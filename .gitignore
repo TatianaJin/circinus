@@ -1,0 +1,11 @@
+build/
+release/
+debug/
+
+*.swp
+*.bak
+
+__pycache__
+
+.ycm_extra_conf.py
+.idea
