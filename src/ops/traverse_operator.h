@@ -14,21 +14,53 @@
 
 #pragma once
 
+#include <utility>
 #include <vector>
 
+#include "graph/compressed_subgraphs.h"
+#include "graph/graph.h"
 #include "graph/types.h"
 #include "ops/operator.h"
 
 namespace circinus {
 
+/** set1 and set2 must be sorted in ascending order */
+void intersect(const std::pair<const VertexID*, uint32_t>& set1, const std::pair<const VertexID*, uint32_t>& set2,
+               std::vector<VertexID>* intersection);
+
+/** set1 and set2 must be sorted in ascending order */
+inline void intersect(const std::vector<VertexID>& set1, const std::pair<const VertexID*, uint32_t>& set2,
+                      std::vector<VertexID>* intersection) {
+  intersect(std::make_pair(set1.data(), (uint32_t)set1.size()), set2, intersection);
+}
+
+/** set1 and set2 must be sorted in ascending order */
+inline void intersect(const std::vector<VertexID>& set1, const std::vector<VertexID>& set2,
+                      std::vector<VertexID>* intersection) {
+  intersect(set1, std::make_pair(set2.data(), (uint32_t)set1.size()), intersection);
+}
+
 class TraverseOperator : public Operator {
  protected:
   const std::vector<VertexID>* candidates_;
 
+  /* transient variables for recording the current inputs */
+  uint32_t input_index_ = 0;
+  const std::vector<CompressedSubgraphs>* current_inputs_;
+  const Graph* current_data_graph_;
+
  public:
   virtual ~TraverseOperator() {}
 
-  void setCandidateSets(const std::vector<VertexID>* candidates) { candidates_ = candidates; }
+  inline void setCandidateSets(const std::vector<VertexID>* candidates) { candidates_ = candidates; }
+
+  virtual void input(const std::vector<CompressedSubgraphs>& inputs, const Graph* data_graph) {
+    current_inputs_ = &inputs;
+    input_index_ = 0;
+    current_data_graph_ = data_graph;
+  }
+
+  virtual uint32_t expand(std::vector<CompressedSubgraphs>* outputs, uint32_t cap) = 0;
 };
 
 }  // namespace circinus

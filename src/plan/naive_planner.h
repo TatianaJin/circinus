@@ -17,7 +17,6 @@
 #include <queue>
 #include <vector>
 
-#include "algorithms/k_core.h"
 #include "algorithms/minimum_weight_vertex_cover.h"
 #include "graph/query_graph.h"
 #include "plan/execution_plan.h"

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+#include "ops/expand_vertex_operator.h"
 
 #include <vector>
 
@@ -21,11 +21,11 @@
 
 namespace circinus {
 
-class ExpandVertexOperator : public TraverseOperator {
- public:
-  static TraverseOperator* newExpandVertexOperator(const QueryGraph* g, std::vector<QueryVertexID>& parent_vertex,
-                                                   QueryVertexID target_vertex, const std::vector<int>& cover_table,
-                                                   const std::unordered_map<QueryVertexID, uint32_t>& indices);
-};
+TraverseOperator* ExpandVertexOperator::newExpandVertexOperator(
+    const QueryGraph* g, std::vector<QueryVertexID>& parent_vertex, QueryVertexID target_vertex,
+    const std::vector<int>& cover_table, const std::unordered_map<QueryVertexID, uint32_t>& indices) {
+  // TODO(boyang):
+  return nullptr;
+}
 
 }  // namespace circinus

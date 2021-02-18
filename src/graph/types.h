@@ -15,6 +15,8 @@
 #pragma once
 
 #include <cinttypes>
+#include <memory>
+#include <vector>
 
 namespace circinus {
 
@@ -22,5 +24,7 @@ using EdgeID = uint64_t;
 using LabelID = uint32_t;
 using QueryVertexID = uint32_t;
 using VertexID = uint64_t;
+
+using VertexSet = std::shared_ptr<std::vector<VertexID>>;
 
 }  // namespace circinus
