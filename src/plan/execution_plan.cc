@@ -19,6 +19,9 @@
 #include <vector>
 
 #include "ops/operators.h"
+#include "ops/expand_key_key_vertex_operator.h"
+#include "ops/expand_set_vertex_operator.h"
+#include "ops/expand_set_to_key_vertex_operator.h"
 
 namespace circinus {
 
@@ -33,10 +36,9 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
     return;
   }
 
-  /* for traversal, we expand to one vertex at a time according to matching_order */
+  // for traversal, we expand to one vertex at a time according to matching_order
   uint32_t n_keys = 0, n_sets = 0;
   Operator *current, *prev = nullptr;
-  // existing vertices in current query subgraph
   std::unordered_set<QueryVertexID> existing_vertices;
   std::array<std::vector<QueryVertexID>, 2> parents;
   auto& key_parents = parents[1];
@@ -102,7 +104,8 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
       key_parents.clear();
       set_parents.clear();
     }
-
+    key_parents.clear();
+    set_parents.clear();
     existing_vertices.insert(target_vertex);
   }
 
@@ -111,7 +114,7 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
   prev->setNext(output_op);
 
   DCHECK_EQ(existing_vertices.size(), g->getNumVertices());
-}
+} 
 
 TraverseOperator* ExecutionPlan::newExpandEdgeOperator(QueryVertexID parent_vertex, QueryVertexID target_vertex,
                                                        const std::vector<int>& cover_table) {
