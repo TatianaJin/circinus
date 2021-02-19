@@ -15,7 +15,7 @@ ignored_dirs = []
 proj_dir = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 os.chdir(proj_dir)
 
-clang_format = os.getenv('CLANG_FORMAT', 'clang-format')
+clang_format = os.getenv('CLANG_FORMAT', 'clang-format-3.9')
 
 def list_files(path=None):
     dirs = None
