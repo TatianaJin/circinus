@@ -25,12 +25,10 @@
 using circinus::VertexID;
 using circinus::Graph;
 
-DEFINE_string(data_dir, "/data/share/project/haxe/data/subgraph_matching_datasets", "The directory of datasets");
-
 class TestGraph : public testing::Test {};
 
 TEST_F(TestGraph, Load) {
-  Graph g(FLAGS_data_dir + "/human/data_graph/human.graph");
+  Graph g("resources/human.graph");
   EXPECT_EQ(g.getNumVertices(), 4674);
   EXPECT_EQ(g.getNumEdges(), 86282);
   EXPECT_EQ(g.getGraphMaxDegree(), 771);
@@ -44,7 +42,7 @@ TEST_F(TestGraph, Load) {
 }
 
 TEST_F(TestGraph, GetVerticesByLabel) {
-  Graph g(FLAGS_data_dir + "/human/data_graph/human.graph");
+  Graph g("resources/human.graph");
   auto labels = g.getLabels();
   for (auto l : labels) {
     EXPECT_EQ(g.getVerticesByLabel(l)->size(), g.getVertexCardinalityByLabel(l));

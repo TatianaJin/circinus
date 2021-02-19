@@ -18,8 +18,8 @@
 
 #include "graph/query_graph.h"
 
-using circinus::TwoCoreSolver;
 using circinus::QueryGraph;
+using circinus::TwoCoreSolver;
 
 class TestTwoCoreSolver : public testing::Test {};
 
