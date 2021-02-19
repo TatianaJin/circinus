@@ -17,15 +17,23 @@
 #include <vector>
 
 #include "graph/query_graph.h"
+#include "graph/compressed_subgraphs.h"
 #include "ops/traverse_operator.h"
 
 namespace circinus {
 
 class ExpandVertexOperator : public TraverseOperator {
  public:
-  static TraverseOperator* newExpandVertexOperator(const QueryGraph* g, std::vector<QueryVertexID>& parent_vertex,
-                                                   QueryVertexID target_vertex, const std::vector<int>& cover_table,
-                                                   const std::unordered_map<QueryVertexID, uint32_t>& indices);
+  
+  ExpandVertexOperator(const QueryGraph* g, std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
+                       const std::vector<int>& cover_table, std::unordered_map<QueryVertexID, uint32_t>& query_vertex_indices) : g_(g), parents_(parents), target_vertex_(target_vertex), cover_table_(cover_table), query_vertex_indices_(query_vertex_indices) {}
+
+ protected:
+  const QueryGraph* g_;
+  const std::vector<int> cover_table_;
+  std::vector<uint32_t> parents_;
+  std::unordered_map<QueryVertexID, uint32_t> query_vertex_indices_;
+  QueryVertexID target_vertex_;
 };
 
 }  // namespace circinus

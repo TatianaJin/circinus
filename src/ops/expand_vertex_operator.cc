@@ -21,11 +21,5 @@
 
 namespace circinus {
 
-TraverseOperator* ExpandVertexOperator::newExpandVertexOperator(
-    const QueryGraph* g, std::vector<QueryVertexID>& parent_vertex, QueryVertexID target_vertex,
-    const std::vector<int>& cover_table, const std::unordered_map<QueryVertexID, uint32_t>& indices) {
-  // TODO(boyang):
-  return nullptr;
-}
 
 }  // namespace circinus

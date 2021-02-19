@@ -40,4 +40,23 @@ void intersect(const std::pair<const VertexID*, uint32_t>& set1, const std::pair
   }
 }
 
+void intersectInplace(const std::vector<VertexID>& set1, const std::pair<const VertexID*, uint32_t>& set2,
+    std::vector<VertexID>* intersection) {
+  uint32_t size = 0;
+  uint32_t lb = 0;
+  for (uint32_t i = 0; i < set1.size(); ++i) {
+    VertexID vid = set1[i];
+    lb = std::lower_bound(set2.first + lb, set2.first + set2.second, vid) - set2.first;
+
+    if (lb == set2.second) {
+      break;
+    }
+
+    if (set2.first[lb] == vid) {
+      (*intersection)[size++] = vid;
+    }
+  }
+  intersection->resize(size);
+}
+
 }  // namespace circinus

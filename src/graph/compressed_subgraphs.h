@@ -25,6 +25,7 @@ namespace circinus {
 
 /** A group of subgraphs compressed by some key vertices, which constitute a vertex cover for all subgraphs. */
 class CompressedSubgraphs {
+  using VertexSet = std::shared_ptr<std::vector<VertexID>>;
   std::vector<VertexID> keys_;
   std::vector<VertexSet> sets_;
 
@@ -48,11 +49,12 @@ class CompressedSubgraphs {
    * @param key The vertex id.
    */
   explicit CompressedSubgraphs(VertexSet&& set) : sets_(1) { sets_.front() = std::move(set); }
-
+  
   /**
    * @param subgraphs The compressed subgraphs that can extend to this CompressedSubraphs. They are one vertex smaller.
    * @param key The new vertex expanded in this CompressedSubgraphs, which is a key.
    */
+  
   CompressedSubgraphs(const CompressedSubgraphs& subgraphs, VertexID key)
       : keys_(subgraphs.getNumKeys() + 1), sets_(subgraphs.getNumSets()) {
     std::copy(subgraphs.keys_.begin(), subgraphs.keys_.end(), keys_.begin());
@@ -107,6 +109,10 @@ class CompressedSubgraphs {
   /** Get the matching set of the non-key vertex at key_idx. */
   const VertexSet& getSet(uint32_t key_idx) const { return sets_[key_idx]; }
 
+  void UpdateSets(uint32_t set_idx, VertexSet&& new_set) {
+    sets_[set_idx] = std::move(new_set);
+  }
+  
   /** Update the key vertex at key_idx to val. */
   void UpdateKey(uint32_t key_idx, VertexID val) { keys_[key_idx] = val; }
   /** Add a vertex val to the vertex set at set_idx. */

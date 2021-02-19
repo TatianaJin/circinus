@@ -40,6 +40,9 @@ inline void intersect(const std::vector<VertexID>& set1, const std::vector<Verte
   intersect(set1, std::make_pair(set2.data(), (uint32_t)set2.size()), intersection);
 }
 
+void intersectInplace(const std::vector<VertexID>& set1, const std::pair<const VertexID*, uint32_t>& set2,
+    std::vector<VertexID>* intersection);
+
 class TraverseOperator : public Operator {
  protected:
   const std::vector<VertexID>* candidates_;
