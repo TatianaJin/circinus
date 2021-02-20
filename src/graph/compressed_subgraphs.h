@@ -41,7 +41,7 @@ class CompressedSubgraphs {
 
   /**
    * @param subgraphs The compressed subgraphs that can extend to this CompressedSubraphs. They are one vertex smaller.
-   * @param new_key The new vertex expanded in this CompressedSubgraphs, which is a key
+   * @param key The new vertex expanded in this CompressedSubgraphs, which is a key.
    */
   CompressedSubgraphs(const CompressedSubgraphs& subgraphs, VertexID key)
       : keys_(subgraphs.getNumKeys() + 1), sets_(subgraphs.getNumSets()) {
@@ -59,6 +59,23 @@ class CompressedSubgraphs {
     keys_ = subgraphs.keys_;
     std::copy(subgraphs.sets_.begin(), subgraphs.sets_.end(), sets_.begin());
     sets_.back() = std::move(new_set);
+  }
+
+  /** This constructor is used when expanding from a non-key vertex to a new key vertex, and the matches of the parent
+   * query vertex is to be regrouped due to adding the new key.
+   *
+   * @param subgraphs The compressed subgraphs that can extend to this CompressedSubraphs. They are one vertex smaller.
+   * @param replacing_set_index The index of the set to be replaced in `subgraphs`.
+   * @param new_set The set of new vertices to be put at `replacing_set_index`.
+   * @param key The new vertex expanded in this CompressedSubgraphs, which is a key.
+   */
+  CompressedSubgraphs(const CompressedSubgraphs& subgraphs, uint32_t replacing_set_index, VertexSet&& new_set,
+                      VertexID key)
+      : keys_(subgraphs.getNumKeys() + 1), sets_(subgraphs.getNumSets()) {
+    std::copy(subgraphs.keys_.begin(), subgraphs.keys_.end(), keys_.begin());
+    keys_.back() = key;
+    sets_ = subgraphs.sets_;
+    sets_[replacing_set_index] = std::move(new_set);
   }
 
   inline size_t getNumKeys() const { return keys_.size(); }
