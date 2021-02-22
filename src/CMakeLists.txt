@@ -24,8 +24,11 @@ set(circinus_graph_sources
   ${PROJECT_SOURCE_DIR}/src/graph/query_graph.cc
 )
 set(circinus_ops_sources
+  ${PROJECT_SOURCE_DIR}/src/ops/expand_edge_operator.cc
+  ${PROJECT_SOURCE_DIR}/src/ops/expand_vertex_operator.cc
   ${PROJECT_SOURCE_DIR}/src/ops/filters/nlf_filter.cc
   ${PROJECT_SOURCE_DIR}/src/ops/scans/ldf_scan.cc
+  ${PROJECT_SOURCE_DIR}/src/ops/traverse_operator.cc
 )
 set(circinus_plan_sources
   ${PROJECT_SOURCE_DIR}/src/plan/execution_plan.cc

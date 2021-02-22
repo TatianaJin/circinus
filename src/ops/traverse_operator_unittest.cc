@@ -12,20 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+#include "algorithms/k_core.h"
 
-#include <vector>
+#include "gtest/gtest.h"
 
 #include "graph/query_graph.h"
-#include "ops/traverse_operator.h"
 
-namespace circinus {
+using circinus::TwoCoreSolver;
+using circinus::QueryGraph;
 
-class ExpandVertexOperator : public TraverseOperator {
- public:
-  static TraverseOperator* newExpandVertexOperator(const QueryGraph* g, std::vector<QueryVertexID>& parent_vertex,
-                                                   QueryVertexID target_vertex, const std::vector<int>& cover_table,
-                                                   const std::unordered_map<QueryVertexID, uint32_t>& indices);
-};
+class TestTraverseOperator : public testing::Test {};
 
-}  // namespace circinus
+TEST_F(TestTraverseOperator, Intersection) {
+  // TODO(tatiana)
+}

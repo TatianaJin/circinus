@@ -20,7 +20,8 @@
 
 #include "graph/graph.h"
 #include "graph/query_graph.h"
-#include "ops/operators.h"
+#include "ops/operator.h"
+#include "ops/traverse_operator.h"
 
 namespace circinus {
 
@@ -51,11 +52,16 @@ class ExecutionPlan {
   }
 
  private:
-  ExpandEdgeOperator* newExpandEdgeOperator(QueryVertexID parent_vertex, QueryVertexID target_vertex);
-  ExpandVertexOperator* newExpandVertexOperator(std::vector<QueryVertexID>& parents, QueryVertexID target_vertex);
+  TraverseOperator* newExpandEdgeOperator(QueryVertexID parent_vertex, QueryVertexID target_vertex);
+  TraverseOperator* newExpandVertexOperator(std::vector<QueryVertexID>& parents, QueryVertexID target_vertex);
 
   std::vector<Operator*> operators_;
   std::unordered_map<QueryVertexID, Operator*> target_vertex_to_ops_;
+
+  /** The index of each query vertex in the CompressedSubgraphs
+   * For key vertices, the index is n_keys-th key following the matching order
+   * For non-key vertices, the index n_sets-th key following the matching order */
+  std::unordered_map<QueryVertexID, uint32_t> query_vertex_indices_;
 };
 
 }  // namespace circinus

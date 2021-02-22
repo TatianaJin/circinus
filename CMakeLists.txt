@@ -22,7 +22,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 ### Options
 option(BUILD_SHARED "Build shared library" ON)
-option(ADDRESS_SANITIZER "Enable address sanitizer in debug mode" OFF)
+option(ADDRESS_SANITIZER "Enable address sanitizer in debug mode" ON)
 option(BUILD_TESTS "Build tests" ON)
 
 # set release as the default build type
