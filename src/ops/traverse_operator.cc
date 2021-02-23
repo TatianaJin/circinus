@@ -23,7 +23,7 @@ namespace circinus {
 
 void intersect(const std::pair<const VertexID*, uint32_t>& set1, const std::pair<const VertexID*, uint32_t>& set2,
                std::vector<VertexID>* intersection) {
-  if (set1.second < set2.second) {
+  if (set1.second <= set2.second) {
     auto lower_bound = set2.first;
     for (uint32_t i = 0; i < set1.second; ++i) {
       auto vid = set1.first[i];

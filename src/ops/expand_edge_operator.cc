@@ -79,10 +79,10 @@ class ExpandEdgeKeyToKeyOperator : public TraverseOperator {
       // if there are existing targets from the last input, consume first
       if (current_target_index_ < current_targets_.size()) {
         auto target_end = std::min(current_target_index_ + cap - n, (uint32_t)current_targets_.size());
+        n += target_end - current_target_index_;
         for (; current_target_index_ < target_end; ++current_target_index_) {
           outputs->emplace_back((*current_inputs_)[input_index_ - 1], current_targets_[current_target_index_]);
         }
-        n += target_end - current_target_index_;
         if (n == cap) {
           return n;
         }
@@ -196,7 +196,7 @@ class CurrentResultsByExtension : public CurrentResults {
 
     auto& parent_set = *input_->getSet(parent_index_);
     uint32_t n = std::min(cap, (uint32_t)extensions_.size());
-    auto leftover_size = extensions_.size() - n;
+    int leftover_size = extensions_.size() - n;
     for (int i = extensions_.size() - 1; i >= leftover_size; --i) {
       auto candidate = extensions_[i];
       std::vector<VertexID> parents;  // valid parents for current candidate
@@ -247,6 +247,7 @@ class ExpandEdgeSetToKeyOperator : public TraverseOperator {
   void clear() {
     if (current_results_ != nullptr) {
       delete current_results_;
+      current_results_ = nullptr;
     }
   }
 
@@ -273,6 +274,7 @@ class ExpandEdgeSetToKeyOperator : public TraverseOperator {
           return cap;
         }
         delete current_results_;
+        current_results_ = nullptr;
       }
       if (input_index_ == current_inputs_->size()) {
         return cap - needed;
