@@ -39,6 +39,16 @@ class CompressedSubgraphs {
     }
   }
 
+  /** Construct a CompressedSubgraphs that contains only a single-vertex subgraph.
+   * @param key The vertex id.
+   */
+  explicit CompressedSubgraphs(VertexID key) : keys_(1) { keys_.front() = key; }
+
+  /** Construct a CompressedSubgraphs that contains only a single-vertex subgraph.
+   * @param key The vertex id.
+   */
+  explicit CompressedSubgraphs(VertexSet&& set) : sets_(1) { sets_.front() = std::move(set); }
+
   /**
    * @param subgraphs The compressed subgraphs that can extend to this CompressedSubraphs. They are one vertex smaller.
    * @param key The new vertex expanded in this CompressedSubgraphs, which is a key.
@@ -81,6 +91,16 @@ class CompressedSubgraphs {
   inline size_t getNumKeys() const { return keys_.size(); }
   inline size_t getNumSets() const { return sets_.size(); }
   inline size_t getNumVertices() const { return getNumKeys() + getNumSets(); }
+  inline uint64_t getNumSubgraphs() const {
+    if (sets_.empty()) {
+      return !keys_.empty();
+    }
+    uint64_t n_subgraphs = sets_.front()->size();
+    for (uint32_t i = 1; i < sets_.size(); ++i) {
+      n_subgraphs *= sets_[i]->size();
+    }
+    return n_subgraphs;
+  }
 
   /** Get the value of the key vertex at key_idx. */
   VertexID getKeyVal(uint32_t key_idx) const { return keys_[key_idx]; }
