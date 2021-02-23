@@ -36,6 +36,9 @@ if(GTEST_FOUND)
   add_executable(TestFilterAndMWVC unittest_main.cc test_filter_and_mwvc.cc)
   target_link_libraries(TestFilterAndMWVC circinus ${GTEST_LIBRARY} ${EXTERNAL_LIBRARY})
 
+  add_executable(TestExpandEdgeCosts unittest_main.cc test_expand_edge_costs.cc)
+  target_link_libraries(TestExpandEdgeCosts circinus ${GTEST_LIBRARY} ${EXTERNAL_LIBRARY})
+
   file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/resources DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
 
   add_custom_target(tests COMMAND "${CMAKE_CTEST_COMMAND}" COMMENT "Running tests..." DEPENDS ${PROJECT_NAME}_unit_tests)

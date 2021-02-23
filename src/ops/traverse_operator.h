@@ -37,7 +37,7 @@ inline void intersect(const std::vector<VertexID>& set1, const std::pair<const V
 /** set1 and set2 must be sorted in ascending order */
 inline void intersect(const std::vector<VertexID>& set1, const std::vector<VertexID>& set2,
                       std::vector<VertexID>* intersection) {
-  intersect(set1, std::make_pair(set2.data(), (uint32_t)set1.size()), intersection);
+  intersect(set1, std::make_pair(set2.data(), (uint32_t)set2.size()), intersection);
 }
 
 class TraverseOperator : public Operator {
