@@ -30,7 +30,6 @@ class ExpandIntoOperator : public TraverseOperator {
   uint32_t expand(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size) {
     uint32_t output_num = 0;
     while (input_index_ < current_inputs_->size()) {
-      std::unordered_map<VertexID, bool> visited;
       auto input = (*current_inputs_)[input_index_];
       auto key_vertex_id = input.getKeyVal(query_vertex_indices_[target_vertex_]);
       auto key_out_neighbors = current_data_graph_->getOutNeighbors(key_vertex_id);
