@@ -47,6 +47,12 @@ class ExpandEdgeKeyToSetOperator : public TraverseOperator {
     return n;
   }
 
+  std::string toString() const override {
+    std::stringstream ss;
+    ss << "ExpandEdgeKeyToSetOperator " << parent_index_ << "->" << target_index_;
+    return ss.str();
+  }
+
  private:
   /** @returns True if one CompressedSubgraphs is generated, else false. */
   inline bool expandInner(std::vector<CompressedSubgraphs>* outputs, const CompressedSubgraphs& input) {
@@ -96,6 +102,12 @@ class ExpandEdgeKeyToKeyOperator : public TraverseOperator {
       ++input_index_;
     }
     return n;
+  }
+
+  std::string toString() const override {
+    std::stringstream ss;
+    ss << "ExpandEdgeKeyToKeyOperator " << parent_index_ << "->" << target_index_;
+    return ss.str();
   }
 
  private:
@@ -283,6 +295,12 @@ class ExpandEdgeSetToKeyOperator : public TraverseOperator {
       ++input_index_;
     }
     return cap - needed;
+  }
+
+  std::string toString() const override {
+    std::stringstream ss;
+    ss << "ExpandEdgeSetToKeyOperator " << parent_index_ << "->" << target_index_;
+    return ss.str();
   }
 
  private:

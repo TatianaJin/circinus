@@ -69,7 +69,7 @@ std::vector<QueryVertexID> NaivePlanner::generateMatchingOrder(const QueryGraph*
   auto compare = [this, &core_table](QueryVertexID v1, QueryVertexID v2) {
     if (TwoCoreSolver::isInCore(core_table, v1)) {
       if (TwoCoreSolver::isInCore(core_table, v2)) {
-        return candidate_cardinality_[v1] > candidate_cardinality_[v2];
+        return (*candidate_cardinality_)[v1] > (*candidate_cardinality_)[v2];
       }
       return false;
     }
