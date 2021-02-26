@@ -16,6 +16,7 @@
 
 #include <vector>
 
+#include "graph/compressed_subgraphs.h"
 #include "graph/query_graph.h"
 #include "ops/traverse_operator.h"
 
@@ -23,9 +24,14 @@ namespace circinus {
 
 class ExpandVertexOperator : public TraverseOperator {
  public:
-  static TraverseOperator* newExpandVertexOperator(const QueryGraph* g, std::vector<QueryVertexID>& parent_vertex,
-                                                   QueryVertexID target_vertex, const std::vector<int>& cover_table,
-                                                   const std::unordered_map<QueryVertexID, uint32_t>& indices);
+  ExpandVertexOperator(std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
+                       std::unordered_map<QueryVertexID, uint32_t>& query_vertex_indices)
+      : parents_(parents), target_vertex_(target_vertex), query_vertex_indices_(query_vertex_indices) {}
+
+ protected:
+  std::vector<QueryVertexID> parents_;
+  std::unordered_map<QueryVertexID, uint32_t> query_vertex_indices_;
+  QueryVertexID target_vertex_;
 };
 
 }  // namespace circinus

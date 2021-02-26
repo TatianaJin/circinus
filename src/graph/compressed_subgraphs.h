@@ -102,10 +102,21 @@ class CompressedSubgraphs {
     return n_subgraphs;
   }
 
+  bool isExisting(uint32_t key) const {
+    for (uint32_t existing_key : keys_) {
+      if (existing_key == key) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   /** Get the value of the key vertex at key_idx. */
   VertexID getKeyVal(uint32_t key_idx) const { return keys_[key_idx]; }
   /** Get the matching set of the non-key vertex at key_idx. */
   const VertexSet& getSet(uint32_t key_idx) const { return sets_[key_idx]; }
+
+  void UpdateSets(uint32_t set_idx, VertexSet&& new_set) { sets_[set_idx] = std::move(new_set); }
 
   /** Update the key vertex at key_idx to val. */
   void UpdateKey(uint32_t key_idx, VertexID val) { keys_[key_idx] = val; }

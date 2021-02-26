@@ -53,7 +53,10 @@ class ExecutionPlan {
 
  private:
   TraverseOperator* newExpandEdgeOperator(QueryVertexID parent_vertex, QueryVertexID target_vertex);
-  TraverseOperator* newExpandVertexOperator(std::vector<QueryVertexID>& parents, QueryVertexID target_vertex);
+  TraverseOperator* newExpandKeyKeyVertexOperator(std::vector<QueryVertexID>& parents, QueryVertexID target_vertex);
+  TraverseOperator* newExpandSetVertexOperator(std::vector<QueryVertexID>& parents, QueryVertexID target_vertex);
+  TraverseOperator* newExpandSetToKeyVertexOperator(std::vector<QueryVertexID>& parents, QueryVertexID target_vertex);
+  TraverseOperator* newExpandIntoOperator(std::vector<QueryVertexID>& parents, QueryVertexID target_vertex);
 
   std::vector<Operator*> operators_;
   std::unordered_map<QueryVertexID, Operator*> target_vertex_to_ops_;
