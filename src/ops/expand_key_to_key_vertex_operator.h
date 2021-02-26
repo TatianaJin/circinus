@@ -46,9 +46,12 @@ class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
       }
       if (new_keys.size() != 0) {
         for (VertexID new_key : new_keys) {
+          if (input.isExisting(new_key)) {
+            continue;
+          }
           outputs->emplace_back(input, new_key);
+          ++output_num;
         }
-        output_num += new_keys.size();
       }
       if (output_num >= batch_size) {
         break;
