@@ -32,7 +32,7 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
     uint32_t output_num = 0;
     while (input_index_ < current_inputs_->size()) {
       std::unordered_set<VertexID> visited;
-      auto input = (*current_inputs_)[input_index_];
+      auto& input = (*current_inputs_)[input_index_];
       const auto& parent_match = input.getSet(query_vertex_indices_[parents_[0]]);
       for (VertexID vid : *parent_match) {
         const auto& out_neighbors = current_data_graph_->getOutNeighbors(vid);
@@ -61,7 +61,6 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
             if (add) {
               outputs->emplace_back(std::move(new_output));
               output_num++;
-              // TODO(by) bound by batch_size
             }
           }
         }
