@@ -61,6 +61,7 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
             if (add) {
               outputs->emplace_back(std::move(new_output));
               output_num++;
+              // TODO(by) bound by batch_size
             }
           }
         }
