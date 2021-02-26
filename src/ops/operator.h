@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <string>
+
 namespace circinus {
 
 class Operator {
@@ -24,6 +26,12 @@ class Operator {
   virtual ~Operator() {}
 
   inline void setNext(Operator* next) { next_ = next; }
+  inline Operator* getNext() const { return next_; }
+
+  virtual std::string toString() const { return "Operator"; }
+
+  // TODO(tatiana): profile info
+  virtual std::string toProfileString() const { return "Operator"; }
 };
 
 }  // namespace circinus

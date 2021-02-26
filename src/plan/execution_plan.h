@@ -44,6 +44,11 @@ class ExecutionPlan {
   void populatePhysicalPlan(const QueryGraph* g, const std::vector<QueryVertexID>& matching_order,
                             const std::vector<int>& cover_table);
 
+  void printPhysicalPlan() const {
+    if (operators_.empty()) return;
+    printOperatorChain(operators_.front());
+  }
+
   inline void setCandidateSets(std::vector<std::vector<VertexID>>& cs) {
     candidate_sets_.swap(cs);
     for (uint32_t i = 1; i < candidate_sets_.size(); ++i) {
@@ -52,6 +57,13 @@ class ExecutionPlan {
   }
 
  private:
+  inline void printOperatorChain(const Operator* root, const std::string& indent = "") const {
+    LOG(INFO) << root->toString();
+    if (root->getNext() != nullptr) {
+      printOperatorChain(root->getNext(), " |");
+    }
+  }
+
   TraverseOperator* newExpandEdgeOperator(QueryVertexID parent_vertex, QueryVertexID target_vertex);
   TraverseOperator* newExpandKeyKeyVertexOperator(std::vector<QueryVertexID>& parents, QueryVertexID target_vertex);
   TraverseOperator* newExpandSetVertexOperator(std::vector<QueryVertexID>& parents, QueryVertexID target_vertex);
