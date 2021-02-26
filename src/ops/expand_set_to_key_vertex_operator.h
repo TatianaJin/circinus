@@ -39,6 +39,7 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
       } else {
         DLOG(INFO) << "fromCandidateStrategy";
         output_num += fromCandidateStrategy(outputs);
+
       }
       input_index_++;
       if (output_num >= batch_size) {

@@ -54,7 +54,7 @@ class ExpandKeyToSetVertexOperator : public ExpandVertexOperator {
                                    [&input](VertexID set_vertex) { return input.isExisting(set_vertex); }),
                     new_set.end());
       if (new_set.size() != 0) {
-        outputs->emplace_back(input, std::make_shared<std::vector<VertexID>>(std::move(new_set)));
+        outputs->emplace_back(input, std::make_shared<std::vector<VertexID>>(new_set));
         ++output_num;
         // TODO(by) break if batch_size is reached
       }
