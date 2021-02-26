@@ -41,7 +41,7 @@ void intersect(const std::pair<const VertexID*, uint32_t>& set1, const std::pair
 }
 
 void intersectInplace(const std::vector<VertexID>& set1, const std::pair<const VertexID*, uint32_t>& set2,
-    std::vector<VertexID>* intersection) {
+                      std::vector<VertexID>* intersection) {
   uint32_t size = 0;
   uint32_t lb = 0;
   for (uint32_t i = 0; i < set1.size(); ++i) {

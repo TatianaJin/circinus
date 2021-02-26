@@ -18,7 +18,6 @@
 
 #include "gflags/gflags.h"
 #include "glog/logging.h"
-#include "gperftools/profiler.h"
 #include "gtest/gtest.h"
 
 #include "graph/query_graph.h"
@@ -26,54 +25,37 @@
 
 namespace circinus {
 
-class ExpandSetVertexOperator : public ExpandVertexOperator {
+class ExpandKeyToSetVertexOperator : public ExpandVertexOperator {
  public:
-  ExpandSetVertexOperator(const QueryGraph* g, std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
-                       const std::vector<int>& cover_table, std::unordered_map<QueryVertexID, uint32_t>& query_vertex_indices) : ExpandVertexOperator(g, parents, target_vertex, cover_table, query_vertex_indices) {
-  }
-
-  void input(const std::vector<CompressedSubgraphs>* inputs, const Graph* data_graph) {
-    inputs_ = inputs;
-    data_graph_ = data_graph;
-    inputs_idx_ = 0;
-  }  
+  ExpandKeyToSetVertexOperator(std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
+                               std::unordered_map<QueryVertexID, uint32_t>& query_vertex_indices)
+      : ExpandVertexOperator(parents, target_vertex, query_vertex_indices) {}
 
   uint32_t expand(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size) {
     uint32_t output_num = 0;
-    while (inputs_idx_ < inputs_->size()) {
-      const auto& input = (*inputs_)[inputs_idx_];
+    while (input_index_ < current_inputs_->size()) {
+      const auto& input = (*current_inputs_)[input_index_++];
       std::vector<VertexID> new_set;
       for (uint32_t i = 0; i < parents_.size(); ++i) {
         uint32_t key = query_vertex_indices_[parents_[i]];
         uint32_t key_vid = input.getKeyVal(key);
-        LOG(INFO) << candidates_->size() << " " << data_graph_->getOutNeighbors(key_vid).second;
-        for (uint32_t i = 0; i < data_graph_->getOutNeighbors(key_vid).second; ++i) {
-          LOG(INFO) << *(data_graph_->getOutNeighbors(key_vid).first + i);
-        }
         if (i == 0) {
-          intersect(*candidates_, data_graph_->getOutNeighbors(key_vid), &new_set);
+          intersect(*candidates_, current_data_graph_->getOutNeighbors(key_vid), &new_set);
         } else {
-          intersectInplace(new_set, data_graph_->getOutNeighbors(key_vid), &new_set);
+          intersectInplace(new_set, current_data_graph_->getOutNeighbors(key_vid), &new_set);
         }
-        if(new_set.size() == 0) {
-          LOG(INFO) << " no result ";
+        if (new_set.size() == 0) {
           break;
-          
         }
       }
       if (new_set.size() != 0) {
         outputs->emplace_back(input, std::make_shared<std::vector<VertexID>>(new_set));
-        output_num++;
+        ++output_num;
+        // TODO(by) break if batch_size is reached
       }
-      inputs_idx_++;
     }
     return output_num;
   }
- 
- protected:
-  const std::vector<CompressedSubgraphs>* inputs_;
-  const Graph* data_graph_;
-  uint32_t inputs_idx_;
 };
 
 }  // namespace circinus

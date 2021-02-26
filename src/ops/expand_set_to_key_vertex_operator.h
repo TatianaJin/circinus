@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <unordered_set>
 #include <vector>
 
 #include "graph/query_graph.h"
@@ -23,31 +24,28 @@ namespace circinus {
 
 class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
  public:
-  ExpandSetToKeyVertexOperator(const QueryGraph* g, std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
-                       const std::vector<int>& cover_table, std::unordered_map<QueryVertexID, uint32_t>& query_vertex_indices) : ExpandVertexOperator(g, parents, target_vertex, cover_table, query_vertex_indices) {
-  }
+  ExpandSetToKeyVertexOperator(std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
+                               std::unordered_map<QueryVertexID, uint32_t>& query_vertex_indices)
+      : ExpandVertexOperator(parents, target_vertex, query_vertex_indices) {}
 
-  void input(const std::vector<CompressedSubgraphs>* inputs, const Graph* data_graph) {
-    inputs_ = inputs;
-    data_graph_ = data_graph;
-    inputs_idx_ = 0;
-  }  
-  
   uint32_t expand(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size) {
     uint32_t output_num = 0;
-    while (inputs_idx_ < inputs_->size()) {
-      std::unordered_map<VertexID, bool> visited;
-      auto input = (*inputs_)[inputs_idx_];
-      auto parent_match = input.getSet(query_vertex_indices_[parents_[0]]);
-      for (VertexID vid : *parent_match.get()) {
-        const auto& out_neighbors = data_graph_->getOutNeighbors(vid);
+    while (input_index_ < current_inputs_->size()) {
+      std::unordered_set<VertexID> visited;
+      auto input = (*current_inputs_)[input_index_];
+      const auto& parent_match = input.getSet(query_vertex_indices_[parents_[0]]);
+      for (VertexID vid : *parent_match) {
+        const auto& out_neighbors = current_data_graph_->getOutNeighbors(vid);
         for (uint32_t i = 0; i < out_neighbors.second; ++i) {
-          VertexID key_vertex_id = *(out_neighbors.first + i);
-          if (visited[key_vertex_id] == false || !isInCandidates(key_vertex_id)) {
-            // TODO make sure key_vertex_id is in candidates_
-            visited[key_vertex_id] = true;
-            auto key_out_neighbors = data_graph_->getOutNeighbors(key_vertex_id);
-            CompressedSubgraphs new_output = CompressedSubgraphs(input, key_vertex_id); 
+          VertexID key_vertex_id = out_neighbors.first[i];
+          if (visited.find(key_vertex_id) == visited.end()) {
+            visited.insert(key_vertex_id);
+            if (!isInCandidates(key_vertex_id)) {
+              continue;
+            }
+            auto key_out_neighbors = current_data_graph_->getOutNeighbors(key_vertex_id);
+            // TODO(by) hash key_out_neighbors
+            CompressedSubgraphs new_output(input, key_vertex_id);
             bool add = true;
             for (uint32_t set_vid : parents_) {
               std::vector<VertexID> new_set;
@@ -59,31 +57,28 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
               }
               new_output.UpdateSets(id, std::make_shared<std::vector<VertexID>>(std::move(new_set)));
             }
-            
+
             if (add) {
-              outputs->emplace_back(new_output);
+              outputs->emplace_back(std::move(new_output));
               output_num++;
+              // TODO(by) bound by batch_size
             }
           }
         }
       }
-      inputs_idx_++;
+      input_index_++;
       if (output_num >= batch_size) {
         break;
       }
     }
     return output_num;
   }
- 
+
  protected:
   bool isInCandidates(VertexID key) {
     auto lb = std::lower_bound(candidates_->begin(), candidates_->end(), key);
     return lb != candidates_->end() && *lb == key;
   }
-
-  const std::vector<CompressedSubgraphs>* inputs_;
-  const Graph* data_graph_;
-  uint32_t inputs_idx_;
 };
 
 }  // namespace circinus

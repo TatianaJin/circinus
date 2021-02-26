@@ -21,54 +21,42 @@
 
 namespace circinus {
 
-class ExpandKeyKeyVertexOperator : public ExpandVertexOperator {
+class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
  public:
-  ExpandKeyKeyVertexOperator(const QueryGraph* g, std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
-                       const std::vector<int>& cover_table, std::unordered_map<QueryVertexID, uint32_t>& query_vertex_indices) : ExpandVertexOperator(g, parents, target_vertex, cover_table, query_vertex_indices) {
-  }
-
-  void input(const std::vector<CompressedSubgraphs>* inputs, const Graph* data_graph) {
-    inputs_ = inputs;
-    data_graph_ = data_graph;
-    inputs_idx_ = 0;
-  }  
+  ExpandKeyToKeyVertexOperator(std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
+                               std::unordered_map<QueryVertexID, uint32_t>& query_vertex_indices)
+      : ExpandVertexOperator(parents, target_vertex, query_vertex_indices) {}
 
   uint32_t expand(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size) {
     uint32_t output_num = 0;
-    while (inputs_idx_ < inputs_->size()) {
+    while (input_index_ < current_inputs_->size()) {
       std::vector<VertexID> new_keys;
-      const auto& input = (*inputs_)[inputs_idx_];
+      const auto& input = (*current_inputs_)[input_index_++];
       for (uint32_t i = 0; i < parents_.size(); ++i) {
         uint32_t key = query_vertex_indices_[parents_[i]];
         uint32_t key_vid = input.getKeyVal(key);
         if (i == 0) {
-          intersect(*candidates_, data_graph_->getOutNeighbors(key_vid), &new_keys);
+          intersect(*candidates_, current_data_graph_->getOutNeighbors(key_vid), &new_keys);
         } else {
-          intersectInplace(new_keys, data_graph_->getOutNeighbors(key_vid), &new_keys);
+          intersectInplace(new_keys, current_data_graph_->getOutNeighbors(key_vid), &new_keys);
         }
-        if(new_keys.size() == 0) {
+        if (new_keys.size() == 0) {
           break;
         }
       }
       if (new_keys.size() != 0) {
         for (VertexID new_key : new_keys) {
           outputs->emplace_back(input, new_key);
-          output_num++;
         }
+        output_num += new_keys.size();
       }
       if (output_num >= batch_size) {
         break;
       }
-      inputs_idx_++;
+      new_keys.clear();
     }
     return output_num;
   }
-
- protected:
-  const std::vector<CompressedSubgraphs>* inputs_;
-  const Graph* data_graph_;
-  uint32_t inputs_idx_;
-
 };
 
 }  // namespace circinus

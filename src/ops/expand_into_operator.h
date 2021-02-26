@@ -23,25 +23,17 @@ namespace circinus {
 
 class ExpandIntoOperator : public TraverseOperator {
  public:
-  ExpandIntoOperator(const QueryGraph* g, std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
-                       const std::vector<int>& cover_table, std::unordered_map<QueryVertexID, uint32_t>& query_vertex_indices) : g_(g), parents_(parents), target_vertex_(target_vertex), cover_table_(cover_table), query_vertex_indices_(query_vertex_indices) {
-    // FIXME
-  }
+  ExpandIntoOperator(std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
+                     std::unordered_map<QueryVertexID, uint32_t>& query_vertex_indices)
+      : parents_(parents), target_vertex_(target_vertex), query_vertex_indices_(query_vertex_indices) {}
 
-  void input(const std::vector<CompressedSubgraphs>* inputs, const Graph* data_graph) {
-    inputs_ = inputs;
-    data_graph_ = data_graph;
-    inputs_idx_ = 0;
-  }  
-  
   uint32_t expand(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size) {
     uint32_t output_num = 0;
-    while (inputs_idx_ < inputs_->size()) {
+    while (input_index_ < current_inputs_->size()) {
       std::unordered_map<VertexID, bool> visited;
-      auto input = (*inputs_)[inputs_idx_];
+      auto input = (*current_inputs_)[input_index_];
       auto key_vertex_id = input.getKeyVal(query_vertex_indices_[target_vertex_]);
-      auto key_out_neighbors = data_graph_->getOutNeighbors(key_vertex_id);
-      CompressedSubgraphs new_output = input; 
+      auto key_out_neighbors = current_data_graph_->getOutNeighbors(key_vertex_id);
       bool add = true;
       for (QueryVertexID vid : parents_) {
         std::vector<VertexID> new_set;
@@ -51,31 +43,26 @@ class ExpandIntoOperator : public TraverseOperator {
           add = false;
           break;
         }
-        new_output.UpdateSets(id, std::make_shared<std::vector<VertexID>>(std::move(new_set)));
+        input.UpdateSets(id, std::make_shared<std::vector<VertexID>>(std::move(new_set)));
       }
-      
+
       if (add) {
-        outputs->emplace_back(new_output);
+        outputs->emplace_back(std::move(input));
         output_num++;
       }
-      inputs_idx_++;
-      
+      input_index_++;
+
       if (output_num >= batch_size) {
         break;
       }
     }
     return output_num;
   }
- 
+
  protected:
-  const QueryGraph* g_;
-  const std::vector<int> cover_table_;
   std::unordered_map<QueryVertexID, uint32_t> query_vertex_indices_;
   std::vector<QueryVertexID> parents_;
   QueryVertexID target_vertex_;
-  const std::vector<CompressedSubgraphs>* inputs_;
-  const Graph* data_graph_;
-  uint32_t inputs_idx_;
 };
 
 }  // namespace circinus
