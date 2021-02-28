@@ -19,8 +19,6 @@
 
 #include "graph/compressed_subgraphs.h"
 #include "graph/query_graph.h"
-#include "graph/compressed_subgraphs.h"
-#include "graph/query_graph.h"
 #include "ops/traverse_operator.h"
 
 namespace circinus {
