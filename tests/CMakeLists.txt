@@ -16,7 +16,7 @@ find_package(GTest)
 
 if(GTEST_FOUND)
   enable_testing()
-  file(GLOB_RECURSE UNIT_TEST_SOURCE ${PROJECT_SOURCE_DIR}/src/*_unittest.cc) 
+  file(GLOB_RECURSE UNIT_TEST_SOURCE ${PROJECT_SOURCE_DIR}/src/*_unittest.cc)
   include_directories(${GTEST_INCLUDE_DIR})
 
   add_executable(${PROJECT_NAME}_unit_tests ${UNIT_TEST_SOURCE} unittest_main.cc)
@@ -35,6 +35,9 @@ if(GTEST_FOUND)
 
   add_executable(TestFilterAndMWVC unittest_main.cc test_filter_and_mwvc.cc)
   target_link_libraries(TestFilterAndMWVC circinus ${GTEST_LIBRARY} ${EXTERNAL_LIBRARY})
+
+  add_executable(TestSubgraphMatching unittest_main.cc test_subgraph_matching.cc)
+  target_link_libraries(TestSubgraphMatching circinus ${GTEST_LIBRARY} ${EXTERNAL_LIBRARY})
 
   add_executable(TestExpandEdgeCosts unittest_main.cc test_expand_edge_costs.cc)
   target_link_libraries(TestExpandEdgeCosts circinus ${GTEST_LIBRARY} ${EXTERNAL_LIBRARY})

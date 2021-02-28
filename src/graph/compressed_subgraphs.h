@@ -117,7 +117,7 @@ class CompressedSubgraphs {
   const VertexSet& getSet(uint32_t key_idx) const { return sets_[key_idx]; }
 
   void UpdateSets(uint32_t set_idx, VertexSet&& new_set) { sets_[set_idx] = std::move(new_set); }
-  
+
   /** Update the key vertex at key_idx to val. */
   void UpdateKey(uint32_t key_idx, VertexID val) { keys_[key_idx] = val; }
   /** Add a vertex val to the vertex set at set_idx. */
