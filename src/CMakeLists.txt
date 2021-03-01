@@ -32,7 +32,12 @@ set(circinus_ops_sources
 set(circinus_plan_sources
   ${PROJECT_SOURCE_DIR}/src/plan/execution_plan.cc
   ${PROJECT_SOURCE_DIR}/src/plan/naive_planner.cc
+  ${PROJECT_SOURCE_DIR}/src/plan/operator_tree.cc
 )
+set(circinus_utils_sources
+  ${PROJECT_SOURCE_DIR}/src/utils/flags.cc
+)
+
 
 if (BUILD_SHARED)
   set(circinus_sources
@@ -40,16 +45,19 @@ if (BUILD_SHARED)
     ${circinus_graph_sources}
     ${circinus_ops_sources}
     ${circinus_plan_sources}
+    ${circinus_utils_sources}
     PARENT_SCOPE)
 else()
   add_library(circinus_algo_obj OBJECT ${circinus_algo_sources})
   add_library(circinus_graph_obj OBJECT ${circinus_graph_sources})
   add_library(circinus_ops_obj OBJECT ${circinus_ops_sources})
   add_library(circinus_plan_obj OBJECT ${circinus_plan_sources})
+  add_library(circinus_utils_obj OBJECT ${circinus_utils_sources})
   set (circinus_objs
     $<TARGET_OBJECTS:circinus_algo_obj>
     $<TARGET_OBJECTS:circinus_graph_obj>
     $<TARGET_OBJECTS:circinus_ops_obj>
     $<TARGET_OBJECTS:circinus_plan_obj>
+    $<TARGET_OBJECTS:circinus_utils_obj>
     PARENT_SCOPE)
 endif()

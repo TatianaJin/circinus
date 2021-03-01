@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -26,18 +27,18 @@ namespace circinus {
 
 /** set1 and set2 must be sorted in ascending order */
 void intersect(const std::pair<const VertexID*, uint32_t>& set1, const std::pair<const VertexID*, uint32_t>& set2,
-               std::vector<VertexID>* intersection);
+               std::vector<VertexID>* intersection, const std::unordered_set<VertexID>& except = {});
 
 /** set1 and set2 must be sorted in ascending order */
 inline void intersect(const std::vector<VertexID>& set1, const std::pair<const VertexID*, uint32_t>& set2,
-                      std::vector<VertexID>* intersection) {
-  intersect(std::make_pair(set1.data(), (uint32_t)set1.size()), set2, intersection);
+                      std::vector<VertexID>* intersection, const std::unordered_set<VertexID>& except = {}) {
+  intersect(std::make_pair(set1.data(), (uint32_t)set1.size()), set2, intersection, except);
 }
 
 /** set1 and set2 must be sorted in ascending order */
 inline void intersect(const std::vector<VertexID>& set1, const std::vector<VertexID>& set2,
-                      std::vector<VertexID>* intersection) {
-  intersect(set1, std::make_pair(set2.data(), (uint32_t)set2.size()), intersection);
+                      std::vector<VertexID>* intersection, const std::unordered_set<VertexID>& except = {}) {
+  intersect(set1, std::make_pair(set2.data(), (uint32_t)set2.size()), intersection, except);
 }
 
 void intersectInplace(const std::vector<VertexID>& set1, const std::pair<const VertexID*, uint32_t>& set2,
@@ -45,17 +46,18 @@ void intersectInplace(const std::vector<VertexID>& set1, const std::pair<const V
 
 class TraverseOperator : public Operator {
  protected:
-  const std::vector<VertexID>* candidates_;
+  const std::vector<VertexID>* candidates_ = nullptr;
 
   /* transient variables for recording the current inputs */
   uint32_t input_index_ = 0;
-  const std::vector<CompressedSubgraphs>* current_inputs_;
-  const Graph* current_data_graph_;
+  const std::vector<CompressedSubgraphs>* current_inputs_ = nullptr;
+  const Graph* current_data_graph_ = nullptr;
 
  public:
   virtual ~TraverseOperator() {}
 
   inline void setCandidateSets(const std::vector<VertexID>* candidates) { candidates_ = candidates; }
+  inline const std::vector<VertexID>* getCandidateSets() const { return candidates_; }
 
   virtual void input(const std::vector<CompressedSubgraphs>& inputs, const Graph* data_graph) {
     current_inputs_ = &inputs;

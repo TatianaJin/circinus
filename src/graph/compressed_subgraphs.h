@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <cinttypes>
 #include <memory>
+#include <unordered_set>
 #include <vector>
 
 #include "graph/types.h"
@@ -33,7 +34,8 @@ class CompressedSubgraphs {
    * @param key_size The number of key vertices.
    * @param n_vertices The number of vertices in each compressed subgraph.
    */
-  CompressedSubgraphs(uint32_t key_size, uint32_t n_vertices) : keys_(key_size), sets_(n_vertices - key_size) {
+  [[deprecated]] CompressedSubgraphs(uint32_t key_size, uint32_t n_vertices)
+      : keys_(key_size), sets_(n_vertices - key_size) {
     for (auto& set : sets_) {
       set = std::make_shared<std::vector<VertexID>>();
     }
@@ -102,6 +104,11 @@ class CompressedSubgraphs {
     return n_subgraphs;
   }
 
+  uint64_t getNumIsomorphicSubgraphs() const {
+    // TODO(tatiana): check?
+    return getNumSubgraphs();
+  }
+
   bool isExisting(uint32_t key) const {
     for (uint32_t existing_key : keys_) {
       if (existing_key == key) {
@@ -113,6 +120,9 @@ class CompressedSubgraphs {
 
   /** Get the value of the key vertex at key_idx. */
   VertexID getKeyVal(uint32_t key_idx) const { return keys_[key_idx]; }
+
+  std::unordered_set<VertexID> getKeyMap() const { return std::unordered_set<VertexID>(keys_.begin(), keys_.end()); }
+
   /** Get the matching set of the non-key vertex at key_idx. */
   const VertexSet& getSet(uint32_t key_idx) const { return sets_[key_idx]; }
 

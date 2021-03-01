@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <string>
 #include <vector>
 
 #include "gflags/gflags.h"
@@ -27,11 +28,11 @@ namespace circinus {
 
 class ExpandKeyToSetVertexOperator : public ExpandVertexOperator {
  public:
-  ExpandKeyToSetVertexOperator(std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
-                               std::unordered_map<QueryVertexID, uint32_t>& query_vertex_indices)
+  ExpandKeyToSetVertexOperator(const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
+                               const std::unordered_map<QueryVertexID, uint32_t>& query_vertex_indices)
       : ExpandVertexOperator(parents, target_vertex, query_vertex_indices) {}
 
-  uint32_t expand(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size) {
+  uint32_t expand(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size) override {
     uint32_t output_num = 0;
     while (input_index_ < current_inputs_->size()) {
       const auto& input = (*current_inputs_)[input_index_++];
@@ -55,6 +56,20 @@ class ExpandKeyToSetVertexOperator : public ExpandVertexOperator {
       }
     }
     return output_num;
+  }
+
+  std::string toString() const override {
+    std::stringstream ss;
+    ss << "ExpandKeyToSetVertexOperator";
+    toStringInner(ss);
+    return ss.str();
+  }
+
+  Operator* clone() const override {
+    // TODO(tatiana): for now next_ is not handled because it is only used for printing plan
+    auto ret = new ExpandKeyToSetVertexOperator(parents_, target_vertex_, query_vertex_indices_);
+    ret->candidates_ = candidates_;
+    return ret;
   }
 };
 

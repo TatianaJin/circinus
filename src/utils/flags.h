@@ -14,26 +14,7 @@
 
 #pragma once
 
-#include <string>
+#include "gflags/gflags.h"
 
-namespace circinus {
-
-class Operator {
- private:
-  Operator* next_ = nullptr;
-
- public:
-  virtual ~Operator() {}
-
-  inline void setNext(Operator* next) { next_ = next; }
-  inline Operator* getNext() const { return next_; }
-
-  virtual std::string toString() const { return "Operator"; }
-
-  // TODO(tatiana): profile info
-  virtual std::string toProfileString() const { return "Operator"; }
-
-  virtual Operator* clone() const = 0;
-};
-
-}  // namespace circinus
+DECLARE_int32(batch_size);
+DECLARE_int32(num_cores);
