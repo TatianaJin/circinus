@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <string>
 #include <vector>
 
 #include "graph/query_graph.h"
@@ -23,11 +24,11 @@ namespace circinus {
 
 class ExpandIntoOperator : public TraverseOperator {
  public:
-  ExpandIntoOperator(std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
-                     std::unordered_map<QueryVertexID, uint32_t>& query_vertex_indices)
+  ExpandIntoOperator(const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
+                     const std::unordered_map<QueryVertexID, uint32_t>& query_vertex_indices)
       : parents_(parents), target_vertex_(target_vertex), query_vertex_indices_(query_vertex_indices) {}
 
-  uint32_t expand(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size) {
+  uint32_t expand(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size) override {
     uint32_t output_num = 0;
     while (input_index_ < current_inputs_->size()) {
       auto input = (*current_inputs_)[input_index_];
@@ -56,6 +57,24 @@ class ExpandIntoOperator : public TraverseOperator {
       }
     }
     return output_num;
+  }
+
+  std::string toString() const override {
+    std::stringstream ss;
+    ss << "ExpandIntoOperator";
+    for (auto parent : parents_) {
+      DCHECK_EQ(query_vertex_indices_.count(parent), 1);
+      ss << ' ' << parent;
+    }
+    DCHECK_EQ(query_vertex_indices_.count(target_vertex_), 1);
+    ss << " -> " << target_vertex_;
+    return ss.str();
+  }
+
+  Operator* clone() const override {
+    // TODO(tatiana): for now next_ is not handled because it is only used for printing plan
+    auto ret = new ExpandIntoOperator(parents_, target_vertex_, query_vertex_indices_);
+    return ret;
   }
 
  protected:

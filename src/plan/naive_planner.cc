@@ -76,7 +76,7 @@ std::vector<QueryVertexID> NaivePlanner::generateMatchingOrder(const QueryGraph*
     if (TwoCoreSolver::isInCore(core_table, v2)) {
       return true;
     }
-    return candidate_cardinality_[v1] > candidate_cardinality_[v2];
+    return (*candidate_cardinality_)[v1] > (*candidate_cardinality_)[v2];
   };
   std::priority_queue<QueryVertexID, std::vector<QueryVertexID>, decltype(compare)> queue(compare);
   // initialization

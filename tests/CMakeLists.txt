@@ -45,6 +45,9 @@ if(GTEST_FOUND)
   add_executable(PrintExecutionPlan unittest_main.cc print_execution_plan.cc)
   target_link_libraries(PrintExecutionPlan circinus ${GTEST_LIBRARY} ${EXTERNAL_LIBRARY})
 
+  add_executable(Benchmark unittest_main.cc benchmark.cc)
+  target_link_libraries(Benchmark circinus ${GTEST_LIBRARY} ${EXTERNAL_LIBRARY})
+
   file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/resources DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
 
   add_custom_target(tests COMMAND "${CMAKE_CTEST_COMMAND}" COMMENT "Running tests..." DEPENDS ${PROJECT_NAME}_unit_tests)

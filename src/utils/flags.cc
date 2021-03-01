@@ -12,28 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+#include "utils/flags.h"
 
-#include <string>
+#include "gflags/gflags.h"
 
-namespace circinus {
-
-class Operator {
- private:
-  Operator* next_ = nullptr;
-
- public:
-  virtual ~Operator() {}
-
-  inline void setNext(Operator* next) { next_ = next; }
-  inline Operator* getNext() const { return next_; }
-
-  virtual std::string toString() const { return "Operator"; }
-
-  // TODO(tatiana): profile info
-  virtual std::string toProfileString() const { return "Operator"; }
-
-  virtual Operator* clone() const = 0;
-};
-
-}  // namespace circinus
+DEFINE_int32(batch_size, 1024, "Batch size for input and output.");
+DEFINE_int32(num_cores, 1, "The number of cores to use for thread pool.");

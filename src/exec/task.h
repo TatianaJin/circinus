@@ -14,26 +14,25 @@
 
 #pragma once
 
-#include <string>
+#include <vector>
+
+#include "graph/compressed_subgraphs.h"
+#include "graph/graph.h"
 
 namespace circinus {
 
-class Operator {
- private:
-  Operator* next_ = nullptr;
+class Task {
+  uint32_t level_;
+  std::vector<CompressedSubgraphs> input_;
+  const Graph* data_graph_;
 
  public:
-  virtual ~Operator() {}
+  Task(uint32_t level, std::vector<CompressedSubgraphs>&& input, const Graph* graph)
+      : level_(level), input_(std::move(input)), data_graph_(graph) {}
 
-  inline void setNext(Operator* next) { next_ = next; }
-  inline Operator* getNext() const { return next_; }
-
-  virtual std::string toString() const { return "Operator"; }
-
-  // TODO(tatiana): profile info
-  virtual std::string toProfileString() const { return "Operator"; }
-
-  virtual Operator* clone() const = 0;
+  inline uint32_t getLevel() const { return level_; }
+  inline const auto& getInput() const { return input_; }
+  inline const Graph* getDataGraph() const { return data_graph_; }
 };
 
 }  // namespace circinus
