@@ -54,3 +54,6 @@ if(GTEST_FOUND)
 else()
   message(WARNING "Google Test not found")
 endif()
+
+add_executable(TestPrintStyle test_print_style.cc)
+target_link_libraries(TestPrintStyle circinus ${EXTERNAL_LIBRARY})
