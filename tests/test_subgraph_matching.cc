@@ -20,12 +20,10 @@
 
 #include "gflags/gflags.h"
 #include "glog/logging.h"
-#include "gperftools/profiler.h"
 #include "gtest/gtest.h"
 
 #include "algorithms/minimum_weight_vertex_cover.h"
 #include "graph/graph.h"
-#include "graph/query_graph.h"
 #include "ops/expand_edge_operator.h"
 #include "ops/expand_into_operator.h"
 #include "ops/expand_key_to_key_vertex_operator.h"
@@ -78,46 +76,44 @@ class TestSubgraphMatching : public testing::Test {
       }
     }
   }
-};
 
-uint64_t getNumSubgraphs(const std::vector<CompressedSubgraphs>& outputs) {
-  uint64_t n = 0;
-  for (auto& output : outputs) {
-    n += output.getNumSubgraphs();
+  uint64_t getNumSubgraphs(const std::vector<CompressedSubgraphs>& outputs) {
+    uint64_t n = 0;
+    for (auto& output : outputs) {
+      n += output.getNumSubgraphs();
+    }
+    return n;
   }
-  return n;
-}
 
-void getMatchingOrder(std::vector<QueryVertexID>& matching_order, std::vector<bool>& visited, QueryGraph* q,
-                      QueryVertexID uid) {
-  if (visited[uid]) {
-    return;
+  void getMatchingOrder(std::vector<QueryVertexID>& matching_order, std::vector<bool>& visited, QueryGraph* q,
+                        QueryVertexID uid) {
+    if (visited[uid]) {
+      return;
+    }
+    visited[uid] = true;
+    matching_order.push_back(uid);
+    const auto& neighbors = q->getOutNeighbors(uid);
+    for (uint32_t i = 0; i < neighbors.second; ++i) {
+      auto vid = neighbors.first[i];
+      getMatchingOrder(matching_order, visited, q, vid);
+    }
   }
-  visited[uid] = true;
-  matching_order.push_back(uid);
-  const auto& neighbors = q->getOutNeighbors(uid);
-  for (uint32_t i = 0; i < neighbors.second; ++i) {
-    auto vid = neighbors.first[i];
-    getMatchingOrder(matching_order, visited, q, vid);
-  }
-}
 
-void outputLog(const std::string name, std::vector<QueryVertexID> parents, QueryVertexID target, uint32_t time_usage,
-               uint32_t output_num) {
-  std::string parents_string;
-  for (auto uid : parents) {
-    parents_string += std::to_string(uid) + " ";
+  void outputLog(const std::string name, std::vector<QueryVertexID> parents, QueryVertexID target, uint32_t time_usage,
+                 uint32_t output_num) {
+    std::string parents_string;
+    for (auto uid : parents) {
+      parents_string += std::to_string(uid) + " ";
+    }
+    LOG(INFO) << name << " " << parents_string << "->" << target << ' ' << time_usage << "ms " << output_num;
   }
-  LOG(INFO) << name << " " << parents_string << "->" << target << ' ' << time_usage << "ms " << output_num;
-}
 
-TEST_F(TestSubgraphMatching, SM) {
-  for (uint32_t i = 0; i < datasets_.size(); ++i) {
+  void subgraphMatching(uint32_t graph_id) {
     // load data graph
-    Graph g(FLAGS_data_dir + "/" + data_graph_paths_[i]);
-    LOG(INFO) << "load graph " << data_graph_paths_[i];
-    for (uint32_t j = 0; j < query_graph_paths_[i].size(); ++j) {
-      auto& q_path = query_graph_paths_[i][j];
+    Graph g(FLAGS_data_dir + "/" + data_graph_paths_[graph_id]);
+    LOG(INFO) << "load graph " << data_graph_paths_[graph_id];
+    for (uint32_t query_id = 0; query_id < query_graph_paths_[graph_id].size(); ++query_id) {
+      auto& q_path = query_graph_paths_[graph_id][query_id];
       // load query graph
       QueryGraph q(FLAGS_data_dir + "/" + q_path);
       LOG(INFO) << "query graph " << q_path;
@@ -141,7 +137,7 @@ TEST_F(TestSubgraphMatching, SM) {
       WeightedBnB solver(&q, vertex_weights);
       solver.computeVertexCover();
       LOG(INFO) << solver.getBestCovers().size() << " best covers, weight" << solver.getBestObjective() << ' '
-                << solver.getTimeToBest() << '/' << solver.getElapsedTime() << "ms";
+                << solver.getTimeToBest() << '/' << solver.getElapsedTime() << "s";
       auto cover = solver.getBestCovers().front();
       for (auto& set : candidates) {
         LOG(INFO) << "candidate set size " << set.size();
@@ -285,16 +281,20 @@ TEST_F(TestSubgraphMatching, SM) {
             delete op;
           }
         }
-        uint64_t matching_num = 0;
-        for (const auto& csg : outputs[!(i & 1)]) {
-          matching_num += csg.getNumSubgraphs();
-        }
-        LOG(INFO) << " matching number " << matching_num;
+        LOG(INFO) << " matching number " << getNumSubgraphs(outputs[!(i & 1)]);
         key_parents.clear();
         set_parents.clear();
         existing_vertices.insert(target);
       }
     }
   }
-  // ProfilerStop();
-}
+};
+
+TEST_F(TestSubgraphMatching, DBLP) { subgraphMatching(0); }
+TEST_F(TestSubgraphMatching, EU2005) { subgraphMatching(1); }
+TEST_F(TestSubgraphMatching, HPRD) { subgraphMatching(2); }
+TEST_F(TestSubgraphMatching, HUMAN) { subgraphMatching(3); }
+TEST_F(TestSubgraphMatching, PATENTS) { subgraphMatching(4); }
+TEST_F(TestSubgraphMatching, WORDNET) { subgraphMatching(5); }
+TEST_F(TestSubgraphMatching, YEAST) { subgraphMatching(6); }
+TEST_F(TestSubgraphMatching, YOUTUBE) { subgraphMatching(7); }
