@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <vector>
 
 #include "gflags/gflags.h"
@@ -48,6 +49,9 @@ class ExpandKeyToSetVertexOperator : public ExpandVertexOperator {
           break;
         }
       }
+      new_set.erase(std::remove_if(new_set.begin(), new_set.end(),
+                                   [&input](VertexID set_vertex) { return input.isExisting(set_vertex); }),
+                    new_set.end());
       if (new_set.size() != 0) {
         outputs->emplace_back(input, std::make_shared<std::vector<VertexID>>(std::move(new_set)));
         ++output_num;
