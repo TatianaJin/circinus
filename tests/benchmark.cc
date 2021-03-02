@@ -83,9 +83,6 @@ class Benchmark : public testing::Test {
         buffer.clear();
       }
     }
-    for (auto& candidate : candidates) {
-      LOG(INFO) << "candidate set size " << candidate.size();
-    }
     return candidates;
   }
 

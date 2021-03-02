@@ -26,10 +26,16 @@
 #include "graph/query_graph.h"
 #include "ops/expand_edge_operator.h"
 #include "ops/filters.h"
+#include "ops/operators.h"
 #include "ops/scans.h"
+#include "utils/flags.h"
+#include "utils/print_styles.h"
 
 using circinus::CompressedSubgraphs;
 using circinus::ExpandEdgeOperator;
+using circinus::ExpandKeyToKeyVertexOperator;
+using circinus::ExpandKeyToSetVertexOperator;
+using circinus::ExpandSetToKeyVertexOperator;
 using circinus::Graph;
 using circinus::LDFScan;
 using circinus::NLFFilter;
@@ -37,7 +43,7 @@ using circinus::QueryGraph;
 using circinus::QueryVertexID;
 using circinus::VertexID;
 
-#define BATCH_SIZE 1024
+#define BATCH_SIZE FLAGS_batch_size
 
 DEFINE_string(data_dir, "/data/share/project/haxe/data/subgraph_matching_datasets", "The directory of datasets");
 
@@ -50,6 +56,7 @@ class TestExpandEdgeCosts : public testing::Test {
   std::vector<std::vector<std::string>> query_graph_paths_;
 
   void SetUp() override {
+    LOG(INFO) << "BATCH_SIZE=" << BATCH_SIZE;
     data_graph_paths_.resize(datasets_.size());
     query_graph_paths_.reserve(datasets_.size());
     for (uint32_t dataset_i = 0; dataset_i < datasets_.size(); ++dataset_i) {
@@ -96,8 +103,8 @@ class TestExpandEdgeCosts : public testing::Test {
     std::unordered_map<QueryVertexID, uint32_t> indices;
     indices[parent] = 0;
     indices[target] = 1;
-    auto start = std::chrono::high_resolution_clock::now();
     auto op = ExpandEdgeOperator::newExpandEdgeOperator(parent, target, cover, indices);
+    auto start = std::chrono::high_resolution_clock::now();
     op->setCandidateSets(&candidates[target]);
     op->input(seeds, &g);
     std::vector<CompressedSubgraphs> outputs;
@@ -112,6 +119,63 @@ class TestExpandEdgeCosts : public testing::Test {
     return ret;
   }
 
+  uint32_t expandVertex(QueryVertexID parent, QueryVertexID target, const std::vector<int>& cover,
+                        const std::vector<std::vector<VertexID>>& candidates,
+                        const std::vector<CompressedSubgraphs>& seeds, const Graph& g) {
+    std::unordered_map<QueryVertexID, uint32_t> indices;
+    indices[parent] = 0;
+    indices[target] = 1;
+
+    // expand vertex operator
+    circinus::TraverseOperator* op;
+    if (cover[parent] == 1 && cover[target] == 1) {  // key to key
+      op = new ExpandKeyToKeyVertexOperator(std::vector<QueryVertexID>{parent}, target, indices);
+    } else if (cover[parent] == 1) {  // key to set
+      op = new ExpandKeyToSetVertexOperator(std::vector<QueryVertexID>{parent}, target, indices);
+    } else {  // set to key
+      op = new ExpandSetToKeyVertexOperator(std::vector<QueryVertexID>{parent}, target, indices);
+    }
+    auto start = std::chrono::high_resolution_clock::now();
+    op->setCandidateSets(&candidates[target]);
+    op->input(seeds, &g);
+    std::vector<CompressedSubgraphs> outputs;
+    while (op->expand(&outputs, BATCH_SIZE) > 0) {
+    }
+    auto end = std::chrono::high_resolution_clock::now();
+    auto ret = getNumSubgraphs(outputs);
+    outputs.clear();
+    auto expand_vertex_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+    delete op;
+
+    // expand vertex operator
+    auto op_expand_edge = ExpandEdgeOperator::newExpandEdgeOperator(parent, target, cover, indices);
+    start = std::chrono::high_resolution_clock::now();
+    op_expand_edge->setCandidateSets(&candidates[target]);
+    op_expand_edge->input(seeds, &g);
+    while (op_expand_edge->expand(&outputs, BATCH_SIZE) > 0) {
+    }
+    end = std::chrono::high_resolution_clock::now();
+    EXPECT_EQ(ret, getNumSubgraphs(outputs));
+    auto expand_edge_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+    delete op_expand_edge;
+
+    if (expand_vertex_time < expand_edge_time) {
+      LOG(INFO) << ((cover[parent] == 1) ? "key" : "set") << "to" << ((cover[target] == 1) ? "key " : "set ") << parent
+                << "->" << target << " vertex/edge " << GREEN(expand_vertex_time << '/' << expand_edge_time) << "ms "
+                << ret << '/' << outputs.size();
+    } else if (expand_vertex_time > expand_edge_time) {
+      LOG(INFO) << ((cover[parent] == 1) ? "key" : "set") << "to" << ((cover[target] == 1) ? "key " : "set ") << parent
+                << "->" << target << " vertex/edge " << RED(expand_vertex_time << '/' << expand_edge_time) << "ms "
+                << ret << '/' << outputs.size();
+    } else {
+      LOG(INFO) << ((cover[parent] == 1) ? "key" : "set") << "to" << ((cover[target] == 1) ? "key " : "set ") << parent
+                << "->" << target << " vertex/edge " << expand_vertex_time << '/' << expand_edge_time << "ms " << ret
+                << '/' << outputs.size();
+    }
+    return ret;
+  }
+
+  template <bool compare_expand_vertex = false>
   void expandEdges(uint32_t i) {
     Graph g(FLAGS_data_dir + "/" + data_graph_paths_[i]);  // load data graph
     for (uint32_t j = 0; j < query_graph_paths_[i].size(); ++j) {
@@ -139,18 +203,31 @@ class TestExpandEdgeCosts : public testing::Test {
           { /* key to set */
             cover[v] = 1;
             cover[target] = 0;
-            n_output = getNumMatches(v, target, cover, candidates, seed_keys, g);
+            if (compare_expand_vertex) {
+              n_output = expandVertex(v, target, cover, candidates, seed_keys, g);
+            } else {
+              n_output = getNumMatches(v, target, cover, candidates, seed_keys, g);
+            }
           }
           { /* key to key */
             cover[v] = 1;
             cover[target] = 1;
-            EXPECT_EQ(n_output, getNumMatches(v, target, cover, candidates, seed_keys, g));
+            if (compare_expand_vertex) {
+              EXPECT_EQ(n_output, expandVertex(v, target, cover, candidates, seed_keys, g));
+            } else {
+              EXPECT_EQ(n_output, getNumMatches(v, target, cover, candidates, seed_keys, g));
+            }
           }
           { /* set to key */
             cover[v] = 0;
             cover[target] = 1;
-            ASSERT_EQ(n_output, getNumMatches(v, target, cover, candidates, seed_sets, g));
+            if (compare_expand_vertex) {
+              ASSERT_EQ(n_output, expandVertex(v, target, cover, candidates, seed_sets, g));
+            } else {
+              ASSERT_EQ(n_output, getNumMatches(v, target, cover, candidates, seed_sets, g));
+            }
           }
+          LOG(INFO) << "-------";
         }
       }
     }
@@ -165,3 +242,12 @@ TEST_F(TestExpandEdgeCosts, PATENTS) { expandEdges(4); }
 TEST_F(TestExpandEdgeCosts, WORDNET) { expandEdges(5); }
 TEST_F(TestExpandEdgeCosts, YEAST) { expandEdges(6); }
 TEST_F(TestExpandEdgeCosts, YOUTUBE) { expandEdges(7); }
+
+TEST_F(TestExpandEdgeCosts, CompareDBLP) { expandEdges<true>(0); }
+TEST_F(TestExpandEdgeCosts, CompareEU2005) { expandEdges<true>(1); }
+TEST_F(TestExpandEdgeCosts, CompareHPRD) { expandEdges<true>(2); }
+TEST_F(TestExpandEdgeCosts, CompareHUMAN) { expandEdges<true>(3); }
+TEST_F(TestExpandEdgeCosts, ComparePATENTS) { expandEdges<true>(4); }
+TEST_F(TestExpandEdgeCosts, CompareWORDNET) { expandEdges<true>(5); }
+TEST_F(TestExpandEdgeCosts, CompareYEAST) { expandEdges<true>(6); }
+TEST_F(TestExpandEdgeCosts, CompareYOUTUBE) { expandEdges<true>(7); }
