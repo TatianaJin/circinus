@@ -25,7 +25,7 @@ namespace circinus {
 double WeightedBnB::computeAssignmentWeight(const std::vector<int>& assignment,
                                             const std::vector<double>& vertex_weights) {
   double weight = 0;
-  for (int i = 0; i < assignment.size(); ++i) {
+  for (uint32_t i = 0; i < assignment.size(); ++i) {
     if (assignment[i] == 1) {
       weight += vertex_weights[i];
     }
@@ -35,9 +35,9 @@ double WeightedBnB::computeAssignmentWeight(const std::vector<int>& assignment,
 
 std::deque<QueryEdge> WeightedBnB::getEdgeList(const QueryGraph& g) {
   std::deque<QueryEdge> list;
-  for (int i = 0; i < g.getNumVertices(); ++i) {
+  for (QueryVertexID i = 0; i < g.getNumVertices(); ++i) {
     auto neighbors = g.getOutNeighbors(i);
-    for (int j = 0; j < neighbors.second; ++j) {
+    for (uint32_t j = 0; j < neighbors.second; ++j) {
       if (i < neighbors.first[j]) {
         list.emplace_back(i, neighbors.first[j]);
       }
@@ -91,7 +91,7 @@ double WeightedBnB::matchingLB(std::deque<QueryEdge> uncovered_edges, std::vecto
 
 uint32_t WeightedBnB::countUncoveredNeighbors(int v, const std::deque<QueryEdge>& uncovered_edges) {
   uint32_t count = 0;
-  for (int i = 0; i < uncovered_edges.size(); ++i) {
+  for (uint32_t i = 0; i < uncovered_edges.size(); ++i) {
     count += uncovered_edges[i].hasEndVertex(v);
   }
   return count;
@@ -115,7 +115,7 @@ void WeightedBnB::dfs(std::vector<int> assignment, std::deque<QueryEdge> uncover
   }
 
   // check infeasible assignment: at least one edge with both ends assigned to be not in the vertex cover
-  for (int i = 0; i < uncovered_edges.size(); ++i) {
+  for (uint32_t i = 0; i < uncovered_edges.size(); ++i) {
     if (assignment[uncovered_edges[i].src] == 0 && assignment[uncovered_edges[i].dst] == 0) {
       return;
     }
@@ -136,7 +136,7 @@ void WeightedBnB::dfs(std::vector<int> assignment, std::deque<QueryEdge> uncover
   }
 
   // find the branch vertex that has most uncovered edges
-  uint32_t branching_vertex;
+  uint32_t branching_vertex = 0;
   uint32_t max_uncovered_neighbors = 0;
   for (uint32_t i = 0; i < graph_->getNumVertices(); ++i) {
     if (assignment[i] == -1) {

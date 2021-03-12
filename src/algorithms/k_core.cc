@@ -44,20 +44,20 @@ const std::vector<int>& TwoCoreSolver::get2CoreTable(const QueryGraph* graph) {
   core_table_.resize(vertices_count);
 
   // populate degree_bin
-  for (int i = 0; i < vertices_count; ++i) {
+  for (uint32_t i = 0; i < vertices_count; ++i) {
     int degree = graph->getVertexOutDegree(i);
     core_table_[i] = degree;
     degree_bin[degree] += 1;
   }
 
   // populate offsets according to degree_bin
-  for (int i = 1; i < max_degree + 1; ++i) {
+  for (uint32_t i = 1; i < max_degree + 1; ++i) {
     offsets[i] = offsets[i - 1] + degree_bin[i - 1];
   }
 
   // count sort to populate vertices
   // here offsets[i] is used as the position of the next vertex of degreed i
-  for (int i = 0; i < vertices_count; ++i) {
+  for (uint32_t i = 0; i < vertices_count; ++i) {
     int degree = graph->getVertexOutDegree(i);
     position[i] = offsets[degree];
     vertices[position[i]] = i;
@@ -70,12 +70,12 @@ const std::vector<int>& TwoCoreSolver::get2CoreTable(const QueryGraph* graph) {
   }
   offsets.front() = 0;
 
-  for (int i = 0; i < vertices_count; ++i) {
+  for (uint32_t i = 0; i < vertices_count; ++i) {
     int v = vertices[i];
 
     auto neighbors = graph->getOutNeighbors(v);
 
-    for (int j = 0; j < neighbors.second; ++j) {
+    for (uint32_t j = 0; j < neighbors.second; ++j) {
       auto u = neighbors.first[j];
 
       if (core_table_[u] > core_table_[v]) {
@@ -84,7 +84,7 @@ const std::vector<int>& TwoCoreSolver::get2CoreTable(const QueryGraph* graph) {
         int cur_degree_u = core_table_[u];
         int position_u = position[u];
         int position_w = offsets[cur_degree_u];
-        int w = vertices[position_w];
+        auto w = vertices[position_w];
 
         if (u != w) {
           // Swap u and w.

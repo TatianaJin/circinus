@@ -37,7 +37,7 @@ if(CMAKE_COMPILER_IS_GNUCXX)
     set(CMAKE_CXX_FLAGS_DEBUG "-g")
   endif()
   set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -g")
-  set(CMAKE_CXX_FLAGS_RELEASE "-O3 -w -march=native -DNDEBUG")
+  set(CMAKE_CXX_FLAGS_RELEASE "-O3 -Wall -march=native -DNDEBUG")
 endif()
 
 ### Dependencies and CMake utils
@@ -47,6 +47,7 @@ include(dep)
 
 ### Source
 include_directories(${PROJECT_SOURCE_DIR}/src)
+include_directories(${PROJECT_SOURCE_DIR}/third_party/include)
 add_subdirectory(src)
 
 ### Libraries
@@ -54,10 +55,12 @@ add_subdirectory(src)
 if (BUILD_SHARED)
   add_library(circinus SHARED ${circinus_sources})
   target_link_libraries(circinus ${EXTERNAL_LIBRARY})
+  add_dependencies(circinus phmap_ep)
 else()
   # Static
   add_library(circinus STATIC ${circinus_objs})
   target_link_libraries(circinus ${EXTERNAL_LIBRARY})
+  add_dependencies(circinus phmap_ep)
 endif()
 
 

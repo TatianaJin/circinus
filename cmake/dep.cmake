@@ -13,6 +13,7 @@
 # limitations under the License.
 
 set(THIRDPARTY_DIR ${PROJECT_SOURCE_DIR}/third_party)
+include(ExternalProject)
 
 ### pthread
 find_package(Threads)
@@ -72,6 +73,14 @@ if(profiler_INCLUDE AND profiler_LIB)
 else()
   message(STATUS "gperf not found")
 endif()
+
+
+### parallel hashmap
+ExternalProject_Add(phmap_ep
+  CMAKE_ARGS "-DCMAKE_INSTALL_PREFIX=${THIRDPARTY_DIR}"
+  GIT_REPOSITORY https://github.com/greg7mdp/parallel-hashmap.git
+  GIT_TAG 1.32
+)
 
 
 add_definitions(${EXTERNAL_DEFINITION})
