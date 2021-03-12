@@ -23,6 +23,7 @@
 
 using circinus::WeightedBnB;
 using circinus::QueryGraph;
+using circinus::QueryVertexID;
 
 class TestMinimumWeightVertexCoverAlgorithm : public testing::Test {
  protected:
@@ -68,13 +69,13 @@ TEST_F(TestMinimumWeightVertexCoverAlgorithm, Correctness) {
       EXPECT_EQ(vertex_cover_size, solver.getBestObjective());
 
       // check if it is a vertex cover
-      for (int i = 0; i < g.getNumVertices(); ++i) {
+      for (QueryVertexID i = 0; i < g.getNumVertices(); ++i) {
         if (assignment[i]) {  // vertex i is in the cover, all its out edges are covered
           continue;
         }
         auto neighbors = g.getOutNeighbors(i);
         // the destination vertex should be in the cover to cover j-th out-edge of i
-        for (int j = 0; j < neighbors.second; ++j) {
+        for (uint32_t j = 0; j < neighbors.second; ++j) {
           EXPECT_EQ(1, assignment[neighbors.first[j]]);
         }
       }
