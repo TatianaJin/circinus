@@ -26,15 +26,15 @@
 
 namespace circinus {
 
-void OperatorTree::handleTask(Task* task, TaskQueue* queue, uint64_t* count) const {
+bool OperatorTree::handleTask(Task* task, TaskQueue* queue, uint32_t thread_id) {
   auto op = operators_[task->getLevel()];
+
   // TODO(tatiana): handle non-traverse operators
   auto traverse_op = dynamic_cast<TraverseOperator*>(op);
   if (traverse_op == nullptr) {
     auto output_op = dynamic_cast<OutputOperator*>(op);
-    CHECK(output_op != nullptr);
-    *count += output_op->checkAndCount(task->getInput());
-    return;
+    DCHECK(output_op != nullptr);
+    return output_op->validateAndOutput(task->getInput(), thread_id);
   }
 
   // TODO(tatiana): data graph may change
@@ -43,14 +43,10 @@ void OperatorTree::handleTask(Task* task, TaskQueue* queue, uint64_t* count) con
   while (true) {
     std::vector<CompressedSubgraphs> outputs;
     auto size = traverse_op->expand(&outputs, FLAGS_batch_size);
-    if (size == 0) return;
-    if (size == FLAGS_batch_size) {
-      queue->putTask(task->getLevel() + 1, std::move(outputs), task->getDataGraph());
-    } else {  // the last output batch
-      handleTask(new Task(task->getLevel() + 1, std::move(outputs), task->getDataGraph()), queue, count);
-      return;
-    }
+    if (size == 0) return false;
+    queue->putTask(task->getLevel() + 1, std::move(outputs), task->getDataGraph());
   }
+  return false;
 }
 
 }  // namespace circinus

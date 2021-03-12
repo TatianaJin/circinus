@@ -29,16 +29,16 @@ class TestGraph : public testing::Test {};
 
 TEST_F(TestGraph, Load) {
   Graph g("resources/human.graph");
-  EXPECT_EQ(g.getNumVertices(), 4674);
-  EXPECT_EQ(g.getNumEdges(), 86282);
-  EXPECT_EQ(g.getGraphMaxDegree(), 771);
+  EXPECT_EQ(g.getNumVertices(), 4674u);
+  EXPECT_EQ(g.getNumEdges(), 86282u);
+  EXPECT_EQ(g.getGraphMaxDegree(), 771u);
   auto labels = g.getLabels();
-  EXPECT_EQ(labels.size(), 44);
+  EXPECT_EQ(labels.size(), 44u);
   uint64_t max_label_frequency = 0;
   for (auto l : labels) {
     max_label_frequency = std::max(max_label_frequency, g.getVertexCardinalityByLabel(l));
   }
-  EXPECT_EQ(max_label_frequency, 683);
+  EXPECT_EQ(max_label_frequency, 683u);
 }
 
 TEST_F(TestGraph, GetVerticesByLabel) {

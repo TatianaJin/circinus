@@ -17,7 +17,6 @@
 #include <algorithm>
 #include <string>
 #include <unordered_map>
-#include <unordered_set>
 #include <vector>
 
 #include "graph/compressed_subgraphs.h"
@@ -25,6 +24,7 @@
 #include "graph/query_graph.h"
 #include "graph/types.h"
 #include "ops/traverse_operator.h"
+#include "utils/hashmap.h"
 
 namespace circinus {
 
@@ -185,7 +185,7 @@ class CurrentResultsByParent : public CurrentResults {
 
   uint32_t getResults(std::vector<CompressedSubgraphs>* outputs, uint32_t cap) override {
     auto& parent_set = *input_->getSet(parent_index_);
-    std::unordered_map<VertexID, uint32_t> group_index;
+    unordered_map<VertexID, uint32_t> group_index;
     uint32_t n = 0;
     auto current_keys = input_->getKeyMap();
     for (uint32_t i = 0; i < parent_set.size(); ++i) {
@@ -210,10 +210,10 @@ class CurrentResultsByParent : public CurrentResults {
 
 class CurrentResultsByExtension : public CurrentResults {
  private:
-  std::unordered_set<VertexID> seen_extensions_;
+  unordered_set<VertexID> seen_extensions_;
   std::vector<VertexID> extensions_;
   uint32_t parent_match_index_ = 0;
-  std::unordered_set<VertexID> current_keys_;
+  unordered_set<VertexID> current_keys_;
 
  public:
   CurrentResultsByExtension(const std::vector<VertexID>* candidates, const CompressedSubgraphs* input,

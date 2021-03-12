@@ -41,8 +41,8 @@ class ExpandVertexOperator : public TraverseOperator {
   }
 
   std::vector<QueryVertexID> parents_;
-  std::unordered_map<QueryVertexID, uint32_t> query_vertex_indices_;
   QueryVertexID target_vertex_;
+  std::unordered_map<QueryVertexID, uint32_t> query_vertex_indices_;
 };
 
 }  // namespace circinus

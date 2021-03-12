@@ -21,6 +21,7 @@
 #include "graph/graph.h"
 #include "graph/query_graph.h"
 #include "ops/operator.h"
+#include "ops/output_operator.h"
 #include "ops/traverse_operator.h"
 #include "plan/operator_tree.h"
 
@@ -33,6 +34,7 @@ class ExecutionPlan {
   std::vector<std::vector<VertexID>> candidate_sets_;
   std::unordered_map<QueryVertexID, Operator*> target_vertex_to_ops_;
   OperatorTree operators_;
+  Outputs outputs_;
 
   QueryVertexID root_query_vertex_;
   std::vector<int> cover_table_;
@@ -54,12 +56,13 @@ class ExecutionPlan {
   }
 
   inline const OperatorTree& getOperators() const { return operators_; }
+  inline OperatorTree& getOperators() { return operators_; }
 
   inline void setCandidateSets(std::vector<std::vector<VertexID>>& cs) {
     candidate_sets_.swap(cs);
     for (uint32_t i = 0; i < candidate_sets_.size(); ++i) {
-      if (i == root_query_vertex_) continue;
       DLOG(INFO) << "query vertex " << i << ": " << candidate_sets_[i].size() << " candidates";
+      if (i == root_query_vertex_) continue;
       ((TraverseOperator*)target_vertex_to_ops_[i])->setCandidateSets(&candidate_sets_[i]);
     }
   }
@@ -74,6 +77,9 @@ class ExecutionPlan {
   inline QueryVertexID getRootQueryVertexID() const { return root_query_vertex_; }
 
   inline bool isInCover(QueryVertexID id) const { return cover_table_[id] == 1; }
+
+  inline const Outputs& getOutputs() const { return outputs_; }
+  inline Outputs& getOutputs() { return outputs_; }
 
  private:
   inline void printOperatorChain(const Operator* root, const std::string& indent = "") const {

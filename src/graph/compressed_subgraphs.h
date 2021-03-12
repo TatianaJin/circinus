@@ -17,10 +17,12 @@
 #include <algorithm>
 #include <cinttypes>
 #include <memory>
-#include <unordered_set>
 #include <vector>
 
+#include "glog/logging.h"
+
 #include "graph/types.h"
+#include "utils/hashmap.h"
 
 namespace circinus {
 
@@ -104,9 +106,50 @@ class CompressedSubgraphs {
     return n_subgraphs;
   }
 
+  // TODO(tatiana): this function is quite expensive
   uint64_t getNumIsomorphicSubgraphs() const {
-    // TODO(tatiana): check?
-    return getNumSubgraphs();
+    if (sets_.empty()) {
+      return !keys_.empty();
+    }
+    if (sets_.size() == 1) {
+      return sets_.front()->size();
+    }
+    // dfs sets_ chain
+    uint64_t count = 0;
+    std::vector<uint32_t> set_index(sets_.size(), 0);
+    std::vector<QueryVertexID> existing_vertices;
+    existing_vertices.reserve(getNumVertices());
+    existing_vertices.insert(existing_vertices.end(), keys_.begin(), keys_.end());
+    uint32_t last_depth = sets_.size() - 1;
+    uint32_t current_depth = 0;
+    while (true) {
+      while (set_index[current_depth] < (*sets_[current_depth]).size()) {
+        auto v = (*sets_[current_depth])[set_index[current_depth]];
+        bool existing = false;
+        for (auto e : existing_vertices) {
+          if (e == v) {
+            existing = true;
+            break;
+          }
+        }
+        ++set_index[current_depth];
+        if (!existing) {                      // v is valid
+          if (current_depth == last_depth) {  // reaching a leave in dfs
+            ++count;
+          } else {
+            existing_vertices.push_back(v);
+            ++current_depth;
+            set_index[current_depth] = 0;  // start from the first vertex in the next set
+          }
+        }
+      }
+      if (current_depth == 0) {
+        break;
+      }
+      --current_depth;
+      existing_vertices.pop_back();
+    }
+    return count;
   }
 
   bool isExisting(uint32_t key) const {
@@ -121,7 +164,7 @@ class CompressedSubgraphs {
   /** Get the value of the key vertex at key_idx. */
   VertexID getKeyVal(uint32_t key_idx) const { return keys_[key_idx]; }
 
-  std::unordered_set<VertexID> getKeyMap() const { return std::unordered_set<VertexID>(keys_.begin(), keys_.end()); }
+  unordered_set<VertexID> getKeyMap() const { return unordered_set<VertexID>(keys_.begin(), keys_.end()); }
 
   /** Get the matching set of the non-key vertex at key_idx. */
   const VertexSet& getSet(uint32_t key_idx) const { return sets_[key_idx]; }

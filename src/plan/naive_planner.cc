@@ -109,13 +109,14 @@ QueryVertexID NaivePlanner::selectStartingVertex(const std::vector<QueryVertexID
   // (*candidate_cardinality_)[v1] / query_graph_->getVertexOutDegree(v1) < (*candidate_cardinality_)[v2] /
   // query_graph_->getVertexOutDegree(v2); });
 
-  QueryVertexID start_vertex;
+  QueryVertexID start_vertex = cover.front();
   double min = (*candidate_cardinality_)[cover.front()];
 
   for (auto v : cover) {
     double score = (*candidate_cardinality_)[v] / query_graph_->getVertexOutDegree(v);
+    DLOG(INFO) << "cover vertex " << v << " score " << score << " min " << min;
     if (score < min) {
-      score = min;
+      min = score;
       start_vertex = v;
     }
   }

@@ -150,7 +150,7 @@ TraverseOperator* ExecutionPlan::newExpandKeyKeyVertexOperator(std::vector<Query
 }
 
 Operator* ExecutionPlan::newOutputOperator() {
-  auto ret = new OutputOperator();
+  auto ret = OutputOperator::newOutputOperator(OutputType::Count, &outputs_);
   operators_.push_back(ret);
   return ret;
 }

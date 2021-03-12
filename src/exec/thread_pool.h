@@ -24,24 +24,18 @@
 namespace circinus {
 
 class ThreadPool {
-  const ExecutionPlan* plan_;
+  ExecutionPlan* plan_;
   TaskQueue task_queue_;
   std::vector<std::thread> pool_;
   uint32_t n_threads_;
-  std::vector<uint64_t> output_count_;
 
  public:
-  ThreadPool(uint32_t n_threads, const ExecutionPlan* plan) : plan_(plan), task_queue_(), n_threads_(n_threads) {}
+  ThreadPool(uint32_t n_threads, ExecutionPlan* plan) : plan_(plan), task_queue_(n_threads), n_threads_(n_threads) {}
 
   ~ThreadPool() {
     for (auto& t : pool_) {
       t.join();
     }
-    uint64_t count = 0;
-    for (auto c : output_count_) {
-      count += c;
-    }
-    LOG(INFO) << "find matches " << count;
   }
 
   inline void addInitTask(uint32_t level, std::vector<CompressedSubgraphs>&& input, const Graph* data_graph) {
@@ -50,23 +44,26 @@ class ThreadPool {
 
   void start() {
     pool_.reserve(n_threads_);
-    output_count_.resize(n_threads_, 0);
     pool_.push_back(std::thread([this]() {
       auto& operators = plan_->getOperators();
-      while (true) {
-        auto task = task_queue_.getTask();
+      bool stop = false;
+      while (!stop) {
+        auto task = task_queue_.getTask(0);
         if (task == nullptr) break;
-        operators.handleTask(task, &task_queue_, &output_count_[0]);
+        stop = operators.handleTask(task, &task_queue_, 0);
         delete task;
       }
     }));
     for (uint32_t i = 1; i < n_threads_; ++i) {
       pool_.push_back(std::thread([this, i]() {
         auto operators = plan_->cloneOperators();
-        while (true) {
-          auto task = task_queue_.getTask();
-          if (task == nullptr) break;
-          operators.handleTask(task, &task_queue_, &output_count_[i]);
+        bool stop = false;
+        while (!stop) {
+          auto task = task_queue_.getTask(i);
+          if (task == nullptr) {
+            break;
+          }
+          stop = operators.handleTask(task, &task_queue_, i);
           delete task;
         }
       }));

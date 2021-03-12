@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <fstream>
 #include <string>
 #include <vector>
 
@@ -24,22 +25,62 @@
 
 namespace circinus {
 
-class OutputOperator : public Operator {
- public:
-  std::string toString() const override { return "OutputOperator"; }
-  Operator* clone() const override { return new OutputOperator(); }
+enum class OutputType : uint32_t { Subgraph = 0, Count }; /* TODO(tatiana): support enumeration */
 
-  void checkAndOutput(const std::vector<CompressedSubgraphs>& input) const { /* TODO(tatiana) */
+class Outputs {
+  std::vector<uint64_t> n_matches_per_thread_;
+  std::vector<std::ofstream> output_file_per_thread_;
+  uint32_t n_threads_ = 0;
+  uint64_t limit_per_thread_ = ~0u;
+
+ public:
+  Outputs& init(uint32_t n_threads, const std::string& path_prefix = "");
+
+  inline uint64_t updateCount(uint64_t count, uint32_t thread_id) {
+    DCHECK_LT(thread_id, n_matches_per_thread_.size());
+    n_matches_per_thread_[thread_id] += count;
+    return n_matches_per_thread_[thread_id];
   }
 
-  uint64_t checkAndCount(const std::vector<CompressedSubgraphs>& input) const {
-    uint64_t count = 0, rough = 0;
+  inline void limit(uint64_t total_limit) {
+    limit_per_thread_ = total_limit / n_threads_ + ((total_limit % n_threads_) != 0);
+  }
+
+  inline uint64_t getLimitPerThread() const { return limit_per_thread_; }
+
+  inline uint64_t getCount() const {
+    uint64_t total = 0;
+    for (auto count : n_matches_per_thread_) {
+      total += count;
+    }
+    return total;
+  }
+};
+
+class OutputOperator : public Operator {
+ protected:
+  Outputs* outputs_;
+
+ public:
+  explicit OutputOperator(Outputs* outputs) : outputs_(outputs) {}
+  static OutputOperator* newOutputOperator(OutputType type, Outputs* outputs);
+  virtual bool validateAndOutput(const std::vector<CompressedSubgraphs>& input, uint32_t output_index) = 0;
+};
+
+class CountOutputOperator : public OutputOperator {
+ public:
+  std::string toString() const override { return "CountOutputOperator"; }
+  // all clones share the same Outputs instance
+  Operator* clone() const override { return new CountOutputOperator(outputs_); }
+
+  explicit CountOutputOperator(Outputs* outputs) : OutputOperator(outputs) {}
+
+  bool validateAndOutput(const std::vector<CompressedSubgraphs>& input, uint32_t output_index) override {
+    uint64_t count = 0;
     for (auto& group : input) {
       count += group.getNumIsomorphicSubgraphs();
-      rough += group.getNumSubgraphs();
     }
-    // LOG(INFO) << "# isomorphic matches " << count << " roughly " << rough;
-    return count;
+    return outputs_->updateCount(count, output_index) >= outputs_->getLimitPerThread();
   }
 };
 

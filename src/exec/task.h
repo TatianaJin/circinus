@@ -21,6 +21,7 @@
 
 namespace circinus {
 
+// TODO(tatiana): add query id for concurrent processing
 class Task {
   uint32_t level_;
   std::vector<CompressedSubgraphs> input_;

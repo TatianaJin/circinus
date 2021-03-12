@@ -14,7 +14,6 @@
 
 #pragma once
 
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -22,22 +21,50 @@
 #include "graph/graph.h"
 #include "graph/types.h"
 #include "ops/operator.h"
+#include "utils/hashmap.h"
 
 namespace circinus {
 
 /** set1 and set2 must be sorted in ascending order */
-void intersect(const std::pair<const VertexID*, uint32_t>& set1, const std::pair<const VertexID*, uint32_t>& set2,
-               std::vector<VertexID>* intersection, const std::unordered_set<VertexID>& except = {});
+inline void intersect(const std::pair<const VertexID*, uint32_t>& set1,
+                      const std::pair<const VertexID*, uint32_t>& set2, std::vector<VertexID>* intersection,
+                      const unordered_set<VertexID>& except = {}) {
+  if (set1.second <= set2.second) {
+    intersection->reserve(set1.second);
+    uint32_t set2_index = 0;
+    for (uint32_t i = 0; i < set1.second; ++i) {
+      auto vid = set1.first[i];
+      while (set2_index < set2.second && set2.first[set2_index] < vid) {
+        ++set2_index;
+      }
+      if (set2_index == set2.second) {  // all elements in the rest of set2 are smaller than the rest of set1
+        break;
+      }
+      if (set2.first[set2_index] == vid && except.count(vid) == 0) intersection->emplace_back(vid);
+    }
+  } else {
+    intersect(set2, set1, intersection, except);
+  }
+}
+
+inline void intersect(const unordered_set<VertexID>& set1, const std::pair<const VertexID*, uint32_t>& set2,
+                      std::vector<VertexID>* intersection, const unordered_set<VertexID>& except = {}) {
+  intersection->reserve(std::min(set2.second, (uint32_t)set1.size()));
+  for (uint32_t i = 0; i < set2.second; ++i) {
+    auto vid = set2.first[i];
+    if (set1.count(vid) && except.count(vid) == 0) intersection->emplace_back(vid);
+  }
+}
 
 /** set1 and set2 must be sorted in ascending order */
 inline void intersect(const std::vector<VertexID>& set1, const std::pair<const VertexID*, uint32_t>& set2,
-                      std::vector<VertexID>* intersection, const std::unordered_set<VertexID>& except = {}) {
+                      std::vector<VertexID>* intersection, const unordered_set<VertexID>& except = {}) {
   intersect(std::make_pair(set1.data(), (uint32_t)set1.size()), set2, intersection, except);
 }
 
 /** set1 and set2 must be sorted in ascending order */
 inline void intersect(const std::vector<VertexID>& set1, const std::vector<VertexID>& set2,
-                      std::vector<VertexID>* intersection, const std::unordered_set<VertexID>& except = {}) {
+                      std::vector<VertexID>* intersection, const unordered_set<VertexID>& except = {}) {
   intersect(set1, std::make_pair(set2.data(), (uint32_t)set2.size()), intersection, except);
 }
 
@@ -56,7 +83,7 @@ class TraverseOperator : public Operator {
  public:
   virtual ~TraverseOperator() {}
 
-  inline void setCandidateSets(const std::vector<VertexID>* candidates) { candidates_ = candidates; }
+  inline virtual void setCandidateSets(const std::vector<VertexID>* candidates) { candidates_ = candidates; }
   inline const std::vector<VertexID>* getCandidateSets() const { return candidates_; }
 
   virtual void input(const std::vector<CompressedSubgraphs>& inputs, const Graph* data_graph) {

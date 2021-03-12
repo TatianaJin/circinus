@@ -1,6 +1,7 @@
 build/
 release/
 debug/
+third_party
 
 *.swp
 *.bak

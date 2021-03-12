@@ -51,7 +51,7 @@ class OperatorTree {
     return ret;
   }
 
-  void handleTask(Task* task, TaskQueue* queue, uint64_t* count) const;
+  bool handleTask(Task* task, TaskQueue* queue, uint32_t thread_id);
 };
 
 }  // namespace circinus

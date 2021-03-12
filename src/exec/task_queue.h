@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <condition_variable>
 #include <mutex>
 #include <queue>
 #include <vector>
@@ -30,12 +31,24 @@ class TaskQueue {
   };
   std::priority_queue<Task*, std::vector<Task*>, TaskComparator> task_queue_;
   std::mutex mu_;
+  std::condition_variable cv_;
+  uint32_t n_subscribers_ = 0;
+  uint32_t wait_count_ = 0;
 
  public:
+  TaskQueue(uint32_t n_subscribers) : n_subscribers_(n_subscribers) {}
+
   /** A task is newed */
   inline void putTask(uint32_t level, std::vector<CompressedSubgraphs>&& input, const Graph* graph) {
-    std::lock_guard<std::mutex> lock(mu_);
-    task_queue_.push(new Task(level, std::move(input), graph));
+    bool notify = false;
+    {
+      std::lock_guard<std::mutex> lock(mu_);
+      task_queue_.push(new Task(level, std::move(input), graph));
+      notify = (task_queue_.size() == 1);
+    }
+    if (notify) {
+      cv_.notify_one();
+    }
   }
 
   /** A task is newed */
@@ -44,9 +57,21 @@ class TaskQueue {
   }
 
   /** The caller should delete the pointer after use */
-  inline Task* getTask() {
-    std::lock_guard<std::mutex> lock(mu_);
-    if (task_queue_.empty()) return nullptr;
+  inline Task* getTask(uint32_t subscriber_id) {
+    std::unique_lock<std::mutex> lock(mu_);
+    // std::lock_guard<std::mutex> lock(mu_);
+    if (task_queue_.empty()) {
+      if (++wait_count_ == n_subscribers_) {  // all tasks finished
+        LOG(INFO) << "tasks all done " << wait_count_ << "/" << n_subscribers_;
+        cv_.notify_all();
+        return nullptr;
+      }
+      while (task_queue_.empty()) {
+        cv_.wait(lock);
+        if (wait_count_ == n_subscribers_) return nullptr;
+      }
+      --wait_count_;
+    }
     auto task = task_queue_.top();
     task_queue_.pop();
     return task;

@@ -66,7 +66,6 @@ class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
     std::stringstream ss;
     ss << "ExpandKeyToKeyVertexOperator";
     toStringInner(ss);
-    if (candidates_ != nullptr) ss << " (" << candidates_->size() << ")";
     return ss.str();
   }
 
