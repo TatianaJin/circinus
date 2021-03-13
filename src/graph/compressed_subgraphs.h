@@ -107,7 +107,7 @@ class CompressedSubgraphs {
   }
 
   // TODO(tatiana): this function is quite expensive
-  uint64_t getNumIsomorphicSubgraphs() const {
+  uint64_t getNumIsomorphicSubgraphs(uint64_t limit = ~0u) const {
     if (sets_.empty()) {
       return !keys_.empty();
     }
@@ -117,27 +117,32 @@ class CompressedSubgraphs {
     // dfs sets_ chain
     uint64_t count = 0;
     std::vector<uint32_t> set_index(sets_.size(), 0);
-    std::vector<QueryVertexID> existing_vertices;
+    unordered_set<QueryVertexID> existing_vertices;
     existing_vertices.reserve(getNumVertices());
-    existing_vertices.insert(existing_vertices.end(), keys_.begin(), keys_.end());
+    existing_vertices.insert(keys_.begin(), keys_.end());
+    // std::vector<QueryVertexID> existing_vertices;
+    // existing_vertices.reserve(getNumVertices());
+    // existing_vertices.insert(existing_vertices.end(), keys_.begin(), keys_.end());
     uint32_t last_depth = sets_.size() - 1;
     uint32_t current_depth = 0;
     while (true) {
       while (set_index[current_depth] < (*sets_[current_depth]).size()) {
         auto v = (*sets_[current_depth])[set_index[current_depth]];
-        bool existing = false;
-        for (auto e : existing_vertices) {
-          if (e == v) {
-            existing = true;
-            break;
-          }
-        }
+        // bool existing = false;
+        // for (auto e : existing_vertices) {
+        //   if (e == v) {
+        //     existing = true;
+        //     break;
+        //   }
+        // }
         ++set_index[current_depth];
-        if (!existing) {                      // v is valid
-          if (current_depth == last_depth) {  // reaching a leave in dfs
-            ++count;
+        // if (!existing) {                      // v is valid
+        if (existing_vertices.count(v) == 0) {  // v is valid
+          if (current_depth == last_depth) {    // reaching a leave in dfs
+            if (++count == limit) return count;
           } else {
-            existing_vertices.push_back(v);
+            // existing_vertices.push_back(v);
+            existing_vertices.insert(v);
             ++current_depth;
             set_index[current_depth] = 0;  // start from the first vertex in the next set
           }
@@ -147,7 +152,8 @@ class CompressedSubgraphs {
         break;
       }
       --current_depth;
-      existing_vertices.pop_back();
+      // existing_vertices.pop_back();
+      existing_vertices.erase((*sets_[current_depth])[set_index[current_depth] - 1]);
     }
     return count;
   }

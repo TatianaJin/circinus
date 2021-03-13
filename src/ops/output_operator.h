@@ -42,6 +42,8 @@ class Outputs {
     return n_matches_per_thread_[thread_id];
   }
 
+  inline uint64_t getCount(uint32_t thread_id) const { return n_matches_per_thread_[thread_id]; }
+
   inline void limit(uint64_t total_limit) {
     limit_per_thread_ = total_limit / n_threads_ + ((total_limit % n_threads_) != 0);
   }
@@ -76,11 +78,13 @@ class CountOutputOperator : public OutputOperator {
   explicit CountOutputOperator(Outputs* outputs) : OutputOperator(outputs) {}
 
   bool validateAndOutput(const std::vector<CompressedSubgraphs>& input, uint32_t output_index) override {
-    uint64_t count = 0;
+    auto count_acc = outputs_->getCount(output_index);
     for (auto& group : input) {
-      count += group.getNumIsomorphicSubgraphs();
+      count_acc = outputs_->updateCount(group.getNumIsomorphicSubgraphs(outputs_->getLimitPerThread() - count_acc),
+                                        output_index);
+      if (count_acc >= outputs_->getLimitPerThread()) return true;
     }
-    return outputs_->updateCount(count, output_index) >= outputs_->getLimitPerThread();
+    return false;
   }
 };
 

@@ -50,6 +50,8 @@ class ThreadPool {
       while (!stop) {
         auto task = task_queue_.getTask(0);
         if (task == nullptr) break;
+        // LOG(INFO) << "input no. CompressedSubgraphs " << task->getInput().size() << ' ' << task->getLevel() << ' '
+        // << operators.getOperator(task->getLevel())->toString();
         stop = operators.handleTask(task, &task_queue_, 0);
         delete task;
       }
