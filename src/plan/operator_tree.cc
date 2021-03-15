@@ -21,6 +21,7 @@
 #include "exec/task.h"
 #include "exec/task_queue.h"
 #include "graph/compressed_subgraphs.h"
+#include "graph/graph.h"
 #include "ops/operators.h"
 #include "utils/flags.h"
 
@@ -45,6 +46,28 @@ bool OperatorTree::handleTask(Task* task, TaskQueue* queue, uint32_t thread_id) 
     auto size = traverse_op->expand(&outputs, FLAGS_batch_size);
     if (size == 0) return false;
     queue->putTask(task->getLevel() + 1, std::move(outputs), task->getDataGraph());
+  }
+  return false;
+}
+
+bool OperatorTree::handleInput(const Graph* g, const std::vector<CompressedSubgraphs>& inputs, uint32_t level) {
+  std::vector<CompressedSubgraphs> outputs;
+  auto op = operators_[level];
+  if (level == operators_.size() - 1) {
+    auto output_op = dynamic_cast<OutputOperator*>(op);
+    return output_op->validateAndOutput(inputs, 0);
+  }
+  auto traverse_op = dynamic_cast<TraverseOperator*>(op);
+  traverse_op->input(inputs, g);
+  while (true) {
+    outputs.clear();
+    auto size = traverse_op->expand(&outputs, FLAGS_batch_size);
+    if (size == 0) {
+      break;
+    }
+    if (handleInput(g, outputs, level + 1)) {
+      return true;
+    }
   }
   return false;
 }

@@ -55,16 +55,42 @@ class ExecutionPlan {
     printOperatorChain(operators_.root());
   }
 
+  void printLabelFrequency() const {
+    unordered_map<LabelID, std::vector<QueryVertexID>> labels;
+    uint32_t n_keys = 0;
+    for (QueryVertexID v = 0; v < query_graph_->getNumVertices(); ++v) {
+      labels[query_graph_->getVertexLabel(v)].push_back(v);
+      n_keys += isInCover(v);
+    }
+    for (auto& pair : labels) {
+      std::stringstream ss;
+      for (auto v : pair.second) {
+        ss << ' ' << v << '(' << (isInCover(v) ? "key" : "set") << ')';
+      }
+      LOG(INFO) << "label " << pair.first << ':' << ss.str();
+    }
+    LOG(INFO) << n_keys << " keys " << (query_graph_->getNumVertices() - n_keys) << " sets";
+  }
+
   inline const OperatorTree& getOperators() const { return operators_; }
   inline OperatorTree& getOperators() { return operators_; }
 
   inline void setCandidateSets(std::vector<std::vector<VertexID>>& cs) {
     candidate_sets_.swap(cs);
+    uint64_t total_key_candidate_size = 1, total_set_candidate_size = 1;
     for (uint32_t i = 0; i < candidate_sets_.size(); ++i) {
       DLOG(INFO) << "query vertex " << i << ": " << candidate_sets_[i].size() << " candidates";
+      if (isInCover(i)) {
+        total_key_candidate_size *= candidate_sets_[i].size();
+      } else {
+        total_set_candidate_size *= candidate_sets_[i].size();
+      }
       if (i == root_query_vertex_) continue;
       ((TraverseOperator*)target_vertex_to_ops_[i])->setCandidateSets(&candidate_sets_[i]);
     }
+    LOG(INFO) << "total_key_candidate_size=" << total_key_candidate_size
+              << ",total_set_candidate_size=" << total_set_candidate_size;
+    LOG(INFO) << "ratio " << ((double)total_set_candidate_size / total_key_candidate_size);
   }
 
   inline const std::vector<VertexID>& getCandidateSet(QueryVertexID id) const {

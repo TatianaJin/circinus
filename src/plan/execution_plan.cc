@@ -80,7 +80,11 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
       } else {  // more than one parents, ExpandVertex (use set intersection)
         if (cover_table[target_vertex] == 1) {
           if (key_parents.size() != 0 && set_parents.size() != 0) {
-            current = newExpandKeyKeyVertexOperator(key_parents, target_vertex);
+            if (key_parents.size() == 1) {
+              current = newExpandEdgeOperator(key_parents.front(), target_vertex, cover_table);
+            } else {
+              current = newExpandKeyKeyVertexOperator(key_parents, target_vertex);
+            }
             prev->setNext(current);
             prev = current;
             current = newExpandIntoOperator(set_parents, target_vertex);

@@ -33,7 +33,7 @@ bool NaivePlanner::hasValidCandidate() {
   return true;
 }
 
-ExecutionPlan* NaivePlanner::generatePlan() {
+ExecutionPlan* NaivePlanner::generatePlan(const std::vector<QueryVertexID>& use_order) {
   // if any of the candidate cardinality is zero, there is no matching
   if (!hasValidCandidate()) {
     return nullptr;
@@ -56,8 +56,13 @@ ExecutionPlan* NaivePlanner::generatePlan() {
 
   TwoCoreSolver solver;
   auto& core_table = solver.get2CoreTable(query_graph_);
-  auto order = generateMatchingOrder(query_graph_, core_table, start_vertex);
-  plan_.populatePhysicalPlan(query_graph_, order, covers.front());
+  if (use_order.empty()) {
+    matching_order_ = generateMatchingOrder(query_graph_, core_table, start_vertex);
+    plan_.populatePhysicalPlan(query_graph_, matching_order_, covers.front());
+  } else {
+    matching_order_ = use_order;
+    plan_.populatePhysicalPlan(query_graph_, matching_order_, covers.front());
+  }
   return &plan_;
 }
 

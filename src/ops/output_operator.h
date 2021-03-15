@@ -44,6 +44,8 @@ class Outputs {
 
   inline uint64_t getCount(uint32_t thread_id) const { return n_matches_per_thread_[thread_id]; }
 
+  // FIXME(tatiana): problematic when running multiple threads, and the outputs are all in the task running on one
+  // thread but get skipped due to the limit
   inline void limit(uint64_t total_limit) {
     limit_per_thread_ = total_limit / n_threads_ + ((total_limit % n_threads_) != 0);
   }
