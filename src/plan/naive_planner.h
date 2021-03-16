@@ -15,6 +15,7 @@
 #pragma once
 
 #include <queue>
+#include <tuple>
 #include <vector>
 
 #include "algorithms/minimum_weight_vertex_cover.h"

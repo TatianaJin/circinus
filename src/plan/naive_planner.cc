@@ -15,6 +15,7 @@
 #include "plan/naive_planner.h"
 
 #include <queue>
+#include <tuple>
 #include <vector>
 
 #include "algorithms/k_core.h"

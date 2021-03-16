@@ -36,7 +36,7 @@ class TaskQueue {
   uint32_t wait_count_ = 0;
 
  public:
-  TaskQueue(uint32_t n_subscribers) : n_subscribers_(n_subscribers) {}
+  explicit TaskQueue(uint32_t n_subscribers) : n_subscribers_(n_subscribers) {}
 
   /** A task is newed */
   inline void putTask(uint32_t level, std::vector<CompressedSubgraphs>&& input, const Graph* graph) {

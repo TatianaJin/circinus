@@ -138,8 +138,8 @@ class Benchmark {
       uint32_t n_vertices = 1;
       while (op != nullptr) {
         op->input(input, g);
-        while (op->expand(&outputs, FLAGS_batch_size) > 0)
-          ;
+        while (op->expand(&outputs, FLAGS_batch_size) > 0) {
+        }
         input.clear();
         LOG(INFO) << ++n_vertices << ": # groups " << outputs.size();
         // << " # matches " << getNumIsomorphicSubgraphs(outputs) << '/' << getNumSubgraphs(outputs);
