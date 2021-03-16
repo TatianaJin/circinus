@@ -15,6 +15,7 @@
 #pragma once
 
 #include <queue>
+#include <tuple>
 #include <vector>
 
 #include "algorithms/minimum_weight_vertex_cover.h"
@@ -29,11 +30,9 @@ class NaivePlanner {
   const std::vector<double>* candidate_cardinality_;
 
   WeightedBnB vertex_cover_solver_;
+  ExecutionPlan plan_;
 
   std::vector<QueryVertexID> matching_order_;
-  std::vector<uint32_t> order_index_;  // i: the index of query vertex i in matching_order_
-
-  ExecutionPlan plan_;
 
  public:
   NaivePlanner(QueryGraph* query_graph, std::vector<double>* candidate_cardinality)
@@ -43,7 +42,12 @@ class NaivePlanner {
 
   bool hasValidCandidate();
 
-  ExecutionPlan* generatePlan();
+  const auto& getMatchingOrder() const { return matching_order_; }
+
+  ExecutionPlan* generatePlan(const std::vector<QueryVertexID>& use_order = {});
+
+  uint32_t analyzeDynamicCoreCoverEager(const std::vector<QueryVertexID>& use_order = {});
+  std::tuple<uint32_t, uint32_t, uint32_t> analyzeDynamicCoreCoverMWVC();
 
  private:
   std::vector<QueryVertexID> generateMatchingOrder(const QueryGraph* g, const std::vector<int>& core_table,

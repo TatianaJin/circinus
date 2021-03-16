@@ -15,12 +15,9 @@
 #include "plan/execution_plan.h"
 
 #include <array>
+#include <unordered_set>
 #include <vector>
 
-#include "ops/expand_into_operator.h"
-#include "ops/expand_key_to_key_vertex_operator.h"
-#include "ops/expand_key_to_set_vertex_operator.h"
-#include "ops/expand_set_to_key_vertex_operator.h"
 #include "ops/operators.h"
 
 namespace circinus {
@@ -28,10 +25,9 @@ namespace circinus {
 void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<QueryVertexID>& matching_order,
                                          const std::vector<int>& cover_table) {
   query_graph_ = g;
-  matching_order_ = matching_order;
   cover_table_ = cover_table;
   operators_.reserve(g->getNumVertices());
-
+  root_query_vertex_ = matching_order.front();
   if (matching_order.size() == 1) {
     // TODO(tatiana): handle no traversal
     return;
@@ -68,7 +64,7 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
     }
 
     if (i == 1) {  // the first edge: target has one and only one parent
-      prev = newExpandEdgeOperator(parent, target_vertex);
+      prev = newExpandEdgeOperator(parent, target_vertex, cover_table);
     } else {
       // find parent vertices
       auto neighbors = g->getOutNeighbors(target_vertex);
@@ -80,11 +76,15 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
       // create operators
       if (key_parents.size() + set_parents.size() == 1) {  // only one parent, ExpandEdge
         auto front = key_parents.size() == 1 ? key_parents.front() : set_parents.front();
-        current = newExpandEdgeOperator(front, target_vertex);
+        current = newExpandEdgeOperator(front, target_vertex, cover_table);
       } else {  // more than one parents, ExpandVertex (use set intersection)
         if (cover_table[target_vertex] == 1) {
           if (key_parents.size() != 0 && set_parents.size() != 0) {
-            current = newExpandKeyKeyVertexOperator(key_parents, target_vertex);
+            if (key_parents.size() == 1) {
+              current = newExpandEdgeOperator(key_parents.front(), target_vertex, cover_table);
+            } else {
+              current = newExpandKeyKeyVertexOperator(key_parents, target_vertex);
+            }
             prev->setNext(current);
             prev = current;
             current = newExpandIntoOperator(set_parents, target_vertex);
@@ -106,12 +106,17 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
     existing_vertices.insert(target_vertex);
   }
 
+  // output
+  auto output_op = newOutputOperator();
+  prev->setNext(output_op);
+
   DCHECK_EQ(existing_vertices.size(), g->getNumVertices());
 }
 
-TraverseOperator* ExecutionPlan::newExpandEdgeOperator(QueryVertexID parent_vertex, QueryVertexID target_vertex) {
+TraverseOperator* ExecutionPlan::newExpandEdgeOperator(QueryVertexID parent_vertex, QueryVertexID target_vertex,
+                                                       const std::vector<int>& cover_table) {
   auto ret =
-      ExpandEdgeOperator::newExpandEdgeOperator(parent_vertex, target_vertex, cover_table_, query_vertex_indices_);
+      ExpandEdgeOperator::newExpandEdgeOperator(parent_vertex, target_vertex, cover_table, query_vertex_indices_);
   target_vertex_to_ops_[target_vertex] = ret;
   operators_.push_back(ret);
   return ret;
@@ -120,7 +125,6 @@ TraverseOperator* ExecutionPlan::newExpandEdgeOperator(QueryVertexID parent_vert
 TraverseOperator* ExecutionPlan::newExpandIntoOperator(std::vector<QueryVertexID>& parents,
                                                        QueryVertexID target_vertex) {
   auto ret = new ExpandIntoOperator(parents, target_vertex, query_vertex_indices_);
-  target_vertex_to_ops_[target_vertex] = ret;
   operators_.push_back(ret);
   return ret;
 }
@@ -145,6 +149,12 @@ TraverseOperator* ExecutionPlan::newExpandKeyKeyVertexOperator(std::vector<Query
                                                                QueryVertexID target_vertex) {
   auto ret = new ExpandKeyToKeyVertexOperator(parents, target_vertex, query_vertex_indices_);
   target_vertex_to_ops_[target_vertex] = ret;
+  operators_.push_back(ret);
+  return ret;
+}
+
+Operator* ExecutionPlan::newOutputOperator() {
+  auto ret = OutputOperator::newOutputOperator(OutputType::Count, &outputs_);
   operators_.push_back(ret);
   return ret;
 }

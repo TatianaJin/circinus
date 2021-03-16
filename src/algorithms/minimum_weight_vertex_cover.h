@@ -57,6 +57,7 @@ class WeightedBnB {
 
   /** Compute minimum vertex cover(s) within cutoff_time_ */
   inline void computeVertexCover() {
+    if (!best_covers_.empty()) return;
     start_time_ = clock();
     dfs(std::vector<int>(graph_->getNumVertices(), -1), getEdgeList(*graph_), 0);
     elapsed_time_ = ((double)(clock() - start_time_)) / CLOCKS_PER_SEC;

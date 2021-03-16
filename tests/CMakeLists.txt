@@ -42,9 +42,21 @@ if(GTEST_FOUND)
   add_executable(TestExpandEdgeCosts unittest_main.cc test_expand_edge_costs.cc)
   target_link_libraries(TestExpandEdgeCosts circinus ${GTEST_LIBRARY} ${EXTERNAL_LIBRARY})
 
+  add_executable(PrintExecutionPlan unittest_main.cc print_execution_plan.cc)
+  target_link_libraries(PrintExecutionPlan circinus ${GTEST_LIBRARY} ${EXTERNAL_LIBRARY})
+
+  add_executable(Benchmark benchmark.cc)
+  target_link_libraries(Benchmark circinus ${GTEST_LIBRARY} ${EXTERNAL_LIBRARY})
+
+  add_executable(DynamicCoverPreliminary dynamic_cover_preliminary.cc)
+  target_link_libraries(DynamicCoverPreliminary circinus ${GTEST_LIBRARY} ${EXTERNAL_LIBRARY})
+
   file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/resources DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
 
   add_custom_target(tests COMMAND "${CMAKE_CTEST_COMMAND}" COMMENT "Running tests..." DEPENDS ${PROJECT_NAME}_unit_tests)
 else()
   message(WARNING "Google Test not found")
 endif()
+
+add_executable(TestPrintStyle test_print_style.cc)
+target_link_libraries(TestPrintStyle circinus ${EXTERNAL_LIBRARY})

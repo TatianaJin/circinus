@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "graph/types.h"
+#include "utils/hashmap.h"
 
 namespace circinus {
 
@@ -77,4 +78,33 @@ QueryGraph::QueryGraph(const std::string& path) {
     std::sort(elist_.begin() + vlist_[i], elist_.begin() + vlist_[i + 1]);
   }
 }
+
+QueryGraph QueryGraph::getInducedSubgraph(const std::vector<QueryVertexID>& vertices) const {
+  QueryGraph ret;
+  ret.n_vertices_ = vertices.size();
+  ret.vlist_.resize(ret.n_vertices_ + 1, 0);
+  ret.labels_.resize(ret.n_vertices_ + 1);
+  unordered_map<QueryVertexID, QueryVertexID> vset;  // original id : new id
+  vset.reserve(ret.n_vertices_);
+  for (QueryVertexID i = 0; i < ret.n_vertices_; ++i) {
+    vset[vertices[i]] = i;
+  }
+  for (QueryVertexID i = 0; i < ret.n_vertices_; ++i) {  // for each vertex, update its label and out neighbors
+    auto original = vertices[i];
+    ret.labels_[i] = getVertexLabel(original);
+    auto neighbors = getOutNeighbors(original);
+    for (uint32_t j = 0; j < neighbors.second; ++j) {
+      if (vset.count(neighbors.first[j])) {
+        ret.elist_.push_back(vset[neighbors.first[j]]);
+      }
+    }
+    ret.vlist_[i + 1] = ret.elist_.size();
+    // sort neighbors by id
+    std::sort(ret.elist_.begin() + ret.vlist_[i], ret.elist_.begin() + ret.vlist_[i + 1]);
+    ret.max_degree_ = std::max(ret.max_degree_, ret.getVertexOutDegree(i));
+  }
+  ret.n_edges_ = ret.elist_.size() / 2;
+  return ret;
+}
+
 }  // namespace circinus

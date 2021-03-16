@@ -12,18 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "glog/logging.h"
-#include "gtest/gtest.h"
+#pragma once
 
-GTEST_API_ int main(int argc, char** argv) {
-#ifndef NDEBUG
-  FLAGS_logbuflevel = -1;  // -1 means don't buffer.
-#endif
-  testing::InitGoogleTest(&argc, argv);
-  gflags::ParseCommandLineFlags(&argc, &argv, false);
-  google::InitGoogleLogging(argv[0]);
-  if (FLAGS_log_dir == "") {
-    google::LogToStderr();
-  }
-  return RUN_ALL_TESTS();
-}
+#include "gflags/gflags.h"
+
+DECLARE_int32(batch_size);
+DECLARE_int32(num_cores);

@@ -18,12 +18,16 @@
 #include <vector>
 
 #include "graph/types.h"
+#include "utils/hashmap.h"
 
 namespace circinus {
 
-void intersect(const std::pair<const VertexID*, uint32_t>& set1, const std::pair<const VertexID*, uint32_t>& set2,
-               std::vector<VertexID>* intersection) {
+// binary search is more expensive when the two sets are similar
+[[deprecated]] void intersect_bs(const std::pair<const VertexID*, uint32_t>& set1,
+                                 const std::pair<const VertexID*, uint32_t>& set2, std::vector<VertexID>* intersection,
+                                 const unordered_set<VertexID>& except) {
   if (set1.second <= set2.second) {
+    intersection->reserve(set1.second);
     auto lower_bound = set2.first;
     for (uint32_t i = 0; i < set1.second; ++i) {
       auto vid = set1.first[i];
@@ -33,10 +37,10 @@ void intersect(const std::pair<const VertexID*, uint32_t>& set1, const std::pair
       if (index >= set2.second) {
         break;
       }
-      if (*lower_bound == vid) intersection->emplace_back(vid);
+      if (*lower_bound == vid && except.count(vid) == 0) intersection->emplace_back(vid);
     }
   } else {
-    intersect(set2, set1, intersection);
+    intersect(set2, set1, intersection, except);
   }
 }
 

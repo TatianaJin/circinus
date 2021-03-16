@@ -15,8 +15,8 @@
 #include "ops/expand_edge_operator.h"
 
 #include <algorithm>
+#include <string>
 #include <unordered_map>
-#include <unordered_set>
 #include <vector>
 
 #include "graph/compressed_subgraphs.h"
@@ -24,20 +24,16 @@
 #include "graph/query_graph.h"
 #include "graph/types.h"
 #include "ops/traverse_operator.h"
+#include "utils/hashmap.h"
 
 namespace circinus {
 
 #define makeVertexSet(vertex) std::make_shared<std::vector<VertexID>>(std::vector<VertexID>({vertex})
 
-class ExpandEdgeKeyToSetOperator : public TraverseOperator {
-  uint32_t parent_index_;  // index of parent query vertex in the compressed subgraphs
-  uint32_t target_index_;  // index of target query vertex in the compressed subgraphs
-
-  // TODO(tatiana): statistics for how much saving is made
-
+class ExpandEdgeKeyToSetOperator : public ExpandEdgeOperator {
  public:
-  ExpandEdgeKeyToSetOperator(uint32_t parent_index, uint32_t target_index)
-      : parent_index_(parent_index), target_index_(target_index) {}
+  ExpandEdgeKeyToSetOperator(uint32_t parent_index, uint32_t target_index, QueryVertexID parent, QueryVertexID target)
+      : ExpandEdgeOperator(parent_index, target_index, parent, target) {}
 
   uint32_t expand(std::vector<CompressedSubgraphs>* outputs, uint32_t cap) override {
     uint32_t n = 0;
@@ -47,12 +43,26 @@ class ExpandEdgeKeyToSetOperator : public TraverseOperator {
     return n;
   }
 
+  std::string toString() const override {
+    std::stringstream ss;
+    ss << "ExpandEdgeKeyToSetOperator";
+    toStringInner(ss);
+    return ss.str();
+  }
+
+  Operator* clone() const override {
+    // TODO(tatiana): for now next_ is not handled because it is only used for printing plan
+    auto ret = new ExpandEdgeKeyToSetOperator(parent_index_, target_index_, parent_id_, target_id_);
+    ret->candidates_ = candidates_;
+    return ret;
+  }
+
  private:
   /** @returns True if one CompressedSubgraphs is generated, else false. */
   inline bool expandInner(std::vector<CompressedSubgraphs>* outputs, const CompressedSubgraphs& input) {
     std::vector<VertexID> targets;
     auto parent_match = input.getKeyVal(parent_index_);
-    intersect(*candidates_, current_data_graph_->getOutNeighbors(parent_match), &targets);
+    intersect(*candidates_, current_data_graph_->getOutNeighbors(parent_match), &targets, input.getKeyMap());
     if (targets.empty()) {
       return false;
     }
@@ -61,17 +71,20 @@ class ExpandEdgeKeyToSetOperator : public TraverseOperator {
   }
 };
 
-class ExpandEdgeKeyToKeyOperator : public TraverseOperator {
-  uint32_t parent_index_;  // index of parent query vertex in the compressed subgraphs
-  uint32_t target_index_;  // index of target query vertex in the compressed subgraphs
-
+class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
   // calculated from current_inputs_[input_index_]
   std::vector<VertexID> current_targets_;
   uint32_t current_target_index_ = 0;
+  unordered_set<VertexID> candidate_set_;
 
  public:
-  ExpandEdgeKeyToKeyOperator(uint32_t parent_index, uint32_t target_index)
-      : parent_index_(parent_index), target_index_(target_index) {}
+  ExpandEdgeKeyToKeyOperator(uint32_t parent_index, uint32_t target_index, QueryVertexID parent, QueryVertexID target)
+      : ExpandEdgeOperator(parent_index, target_index, parent, target) {}
+
+  void setCandidateSets(const std::vector<VertexID>* candidates) override {
+    candidates_ = candidates;
+    candidate_set_.insert(candidates->begin(), candidates->end());
+  }
 
   uint32_t expand(std::vector<CompressedSubgraphs>* outputs, uint32_t cap) override {
     uint32_t n = 0;
@@ -98,12 +111,29 @@ class ExpandEdgeKeyToKeyOperator : public TraverseOperator {
     return n;
   }
 
+  std::string toString() const override {
+    std::stringstream ss;
+    ss << "ExpandEdgeKeyToKeyOperator";
+    toStringInner(ss);
+    return ss.str();
+  }
+
+  Operator* clone() const override {
+    // TODO(tatiana): for now next_ is not handled because it is only used for printing plan
+    auto ret = new ExpandEdgeKeyToKeyOperator(parent_index_, target_index_, parent_id_, target_id_);
+    ret->candidates_ = candidates_;
+    ret->candidate_set_ = candidate_set_;
+    return ret;
+  }
+
  private:
   inline void expandInner(const CompressedSubgraphs& input) {
     current_targets_.clear();
     current_target_index_ = 0;
     auto parent_match = input.getKeyVal(parent_index_);
-    intersect(*candidates_, current_data_graph_->getOutNeighbors(parent_match), &current_targets_);
+    intersect(candidate_set_, current_data_graph_->getOutNeighbors(parent_match), &current_targets_, input.getKeyMap());
+    // intersect(*candidates_, current_data_graph_->getOutNeighbors(parent_match), &current_targets_,
+    // input.getKeyMap());
   }
 };
 
@@ -136,10 +166,15 @@ class CurrentResultsByCandidate : public CurrentResults {
   uint32_t getResults(std::vector<CompressedSubgraphs>* outputs, uint32_t cap) override {
     uint32_t n = 0;
     auto& parent_set = input_->getSet(parent_index_);
+
+    auto current_keys = input_->getKeyMap();
     for (; n < cap && candidate_index_ < candidates_->size(); ++candidate_index_) {
       std::vector<VertexID> parents;
       auto candidate = (*candidates_)[candidate_index_];
-      intersect(*parent_set, data_graph_->getOutNeighbors(candidate), &parents);
+      if (input_->isExisting(candidate)) {
+        continue;
+      }
+      intersect(*parent_set, data_graph_->getOutNeighbors(candidate), &parents, current_keys);
       if (parents.empty()) {
         continue;
       }
@@ -159,12 +194,14 @@ class CurrentResultsByParent : public CurrentResults {
 
   uint32_t getResults(std::vector<CompressedSubgraphs>* outputs, uint32_t cap) override {
     auto& parent_set = *input_->getSet(parent_index_);
-    std::unordered_map<VertexID, uint32_t> group_index;
+    unordered_map<VertexID, uint32_t> group_index;
     uint32_t n = 0;
+    auto current_keys = input_->getKeyMap();
     for (uint32_t i = 0; i < parent_set.size(); ++i) {
       auto parent_match = parent_set[i];
+      if (input_->isExisting(parent_match)) continue;
       std::vector<VertexID> targets;
-      intersect(*candidates_, data_graph_->getOutNeighbors(parent_match), &targets);
+      intersect(*candidates_, data_graph_->getOutNeighbors(parent_match), &targets, current_keys);
       for (auto target : targets) {
         auto pos = group_index.find(target);
         if (pos == group_index.end()) {
@@ -182,9 +219,10 @@ class CurrentResultsByParent : public CurrentResults {
 
 class CurrentResultsByExtension : public CurrentResults {
  private:
-  std::unordered_set<VertexID> seen_extensions_;
+  unordered_set<VertexID> seen_extensions_;
   std::vector<VertexID> extensions_;
   uint32_t parent_match_index_ = 0;
+  unordered_set<VertexID> current_keys_;
 
  public:
   CurrentResultsByExtension(const std::vector<VertexID>* candidates, const CompressedSubgraphs* input,
@@ -200,7 +238,7 @@ class CurrentResultsByExtension : public CurrentResults {
     for (int i = extensions_.size() - 1; i >= leftover_size; --i) {
       auto candidate = extensions_[i];
       std::vector<VertexID> parents;  // valid parents for current candidate
-      intersect(parent_set, data_graph_->getOutNeighbors(candidate), &parents);
+      intersect(parent_set, data_graph_->getOutNeighbors(candidate), &parents, current_keys_);
       outputs->emplace_back(*input_, parent_index_, std::make_shared<std::vector<VertexID>>(std::move(parents)),
                             candidate);
     }
@@ -222,25 +260,22 @@ class CurrentResultsByExtension : public CurrentResults {
           current_extensions.push_back(neighbor);
         }
       }
-      intersect(*candidates_, current_extensions, &extensions_);
+      current_keys_ = input_->getKeyMap();
+      intersect(*candidates_, current_extensions, &extensions_, current_keys_);
       current_extensions.clear();
     }
   }
 };
 
-class ExpandEdgeSetToKeyOperator : public TraverseOperator {
+class ExpandEdgeSetToKeyOperator : public ExpandEdgeOperator {
   enum ExecutionMode { ByCandidate, ByParent, ByExtension };
 
-  uint32_t parent_index_;  // index of parent query vertex in the compressed subgraphs
-  uint32_t target_index_;  // index of target query vertex in the compressed subgraphs
-
   uint64_t candidates_neighbor_size_ = 0;
-
   CurrentResults* current_results_ = nullptr;
 
  public:
-  ExpandEdgeSetToKeyOperator(uint32_t parent_index, uint32_t target_index)
-      : parent_index_(parent_index), target_index_(target_index) {}
+  ExpandEdgeSetToKeyOperator(uint32_t parent_index, uint32_t target_index, QueryVertexID parent, QueryVertexID target)
+      : ExpandEdgeOperator(parent_index, target_index, parent, target) {}
 
   ~ExpandEdgeSetToKeyOperator() { clear(); }
 
@@ -283,6 +318,20 @@ class ExpandEdgeSetToKeyOperator : public TraverseOperator {
       ++input_index_;
     }
     return cap - needed;
+  }
+
+  std::string toString() const override {
+    std::stringstream ss;
+    ss << "ExpandEdgeSetToKeyOperator";
+    toStringInner(ss);
+    return ss.str();
+  }
+
+  Operator* clone() const override {
+    // TODO(tatiana): for now next_ is not handled because it is only used for printing plan
+    auto ret = new ExpandEdgeSetToKeyOperator(parent_index_, target_index_, parent_id_, target_id_);
+    ret->candidates_ = candidates_;
+    return ret;
   }
 
  private:
@@ -342,18 +391,21 @@ TraverseOperator* ExpandEdgeOperator::newExpandEdgeOperator(
   CHECK_GT(indices.count(target_vertex), 0);
   // the target is not a compression key, and the parent must be in the cover: expand and copy target list
   if (cover_table[target_vertex] != 1) {
-    return new ExpandEdgeKeyToSetOperator(indices.at(parent_vertex), indices.at(target_vertex));
+    return new ExpandEdgeKeyToSetOperator(indices.at(parent_vertex), indices.at(target_vertex), parent_vertex,
+                                          target_vertex);
   }
   // the target is a compression key
   if (cover_table[parent_vertex] == 1) {
     // the parent is a compression key: expand and enumerate parent-target pairs
-    return new ExpandEdgeKeyToKeyOperator(indices.at(parent_vertex), indices.at(target_vertex));
+    return new ExpandEdgeKeyToKeyOperator(indices.at(parent_vertex), indices.at(target_vertex), parent_vertex,
+                                          target_vertex);
   }
 
   // tricky case: expand, look up group for each match of target, and copy parent to set for each group; or
   // consider an alternative: enumerate each candidate of target, and do set intersection between the target
   // neighbors and parent sets
-  return new ExpandEdgeSetToKeyOperator(indices.at(parent_vertex), indices.at(target_vertex));
+  return new ExpandEdgeSetToKeyOperator(indices.at(parent_vertex), indices.at(target_vertex), parent_vertex,
+                                        target_vertex);
 }
 
 }  // namespace circinus

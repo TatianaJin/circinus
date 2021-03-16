@@ -18,6 +18,7 @@
 #include <cstdint>
 #include <ctime>
 #include <deque>
+#include <utility>
 #include <vector>
 
 #include "graph/query_graph.h"
@@ -63,6 +64,25 @@ class BnB {
   inline double getTimeToBest() const { return history_time_.back(); }
   /** * @returns Time used to find the best covers */
   inline double getElapsedTime() const { return elapsed_time_; }
+
+  /** @returns The index of the smallest cover in cover_assignments and the cover size */
+  static inline std::pair<std::vector<uint32_t>, uint32_t> getSmallestCover(
+      const std::vector<std::vector<int>>& cover_assignments) {
+    DCHECK(!cover_assignments.empty());
+    uint32_t min = cover_assignments.front().size();
+    std::vector<uint32_t> ret;
+    for (uint32_t i = 0; i < cover_assignments.size(); ++i) {
+      uint32_t size = countAssignment(cover_assignments[i]);
+      if (size < min) {
+        min = size;
+        ret.resize(1);
+        ret.front() = i;
+      } else if (size == min) {
+        ret.push_back(i);
+      }
+    }
+    return std::make_pair(ret, min);
+  }
 
  private:
   static std::deque<QueryEdge> getEdgeList(QueryGraph& g);

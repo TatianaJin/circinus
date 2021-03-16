@@ -49,7 +49,7 @@ Graph::Graph(const std::string& path) {
 
   // next n_edges_ lines should be of type e
   std::vector<uint32_t> next_neighbor_offset(n_vertices_, 0);
-  VertexID v1, v2, dummy;
+  VertexID v1, v2;
   for (EdgeID i = 0; i < n_edges_; ++i) {
     CHECK(infile >> line_type) << i + n_vertices_ + 2 << " " << path;
     if (line_type != 'e') {  // there may be a dummy 0 after "e src dst"
