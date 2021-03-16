@@ -71,11 +71,8 @@ class QueryGraph {
     return std::make_pair(&elist_[vlist_[id]], vlist_[id + 1] - vlist_[id]);
   }
 
-  QueryGraph getInducedSubgraph(const std::vector<QueryVertexID>) const {
-    // TODO(tatiana): extract induced subgraph on vertices
-    LOG(FATAL) << "not implemented";
-    return QueryGraph();
-  }
+  /** extract induced subgraph on vertices, with the vertex index in vertices as the new vertex id */
+  QueryGraph getInducedSubgraph(const std::vector<QueryVertexID>& vertices) const;
 };
 
 }  // namespace circinus

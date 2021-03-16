@@ -45,6 +45,9 @@ class NaivePlanner {
 
   ExecutionPlan* generatePlan(const std::vector<QueryVertexID>& use_order = {});
 
+  uint32_t analyzeDynamicCoreCoverEager(const std::vector<QueryVertexID>& use_order = {});
+  std::tuple<uint32_t, uint32_t, uint32_t> analyzeDynamicCoreCoverMWVC();
+
  private:
   std::vector<QueryVertexID> generateMatchingOrder(const QueryGraph* g, const std::vector<int>& core_table,
                                                    QueryVertexID start_vertex);
