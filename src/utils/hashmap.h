@@ -14,6 +14,22 @@
 
 #pragma once
 
+#ifdef USE_STL
+
+#include <unordered_map>
+#include <unordered_set>
+
+namespace circinus {
+
+template <typename T>
+using unordered_set = std::unordered_set<T>;
+
+template <typename K, typename V>
+using unordered_map = std::unordered_map<K, V>;
+}  // namespace circinus
+
+#else  // USE_STL
+
 #include "parallel_hashmap/phmap.h"
 
 namespace circinus {
@@ -25,3 +41,5 @@ template <typename K, typename V>
 using unordered_map = phmap::flat_hash_map<K, V>;
 
 }  // namespace circinus
+
+#endif  // USE_STL

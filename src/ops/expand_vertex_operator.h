@@ -15,6 +15,7 @@
 #pragma once
 
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "graph/compressed_subgraphs.h"

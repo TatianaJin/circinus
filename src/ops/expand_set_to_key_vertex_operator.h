@@ -15,11 +15,13 @@
 #pragma once
 
 #include <string>
-#include <unordered_set>
+#include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "graph/query_graph.h"
 #include "ops/expand_vertex_operator.h"
+#include "utils/hashmap.h"
 
 namespace circinus {
 
@@ -29,6 +31,7 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
                                const std::unordered_map<QueryVertexID, uint32_t>& query_vertex_indices)
       : ExpandVertexOperator(parents, target_vertex, query_vertex_indices) {}
 
+  // TODO(tatiana): see if hard limit on output size is needed
   uint32_t expand(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size) override {
     uint32_t output_num = 0;
     while (input_index_ < current_inputs_->size()) {
@@ -72,7 +75,6 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
       for (VertexID vid : *parent_match) {
         const auto& out_neighbors = current_data_graph_->getOutNeighbors(vid);
         for (uint32_t i = 0; i < out_neighbors.second; ++i) {
-          VertexID key_vertex_id = out_neighbors.first[i];
           loop_num++;
         }
       }
@@ -91,8 +93,9 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
     uint32_t parent = 0, size = 0xFFFFFFFF;
     auto& input = (*current_inputs_)[input_index_];
     for (auto par : parents_) {
-      if (input.getSet(query_vertex_indices_[par])->size() < size) {
-        size = input.getSet(query_vertex_indices_[par])->size();
+      auto current_size = input.getSet(query_vertex_indices_[par])->size();
+      if (current_size < size) {
+        size = current_size;
         parent = par;
       }
     }
@@ -111,7 +114,7 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
         std::vector<VertexID> new_set;
         uint32_t id = query_vertex_indices_[set_vid];
         intersect(*input.getSet(id), key_out_neighbors, &new_set);
-        if (new_set.size() == 0) {
+        if (new_set.empty()) {
           add = false;
           break;
         }
@@ -127,7 +130,7 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
   }
 
   uint32_t fromSetNeighborStrategy(std::vector<CompressedSubgraphs>* outputs, QueryVertexID min_parent) {
-    std::unordered_set<VertexID> visited;
+    unordered_set<VertexID> visited;
     auto& input = (*current_inputs_)[input_index_];
     uint32_t output_num = 0;
     const auto& parent_match = input.getSet(query_vertex_indices_[min_parent]);
@@ -135,8 +138,7 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
       const auto& out_neighbors = current_data_graph_->getOutNeighbors(vid);
       for (uint32_t i = 0; i < out_neighbors.second; ++i) {
         VertexID key_vertex_id = out_neighbors.first[i];
-        if (visited.find(key_vertex_id) == visited.end()) {
-          visited.insert(key_vertex_id);
+        if (visited.insert(key_vertex_id).second) {
           if (!isInCandidates(key_vertex_id)) {
             continue;
           }
@@ -148,7 +150,7 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
             std::vector<VertexID> new_set;
             uint32_t id = query_vertex_indices_[set_vid];
             intersect(*input.getSet(id), key_out_neighbors, &new_set);
-            if (new_set.size() == 0) {
+            if (new_set.empty()) {
               add = false;
               break;
             }
