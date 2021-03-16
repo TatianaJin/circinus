@@ -19,7 +19,9 @@
 
 #include "gflags/gflags.h"
 #include "glog/logging.h"
+#ifdef WITH_GPERF
 #include "gperftools/profiler.h"
+#endif
 #include "gtest/gtest.h"
 
 #include "exec/thread_pool.h"
