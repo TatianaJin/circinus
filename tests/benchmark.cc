@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include <chrono>
+#include <cmath>
 #include <fstream>
 #include <string>
 #include <vector>
@@ -28,6 +29,7 @@
 #include "graph/query_graph.h"
 #include "ops/expand_edge_operator.h"
 #include "ops/filters.h"
+#include "ops/order.h"
 #include "ops/scans.h"
 #include "plan/execution_plan.h"
 #include "plan/naive_planner.h"
@@ -39,6 +41,8 @@ using circinus::Graph;
 using circinus::LDFScan;
 using circinus::NaivePlanner;
 using circinus::NLFFilter;
+using circinus::CFLFilter;
+using circinus::CFLOrder;
 using circinus::QueryGraph;
 using circinus::QueryVertexID;
 using circinus::Task;
@@ -57,6 +61,7 @@ DEFINE_uint64(query_size, 8, "The query size.");
 DEFINE_uint64(match_limit, 1e5, "The limit of matches to find");
 DEFINE_uint64(query_index, 1, "The index of query in the same category");
 DEFINE_string(match_order, "", "Matching order");
+DEFINE_string(filter, "nlf", "filter");
 
 class Benchmark {
  protected:
@@ -77,6 +82,7 @@ class Benchmark {
  protected:
   std::vector<std::vector<VertexID>> getCandidateSets(const Graph& g, const QueryGraph& q) {
     std::vector<std::vector<VertexID>> candidates(q.getNumVertices());
+    std::vector<uint32_t> candidate_size(q.getNumVertices());
     for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
       candidates[v].reserve(g.getVertexCardinalityByLabel(q.getVertexLabel(v)));
       LDFScan scan(&q, v, &g);
@@ -87,6 +93,17 @@ class Benchmark {
         filter.Filter(g, buffer, &candidates[v]);
         buffer.clear();
       }
+      candidate_size[v] = candidates[v].size();
+    }
+    if (FLAGS_filter == "cfl") {
+      CFLOrder cfl_order;
+      QueryVertexID start_vertex = cfl_order.getStartVertex(&g, &q, candidate_size);
+      LOG(INFO) << "cfl order get start vertex " << start_vertex;
+      CFLFilter cfl_filter(&q, &g, start_vertex);
+      cfl_filter.Filter(candidates);
+    }
+    for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
+      LOG(INFO) << "vertex " << v << " " << candidate_size[v] << "/" << candidates[v].size();
     }
     return candidates;
   }
@@ -188,6 +205,7 @@ class Benchmark {
     candidate_cardinality.reserve(candidates.size());
     for (auto& set : candidates) {
       candidate_cardinality.push_back(set.size());
+      // candidate_cardinality.push_back(std::log(set.size()));
     }
     NaivePlanner planner(&q, &candidate_cardinality);
     auto plan = planner.generatePlan(use_order);
@@ -217,6 +235,41 @@ class Benchmark {
     (*out) << toSeconds(start_loading, end_loading) << ',' << toSeconds(start_filter, end_filter) << ','
            << toSeconds(end_filter, start_execution) << ',' << toSeconds(start_execution, end) << ',' << n_matches
            << ',' << ss.str() << '\n';
+  }
+
+  void run1(const std::string& graph_path, const std::string& query_path, std::ostream* out) {
+    auto start_loading = std::chrono::steady_clock::now();
+    Graph g(FLAGS_data_dir + "/" + graph_path);  // load data graph
+    auto end_loading = std::chrono::steady_clock::now();
+    LOG(INFO) << "========================";
+    LOG(INFO) << "graph " << graph_path << " query " << query_path;
+    QueryGraph q(FLAGS_data_dir + "/" + query_path);  // load query graph
+    auto start_filter = std::chrono::steady_clock::now();
+    auto candidates = getCandidateSets(g, q);  // get candidates for each query vertex
+    auto end_filter = std::chrono::steady_clock::now();
+    std::vector<double> candidate_cardinality;
+    candidate_cardinality.reserve(candidates.size());
+    for (auto& set : candidates) {
+      candidate_cardinality.push_back(set.size());
+    }
+    NaivePlanner planner(&q, &candidate_cardinality);
+    auto plan = planner.generatePlan();
+    plan->setCandidateSets(candidates);  // swap
+    plan->printPhysicalPlan();
+    plan->getOutputs().init(FLAGS_num_cores).limit(FLAGS_match_limit);
+    LOG(INFO) << "limit per thread " << plan->getOutputs().getLimitPerThread();
+
+    auto start_execution = std::chrono::steady_clock::now();
+    // ProfilerStart("benchmark.prof");
+    // bfsExecute(&g, plan);
+    batchDFSExecute(&g, plan);
+    // ProfilerStop();
+    auto n_matches = plan->getOutputs().getCount();
+    auto end = std::chrono::steady_clock::now();
+
+    (*out) << toSeconds(start_loading, end_loading) << ',' << toSeconds(start_filter, end_filter) << ','
+           << toSeconds(end_filter, start_execution) << ',' << toSeconds(start_execution, end) << ',' << n_matches
+           << '\n';
   }
 };
 
