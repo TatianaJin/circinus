@@ -139,6 +139,7 @@ class Benchmark {
         threads.addInitTask(0, std::vector<CompressedSubgraphs>(seeds.begin() + i, seeds.begin() + end), g);
       }
     } else {
+      // FIXME(tatiana): this branch is possible with a different qvo strategy
       LOG(ERROR) << "this branch should not be reached";
     }
     threads.start();

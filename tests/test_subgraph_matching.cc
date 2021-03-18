@@ -34,6 +34,7 @@
 #include "ops/operator.h"
 #include "ops/scans.h"
 #include "plan/execution_plan.h"
+#include "utils/hashmap.h"
 
 using circinus::CompressedSubgraphs;
 using circinus::ExpandKeyToSetVertexOperator;
@@ -144,7 +145,7 @@ class TestSubgraphMatching : public testing::Test {
         LOG(INFO) << "candidate set size " << set.size();
       }
 
-      std::unordered_map<QueryVertexID, uint32_t> indices;
+      circinus::unordered_map<QueryVertexID, uint32_t> indices;
 
       std::vector<QueryVertexID> matching_order;
       std::vector<bool> visited(q.getNumVertices(), false);

@@ -16,7 +16,6 @@
 
 #include <algorithm>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 #include "graph/compressed_subgraphs.h"
@@ -384,9 +383,9 @@ class ExpandEdgeSetToKeyOperator : public ExpandEdgeOperator {
   }
 };
 
-TraverseOperator* ExpandEdgeOperator::newExpandEdgeOperator(
-    QueryVertexID parent_vertex, QueryVertexID target_vertex, const std::vector<int>& cover_table,
-    const std::unordered_map<QueryVertexID, uint32_t>& indices) {
+TraverseOperator* ExpandEdgeOperator::newExpandEdgeOperator(QueryVertexID parent_vertex, QueryVertexID target_vertex,
+                                                            const std::vector<int>& cover_table,
+                                                            const unordered_map<QueryVertexID, uint32_t>& indices) {
   CHECK_GT(indices.count(parent_vertex), 0);
   CHECK_GT(indices.count(target_vertex), 0);
   // the target is not a compression key, and the parent must be in the cover: expand and copy target list

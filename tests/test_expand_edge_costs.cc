@@ -29,6 +29,7 @@
 #include "ops/operators.h"
 #include "ops/scans.h"
 #include "utils/flags.h"
+#include "utils/hashmap.h"
 #include "utils/print_styles.h"
 
 using circinus::CompressedSubgraphs;
@@ -100,7 +101,7 @@ class TestExpandEdgeCosts : public testing::Test {
   uint32_t getNumMatches(QueryVertexID parent, QueryVertexID target, const std::vector<int>& cover,
                          const std::vector<std::vector<VertexID>>& candidates,
                          const std::vector<CompressedSubgraphs>& seeds, const Graph& g) {
-    std::unordered_map<QueryVertexID, uint32_t> indices;
+    circinus::unordered_map<QueryVertexID, uint32_t> indices;
     indices[parent] = 0;
     indices[target] = 1;
     auto op = ExpandEdgeOperator::newExpandEdgeOperator(parent, target, cover, indices);
@@ -122,7 +123,7 @@ class TestExpandEdgeCosts : public testing::Test {
   uint32_t expandVertex(QueryVertexID parent, QueryVertexID target, const std::vector<int>& cover,
                         const std::vector<std::vector<VertexID>>& candidates,
                         const std::vector<CompressedSubgraphs>& seeds, const Graph& g) {
-    std::unordered_map<QueryVertexID, uint32_t> indices;
+    circinus::unordered_map<QueryVertexID, uint32_t> indices;
     indices[parent] = 0;
     indices[target] = 1;
 

@@ -14,11 +14,11 @@
 
 #pragma once
 
-#include <unordered_map>
 #include <vector>
 
 #include "graph/types.h"
 #include "ops/traverse_operator.h"
+#include "utils/hashmap.h"
 
 namespace circinus {
 
@@ -32,7 +32,7 @@ class ExpandEdgeOperator : public TraverseOperator {
    */
   static TraverseOperator* newExpandEdgeOperator(QueryVertexID parent_vertex, QueryVertexID target_vertex,
                                                  const std::vector<int>& cover_table,
-                                                 const std::unordered_map<QueryVertexID, uint32_t>& indices);
+                                                 const unordered_map<QueryVertexID, uint32_t>& indices);
 
   ExpandEdgeOperator(uint32_t parent_index, uint32_t target_index, QueryVertexID parent, QueryVertexID target)
       : parent_index_(parent_index), target_index_(target_index), parent_id_(parent), target_id_(target) {}

@@ -37,12 +37,7 @@ class CompressedSubgraphs {
    * @param key_size The number of key vertices.
    * @param n_vertices The number of vertices in each compressed subgraph.
    */
-  [[deprecated]] CompressedSubgraphs(uint32_t key_size, uint32_t n_vertices)
-      : keys_(key_size), sets_(n_vertices - key_size) {
-    for (auto& set : sets_) {
-      set = std::make_shared<std::vector<VertexID>>();
-    }
-  }
+  CompressedSubgraphs(uint32_t key_size, uint32_t n_vertices) : keys_(key_size), sets_(n_vertices - key_size) {}
 
   /** Construct a CompressedSubgraphs that contains only a single-vertex subgraph.
    * @param key The vertex id.
@@ -118,10 +113,10 @@ class CompressedSubgraphs {
     // dfs sets_ chain
     uint64_t count = 0;
     std::vector<uint32_t> set_index(sets_.size(), 0);
-    unordered_set<QueryVertexID> existing_vertices;
+    unordered_set<VertexID> existing_vertices;
     existing_vertices.reserve(getNumVertices());
     existing_vertices.insert(keys_.begin(), keys_.end());
-    // std::vector<QueryVertexID> existing_vertices;
+    // std::vector<VertexID> existing_vertices;
     // existing_vertices.reserve(getNumVertices());
     // existing_vertices.insert(existing_vertices.end(), keys_.begin(), keys_.end());
     uint32_t last_depth = sets_.size() - 1;
@@ -188,12 +183,16 @@ class CompressedSubgraphs {
   /** Get the value of the key vertex at key_idx. */
   VertexID getKeyVal(uint32_t key_idx) const { return keys_[key_idx]; }
 
+  const std::vector<VertexID>& getKeys() const { return keys_; }
+  std::vector<VertexID>& getKeys() { return keys_; }
+
   unordered_set<VertexID> getKeyMap() const { return unordered_set<VertexID>(keys_.begin(), keys_.end()); }
 
   /** Get the matching set of the non-key vertex at key_idx. */
   const VertexSet& getSet(uint32_t key_idx) const { return sets_[key_idx]; }
 
   void UpdateSets(uint32_t set_idx, VertexSet&& new_set) { sets_[set_idx] = std::move(new_set); }
+  void UpdateSets(uint32_t set_idx, const VertexSet& new_set) { sets_[set_idx] = new_set; }
 
   /** Update the key vertex at key_idx to val. */
   void UpdateKey(uint32_t key_idx, VertexID val) { keys_[key_idx] = val; }

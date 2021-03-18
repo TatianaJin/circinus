@@ -15,7 +15,6 @@
 #pragma once
 
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 #include "graph/graph.h"
@@ -24,6 +23,7 @@
 #include "ops/output_operator.h"
 #include "ops/traverse_operator.h"
 #include "plan/operator_tree.h"
+#include "utils/hashmap.h"
 #include "utils/profiler.h"
 
 namespace circinus {
@@ -33,7 +33,7 @@ class ExecutionPlan {
   const QueryGraph* query_graph_;
 
   std::vector<std::vector<VertexID>> candidate_sets_;
-  std::unordered_map<QueryVertexID, Operator*> target_vertex_to_ops_;
+  unordered_map<QueryVertexID, Operator*> target_vertex_to_ops_;
   OperatorTree operators_;
   Outputs outputs_;
 
@@ -43,7 +43,7 @@ class ExecutionPlan {
   /** The index of each query vertex in the CompressedSubgraphs
    * For key vertices, the index is n_keys-th key following the matching order
    * For non-key vertices, the index n_sets-th key following the matching order */
-  std::unordered_map<QueryVertexID, uint32_t> query_vertex_indices_;
+  unordered_map<QueryVertexID, uint32_t> query_vertex_indices_;
 
  public:
   ~ExecutionPlan() {}
