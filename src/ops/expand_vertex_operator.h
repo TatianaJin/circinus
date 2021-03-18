@@ -32,6 +32,8 @@ class ExpandVertexOperator : public TraverseOperator {
 
   virtual ~ExpandVertexOperator() {}
 
+  const auto& getQueryVertexIndices() const { return query_vertex_indices_; }
+
  protected:
   inline void toStringInner(std::stringstream& ss) const {
     for (auto parent : parents_) {

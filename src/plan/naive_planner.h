@@ -45,15 +45,21 @@ class NaivePlanner {
   const auto& getMatchingOrder() const { return matching_order_; }
 
   ExecutionPlan* generatePlan(const std::vector<QueryVertexID>& use_order = {}, Profiler* profiler = nullptr);
+  ExecutionPlan* generatePlanWithEagerDynamicCover(const std::vector<QueryVertexID>& use_order = {},
+                                                   Profiler* profiler = nullptr);
 
-  uint32_t analyzeDynamicCoreCoverEager(const std::vector<QueryVertexID>& use_order = {});
-  std::tuple<uint32_t, uint32_t, uint32_t> analyzeDynamicCoreCoverMWVC();
+  std::pair<uint32_t, uint32_t> analyzeDynamicCoreCoverEager(const std::vector<QueryVertexID>& use_order = {});
+  std::tuple<uint32_t, uint32_t, uint32_t> analyzeDynamicCoreCoverMWVC(
+      const std::vector<QueryVertexID>& use_order = {});
 
  private:
   std::vector<QueryVertexID> generateMatchingOrder(const QueryGraph* g, const std::vector<int>& core_table,
                                                    QueryVertexID start_vertex);
 
   QueryVertexID selectStartingVertex(const std::vector<QueryVertexID>& cover);
+
+  std::pair<uint32_t, uint32_t> analyzeDynamicCoreCoverEagerInner(const std::vector<int>& query_graph_cover);
+  unordered_map<QueryVertexID, uint32_t> getDynamicCoreCoverEager(const std::vector<int>& query_graph_cover);
 };
 
 }  // namespace circinus

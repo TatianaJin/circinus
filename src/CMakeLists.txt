@@ -24,6 +24,7 @@ set(circinus_graph_sources
   ${PROJECT_SOURCE_DIR}/src/graph/query_graph.cc
 )
 set(circinus_ops_sources
+  ${PROJECT_SOURCE_DIR}/src/ops/enumerate_key_expand_to_set_operator.cc
   ${PROJECT_SOURCE_DIR}/src/ops/expand_edge_operator.cc
   ${PROJECT_SOURCE_DIR}/src/ops/filters/cfl_filter.cc
   ${PROJECT_SOURCE_DIR}/src/ops/filters/nlf_filter.cc

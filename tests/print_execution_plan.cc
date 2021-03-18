@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include <chrono>
+#include <cmath>
 #include <fstream>
 #include <string>
 #include <vector>
@@ -85,6 +86,7 @@ class PrintExecutionPlan : public testing::Test {
     return candidates;
   }
 
+  template <bool dynamic = false>
   void printExecutionPlan(uint32_t i) {
     Graph g(FLAGS_data_dir + "/" + data_graph_paths_[i]);  // load data graph
     for (uint32_t j = 0; j < query_graph_paths_[i].size(); ++j) {
@@ -95,10 +97,16 @@ class PrintExecutionPlan : public testing::Test {
       std::vector<double> candidate_cardinality;
       candidate_cardinality.reserve(candidates.size());
       for (auto& set : candidates) {
-        candidate_cardinality.push_back(set.size());
+        candidate_cardinality.push_back(std::log((double)set.size()));
       }
       NaivePlanner planner(&q, &candidate_cardinality);
-      auto plan = planner.generatePlan();
+      ExecutionPlan* plan;
+      if (dynamic) {
+        plan = planner.generatePlanWithEagerDynamicCover();
+      } else {
+        plan = planner.generatePlan();
+      }
+      ASSERT_TRUE(plan != nullptr);
       plan->printPhysicalPlan();
     }
   }
@@ -112,3 +120,12 @@ TEST_F(PrintExecutionPlan, PATENTS) { printExecutionPlan(4); }
 TEST_F(PrintExecutionPlan, WORDNET) { printExecutionPlan(5); }
 TEST_F(PrintExecutionPlan, YEAST) { printExecutionPlan(6); }
 TEST_F(PrintExecutionPlan, YOUTUBE) { printExecutionPlan(7); }
+
+TEST_F(PrintExecutionPlan, DynamicDBLP) { printExecutionPlan<true>(0); }
+TEST_F(PrintExecutionPlan, DynamicEU2005) { printExecutionPlan<true>(1); }
+TEST_F(PrintExecutionPlan, DynamicHPRD) { printExecutionPlan<true>(2); }
+TEST_F(PrintExecutionPlan, DynamicHUMAN) { printExecutionPlan<true>(3); }
+TEST_F(PrintExecutionPlan, DynamicPATENTS) { printExecutionPlan<true>(4); }
+TEST_F(PrintExecutionPlan, DynamicWORDNET) { printExecutionPlan<true>(5); }
+TEST_F(PrintExecutionPlan, DynamicYEAST) { printExecutionPlan<true>(6); }
+TEST_F(PrintExecutionPlan, DynamicYOUTUBE) { printExecutionPlan<true>(7); }

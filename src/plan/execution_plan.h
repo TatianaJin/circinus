@@ -39,6 +39,7 @@ class ExecutionPlan {
 
   QueryVertexID root_query_vertex_;
   std::vector<int> cover_table_;
+  unordered_map<QueryVertexID, uint32_t> dynamic_cover_key_level_;
 
   /** The index of each query vertex in the CompressedSubgraphs
    * For key vertices, the index is n_keys-th key following the matching order
@@ -50,6 +51,10 @@ class ExecutionPlan {
 
   void populatePhysicalPlan(const QueryGraph* g, const std::vector<QueryVertexID>& matching_order,
                             const std::vector<int>& cover_table, Profiler* profiler = nullptr);
+
+  void populatePhysicalPlan(const QueryGraph* g, const std::vector<QueryVertexID>& matching_order,
+                            const std::vector<int>& cover_table,
+                            const unordered_map<QueryVertexID, uint32_t>& level_become_key);
 
   void printPhysicalPlan() const {
     if (operators_.empty()) return;
@@ -122,6 +127,10 @@ class ExecutionPlan {
   TraverseOperator* newExpandSetVertexOperator(std::vector<QueryVertexID>& parents, QueryVertexID target_vertex);
   TraverseOperator* newExpandSetToKeyVertexOperator(std::vector<QueryVertexID>& parents, QueryVertexID target_vertex);
   TraverseOperator* newExpandIntoOperator(std::vector<QueryVertexID>& parents, QueryVertexID target_vertex);
+  TraverseOperator* newEnumerateKeyExpandToSetOperator(
+      const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
+      const std::vector<QueryVertexID>& keys_to_enumerate,
+      unordered_map<QueryVertexID, uint32_t> input_query_vertex_indices);
   Operator* newOutputOperator();
 };
 
