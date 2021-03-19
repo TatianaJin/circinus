@@ -60,7 +60,7 @@ void intersectInplace(const std::vector<VertexID>& set1, const std::pair<const V
       (*intersection)[size++] = vid;
     }
   }
-  intersection->resize(size);
+  intersection->erase(intersection->begin() + size, intersection->end());
 }
 
 }  // namespace circinus

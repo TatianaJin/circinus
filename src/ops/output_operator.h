@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <fstream>
 #include <string>
 #include <vector>
@@ -30,6 +31,8 @@ enum class OutputType : uint32_t { Subgraph = 0, Count }; /* TODO(tatiana): supp
 class Outputs {
   std::vector<uint64_t> n_matches_per_thread_;
   std::vector<std::ofstream> output_file_per_thread_;
+  std::atomic_uint64_t total_count_ = 0;
+  uint64_t total_limit_ = 0;
   uint32_t n_threads_ = 0;
   uint64_t limit_per_thread_ = ~0u;
 
@@ -39,14 +42,20 @@ class Outputs {
   inline uint64_t updateCount(uint64_t count, uint32_t thread_id) {
     DCHECK_LT(thread_id, n_matches_per_thread_.size());
     n_matches_per_thread_[thread_id] += count;
-    return n_matches_per_thread_[thread_id];
+    total_count_.fetch_add(count);
+    return total_count_;
   }
 
   inline uint64_t getCount(uint32_t thread_id) const { return n_matches_per_thread_[thread_id]; }
 
+  inline uint64_t getTotaCount() const { return total_count_; }
+
+  inline uint64_t getTotalLimit() const { return total_limit_; }
+
   // FIXME(tatiana): problematic when running multiple threads, and the outputs are all in the task running on one
   // thread but get skipped due to the limit
   inline void limit(uint64_t total_limit) {
+    total_limit_ = total_limit;
     limit_per_thread_ = total_limit / n_threads_ + ((total_limit % n_threads_) != 0);
   }
 
@@ -81,10 +90,17 @@ class CountOutputOperator : public OutputOperator {
 
   bool validateAndOutput(const std::vector<CompressedSubgraphs>& input, uint32_t output_index) override {
     auto count_acc = outputs_->getCount(output_index);
+    if (outputs_->getTotaCount() >= outputs_->getTotalLimit()) {
+      LOG(INFO) << "count " << count_acc;
+      return true;
+    }
     for (auto& group : input) {
-      count_acc = outputs_->updateCount(group.getNumIsomorphicSubgraphs(outputs_->getLimitPerThread() - count_acc),
-                                        output_index);
-      if (count_acc >= outputs_->getLimitPerThread()) return true;
+      count_acc =
+          outputs_->updateCount(group.getNumIsomorphicSubgraphs(outputs_->getTotalLimit() - count_acc), output_index);
+      if (count_acc >= outputs_->getTotalLimit()) {
+        LOG(INFO) << "count " << count_acc;
+        return true;
+      }
     }
     return false;
   }

@@ -78,9 +78,6 @@ CFLFilter::CFLFilter(const QueryGraph* query_graph, const Graph* data_graph, Que
 }
 
 void CFLFilter::Filter(std::vector<std::vector<VertexID>>& candidates) {
-  for (uint32_t i = 0; i <= level_num_; ++i) {
-    LOG(INFO) << level_offset_[i];
-  }
   for (uint32_t i = 0; i < level_num_; ++i) {
     for (uint32_t j = level_offset_[i]; j < level_offset_[i + 1]; ++j) {
       QueryVertexID query_vertex = bfs_order_[j];

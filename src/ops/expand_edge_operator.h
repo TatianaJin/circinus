@@ -22,7 +22,7 @@
 
 namespace circinus {
 
-class ExpandEdgeOperator : public Operator {
+class ExpandEdgeOperator : public TraverseOperator {
  public:
   /**
    * Create a new TraverseOperator, which needs to be deleted manually, according to whether the parent and target

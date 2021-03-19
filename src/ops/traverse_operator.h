@@ -81,16 +81,12 @@ class TraverseOperator : public Operator {
   const std::vector<CompressedSubgraphs>* current_inputs_ = nullptr;
   const Graph* current_data_graph_ = nullptr;
 
-  /* transient variables for recording the current inputs */
-  uint32_t input_index_ = 0;
-  const std::vector<CompressedSubgraphs>* current_inputs_;
-  const Graph* current_data_graph_;
-
  public:
   virtual ~TraverseOperator() {}
 
   inline virtual void setCandidateSets(const std::vector<VertexID>* candidates) { candidates_ = candidates; }
   inline const std::vector<VertexID>* getCandidateSets() const { return candidates_; }
+  inline const uint32_t getInputIndex() const { return input_index_; }
 
   virtual void input(const std::vector<CompressedSubgraphs>& inputs, const Graph* data_graph) {
     current_inputs_ = &inputs;

@@ -16,6 +16,7 @@
 
 #include <string>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include "graph/query_graph.h"
@@ -34,10 +35,10 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
     while (input_index_ < current_inputs_->size()) {
       auto min_parent_set = getMinimumParent();
       if (min_parent_set.first * 20 < candidates_->size()) {
-        DLOG(INFO) << "fromSetNeighborStrategy";
+        // LOG(INFO) << "fromSetNeighborStrategy";
         output_num += fromSetNeighborStrategy(outputs, min_parent_set.second);
       } else {
-        DLOG(INFO) << "fromCandidateStrategy";
+        // LOG(INFO) << "fromCandidateStrategy";
         output_num += fromCandidateStrategy(outputs);
       }
       input_index_++;
@@ -65,20 +66,18 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
  protected:
   uint32_t profile() {
     auto& input = (*current_inputs_)[input_index_];
-    LOG(INFO) << "---------------------";
     for (auto par : parents_) {
       uint32_t loop_num = 0;
       const auto& parent_match = input.getSet(query_vertex_indices_[par]);
       for (VertexID vid : *parent_match) {
         const auto& out_neighbors = current_data_graph_->getOutNeighbors(vid);
         for (uint32_t i = 0; i < out_neighbors.second; ++i) {
-          VertexID key_vertex_id = out_neighbors.first[i];
           loop_num++;
         }
       }
-      LOG(INFO) << "set out_neighbors num " << loop_num;
+      DLOG(INFO) << "set out_neighbors num " << loop_num;
     }
-    LOG(INFO) << "candidates num " << candidates_->size();
+    DLOG(INFO) << "candidates num " << candidates_->size();
     return 0;
   }
 

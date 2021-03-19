@@ -61,7 +61,6 @@ class FilterBase {
       }
       count += 1;
     }
-    uint32_t new_candidate_size = 0;
     candidates[query_vertex].erase(std::remove_if(candidates[query_vertex].begin(), candidates[query_vertex].end(),
                                                   [&](const VertexID& u) { return flag[u] != count; }),
                                    candidates[query_vertex].end());
