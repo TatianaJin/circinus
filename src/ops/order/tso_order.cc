@@ -62,6 +62,7 @@ uint32_t TSOOrder::getStartVertex(const Graph* data_graph, const QueryGraph* que
         }
       }
     }
+    rank_queue.pop();
   }
 
   return start_vertex;

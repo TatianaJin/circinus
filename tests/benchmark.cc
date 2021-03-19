@@ -48,7 +48,8 @@ using circinus::QueryVertexID;
 using circinus::Task;
 using circinus::ThreadPool;
 using circinus::VertexID;
-
+using circinus::DPISOFilter;
+using circinus::OrderBase;
 #define BATCH_SIZE FLAGS_batch_size
 #define toSeconds(start, end) \
   (((double)std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count()) / 1e9)
@@ -101,6 +102,14 @@ class Benchmark {
       LOG(INFO) << "cfl order get start vertex " << start_vertex;
       CFLFilter cfl_filter(&q, &g, start_vertex);
       cfl_filter.Filter(candidates);
+    }else if (FLAGS_filter == "dpiso") {
+        OrderBase dpiso_order;
+        QueryVertexID start_vertex = dpiso_order.getStartVertex(&g, &q, candidate_size);
+        LOG(INFO) << "dpiso order get start vertex " << start_vertex;
+        DPISOFilter dpiso_filter(&q, &g, start_vertex);
+        LOG(INFO) << "!!!!1 " ;
+        dpiso_filter.Filter(candidates);
+        LOG(INFO) << "!!!!2 " ;
     }
     for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
       LOG(INFO) << "vertex " << v << " " << candidate_size[v] << "/" << candidates[v].size();

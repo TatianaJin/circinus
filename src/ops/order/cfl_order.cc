@@ -33,7 +33,7 @@ uint32_t CFLOrder::getStartVertex(const Graph* data_graph, const QueryGraph* que
   TwoCoreSolver two_core_solver;
   const auto& core_table = two_core_solver.get2CoreTable(query_graph);
   uint32_t core_size = two_core_solver.getCoreSize(core_table);
-  LOG(INFO) << "1111111111111";
+  // LOG(INFO) << "1111111111111";
   for (QueryVertexID query_vertex = 0; query_vertex < query_graph->getNumVertices(); ++query_vertex) {
     if (core_size == 0 || core_table[query_vertex] > 1) {
       LabelID label = query_graph->getVertexLabel(query_vertex);
@@ -43,7 +43,7 @@ uint32_t CFLOrder::getStartVertex(const Graph* data_graph, const QueryGraph* que
       rank_queue.push(std::make_pair(query_vertex, rank));
     }
   }
-  LOG(INFO) << "2222222222222";
+  // LOG(INFO) << "2222222222222";
 
   while (rank_queue.size() > 3) {
     rank_queue.pop();
