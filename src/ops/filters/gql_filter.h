@@ -21,8 +21,8 @@
 #include "graph/graph.h"
 #include "graph/query_graph.h"
 #include "ops/filters/filter_base.h"
-#include "utils/utils.h"
 #include "utils/hashmap.h"
+#include "utils/utils.h"
 
 namespace circinus {
 

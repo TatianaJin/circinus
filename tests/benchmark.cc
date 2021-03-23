@@ -112,14 +112,12 @@ class Benchmark {
       LOG(INFO) << "cfl order get start vertex " << start_vertex;
       CFLFilter cfl_filter(&q, &g, start_vertex);
       cfl_filter.Filter(candidates);
-    }else if (FLAGS_filter == "dpiso") {
-        OrderBase dpiso_order;
-        QueryVertexID start_vertex = dpiso_order.getStartVertex(&g, &q, candidate_size);
-        LOG(INFO) << "dpiso order get start vertex " << start_vertex;
-        DPISOFilter dpiso_filter(&q, &g, start_vertex);
-        LOG(INFO) << "!!!!1 " ;
-        dpiso_filter.Filter(candidates);
-        LOG(INFO) << "!!!!2 " ;
+    } else if (FLAGS_filter == "dpiso") {
+      OrderBase dpiso_order;
+      QueryVertexID start_vertex = dpiso_order.getStartVertex(&g, &q, candidate_size);
+      LOG(INFO) << "dpiso order get start vertex " << start_vertex;
+      DPISOFilter dpiso_filter(&q, &g, start_vertex);
+      dpiso_filter.Filter(candidates);
     }
     for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
       LOG(INFO) << "vertex " << v << " " << candidate_size[v] << "/" << candidates[v].size();

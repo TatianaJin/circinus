@@ -32,8 +32,8 @@ class OrderBase {
 
     for (QueryVertexID v = 0; v < query_graph->getNumVertices(); ++v) {
       uint32_t degree = query_graph->getVertexOutDegree(v);
-			
-			if (degree <= 1) continue;
+
+      if (degree <= 1) continue;
 
       double cur_score = candidate_size[v] / (double)degree;
       if (cur_score < min_score) {

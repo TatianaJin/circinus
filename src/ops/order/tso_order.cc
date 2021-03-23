@@ -31,8 +31,10 @@ uint32_t TSOOrder::getStartVertex(const Graph* data_graph, const QueryGraph* que
       rank_queue(rank_compare);
 
   for (QueryVertexID query_vertex = 0; query_vertex < query_graph->getNumVertices(); ++query_vertex) {
+    LabelID label = query_graph->getVertexLabel(query_vertex);
     double degree = query_graph->getVertexOutDegree(query_vertex);
-    double rank = candidate_size[query_vertex] / degree;
+    uint32_t frequency = data_graph->getNumVerticesByLabel(label);
+    double rank = frequency / degree;
     rank_queue.push(std::make_pair(query_vertex, rank));
   }
 
@@ -51,7 +53,9 @@ uint32_t TSOOrder::getStartVertex(const Graph* data_graph, const QueryGraph* que
         start_vertex = query_vertex;
       }
     } else {
-      if (candidate_size[query_vertex] / (double)data_graph->getNumVertices() <= 0.05) {
+      LabelID label = query_graph->getVertexLabel(query_vertex);
+      uint32_t frequency = data_graph->getNumVerticesByLabel(label);
+      if (frequency / (double)data_graph->getNumVertices() <= 0.05) {
         if (candidate_size[query_vertex] < min_candidates_num) {
           min_candidates_num = candidate_size[query_vertex];
           start_vertex = query_vertex;

@@ -49,16 +49,16 @@ void DPISOFilter::Filter(std::vector<std::vector<VertexID>>& candidates) {
     if (refine_time % 2 == 0) {
       for (QueryVertexID query_vertex : bfs_order_) {
         TreeNode& node = tree_[query_vertex];
-				if (node.bn_.size() > 0) {
-        	pruneByPivotVertices(query_vertex, node.bn_, candidates);
-				}
+        if (node.bn_.size() > 0) {
+          pruneByPivotVertices(query_vertex, node.bn_, candidates);
+        }
       }
     } else {
       for (auto it = bfs_order_.rbegin(); it != bfs_order_.rend(); ++it) {
         TreeNode& node = tree_[*it];
-				if (node.fn_.size() > 0) {
-        	pruneByPivotVertices(*it, node.fn_, candidates);
-				}
+        if (node.fn_.size() > 0) {
+          pruneByPivotVertices(*it, node.fn_, candidates);
+        }
       }
     }
   }
