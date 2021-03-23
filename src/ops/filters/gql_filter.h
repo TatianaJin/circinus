@@ -22,19 +22,20 @@
 #include "graph/query_graph.h"
 #include "ops/filters/filter_base.h"
 #include "utils/utils.h"
+#include "utils/hashmap.h"
 
 namespace circinus {
 
 class GQLFilter : public FilterBase {
  private:
   QueryVertexID query_vid_;
-  std::unordered_map<QueryVertexID, std::unordered_set<VertexID>>* valid_candidates_;
+  unordered_map<QueryVertexID, unordered_set<VertexID>>* valid_candidates_;
 
   bool verify(const Graph& data_graph, VertexID data_vertex);
 
  public:
   GQLFilter(const QueryGraph* query_graph, QueryVertexID query_vid,
-            std::unordered_map<QueryVertexID, std::unordered_set<VertexID>>* valid_candidates);
+            unordered_map<QueryVertexID, unordered_set<VertexID>>* valid_candidates);
 
   void preFilter(const Graph& data_graph, std::vector<VertexID>& candidates);
 

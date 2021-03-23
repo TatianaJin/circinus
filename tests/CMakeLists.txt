@@ -33,6 +33,13 @@ if(GTEST_FOUND)
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
   )
 
+  add_executable(TestFilterCandidates unittest_main.cc test_filter_candidates.cc)
+  target_link_libraries(TestFilterCandidates circinus ${GTEST_LIBRARY} ${EXTERNAL_LIBRARY})
+  add_test(NAME TestFilterCandidates
+    COMMAND TestFilterCandidates
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+  )
+
   add_executable(TestFilterAndMWVC unittest_main.cc test_filter_and_mwvc.cc)
   target_link_libraries(TestFilterAndMWVC circinus ${GTEST_LIBRARY} ${EXTERNAL_LIBRARY})
 
@@ -47,6 +54,9 @@ if(GTEST_FOUND)
 
   add_executable(Benchmark benchmark.cc)
   target_link_libraries(Benchmark circinus ${GTEST_LIBRARY} ${EXTERNAL_LIBRARY})
+
+  add_executable(Benchmark1 benchmark1.cc)
+  target_link_libraries(Benchmark1 circinus ${GTEST_LIBRARY} ${EXTERNAL_LIBRARY})
 
   add_executable(DynamicCoverPreliminary dynamic_cover_preliminary.cc)
   target_link_libraries(DynamicCoverPreliminary circinus ${GTEST_LIBRARY} ${EXTERNAL_LIBRARY})

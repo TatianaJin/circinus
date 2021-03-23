@@ -25,7 +25,7 @@
 
 namespace circinus {
 
-const uint32_t INVALID_VERTEX_ID = 0xffffffff;
+const uint64_t INVALID_VERTEX_ID = 0xffffffffffffffff;
 
 using circinus::QueryGraph;
 
@@ -40,7 +40,8 @@ static void dfs(QueryVertexID cur_vertex, const std::vector<TreeNode>& dfs_tree,
 static void bfs(const QueryGraph* query_graph, QueryVertexID start_vertex, std::vector<TreeNode>& bfs_tree,
                 std::vector<QueryVertexID>& bfs_order) {
   QueryVertexID vertex_num = query_graph->getNumVertices();
-
+  bfs_tree.resize(vertex_num);
+  bfs_order.resize(vertex_num);
   std::queue<QueryVertexID> bfs_queue;
   std::vector<bool> visited(vertex_num, false);
 
@@ -69,22 +70,6 @@ static void bfs(const QueryGraph* query_graph, QueryVertexID start_vertex, std::
   }
 }
 
-static void precompute(uint32_t* col_ptrs, const std::vector<uint32_t>& col_ids, std::vector<int>& match,
-                       std::vector<int>& row_match, uint32_t n, uint32_t m) {
-  for (uint32_t i = 0; i < n; i++) {
-    uint32_t s_ptr = col_ptrs[i];
-    uint32_t e_ptr = col_ptrs[i + 1];
-    for (uint32_t ptr = s_ptr; ptr < e_ptr; ptr++) {
-      uint32_t r_id = col_ids[ptr];
-      if (row_match[r_id] == -1) {
-        match[i] = r_id;
-        row_match[r_id] = i;
-        break;
-      }
-    }
-  }
-}
-
 static bool semiperfectBipartiteMatching(uint32_t* col_ptrs, const std::vector<uint32_t>& col_ids, uint32_t n,
                                          uint32_t m) {
   std::vector<int> match(n, -1);
@@ -92,48 +77,42 @@ static bool semiperfectBipartiteMatching(uint32_t* col_ptrs, const std::vector<u
   std::vector<int> visited(m, -1);
   std::vector<int> previous(m, 0);
   std::queue<uint32_t> q;
-  precompute(col_ptrs, col_ids, match, row_match, n, m);
 
-  for (uint32_t i = 0; i < n; i++) {
+  for (int i = 0; i < n; i++) {
     if (match[i] == -1 && col_ptrs[i] != col_ptrs[i + 1]) {
       // clear queue
       while (!q.empty()) q.pop();
       q.push(i);
+			previous[i] = -1;
 
-      while (!q.empty()) {
-        uint32_t queue_col = q.front();
-        q.pop();
-        uint32_t eptr = col_ptrs[queue_col + 1];
-        for (uint32_t ptr = col_ptrs[queue_col]; ptr < eptr; ptr++) {
-          int row = col_ids[ptr];
-
-          if (visited[row] != (int)i) {
-            previous[row] = queue_col;
-            visited[row] = i;
-
-            int col = row_match[row];
-
-            if (col == -1) {
-              // Find an augmenting path. Then, trace back and modify the augmenting path.
-              while (row != -1) {
-                col = previous[row];
-                int temp = match[col];
-                match[col] = row;
-                row_match[row] = col;
-                row = temp;
-              }
-              break;
-            } else {
-              // Continue to construct the match.
-              q.push(col);
-            }
-          }
-        }
-      }
-
-      if (match[i] == -1) {
-        return false;
-      }
+			bool flag = false;
+      while (!q.empty() && !flag) {
+				uint32_t u = q.front();
+				q.pop();
+				for (uint32_t ptr = col_ptrs[u]; ptr < col_ptrs[u + 1] && !flag; ptr++) {
+					uint32_t v = col_ids[ptr];
+					if (visited[v] == -1 || visited[v] != i) {
+						visited[v] = i;
+						if (row_match[v] >= 0) {
+							q.push(row_match[v]);
+							previous[row_match[v]] = u;
+						} else {
+							flag = true;
+							int d = u, e = v;
+							while (d != -1) {
+								int t = match[d];
+								match[d] = e;
+								row_match[e] = d;
+								d = previous[d];
+								e = t;
+							}
+						}
+					}
+				}
+			}
+    }
+    if (match[i] == -1) {
+      return false;
     }
   }
   return true;
