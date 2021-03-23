@@ -12,10 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "utils/flags.h"
+#pragma once
 
-#include "gflags/gflags.h"
+#include <unordered_map>
+#include <vector>
 
-DEFINE_int32(batch_size, 1024, "Batch size for input and output.");
-DEFINE_int32(num_cores, 1, "The number of cores to use for thread pool.");
-DEFINE_bool(profile, false, "True means profiling the execution");
+#include "ops/filters/filter_base.h"
+
+namespace circinus {
+
+class DPISOFilter : public FilterBase {
+ private:
+  QueryVertexID start_vertex_;
+  std::vector<TreeNode> tree_;
+  std::vector<QueryVertexID> bfs_order_;
+
+ public:
+  DPISOFilter(const QueryGraph* query_graph, const Graph* data_graph, QueryVertexID start_vertex);
+
+  /** @returns The number of records that passed the filter and are added to output */
+  void Filter(std::vector<std::vector<VertexID>>& candidates);
+};
+
+}  // namespace circinus

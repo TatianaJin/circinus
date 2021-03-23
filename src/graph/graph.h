@@ -82,6 +82,13 @@ class Graph {
     return &vertex_ids_by_label_.at(lid);
   }
 
+  inline const uint32_t getNumVerticesByLabel(LabelID lid) const {
+    if (vertex_ids_by_label_.count(lid) == 0) {
+      return 0;
+    }
+    return vertex_ids_by_label_.at(lid).size();
+  }
+
   /** * @returns a pair { starting neighbor pointer, out degree } */
   inline std::pair<const VertexID*, uint32_t> getOutNeighbors(VertexID id) const {
     DCHECK_LT(id, vlist_.size() - 1);

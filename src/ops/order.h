@@ -12,10 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "utils/flags.h"
+#pragma once
 
-#include "gflags/gflags.h"
-
-DEFINE_int32(batch_size, 1024, "Batch size for input and output.");
-DEFINE_int32(num_cores, 1, "The number of cores to use for thread pool.");
-DEFINE_bool(profile, false, "True means profiling the execution");
+#include "ops/order/cfl_order.h"

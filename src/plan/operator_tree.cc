@@ -14,6 +14,8 @@
 
 #include "plan/operator_tree.h"
 
+#include <ctime>
+#include <string>
 #include <vector>
 
 #include "glog/logging.h"
@@ -24,6 +26,7 @@
 #include "graph/graph.h"
 #include "ops/operators.h"
 #include "utils/flags.h"
+#include "utils/profiler.h"
 
 namespace circinus {
 
@@ -39,11 +42,20 @@ bool OperatorTree::handleTask(Task* task, TaskQueue* queue, uint32_t thread_id) 
   }
 
   // TODO(tatiana): data graph may change
+  uint32_t last_input_index = 0;
   traverse_op->input(task->getInput(), task->getDataGraph());
 
   while (true) {
     std::vector<CompressedSubgraphs> outputs;
+    auto start_time = clock();
     auto size = traverse_op->expand(&outputs, FLAGS_batch_size);
+    if (FLAGS_profile) {
+      std::string str(typeid(*traverse_op).name());
+      (*profiler_)
+          .addLog(task->getLevel(), str, traverse_op->getInputIndex() - last_input_index, size,
+                  ((double)clock() - start_time) / CLOCKS_PER_SEC);
+      last_input_index = traverse_op->getInputIndex();
+    }
     if (size == 0) return false;
     queue->putTask(task->getLevel() + 1, std::move(outputs), task->getDataGraph());
   }
@@ -58,10 +70,20 @@ bool OperatorTree::handleInput(const Graph* g, const std::vector<CompressedSubgr
     return output_op->validateAndOutput(inputs, 0);
   }
   auto traverse_op = dynamic_cast<TraverseOperator*>(op);
+  uint32_t last_input_index = 0;
   traverse_op->input(inputs, g);
   while (true) {
     outputs.clear();
+    auto start_time = clock();
     auto size = traverse_op->expand(&outputs, FLAGS_batch_size);
+    if (FLAGS_profile) {
+      std::string str(typeid(*traverse_op).name());
+      (*profiler_)
+          .addLog(level, str, traverse_op->getInputIndex() - last_input_index, size,
+                  ((double)clock() - start_time) / CLOCKS_PER_SEC);
+      // (**profiler_).addInput(inputs, last_input_index, traverse_op->getInputIndex());
+      last_input_index = traverse_op->getInputIndex();
+    }
     if (size == 0) {
       break;
     }

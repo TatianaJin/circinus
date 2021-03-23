@@ -14,4 +14,5 @@
 
 #pragma once
 
+#include "ops/filters/cfl_filter.h"
 #include "ops/filters/nlf_filter.h"
