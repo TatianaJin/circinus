@@ -50,12 +50,6 @@ class EnumerateKeyExpandToSetOperator : public ExpandVertexOperator {
 
   Operator* clone() const override {
     // TODO(tatiana): for now next_ is not handled because it is only used for printing plan
-    /*
-    auto ret = new EnumerateKeyExpandToSetOperator(parents_, target_vertex_, input_query_vertex_indices_,
-                                                   query_vertex_indices_, keys_to_enumerate_, existing_key_parents_,
-                                                   cover_table_);
-    ret->candidates_ = candidates_; // set_old_to_new_pos_
-    */
     return new EnumerateKeyExpandToSetOperator(*this);
   }
 
