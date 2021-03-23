@@ -25,7 +25,9 @@ set(circinus_graph_sources
 )
 set(circinus_ops_sources
   ${PROJECT_SOURCE_DIR}/src/ops/expand_edge_operator.cc
+  ${PROJECT_SOURCE_DIR}/src/ops/filters/cfl_filter.cc
   ${PROJECT_SOURCE_DIR}/src/ops/filters/nlf_filter.cc
+  ${PROJECT_SOURCE_DIR}/src/ops/order/cfl_order.cc
   ${PROJECT_SOURCE_DIR}/src/ops/output_operator.cc
   ${PROJECT_SOURCE_DIR}/src/ops/scans/ldf_scan.cc
   ${PROJECT_SOURCE_DIR}/src/ops/traverse_operator.cc

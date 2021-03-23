@@ -14,5 +14,18 @@
 
 #pragma once
 
-#include "ops/filters/cfl_filter.h"
-#include "ops/filters/nlf_filter.h"
+#include <vector>
+
+#include "graph/graph.h"
+#include "graph/query_graph.h"
+#include "ops/order/order_base.h"
+
+namespace circinus {
+
+class CFLOrder : public OrderBase {
+ public:
+  uint32_t getStartVertex(const Graph* data_graph_, const QueryGraph* query_graph,
+                          std::vector<uint32_t>& candidate_size);
+};
+
+}  // namespace circinus
