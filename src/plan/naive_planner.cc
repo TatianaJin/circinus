@@ -173,7 +173,11 @@ unordered_map<QueryVertexID, uint32_t> NaivePlanner::getDynamicCoreCoverEager(co
         if (existing_vertices.count(nb.first[j]) && cover[nb.first[j]] != 1) {
           CHECK_EQ(select_cover[nb.first[j]], 1);
           cover[nb.first[j]] = 1;
-          level_become_key.insert({nb.first[j], i});  // the level is the subquery size - 1
+          if ((i - vertex_order[nb.first[j]]) == 1) {  // if enumerate in the consecutive subquery, then do not delay
+            level_become_key.insert({nb.first[j], vertex_order[nb.first[j]]});
+          } else {
+            level_become_key.insert({nb.first[j], i});  // the level is the subquery size - 1
+          }
         }
       }
     }
@@ -193,6 +197,7 @@ std::pair<uint32_t, uint32_t> NaivePlanner::analyzeDynamicCoreCoverEagerInner(co
   vertex_order[matching_order_.front()] = 0;
   auto current_subquery_key_size = (select_cover[matching_order_.front()] == 1);
   uint32_t key_sizes = current_subquery_key_size;
+  LOG(INFO) << "analyzeDynamicCoreCoverEagerInner";
   for (uint32_t i = 1; i < matching_order_.size(); ++i) {
     auto v = matching_order_[i];
     vertex_order[v] = i;
@@ -214,9 +219,13 @@ std::pair<uint32_t, uint32_t> NaivePlanner::analyzeDynamicCoreCoverEagerInner(co
           CHECK_EQ(select_cover[nb.first[j]], 1);
           cover[nb.first[j]] = 1;
           current_subquery_key_size += 1;
-          sum_delayed_steps += (i - vertex_order[nb.first[j]]);
-          LOG(INFO) << nb.first[j] << " delayed from " << vertex_order[nb.first[j]] << " for "
-                    << (i - vertex_order[nb.first[j]]) << " steps";
+          if ((i - vertex_order[nb.first[j]]) == 1) {  // if enumerate in the consecutive subquery, then do not delay
+            current_subquery_key_size += 1;            // restore for the last subquery
+          } else {
+            sum_delayed_steps += (i - vertex_order[nb.first[j]]);
+            LOG(INFO) << nb.first[j] << " delayed from " << vertex_order[nb.first[j]] << " for "
+                      << (i - vertex_order[nb.first[j]]) << " steps";
+          }
         }
       }
     }
@@ -254,7 +263,8 @@ std::pair<uint32_t, uint32_t> NaivePlanner::analyzeDynamicCoreCoverEager(const s
   return analyzeDynamicCoreCoverEagerInner(select_cover);
 }
 
-ExecutionPlan* NaivePlanner::generatePlanWithEagerDynamicCover(const std::vector<QueryVertexID>& use_order) {
+ExecutionPlan* NaivePlanner::generatePlanWithEagerDynamicCover(const std::vector<QueryVertexID>& use_order,
+                                                               Profiler* profiler) {
   // if any of the candidate cardinality is zero, there is no matching
   if (!hasValidCandidate()) {
     return nullptr;
@@ -297,6 +307,7 @@ ExecutionPlan* NaivePlanner::generatePlanWithEagerDynamicCover(const std::vector
 
   plan_.populatePhysicalPlan(query_graph_, matching_order_, covers[select_cover_index],
                              getDynamicCoreCoverEager(covers[select_cover_index]));
+  plan_.setProfiler(profiler);
   return &plan_;
 }
 

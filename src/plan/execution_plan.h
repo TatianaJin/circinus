@@ -56,6 +56,8 @@ class ExecutionPlan {
                             const std::vector<int>& cover_table,
                             const unordered_map<QueryVertexID, uint32_t>& level_become_key);
 
+  void setProfiler(Profiler* profiler) { operators_.setProfiler(profiler); }
+
   void printPhysicalPlan() const {
     if (operators_.empty()) return;
     printOperatorChain(operators_.root());

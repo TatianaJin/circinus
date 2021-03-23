@@ -170,12 +170,14 @@ class Benchmark {
       auto op = dynamic_cast<circinus::TraverseOperator*>(current_op);
       uint32_t op_idx = 0;
       while (op != nullptr) {
+        auto start = std::chrono::steady_clock::now();
         op->input(input, g);
         while (op->expand(&outputs, FLAGS_batch_size) > 0) {
         }
+        auto end = std::chrono::steady_clock::now();
         input.clear();
         LOG(INFO) << op_idx++ << ": # groups " << outputs.size() << " # matches " << getNumIsomorphicSubgraphs(outputs)
-                  << '/' << getNumSubgraphs(outputs) << " " << op->toString();
+                  << '/' << getNumSubgraphs(outputs) << " " << op->toString() << " " << toSeconds(start, end) << "s";
         input.swap(outputs);
         current_op = current_op->getNext();
         op = dynamic_cast<circinus::TraverseOperator*>(current_op);
@@ -228,9 +230,9 @@ class Benchmark {
     NaivePlanner planner(&q, &candidate_cardinality);
     ExecutionPlan* plan;
     if (vcs == Static) {
-      plan = planner.generatePlan(use_order);
+      plan = planner.generatePlan(use_order, &profiler);
     } else if (vcs == Eager) {
-      plan = planner.generatePlanWithEagerDynamicCover(use_order);
+      plan = planner.generatePlanWithEagerDynamicCover(use_order, &profiler);
     } else {
       LOG(ERROR) << "Unknown vertex cover strategy " << FLAGS_vertex_cover;
       return;
@@ -240,13 +242,12 @@ class Benchmark {
     // plan->printLabelFrequency();
     plan->getOutputs().init(FLAGS_num_cores).limit(FLAGS_match_limit);
     LOG(INFO) << "limit per thread " << plan->getOutputs().getLimitPerThread();
-    LOG(INFO) << &profiler;
     auto start_execution = std::chrono::steady_clock::now();
     // ProfilerStart("benchmark.prof");
-    // bfsExecute(&g, plan);
     if (FLAGS_num_cores == 1) {
       LOG(INFO) << "batchDFSExecuteST";
       batchDFSExecuteST(&g, plan);
+      // bfsExecute(&g, plan);
     } else {
       batchDFSExecute(&g, plan);
     }
@@ -293,6 +294,7 @@ int main(int argc, char** argv) {
   } else {
     out = &std::cout;
   }
+  FLAGS_profile = (FLAGS_profile_file != "");
   if (FLAGS_vertex_cover == "static") {
     benchmark.run<Static>(FLAGS_dataset, FLAGS_query_size, FLAGS_query_mode, FLAGS_query_index, out);
   } else {
