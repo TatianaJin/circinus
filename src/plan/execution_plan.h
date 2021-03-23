@@ -24,6 +24,7 @@
 #include "ops/output_operator.h"
 #include "ops/traverse_operator.h"
 #include "plan/operator_tree.h"
+#include "utils/profiler.h"
 
 namespace circinus {
 
@@ -48,7 +49,7 @@ class ExecutionPlan {
   ~ExecutionPlan() {}
 
   void populatePhysicalPlan(const QueryGraph* g, const std::vector<QueryVertexID>& matching_order,
-                            const std::vector<int>& cover_table);
+                            const std::vector<int>& cover_table, Profiler* profiler = nullptr);
 
   void printPhysicalPlan() const {
     if (operators_.empty()) return;

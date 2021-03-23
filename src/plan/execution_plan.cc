@@ -23,10 +23,11 @@
 namespace circinus {
 
 void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<QueryVertexID>& matching_order,
-                                         const std::vector<int>& cover_table) {
+                                         const std::vector<int>& cover_table, Profiler* profiler) {
   query_graph_ = g;
   cover_table_ = cover_table;
   operators_.reserve(g->getNumVertices());
+  operators_.setProfiler(profiler);
   root_query_vertex_ = matching_order.front();
   if (matching_order.size() == 1) {
     // TODO(tatiana): handle no traversal

@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <cinttypes>
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "glog/logging.h"
@@ -118,11 +119,13 @@ class CompressedSubgraphs {
     uint64_t count = 0;
     std::vector<uint32_t> set_index(sets_.size(), 0);
     unordered_set<QueryVertexID> existing_vertices;
+    std::vector<uint32_t> vertices;
     existing_vertices.reserve(getNumVertices());
     existing_vertices.insert(keys_.begin(), keys_.end());
     // std::vector<QueryVertexID> existing_vertices;
     // existing_vertices.reserve(getNumVertices());
     // existing_vertices.insert(existing_vertices.end(), keys_.begin(), keys_.end());
+    vertices.insert(vertices.end(), keys_.begin(), keys_.end());
     uint32_t last_depth = sets_.size() - 1;
     uint32_t current_depth = 0;
     while (true) {
@@ -165,6 +168,23 @@ class CompressedSubgraphs {
       }
     }
     return false;
+  }
+
+  std::string toString() {
+    std::string s = "{";
+    s += "key_size:" + std::to_string(keys_.size()) + "," + "set_size:" + std::to_string(sets_.size()) + ",";
+    for (VertexID key : keys_) {
+      s += std::to_string(key) + ",";
+    }
+    for (auto& set : sets_) {
+      s += "[";
+      for (auto vid : *set) {
+        s += std::to_string(vid) + ",";
+      }
+      s += "],";
+    }
+    s += "}";
+    return s;
   }
 
   /** Get the value of the key vertex at key_idx. */

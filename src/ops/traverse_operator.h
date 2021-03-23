@@ -86,6 +86,7 @@ class TraverseOperator : public Operator {
 
   inline virtual void setCandidateSets(const std::vector<VertexID>* candidates) { candidates_ = candidates; }
   inline const std::vector<VertexID>* getCandidateSets() const { return candidates_; }
+  inline const uint32_t getInputIndex() const { return input_index_; }
 
   virtual void input(const std::vector<CompressedSubgraphs>& inputs, const Graph* data_graph) {
     current_inputs_ = &inputs;

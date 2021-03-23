@@ -36,6 +36,7 @@
 #include "plan/execution_plan.h"
 #include "plan/naive_planner.h"
 #include "utils/flags.h"
+#include "utils/profiler.h"
 
 using circinus::CompressedSubgraphs;
 using circinus::ExecutionPlan;
@@ -50,6 +51,7 @@ using circinus::QueryVertexID;
 using circinus::Task;
 using circinus::ThreadPool;
 using circinus::VertexID;
+using circinus::Profiler;
 
 #define BATCH_SIZE FLAGS_batch_size
 #define toSeconds(start, end) \
@@ -64,6 +66,7 @@ DEFINE_uint64(match_limit, 1e5, "The limit of matches to find");
 DEFINE_uint64(query_index, 1, "The index of query in the same category");
 DEFINE_string(match_order, "", "Matching order");
 DEFINE_string(filter, "nlf", "filter");
+DEFINE_string(profile_file, "", "profile file");
 
 class Benchmark {
  protected:
@@ -143,8 +146,13 @@ class Benchmark {
 
   void batchDFSExecuteST(const Graph* g, ExecutionPlan* plan) {
     auto seeds = plan->getCandidateSet(plan->getRootQueryVertexID());
-    CHECK(plan->isInCover(plan->getRootQueryVertexID()));
-    plan->getOperators().handleInput(g, std::vector<CompressedSubgraphs>(seeds.begin(), seeds.end()));
+    if (plan->isInCover(plan->getRootQueryVertexID())) {
+      plan->getOperators().handleInput(g, std::vector<CompressedSubgraphs>(seeds.begin(), seeds.end()));
+    } else {
+      std::vector<CompressedSubgraphs> input;
+      input.emplace_back(std::make_shared<std::vector<VertexID>>(std::move(seeds)));
+      plan->getOperators().handleInput(g, input);
+    }
   }
 
   void bfsExecute(const Graph* g, const ExecutionPlan* plan) {
@@ -206,20 +214,24 @@ class Benchmark {
     std::vector<double> candidate_cardinality;
     candidate_cardinality.reserve(candidates.size());
     for (auto& set : candidates) {
-      candidate_cardinality.push_back(set.size());
+      double size = set.size();
+      candidate_cardinality.push_back(std::log2(size));
+      LOG(INFO) << std::log(size) << " " << std::log2(size);
     }
+    Profiler profiler;
     NaivePlanner planner(&q, &candidate_cardinality);
-    auto plan = planner.generatePlan(use_order);
+    auto plan = planner.generatePlan(use_order, &profiler);
     plan->setCandidateSets(candidates);  // swap
     plan->printPhysicalPlan();
     // plan->printLabelFrequency();
     plan->getOutputs().init(FLAGS_num_cores).limit(FLAGS_match_limit);
     LOG(INFO) << "limit per thread " << plan->getOutputs().getLimitPerThread();
-
+    LOG(INFO) << &profiler;
     auto start_execution = std::chrono::steady_clock::now();
     // ProfilerStart("benchmark.prof");
     // bfsExecute(&g, plan);
     if (FLAGS_num_cores == 1) {
+      LOG(INFO) << "batchDFSExecuteST";
       batchDFSExecuteST(&g, plan);
     } else {
       batchDFSExecute(&g, plan);
@@ -231,6 +243,13 @@ class Benchmark {
     std::stringstream ss;
     for (auto v : order) {
       ss << v << ' ';
+    }
+
+    if (FLAGS_profile_file != "") {
+      std::ofstream profile_stream;
+      profile_stream.open(FLAGS_profile_file);
+      profiler.profile(&profile_stream);
+      profile_stream.close();
     }
 
     (*out) << toSeconds(start_loading, end_loading) << ',' << toSeconds(start_filter, end_filter) << ','

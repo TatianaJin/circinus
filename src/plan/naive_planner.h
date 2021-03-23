@@ -21,6 +21,7 @@
 #include "algorithms/minimum_weight_vertex_cover.h"
 #include "graph/query_graph.h"
 #include "plan/execution_plan.h"
+#include "utils/profiler.h"
 
 namespace circinus {
 
@@ -28,7 +29,6 @@ class NaivePlanner {
  private:
   const QueryGraph* query_graph_;
   const std::vector<double>* candidate_cardinality_;
-
   WeightedBnB vertex_cover_solver_;
   ExecutionPlan plan_;
 
@@ -44,7 +44,7 @@ class NaivePlanner {
 
   const auto& getMatchingOrder() const { return matching_order_; }
 
-  ExecutionPlan* generatePlan(const std::vector<QueryVertexID>& use_order = {});
+  ExecutionPlan* generatePlan(const std::vector<QueryVertexID>& use_order = {}, Profiler* profiler = nullptr);
 
   uint32_t analyzeDynamicCoreCoverEager(const std::vector<QueryVertexID>& use_order = {});
   std::tuple<uint32_t, uint32_t, uint32_t> analyzeDynamicCoreCoverMWVC();

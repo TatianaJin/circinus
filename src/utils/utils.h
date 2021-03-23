@@ -89,7 +89,7 @@ static bool semiperfectBipartiteMatching(uint32_t* col_ptrs, const std::vector<u
                                          uint32_t m) {
   std::vector<int> match(n, -1);
   std::vector<int> row_match(m, -1);
-  std::vector<int> visited(m, 0);
+  std::vector<int> visited(m, -1);
   std::vector<int> previous(m, 0);
   std::queue<uint32_t> q;
   precompute(col_ptrs, col_ids, match, row_match, n, m);
