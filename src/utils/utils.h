@@ -83,33 +83,33 @@ static bool semiperfectBipartiteMatching(uint32_t* col_ptrs, const std::vector<u
       // clear queue
       while (!q.empty()) q.pop();
       q.push(i);
-			previous[i] = -1;
+      previous[i] = -1;
 
-			bool flag = false;
+      bool flag = false;
       while (!q.empty() && !flag) {
-				uint32_t u = q.front();
-				q.pop();
-				for (uint32_t ptr = col_ptrs[u]; ptr < col_ptrs[u + 1] && !flag; ptr++) {
-					uint32_t v = col_ids[ptr];
-					if (visited[v] == -1 || visited[v] != i) {
-						visited[v] = i;
-						if (row_match[v] >= 0) {
-							q.push(row_match[v]);
-							previous[row_match[v]] = u;
-						} else {
-							flag = true;
-							int d = u, e = v;
-							while (d != -1) {
-								int t = match[d];
-								match[d] = e;
-								row_match[e] = d;
-								d = previous[d];
-								e = t;
-							}
-						}
-					}
-				}
-			}
+        uint32_t u = q.front();
+        q.pop();
+        for (uint32_t ptr = col_ptrs[u]; ptr < col_ptrs[u + 1] && !flag; ptr++) {
+          uint32_t v = col_ids[ptr];
+          if (visited[v] == -1 || visited[v] != i) {
+            visited[v] = i;
+            if (row_match[v] >= 0) {
+              q.push(row_match[v]);
+              previous[row_match[v]] = u;
+            } else {
+              flag = true;
+              int d = u, e = v;
+              while (d != -1) {
+                int t = match[d];
+                match[d] = e;
+                row_match[e] = d;
+                d = previous[d];
+                e = t;
+              }
+            }
+          }
+        }
+      }
     }
     if (match[i] == -1) {
       return false;

@@ -99,9 +99,9 @@ class Benchmark1 {
       buffer.reserve(BATCH_SIZE);
       while (scan.Scan(&buffer, BATCH_SIZE) > 0) {
         if (FLAGS_filter == "dpiso") {
-            candidates[v].insert(candidates[v].end(), buffer.begin(), buffer.end());
-        }
-        else filter.Filter(g, buffer, &candidates[v]);
+          candidates[v].insert(candidates[v].end(), buffer.begin(), buffer.end());
+        } else
+          filter.Filter(g, buffer, &candidates[v]);
         buffer.clear();
       }
       candidate_size[v] = candidates[v].size();
@@ -113,41 +113,41 @@ class Benchmark1 {
       CFLFilter cfl_filter(&q, &g, start_vertex);
       cfl_filter.Filter(candidates);
     } else if (FLAGS_filter == "dpiso") {
-        OrderBase dpiso_order;
-        QueryVertexID start_vertex = dpiso_order.getStartVertex(&g, &q, candidate_size);
-        LOG(INFO) << "dpiso order get start vertex " << start_vertex;
-        DPISOFilter dpiso_filter(&q, &g, start_vertex);
-        dpiso_filter.Filter(candidates);
+      OrderBase dpiso_order;
+      QueryVertexID start_vertex = dpiso_order.getStartVertex(&g, &q, candidate_size);
+      LOG(INFO) << "dpiso order get start vertex " << start_vertex;
+      DPISOFilter dpiso_filter(&q, &g, start_vertex);
+      dpiso_filter.Filter(candidates);
     } else if (FLAGS_filter == "tso") {
-        TSOOrder tso_order;
-        QueryVertexID start_vertex = tso_order.getStartVertex(&g, &q, candidate_size);
-        LOG(INFO) << "tso order get start vertex " << start_vertex;
-        TSOFilter tso_filter(&q, &g, start_vertex);
-        tso_filter.Filter(candidates);
+      TSOOrder tso_order;
+      QueryVertexID start_vertex = tso_order.getStartVertex(&g, &q, candidate_size);
+      LOG(INFO) << "tso order get start vertex " << start_vertex;
+      TSOFilter tso_filter(&q, &g, start_vertex);
+      tso_filter.Filter(candidates);
     } else if (FLAGS_filter == "gql") {
-        std::vector<std::vector<VertexID>> gql_candidates;
-       	unordered_map<QueryVertexID, unordered_set<VertexID>> gql_map;
-        for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
-            unordered_set<VertexID> gql_set;
-            for(auto i : candidates[v]) {
-                gql_set.insert(i);
-            }
-            gql_map[v] = std::move(gql_set);
+      std::vector<std::vector<VertexID>> gql_candidates;
+      unordered_map<QueryVertexID, unordered_set<VertexID>> gql_map;
+      for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
+        unordered_set<VertexID> gql_set;
+        for (auto i : candidates[v]) {
+          gql_set.insert(i);
         }
-        for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
-            GQLFilter gql_filter(&q, v, &gql_map);
-            gql_filter.preFilter(g, candidates[v]);
-        }
-        for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
-            GQLFilter gql_filter(&q, v, &gql_map);
-            std::vector<VertexID> tempvec;
-            gql_filter.Filter(g, candidates[v], &tempvec);
-            gql_candidates.push_back(std::move(tempvec));
-        }
-        for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
-            LOG(INFO) << "vertex " << v << " " << candidate_size[v] << "/" << gql_candidates[v].size();
-        }
-        return gql_candidates;
+        gql_map[v] = std::move(gql_set);
+      }
+      for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
+        GQLFilter gql_filter(&q, v, &gql_map);
+        gql_filter.preFilter(g, candidates[v]);
+      }
+      for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
+        GQLFilter gql_filter(&q, v, &gql_map);
+        std::vector<VertexID> tempvec;
+        gql_filter.Filter(g, candidates[v], &tempvec);
+        gql_candidates.push_back(std::move(tempvec));
+      }
+      for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
+        LOG(INFO) << "vertex " << v << " " << candidate_size[v] << "/" << gql_candidates[v].size();
+      }
+      return gql_candidates;
     }
 
     for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
@@ -156,8 +156,6 @@ class Benchmark1 {
     return candidates;
   }
 
-
-
   void run(const std::string& graph_path, const std::string& query_path, std::ostream* out) {
     auto start_loading = std::chrono::steady_clock::now();
     Graph g(FLAGS_data_dir + "/" + graph_path);  // load data graph
@@ -165,7 +163,7 @@ class Benchmark1 {
     LOG(INFO) << "========================";
     LOG(INFO) << "graph " << graph_path << " query " << query_path;
     QueryGraph q(FLAGS_data_dir + "/" + query_path);  // load query graph
-    auto candidates = getCandidateSets(g, q);  // get candidates for each query vertex
+    auto candidates = getCandidateSets(g, q);         // get candidates for each query vertex
     std::stringstream ss;
     for (auto v : candidates) {
       ss << v.size() << ' ';

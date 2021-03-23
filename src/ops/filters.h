@@ -17,5 +17,5 @@
 #include "ops/filters/cfl_filter.h"
 #include "ops/filters/dpiso_filter.h"
 #include "ops/filters/gql_filter.h"
-#include "ops/filters/tso_filter.h"
 #include "ops/filters/nlf_filter.h"
+#include "ops/filters/tso_filter.h"

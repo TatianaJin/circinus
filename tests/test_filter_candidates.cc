@@ -61,18 +61,17 @@ using circinus::unordered_set;
 #define toSeconds(start, end) \
   (((double)std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count()) / 1e9)
 
-
-
 const std::vector<std::string> datasets_ = {"dblp",    "eu2005",  "hprd",  "human",
-                                              "patents", "wordnet", "yeast", "youtube"};
-const std::string data_dir="/data/share/project/haxe/data/subgraph_matching_datasets";
+                                            "patents", "wordnet", "yeast", "youtube"};
+const std::string data_dir = "/data/share/project/haxe/data/subgraph_matching_datasets";
 const std::string answer_dir = "/data/share/users/qlma/circinus-test/answer/";
-const std::vector<int> query_size_list = {4,8,12,16,20,24,32};
-const std::vector<std::string> query_mode_list = {"dense","sparse"};
-const std::pair<int,int> query_index_range = {1,200};
+const std::vector<int> query_size_list = {4, 8, 12, 16, 20, 24, 32};
+const std::vector<std::string> query_mode_list = {"dense", "sparse"};
+const std::pair<int, int> query_index_range = {1, 200};
 
-std::vector<std::vector<VertexID>> getCandidateSets(const Graph& g, const QueryGraph& q,const std::string& filter_str) {
-  const char *filter_cstr=filter_str.c_str();
+std::vector<std::vector<VertexID>> getCandidateSets(const Graph& g, const QueryGraph& q,
+                                                    const std::string& filter_str) {
+  const char* filter_cstr = filter_str.c_str();
   std::vector<std::vector<VertexID>> candidates(q.getNumVertices());
   std::vector<uint32_t> candidate_size(q.getNumVertices());
   for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
@@ -82,248 +81,143 @@ std::vector<std::vector<VertexID>> getCandidateSets(const Graph& g, const QueryG
     std::vector<VertexID> buffer;
     buffer.reserve(BATCH_SIZE);
     while (scan.Scan(&buffer, BATCH_SIZE) > 0) {
-      if (strcmp(filter_cstr,"dpiso")==0) {
-          candidates[v].insert(candidates[v].end(), buffer.begin(), buffer.end());
-      }
-      else filter.Filter(g, buffer, &candidates[v]);
+      if (strcmp(filter_cstr, "dpiso") == 0) {
+        candidates[v].insert(candidates[v].end(), buffer.begin(), buffer.end());
+      } else
+        filter.Filter(g, buffer, &candidates[v]);
       buffer.clear();
     }
     candidate_size[v] = candidates[v].size();
   }
-  if (strcmp(filter_cstr,"cfl")==0) {
+  if (strcmp(filter_cstr, "cfl") == 0) {
     CFLOrder cfl_order;
     QueryVertexID start_vertex = cfl_order.getStartVertex(&g, &q, candidate_size);
-    //LOG(INFO) << "cfl order get start vertex " << start_vertex;
+    // LOG(INFO) << "cfl order get start vertex " << start_vertex;
     CFLFilter cfl_filter(&q, &g, start_vertex);
     cfl_filter.Filter(candidates);
-  } else if (strcmp(filter_cstr,"dpiso")==0) {
-      OrderBase dpiso_order;
-      QueryVertexID start_vertex = dpiso_order.getStartVertex(&g, &q, candidate_size);
-      //LOG(INFO) << "dpiso order get start vertex " << start_vertex;
-      DPISOFilter dpiso_filter(&q, &g, start_vertex);
-      dpiso_filter.Filter(candidates);
-  } else if (strcmp(filter_cstr,"tso")==0) {
-      TSOOrder tso_order;
-      QueryVertexID start_vertex = tso_order.getStartVertex(&g, &q, candidate_size);
-      //LOG(INFO) << "tso order get start vertex " << start_vertex;
-      TSOFilter tso_filter(&q, &g, start_vertex);
-      tso_filter.Filter(candidates);
-  } else if (strcmp(filter_cstr,"gql")==0) {
-      std::vector<std::vector<VertexID>> gql_candidates;
-      unordered_map<QueryVertexID, unordered_set<VertexID>> gql_map;
-      for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
-          unordered_set<VertexID> gql_set;
-          for(auto i : candidates[v]) {
-              gql_set.insert(i);
-          }
-          gql_map[v] = std::move(gql_set);
+  } else if (strcmp(filter_cstr, "dpiso") == 0) {
+    OrderBase dpiso_order;
+    QueryVertexID start_vertex = dpiso_order.getStartVertex(&g, &q, candidate_size);
+    // LOG(INFO) << "dpiso order get start vertex " << start_vertex;
+    DPISOFilter dpiso_filter(&q, &g, start_vertex);
+    dpiso_filter.Filter(candidates);
+  } else if (strcmp(filter_cstr, "tso") == 0) {
+    TSOOrder tso_order;
+    QueryVertexID start_vertex = tso_order.getStartVertex(&g, &q, candidate_size);
+    // LOG(INFO) << "tso order get start vertex " << start_vertex;
+    TSOFilter tso_filter(&q, &g, start_vertex);
+    tso_filter.Filter(candidates);
+  } else if (strcmp(filter_cstr, "gql") == 0) {
+    std::vector<std::vector<VertexID>> gql_candidates;
+    unordered_map<QueryVertexID, unordered_set<VertexID>> gql_map;
+    for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
+      unordered_set<VertexID> gql_set;
+      for (auto i : candidates[v]) {
+        gql_set.insert(i);
       }
-      for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
-          GQLFilter gql_filter(&q, v, &gql_map);
-          gql_filter.preFilter(g, candidates[v]);
-      }
-      for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
-          GQLFilter gql_filter(&q, v, &gql_map);
-          std::vector<VertexID> tempvec;
-          gql_filter.Filter(g, candidates[v], &tempvec);
-          gql_candidates.push_back(std::move(tempvec));
-      }
-   //   for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
-     //     LOG(INFO) << "vertex " << v << " " << candidate_size[v] << "/" << gql_candidates[v].size();
-      //}
-      return gql_candidates;
+      gql_map[v] = std::move(gql_set);
+    }
+    for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
+      GQLFilter gql_filter(&q, v, &gql_map);
+      gql_filter.preFilter(g, candidates[v]);
+    }
+    for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
+      GQLFilter gql_filter(&q, v, &gql_map);
+      std::vector<VertexID> tempvec;
+      gql_filter.Filter(g, candidates[v], &tempvec);
+      gql_candidates.push_back(std::move(tempvec));
+    }
+    //   for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
+    //     LOG(INFO) << "vertex " << v << " " << candidate_size[v] << "/" << gql_candidates[v].size();
+    //}
+    return gql_candidates;
   }
 
-//  for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
- //   LOG(INFO) << "vertex " << v << " " << candidate_size[v] << "/" << candidates[v].size();
+  //  for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
+  //   LOG(INFO) << "vertex " << v << " " << candidate_size[v] << "/" << candidates[v].size();
   //}
   return candidates;
 }
-void run(const std::string& dataset, const std::string& filter,std::vector<std::string>&answers ) {
-
+void run(const std::string& dataset, const std::string& filter, std::vector<std::string>& answers) {
   auto graph_path = dataset + "/data_graph/" + dataset + ".graph";
   Graph g(data_dir + "/" + graph_path);  // load data graph
-//  LOG(INFO) << "========================";
- // LOG(INFO) << "graph " << graph_path << " query " << query_path;
-  int index=0;
-  for(auto& query_size:query_size_list)
-    for(auto& query_mode:query_mode_list)
-      for(int i=query_index_range.first;i<=query_index_range.second;++i)
-      {
+                                         //  LOG(INFO) << "========================";
+                                         // LOG(INFO) << "graph " << graph_path << " query " << query_path;
+  int index = 0;
+  for (auto& query_size : query_size_list)
+    for (auto& query_mode : query_mode_list)
+      for (int i = query_index_range.first; i <= query_index_range.second; ++i) {
         auto query_path = dataset + "/query_graph/query_" + query_mode + "_" + std::to_string(query_size) + "_" +
-                  std::to_string(i) + ".graph";
+                          std::to_string(i) + ".graph";
         auto query_dir = data_dir + "/" + query_path;
         std::ifstream infile(query_dir);
-        if(!infile)continue;
+        if (!infile) continue;
         QueryGraph q(query_dir);  // load query graph
-        std::stringstream ss; 
+        std::stringstream ss;
         ss << dataset << ',' << query_size << ',' << query_mode << ',' << i << ':';
         auto candidates = getCandidateSets(g, q, filter);  // get candidates for each query vertex
         for (auto v : candidates) {
           ss << v.size() << ' ';
         }
         std::string result_str = ss.str();
-				result_str.pop_back(); // delete blank
-//				LOG(INFO)<<result_str;
+        result_str.pop_back();  // delete blank
+                                //				LOG(INFO)<<result_str;
         std::string expect_str = answers[index++];
-        EXPECT_EQ(result_str,expect_str);
+        EXPECT_EQ(result_str, expect_str);
       }
 }
 
-bool getAnswers(const std::string& filter,const std::string& dataset, std::vector<std::string>&answers)
-{
+bool getAnswers(const std::string& filter, const std::string& dataset, std::vector<std::string>& answers) {
   auto answer_path = answer_dir + filter;
   std::ifstream in(answer_path);
-  if(in) // file exists
-	{
+  if (in)  // file exists
+  {
     std::string line;
-		while (getline (in, line))
-		{ 
-      if(line.rfind(dataset, 0) == 0)
-        answers.emplace_back(line);
-		}
+    while (getline(in, line)) {
+      if (line.rfind(dataset, 0) == 0) answers.emplace_back(line);
+    }
     return true;
-	}
-	else
-	{
+  } else {
     return false;
-	}
+  }
 }
 
-void filterTest(std::string filter,std::string dataset)
-{
+void filterTest(std::string filter, std::string dataset) {
   std::vector<std::string> answers;
-  bool res=getAnswers(filter,dataset,answers);
-  EXPECT_EQ(res,true);
+  bool res = getAnswers(filter, dataset, answers);
+  EXPECT_EQ(res, true);
   run(dataset, filter, answers);
 }
 
-
-TEST(TestCFLFilterCandidates,dblp)
-{
-filterTest("cfl","dblp");
-}
-TEST(TestCFLFilterCandidates,eu2005)
-{
-filterTest("cfl","eu2005");
-}
-TEST(TestCFLFilterCandidates,hprd)
-{
-filterTest("cfl","hprd");
-}
-TEST(TestCFLFilterCandidates,human)
-{
-filterTest("cfl","human");
-}
-TEST(TestCFLFilterCandidates,patents)
-{
-filterTest("cfl","patents");
-}
-TEST(TestCFLFilterCandidates,wordnet)
-{
-filterTest("cfl","wordnet");
-}
-TEST(TestCFLFilterCandidates,yeast)
-{
-filterTest("cfl","yeast");
-}
-TEST(TestCFLFilterCandidates,youtube)
-{
-filterTest("cfl","youtube");
-}
-TEST(TestTSOFilterCandidates,dblp)
-{
-filterTest("tso","dblp");
-}
-TEST(TestTSOFilterCandidates,eu2005)
-{
-filterTest("tso","eu2005");
-}
-TEST(TestTSOFilterCandidates,hprd)
-{
-filterTest("tso","hprd");
-}
-TEST(TestTSOFilterCandidates,human)
-{
-filterTest("tso","human");
-}
-TEST(TestTSOFilterCandidates,patents)
-{
-filterTest("tso","patents");
-}
-TEST(TestTSOFilterCandidates,wordnet)
-{
-filterTest("tso","wordnet");
-}
-TEST(TestTSOFilterCandidates,yeast)
-{
-filterTest("tso","yeast");
-}
-TEST(TestTSOFilterCandidates,youtube)
-{
-filterTest("tso","youtube");
-}
-TEST(TestGQLFilterCandidates,dblp)
-{
-filterTest("gql","dblp");
-}
-TEST(TestGQLFilterCandidates,eu2005)
-{
-filterTest("gql","eu2005");
-}
-TEST(TestGQLFilterCandidates,hprd)
-{
-filterTest("gql","hprd");
-}
-TEST(TestGQLFilterCandidates,human)
-{
-filterTest("gql","human");
-}
-TEST(TestGQLFilterCandidates,patents)
-{
-filterTest("gql","patents");
-}
-TEST(TestGQLFilterCandidates,wordnet)
-{
-filterTest("gql","wordnet");
-}
-TEST(TestGQLFilterCandidates,yeast)
-{
-filterTest("gql","yeast");
-}
-TEST(TestGQLFilterCandidates,youtube)
-{
-filterTest("gql","youtube");
-}
-TEST(TestDPISOFilterCandidates,dblp)
-{
-filterTest("dpiso","dblp");
-}
-TEST(TestDPISOFilterCandidates,eu2005)
-{
-filterTest("dpiso","eu2005");
-}
-TEST(TestDPISOFilterCandidates,hprd)
-{
-filterTest("dpiso","hprd");
-}
-TEST(TestDPISOFilterCandidates,human)
-{
-filterTest("dpiso","human");
-}
-TEST(TestDPISOFilterCandidates,patents)
-{
-filterTest("dpiso","patents");
-}
-TEST(TestDPISOFilterCandidates,wordnet)
-{
-filterTest("dpiso","wordnet");
-}
-TEST(TestDPISOFilterCandidates,yeast)
-{
-filterTest("dpiso","yeast");
-}
-TEST(TestDPISOFilterCandidates,youtube)
-{
-filterTest("dpiso","youtube");
-}
+TEST(TestCFLFilterCandidates, dblp) { filterTest("cfl", "dblp"); }
+TEST(TestCFLFilterCandidates, eu2005) { filterTest("cfl", "eu2005"); }
+TEST(TestCFLFilterCandidates, hprd) { filterTest("cfl", "hprd"); }
+TEST(TestCFLFilterCandidates, human) { filterTest("cfl", "human"); }
+TEST(TestCFLFilterCandidates, patents) { filterTest("cfl", "patents"); }
+TEST(TestCFLFilterCandidates, wordnet) { filterTest("cfl", "wordnet"); }
+TEST(TestCFLFilterCandidates, yeast) { filterTest("cfl", "yeast"); }
+TEST(TestCFLFilterCandidates, youtube) { filterTest("cfl", "youtube"); }
+TEST(TestTSOFilterCandidates, dblp) { filterTest("tso", "dblp"); }
+TEST(TestTSOFilterCandidates, eu2005) { filterTest("tso", "eu2005"); }
+TEST(TestTSOFilterCandidates, hprd) { filterTest("tso", "hprd"); }
+TEST(TestTSOFilterCandidates, human) { filterTest("tso", "human"); }
+TEST(TestTSOFilterCandidates, patents) { filterTest("tso", "patents"); }
+TEST(TestTSOFilterCandidates, wordnet) { filterTest("tso", "wordnet"); }
+TEST(TestTSOFilterCandidates, yeast) { filterTest("tso", "yeast"); }
+TEST(TestTSOFilterCandidates, youtube) { filterTest("tso", "youtube"); }
+TEST(TestGQLFilterCandidates, dblp) { filterTest("gql", "dblp"); }
+TEST(TestGQLFilterCandidates, eu2005) { filterTest("gql", "eu2005"); }
+TEST(TestGQLFilterCandidates, hprd) { filterTest("gql", "hprd"); }
+TEST(TestGQLFilterCandidates, human) { filterTest("gql", "human"); }
+TEST(TestGQLFilterCandidates, patents) { filterTest("gql", "patents"); }
+TEST(TestGQLFilterCandidates, wordnet) { filterTest("gql", "wordnet"); }
+TEST(TestGQLFilterCandidates, yeast) { filterTest("gql", "yeast"); }
+TEST(TestGQLFilterCandidates, youtube) { filterTest("gql", "youtube"); }
+TEST(TestDPISOFilterCandidates, dblp) { filterTest("dpiso", "dblp"); }
+TEST(TestDPISOFilterCandidates, eu2005) { filterTest("dpiso", "eu2005"); }
+TEST(TestDPISOFilterCandidates, hprd) { filterTest("dpiso", "hprd"); }
+TEST(TestDPISOFilterCandidates, human) { filterTest("dpiso", "human"); }
+TEST(TestDPISOFilterCandidates, patents) { filterTest("dpiso", "patents"); }
+TEST(TestDPISOFilterCandidates, wordnet) { filterTest("dpiso", "wordnet"); }
+TEST(TestDPISOFilterCandidates, yeast) { filterTest("dpiso", "yeast"); }
+TEST(TestDPISOFilterCandidates, youtube) { filterTest("dpiso", "youtube"); }

@@ -27,7 +27,7 @@ TSOFilter::TSOFilter(const QueryGraph* query_graph, const Graph* data_graph, Que
 void TSOFilter::Filter(std::vector<std::vector<VertexID>>& candidates) {
   for (QueryVertexID query_vertex : dfs_order_) {
     if (query_vertex == start_vertex_) {
-      continue;	
+      continue;
     }
     TreeNode& node = tree_[query_vertex];
     pruneByPivotVertices(query_vertex, node.parent_, candidates);
