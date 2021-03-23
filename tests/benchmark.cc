@@ -216,7 +216,6 @@ class Benchmark {
     for (auto& set : candidates) {
       double size = set.size();
       candidate_cardinality.push_back(std::log2(size));
-      LOG(INFO) << std::log(size) << " " << std::log2(size);
     }
     Profiler profiler;
     NaivePlanner planner(&q, &candidate_cardinality);

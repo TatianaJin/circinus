@@ -18,4 +18,4 @@
 
 DEFINE_int32(batch_size, 1024, "Batch size for input and output.");
 DEFINE_int32(num_cores, 1, "The number of cores to use for thread pool.");
-DEFINE_bool(profile, false, "Tree means profiling the execution");
+DEFINE_bool(profile, false, "True means profiling the execution");

@@ -30,7 +30,7 @@ class TaskQueue;
 /** Uses flag: FLAGS_batch_size */
 class OperatorTree {
   std::vector<Operator*> operators_;
-  std::shared_ptr<Profiler*> profiler_;
+  Profiler* profiler_;
 
  public:
   ~OperatorTree() { clear(); }
@@ -46,7 +46,7 @@ class OperatorTree {
   inline Operator* root() const { return operators_.front(); }
   inline void push_back(Operator* t) { operators_.push_back(t); }
   inline void reserve(uint32_t size) { operators_.reserve(size); }
-  inline void setProfiler(Profiler* profiler) { profiler_ = std::make_shared<Profiler*>(profiler); }
+  inline void setProfiler(Profiler* profiler) { profiler_ = profiler; }
   inline Operator* getOperator(uint32_t idx) const { return operators_[idx]; }
 
   inline OperatorTree clone() const {

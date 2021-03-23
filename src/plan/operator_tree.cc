@@ -51,7 +51,7 @@ bool OperatorTree::handleTask(Task* task, TaskQueue* queue, uint32_t thread_id) 
     auto size = traverse_op->expand(&outputs, FLAGS_batch_size);
     if (FLAGS_profile) {
       std::string str(typeid(*traverse_op).name());
-      (**profiler_)
+      (*profiler_)
           .addLog(task->getLevel(), str, traverse_op->getInputIndex() - last_input_index, size,
                   ((double)clock() - start_time) / CLOCKS_PER_SEC);
       last_input_index = traverse_op->getInputIndex();
@@ -78,7 +78,7 @@ bool OperatorTree::handleInput(const Graph* g, const std::vector<CompressedSubgr
     auto size = traverse_op->expand(&outputs, FLAGS_batch_size);
     if (FLAGS_profile) {
       std::string str(typeid(*traverse_op).name());
-      (**profiler_)
+      (*profiler_)
           .addLog(level, str, traverse_op->getInputIndex() - last_input_index, size,
                   ((double)clock() - start_time) / CLOCKS_PER_SEC);
       // (**profiler_).addInput(inputs, last_input_index, traverse_op->getInputIndex());

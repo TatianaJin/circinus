@@ -33,7 +33,7 @@ class CFLFilter : public FilterBase {
  public:
   CFLFilter(const QueryGraph* query_graph, const Graph* data_graph, QueryVertexID start_vertex);
 
-  /** @returns The number of records that passed the filter and are added to output */
+  /** The records that passed the filter will remain in candidates */
   void Filter(std::vector<std::vector<VertexID>>& candidates);
 };
 
