@@ -15,6 +15,7 @@
 #include "ops/expand_edge_operator.h"
 
 #include <algorithm>
+#include <queue>
 #include <string>
 #include <vector>
 
@@ -225,7 +226,7 @@ class CurrentResultsByParent : public CurrentResults {
 class CurrentResultsByExtension : public CurrentResults {
  private:
   unordered_set<VertexID> seen_extensions_;
-  std::vector<VertexID> extensions_;
+  std::queue<VertexID> extensions_;
   uint32_t parent_match_index_ = 0;
   unordered_set<VertexID> current_keys_;
 
@@ -239,35 +240,35 @@ class CurrentResultsByExtension : public CurrentResults {
 
     auto& parent_set = *input_->getSet(parent_index_);
     uint32_t n = std::min(cap, (uint32_t)extensions_.size());
-    int leftover_size = extensions_.size() - n;
-    for (int i = extensions_.size() - 1; i >= leftover_size; --i) {
-      auto candidate = extensions_[i];
+    for (uint32_t i = 0; i < n; ++i) {
+      auto candidate = extensions_.front();
+      extensions_.pop();
       std::vector<VertexID> parents;  // valid parents for current candidate
       intersect(parent_set, data_graph_->getOutNeighbors(candidate), &parents, current_keys_);
       outputs->emplace_back(*input_, parent_index_, std::make_shared<std::vector<VertexID>>(std::move(parents)),
                             candidate);
     }
-    extensions_.resize(leftover_size);
     return n;
   }
 
  private:
   inline void getExtensions(uint32_t cap) {
     auto& parent_set = *input_->getSet(parent_index_);
-    std::vector<VertexID> current_extensions;
+    current_keys_ = input_->getKeyMap();
     for (; extensions_.size() < cap && parent_match_index_ < parent_set.size(); ++parent_match_index_) {
       auto parent_match = parent_set[parent_match_index_];
+      if (current_key_.find(parent_match) != current_keys_.end()) {
+        continue;
+      }
+
       auto neighbors = data_graph_->getOutNeighbors(parent_match);
-      current_extensions.reserve(neighbors.second);
-      for (uint32_t i = 0; i < neighbors.second; ++i) {
-        auto neighbor = neighbors.first[i];
+      std::vector<VertexID> current_extensions;
+      intersect(*candidates_, neighbors, &current_extensions, current_keys_);
+      for (VertexID neighbor : current_extensions) {
         if (seen_extensions_.insert(neighbor).second) {
-          current_extensions.push_back(neighbor);
+          extensions_.push(neighbor);
         }
       }
-      current_keys_ = input_->getKeyMap();
-      intersect(*candidates_, current_extensions, &extensions_, current_keys_);
-      current_extensions.clear();
     }
   }
 };
@@ -307,12 +308,14 @@ class ExpandEdgeSetToKeyOperator : public ExpandEdgeOperator {
     uint32_t needed = cap;
     while (true) {
       if (current_results_ != nullptr) {
-        auto got = current_results_->getResults(outputs, needed);
+        uint32_t got = current_results_->getResults(outputs, needed);
         DCHECK_LE(got, needed);
         needed -= got;
+
         if (needed == 0) {
-          return cap;
+          return cap - needed;
         }
+
         delete current_results_;
         current_results_ = nullptr;
       }
@@ -343,10 +346,10 @@ class ExpandEdgeSetToKeyOperator : public ExpandEdgeOperator {
   /* Assume the set intersection cost of two sorted sets of size n and m is 2(n+m).
    *
    * cost of enumerating candidates = total set intersection cost
-   *                                = 2 * set_neighbor_size + 2 * |parent_set| * |candidates_|
+   *                                = 2 * candidates_neighbor_size + 2 * |parent_set| * |candidates_|
    * cost of enumerating parent set
    *     = total set intersection cost + total CompressedSubgraphs lookup cost
-   *     = 2 * candidates_neighbor_size_ + 2 * |parent_set| * |candidates_|
+   *     = 2 * set_neighbor_size_ + 2 * |parent_set| * |candidates_|
    *       + min(|parent_set| * |candidates_|, set_neighbor_size)
    */
   inline ExecutionMode getExecutionMode(const std::vector<VertexID>* parent_set, uint32_t cap) {
@@ -361,9 +364,10 @@ class ExpandEdgeSetToKeyOperator : public ExpandEdgeOperator {
 
     /* ByParent requires all parent to be processed before the outputs become ready, and thus the output size is unknown
      * in advance and unbounded. ByExtension incurs extra set intersection, but the output size can be bounded. */
-    if (set_neighbor_size <= cap) {  // here we use set_neighbor_size to approximate the output size. as long as the
-                                     // output size does not exceed cap, ByParent is preferred than ByExtension.
-                                     // TODO(tatiana): consider better estimation on the output size
+    if (std::min(candidates_->size(), set_neighbor_size) <=
+        cap) {  // here we use set_neighbor_size to approximate the output size. as long as the
+                // output size does not exceed cap, ByParent is preferred than ByExtension.
+                // TODO(tatiana): consider better estimation on the output size
       return ByParent;
     }
     return ByExtension;
@@ -372,7 +376,7 @@ class ExpandEdgeSetToKeyOperator : public ExpandEdgeOperator {
   void expandInner(const CompressedSubgraphs& input, uint32_t cap) {
     auto& parent_set = input.getSet(parent_index_);
     DCHECK(current_results_ == nullptr);
-    auto mode = getExecutionMode(parent_set.get(), cap);
+    ExecutionMode mode = getExecutionMode(parent_set.get(), cap);
     switch (mode) {
     case ByCandidate:
       // enumerating target candidates is likely to incur less computation
