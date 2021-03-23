@@ -16,6 +16,7 @@
 
 #include <queue>
 #include <tuple>
+#include <utility>
 #include <vector>
 
 #include "algorithms/k_core.h"

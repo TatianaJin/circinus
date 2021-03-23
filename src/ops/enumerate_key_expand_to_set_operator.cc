@@ -14,7 +14,9 @@
 
 #include "ops/enumerate_key_expand_to_set_operator.h"
 
+#include <algorithm>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "graph/types.h"
