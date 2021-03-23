@@ -312,7 +312,11 @@ class ExpandEdgeSetToKeyOperator : public ExpandEdgeOperator {
         DCHECK_LE(got, needed);
         needed -= got;
 
+<<<<<<< HEAD
         if (needed == 0) {
+=======
+        if (needed <= 0) {
+>>>>>>> [OP] modify ByExtension
           return cap - needed;
         }
 
