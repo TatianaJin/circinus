@@ -15,7 +15,6 @@
 #pragma once
 
 #include <string>
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -28,7 +27,7 @@ namespace circinus {
 class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
  public:
   ExpandSetToKeyVertexOperator(const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
-                               const std::unordered_map<QueryVertexID, uint32_t>& query_vertex_indices)
+                               const unordered_map<QueryVertexID, uint32_t>& query_vertex_indices)
       : ExpandVertexOperator(parents, target_vertex, query_vertex_indices) {}
 
   // TODO(tatiana): see if hard limit on output size is needed

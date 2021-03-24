@@ -114,6 +114,142 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
   DCHECK_EQ(existing_vertices.size(), g->getNumVertices());
 }
 
+void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<QueryVertexID>& matching_order,
+                                         const std::vector<int>& cover_table,
+                                         const unordered_map<QueryVertexID, uint32_t>& level_become_key) {
+  query_graph_ = g;
+  cover_table_ = cover_table;
+  operators_.reserve(g->getNumVertices());
+  root_query_vertex_ = matching_order.front();
+  dynamic_cover_key_level_ = level_become_key;
+  if (matching_order.size() == 1) {
+    // TODO(tatiana): handle no traversal
+    return;
+  }
+
+  uint32_t n_keys = 0, n_sets = 0;
+  std::vector<QueryVertexID> set_vertices;
+  set_vertices.reserve(matching_order.size() - dynamic_cover_key_level_.size());
+  Operator *current, *prev = nullptr;
+  // existing vertices in current query subgraph
+  std::unordered_set<QueryVertexID> existing_vertices;
+  std::array<std::vector<QueryVertexID>, 2> parents;
+  auto& key_parents = parents[1];
+  auto& set_parents = parents[0];
+  key_parents.reserve(g->getNumVertices() - 1);
+  set_parents.reserve(g->getNumVertices() - 1);
+
+  // handle first vertex
+  auto parent = matching_order.front();
+  query_vertex_indices_[parent] = 0;
+  if (dynamic_cover_key_level_.count(parent) == 0) {
+    set_vertices.push_back(parent);
+    ++n_sets;
+  } else {
+    ++n_keys;
+  }
+  existing_vertices.insert(parent);
+  std::vector<std::vector<QueryVertexID>> add_keys_at_level(matching_order.size());
+  unordered_map<QueryVertexID, uint32_t> input_query_vertex_indices;
+
+  // handle following traversals
+  for (uint32_t i = 1; i < matching_order.size(); ++i) {
+    // FIXME(tatiana): for debug: check set vertices and query_vertex_indices_ are in correspondence
+    for (uint32_t set_i = 0; set_i < set_vertices.size(); ++set_i) {
+      CHECK_EQ(query_vertex_indices_[set_vertices[set_i]], set_i);
+    }
+    auto target_vertex = matching_order[i];
+    // record query vertex index
+    auto key_level_pos = dynamic_cover_key_level_.find(target_vertex);
+    if (key_level_pos == dynamic_cover_key_level_.end()) {  // target vertex is in set
+      DCHECK_NE(cover_table_[target_vertex], 1);
+      if (!add_keys_at_level[i].empty()) {
+        input_query_vertex_indices = query_vertex_indices_;
+        for (auto v : add_keys_at_level[i]) {
+          auto& v_idx = query_vertex_indices_[v];
+          CHECK_EQ(v, set_vertices[v_idx]);
+          // swap with the last set vertex
+          set_vertices[v_idx] = set_vertices.back();
+          set_vertices.pop_back();
+          query_vertex_indices_[set_vertices[v_idx]] = v_idx;
+          v_idx = n_keys++;
+          cover_table_[v] = 1;
+        }
+        n_sets -= add_keys_at_level[i].size();
+      }
+      query_vertex_indices_[target_vertex] = n_sets;
+      ++n_sets;
+      set_vertices.push_back(target_vertex);
+    } else if (key_level_pos->second <= i) {  // target vertex is in key
+      query_vertex_indices_[target_vertex] = n_keys;
+      ++n_keys;
+    } else {  // target vertex is in key in some later subqueries
+      /* now we assume the existing vertices will not be turned into key if target vertex is in the vertex cover */
+      CHECK(add_keys_at_level[i].empty());
+      query_vertex_indices_[target_vertex] = n_sets;
+      ++n_sets;
+      set_vertices.push_back(target_vertex);
+      add_keys_at_level[key_level_pos->second].push_back(target_vertex);  // add to key later
+      cover_table_[target_vertex] = 0;
+    }
+
+    if (i == 1) {  // the first edge: target has one and only one parent
+      prev = newExpandEdgeOperator(parent, target_vertex, cover_table_);
+    } else {
+      // find parent vertices
+      auto neighbors = g->getOutNeighbors(target_vertex);
+      for (uint32_t j = 0; j < neighbors.second; ++j) {
+        if (existing_vertices.count(neighbors.first[j])) {
+          parents[cover_table_[neighbors.first[j]] == 1].push_back(neighbors.first[j]);
+        }
+      }
+      // create operators
+      if (cover_table_[target_vertex] == 1) {  // target is in key
+        CHECK(add_keys_at_level[i].empty());
+        if (key_parents.size() != 0 && set_parents.size() != 0) {
+          if (key_parents.size() == 1) {
+            current = newExpandEdgeOperator(key_parents.front(), target_vertex, cover_table_);
+          } else {
+            current = newExpandKeyKeyVertexOperator(key_parents, target_vertex);
+          }
+          prev->setNext(current);
+          prev = current;
+          current = newExpandIntoOperator(set_parents, target_vertex);
+        } else if (key_parents.size() == 1) {
+          current = newExpandEdgeOperator(key_parents.front(), target_vertex, cover_table_);
+        } else if (key_parents.size() > 1) {
+          current = newExpandKeyKeyVertexOperator(key_parents, target_vertex);
+        } else if (set_parents.size() == 1) {
+          current = newExpandEdgeOperator(set_parents.front(), target_vertex, cover_table_);
+        } else {
+          current = newExpandSetToKeyVertexOperator(set_parents, target_vertex);
+        }
+      } else {  // target is in set, then  all parents should be in key, and key enumeration may be needed
+        if (!add_keys_at_level[i].empty()) {  // key enumeration is needed
+          current = newEnumerateKeyExpandToSetOperator(key_parents, target_vertex, add_keys_at_level[i],
+                                                       input_query_vertex_indices);
+          add_keys_at_level[i].clear();
+        } else if (key_parents.size() == 1) {
+          current = newExpandEdgeOperator(key_parents.front(), target_vertex, cover_table_);
+        } else {
+          current = newExpandSetVertexOperator(key_parents, target_vertex);
+        }
+      }
+      prev->setNext(current);
+      prev = current;
+      key_parents.clear();
+      set_parents.clear();
+    }
+    existing_vertices.insert(target_vertex);
+  }
+
+  // output
+  auto output_op = newOutputOperator();
+  prev->setNext(output_op);
+
+  DCHECK_EQ(existing_vertices.size(), g->getNumVertices());
+}
+
 TraverseOperator* ExecutionPlan::newExpandEdgeOperator(QueryVertexID parent_vertex, QueryVertexID target_vertex,
                                                        const std::vector<int>& cover_table) {
   auto ret =
@@ -156,6 +292,17 @@ TraverseOperator* ExecutionPlan::newExpandKeyKeyVertexOperator(std::vector<Query
 
 Operator* ExecutionPlan::newOutputOperator() {
   auto ret = OutputOperator::newOutputOperator(OutputType::Count, &outputs_);
+  operators_.push_back(ret);
+  return ret;
+}
+
+TraverseOperator* ExecutionPlan::newEnumerateKeyExpandToSetOperator(
+    const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
+    const std::vector<QueryVertexID>& keys_to_enumerate,
+    unordered_map<QueryVertexID, uint32_t> input_query_vertex_indices) {
+  auto ret = new EnumerateKeyExpandToSetOperator(parents, target_vertex, input_query_vertex_indices,
+                                                 query_vertex_indices_, keys_to_enumerate, cover_table_);
+  target_vertex_to_ops_[target_vertex] = ret;
   operators_.push_back(ret);
   return ret;
 }

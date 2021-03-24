@@ -16,7 +16,6 @@
 
 #include <algorithm>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 #include "graph/compressed_subgraphs.h"
@@ -31,9 +30,16 @@ namespace circinus {
 #define makeVertexSet(vertex) std::make_shared<std::vector<VertexID>>(std::vector<VertexID>({vertex})
 
 class ExpandEdgeKeyToSetOperator : public ExpandEdgeOperator {
+  unordered_set<VertexID> candidate_set_;
+
  public:
   ExpandEdgeKeyToSetOperator(uint32_t parent_index, uint32_t target_index, QueryVertexID parent, QueryVertexID target)
       : ExpandEdgeOperator(parent_index, target_index, parent, target) {}
+
+  void setCandidateSets(const std::vector<VertexID>* candidates) override {
+    candidates_ = candidates;
+    candidate_set_.insert(candidates->begin(), candidates->end());
+  }
 
   uint32_t expand(std::vector<CompressedSubgraphs>* outputs, uint32_t cap) override {
     uint32_t n = 0;
@@ -52,9 +58,7 @@ class ExpandEdgeKeyToSetOperator : public ExpandEdgeOperator {
 
   Operator* clone() const override {
     // TODO(tatiana): for now next_ is not handled because it is only used for printing plan
-    auto ret = new ExpandEdgeKeyToSetOperator(parent_index_, target_index_, parent_id_, target_id_);
-    ret->candidates_ = candidates_;
-    return ret;
+    return new ExpandEdgeKeyToSetOperator(*this);
   }
 
  private:
@@ -62,7 +66,8 @@ class ExpandEdgeKeyToSetOperator : public ExpandEdgeOperator {
   inline bool expandInner(std::vector<CompressedSubgraphs>* outputs, const CompressedSubgraphs& input) {
     std::vector<VertexID> targets;
     auto parent_match = input.getKeyVal(parent_index_);
-    intersect(*candidates_, current_data_graph_->getOutNeighbors(parent_match), &targets, input.getKeyMap());
+    // intersect(*candidates_, current_data_graph_->getOutNeighbors(parent_match), &targets, input.getKeyMap());
+    intersect(candidate_set_, current_data_graph_->getOutNeighbors(parent_match), &targets, input.getKeyMap());
     if (targets.empty()) {
       return false;
     }
@@ -384,9 +389,9 @@ class ExpandEdgeSetToKeyOperator : public ExpandEdgeOperator {
   }
 };
 
-TraverseOperator* ExpandEdgeOperator::newExpandEdgeOperator(
-    QueryVertexID parent_vertex, QueryVertexID target_vertex, const std::vector<int>& cover_table,
-    const std::unordered_map<QueryVertexID, uint32_t>& indices) {
+TraverseOperator* ExpandEdgeOperator::newExpandEdgeOperator(QueryVertexID parent_vertex, QueryVertexID target_vertex,
+                                                            const std::vector<int>& cover_table,
+                                                            const unordered_map<QueryVertexID, uint32_t>& indices) {
   CHECK_GT(indices.count(parent_vertex), 0);
   CHECK_GT(indices.count(target_vertex), 0);
   // the target is not a compression key, and the parent must be in the cover: expand and copy target list

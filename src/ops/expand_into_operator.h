@@ -19,13 +19,14 @@
 
 #include "graph/query_graph.h"
 #include "ops/traverse_operator.h"
+#include "utils/hashmap.h"
 
 namespace circinus {
 
 class ExpandIntoOperator : public TraverseOperator {
  public:
   ExpandIntoOperator(const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
-                     const std::unordered_map<QueryVertexID, uint32_t>& query_vertex_indices)
+                     const unordered_map<QueryVertexID, uint32_t>& query_vertex_indices)
       : parents_(parents), target_vertex_(target_vertex), query_vertex_indices_(query_vertex_indices) {}
 
   uint32_t expand(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size) override {
@@ -80,7 +81,7 @@ class ExpandIntoOperator : public TraverseOperator {
  protected:
   std::vector<QueryVertexID> parents_;
   QueryVertexID target_vertex_;
-  std::unordered_map<QueryVertexID, uint32_t> query_vertex_indices_;
+  unordered_map<QueryVertexID, uint32_t> query_vertex_indices_;
 };
 
 }  // namespace circinus

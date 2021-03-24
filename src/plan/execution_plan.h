@@ -15,7 +15,6 @@
 #pragma once
 
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 #include "graph/graph.h"
@@ -24,6 +23,7 @@
 #include "ops/output_operator.h"
 #include "ops/traverse_operator.h"
 #include "plan/operator_tree.h"
+#include "utils/hashmap.h"
 #include "utils/profiler.h"
 
 namespace circinus {
@@ -33,23 +33,30 @@ class ExecutionPlan {
   const QueryGraph* query_graph_;
 
   std::vector<std::vector<VertexID>> candidate_sets_;
-  std::unordered_map<QueryVertexID, Operator*> target_vertex_to_ops_;
+  unordered_map<QueryVertexID, Operator*> target_vertex_to_ops_;
   OperatorTree operators_;
   Outputs outputs_;
 
   QueryVertexID root_query_vertex_;
   std::vector<int> cover_table_;
+  unordered_map<QueryVertexID, uint32_t> dynamic_cover_key_level_;
 
   /** The index of each query vertex in the CompressedSubgraphs
    * For key vertices, the index is n_keys-th key following the matching order
    * For non-key vertices, the index n_sets-th key following the matching order */
-  std::unordered_map<QueryVertexID, uint32_t> query_vertex_indices_;
+  unordered_map<QueryVertexID, uint32_t> query_vertex_indices_;
 
  public:
   ~ExecutionPlan() {}
 
   void populatePhysicalPlan(const QueryGraph* g, const std::vector<QueryVertexID>& matching_order,
                             const std::vector<int>& cover_table, Profiler* profiler = nullptr);
+
+  void populatePhysicalPlan(const QueryGraph* g, const std::vector<QueryVertexID>& matching_order,
+                            const std::vector<int>& cover_table,
+                            const unordered_map<QueryVertexID, uint32_t>& level_become_key);
+
+  void setProfiler(Profiler* profiler) { operators_.setProfiler(profiler); }
 
   void printPhysicalPlan() const {
     if (operators_.empty()) return;
@@ -122,6 +129,10 @@ class ExecutionPlan {
   TraverseOperator* newExpandSetVertexOperator(std::vector<QueryVertexID>& parents, QueryVertexID target_vertex);
   TraverseOperator* newExpandSetToKeyVertexOperator(std::vector<QueryVertexID>& parents, QueryVertexID target_vertex);
   TraverseOperator* newExpandIntoOperator(std::vector<QueryVertexID>& parents, QueryVertexID target_vertex);
+  TraverseOperator* newEnumerateKeyExpandToSetOperator(
+      const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
+      const std::vector<QueryVertexID>& keys_to_enumerate,
+      unordered_map<QueryVertexID, uint32_t> input_query_vertex_indices);
   Operator* newOutputOperator();
 };
 

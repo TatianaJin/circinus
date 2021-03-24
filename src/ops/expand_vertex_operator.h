@@ -15,20 +15,24 @@
 #pragma once
 
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 #include "graph/compressed_subgraphs.h"
 #include "graph/query_graph.h"
 #include "ops/traverse_operator.h"
+#include "utils/hashmap.h"
 
 namespace circinus {
 
 class ExpandVertexOperator : public TraverseOperator {
  public:
   ExpandVertexOperator(const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
-                       const std::unordered_map<QueryVertexID, uint32_t>& query_vertex_indices)
+                       const unordered_map<QueryVertexID, uint32_t>& query_vertex_indices)
       : parents_(parents), target_vertex_(target_vertex), query_vertex_indices_(query_vertex_indices) {}
+
+  virtual ~ExpandVertexOperator() {}
+
+  const auto& getQueryVertexIndices() const { return query_vertex_indices_; }
 
  protected:
   inline void toStringInner(std::stringstream& ss) const {
@@ -43,7 +47,7 @@ class ExpandVertexOperator : public TraverseOperator {
 
   std::vector<QueryVertexID> parents_;
   QueryVertexID target_vertex_;
-  std::unordered_map<QueryVertexID, uint32_t> query_vertex_indices_;
+  unordered_map<QueryVertexID, uint32_t> query_vertex_indices_;
 };
 
 }  // namespace circinus

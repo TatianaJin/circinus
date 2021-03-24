@@ -37,12 +37,7 @@ class CompressedSubgraphs {
    * @param key_size The number of key vertices.
    * @param n_vertices The number of vertices in each compressed subgraph.
    */
-  [[deprecated]] CompressedSubgraphs(uint32_t key_size, uint32_t n_vertices)
-      : keys_(key_size), sets_(n_vertices - key_size) {
-    for (auto& set : sets_) {
-      set = std::make_shared<std::vector<VertexID>>();
-    }
-  }
+  CompressedSubgraphs(uint32_t key_size, uint32_t n_vertices) : keys_(key_size), sets_(n_vertices - key_size) {}
 
   /** Construct a CompressedSubgraphs that contains only a single-vertex subgraph.
    * @param key The vertex id.
@@ -112,37 +107,22 @@ class CompressedSubgraphs {
     if (sets_.empty()) {
       return !keys_.empty();
     }
-    if (sets_.size() == 1) {
-      return sets_.front()->size();
-    }
     // dfs sets_ chain
     uint64_t count = 0;
     std::vector<uint32_t> set_index(sets_.size(), 0);
-    unordered_set<QueryVertexID> existing_vertices;
+    unordered_set<VertexID> existing_vertices;
     existing_vertices.reserve(getNumVertices());
     existing_vertices.insert(keys_.begin(), keys_.end());
-    // std::vector<QueryVertexID> existing_vertices;
-    // existing_vertices.reserve(getNumVertices());
-    // existing_vertices.insert(existing_vertices.end(), keys_.begin(), keys_.end());
     uint32_t last_depth = sets_.size() - 1;
     uint32_t current_depth = 0;
     while (true) {
       while (set_index[current_depth] < (*sets_[current_depth]).size()) {
         auto v = (*sets_[current_depth])[set_index[current_depth]];
-        // bool existing = false;
-        // for (auto e : existing_vertices) {
-        //   if (e == v) {
-        //     existing = true;
-        //     break;
-        //   }
-        // }
         ++set_index[current_depth];
-        // if (!existing) {                      // v is valid
         if (existing_vertices.count(v) == 0) {  // v is valid
           if (current_depth == last_depth) {    // reaching a leave in dfs
             if (++count == limit) return count;
           } else {
-            // existing_vertices.push_back(v);
             existing_vertices.insert(v);
             ++current_depth;
             set_index[current_depth] = 0;  // start from the first vertex in the next set
@@ -153,7 +133,6 @@ class CompressedSubgraphs {
         break;
       }
       --current_depth;
-      // existing_vertices.pop_back();
       existing_vertices.erase((*sets_[current_depth])[set_index[current_depth] - 1]);
     }
     return count;
@@ -188,17 +167,34 @@ class CompressedSubgraphs {
   /** Get the value of the key vertex at key_idx. */
   VertexID getKeyVal(uint32_t key_idx) const { return keys_[key_idx]; }
 
+  const std::vector<VertexID>& getKeys() const { return keys_; }
+  std::vector<VertexID>& getKeys() { return keys_; }
+
   unordered_set<VertexID> getKeyMap() const { return unordered_set<VertexID>(keys_.begin(), keys_.end()); }
 
   /** Get the matching set of the non-key vertex at key_idx. */
   const VertexSet& getSet(uint32_t key_idx) const { return sets_[key_idx]; }
 
   void UpdateSets(uint32_t set_idx, VertexSet&& new_set) { sets_[set_idx] = std::move(new_set); }
+  void UpdateSets(uint32_t set_idx, const VertexSet& new_set) { sets_[set_idx] = new_set; }
 
   /** Update the key vertex at key_idx to val. */
   void UpdateKey(uint32_t key_idx, VertexID val) { keys_[key_idx] = val; }
   /** Add a vertex val to the vertex set at set_idx. */
   void UpdateSet(uint32_t set_idx, VertexID val) { sets_[set_idx]->push_back(val); }
+
+  void logString(std::ostream& ss) const {
+    for (auto key : keys_) {
+      ss << key << ',';
+    }
+    for (auto& set : sets_) {
+      for (auto v : *set) {
+        ss << v << ' ';
+      }
+      ss << ',';
+    }
+    ss << std::endl;
+  }
 };
 
 }  // namespace circinus

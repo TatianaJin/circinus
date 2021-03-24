@@ -19,13 +19,14 @@
 
 #include "graph/query_graph.h"
 #include "ops/expand_vertex_operator.h"
+#include "utils/hashmap.h"
 
 namespace circinus {
 
 class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
  public:
   ExpandKeyToKeyVertexOperator(const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
-                               const std::unordered_map<QueryVertexID, uint32_t>& query_vertex_indices)
+                               const unordered_map<QueryVertexID, uint32_t>& query_vertex_indices)
       : ExpandVertexOperator(parents, target_vertex, query_vertex_indices) {}
 
   uint32_t expand(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size) override {

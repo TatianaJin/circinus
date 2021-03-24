@@ -29,8 +29,8 @@
 #include "graph/compressed_subgraphs.h"
 #include "graph/graph.h"
 #include "graph/query_graph.h"
-#include "ops/expand_edge_operator.h"
 #include "ops/filters.h"
+#include "ops/operators.h"
 #include "ops/order.h"
 #include "ops/scans.h"
 #include "plan/execution_plan.h"
@@ -67,6 +67,9 @@ DEFINE_uint64(query_index, 1, "The index of query in the same category");
 DEFINE_string(match_order, "", "Matching order");
 DEFINE_string(filter, "nlf", "filter");
 DEFINE_string(profile_file, "", "profile file");
+DEFINE_string(vertex_cover, "static", "Vertex cover strategy: static, eager");
+
+enum VertexCoverStrategy : uint32_t { Static = 0, Eager };
 
 class Benchmark {
  protected:
@@ -74,6 +77,7 @@ class Benchmark {
                                               "patents", "wordnet", "yeast", "youtube"};
 
  public:
+  template <VertexCoverStrategy vcs>
   void run(const std::string& dataset, uint32_t query_size, const std::string& query_mode, uint32_t index,
            std::ostream* out) {
     auto graph_path = dataset + "/data_graph/" + dataset + ".graph";
@@ -81,7 +85,7 @@ class Benchmark {
                       std::to_string(index) + ".graph";
 
     (*out) << dataset << ',' << query_size << ',' << query_mode << ',' << index << ',';
-    run(graph_path, query_path, out);
+    run<vcs>(graph_path, query_path, out);
   }
 
  protected:
@@ -132,14 +136,16 @@ class Benchmark {
   void batchDFSExecute(const Graph* g, ExecutionPlan* plan) {
     LOG(INFO) << FLAGS_num_cores << " threads";
     ThreadPool threads(FLAGS_num_cores, plan);
-    auto seeds = plan->getCandidateSet(plan->getRootQueryVertexID());
+    auto& seeds = plan->getCandidateSet(plan->getRootQueryVertexID());
     if (plan->isInCover(plan->getRootQueryVertexID())) {
       for (size_t i = 0; i < seeds.size(); i += BATCH_SIZE) {
         size_t end = std::min(i + BATCH_SIZE, seeds.size());
         threads.addInitTask(0, std::vector<CompressedSubgraphs>(seeds.begin() + i, seeds.begin() + end), g);
       }
     } else {
-      LOG(ERROR) << "this branch should not be reached";
+      threads.addInitTask(
+          0, std::vector<CompressedSubgraphs>({CompressedSubgraphs(std::make_shared<std::vector<VertexID>>(seeds))}),
+          g);
     }
     threads.start();
   }
@@ -162,14 +168,16 @@ class Benchmark {
       std::vector<CompressedSubgraphs> input(seeds.begin(), seeds.end());
       auto current_op = plan->getOperators().root();
       auto op = dynamic_cast<circinus::TraverseOperator*>(current_op);
-      uint32_t n_vertices = 1;
+      uint32_t op_idx = 0;
       while (op != nullptr) {
+        auto start = std::chrono::steady_clock::now();
         op->input(input, g);
         while (op->expand(&outputs, FLAGS_batch_size) > 0) {
         }
+        auto end = std::chrono::steady_clock::now();
         input.clear();
-        LOG(INFO) << ++n_vertices << ": # groups " << outputs.size();
-        // << " # matches " << getNumIsomorphicSubgraphs(outputs) << '/' << getNumSubgraphs(outputs);
+        LOG(INFO) << op_idx++ << ": # groups " << outputs.size() << " # matches " << getNumIsomorphicSubgraphs(outputs)
+                  << '/' << getNumSubgraphs(outputs) << " " << op->toString() << " " << toSeconds(start, end) << "s";
         input.swap(outputs);
         current_op = current_op->getNext();
         op = dynamic_cast<circinus::TraverseOperator*>(current_op);
@@ -200,6 +208,7 @@ class Benchmark {
     return order;
   }
 
+  template <VertexCoverStrategy vcs>
   void run(const std::string& graph_path, const std::string& query_path, std::ostream* out) {
     auto start_loading = std::chrono::steady_clock::now();
     Graph g(FLAGS_data_dir + "/" + graph_path);  // load data graph
@@ -219,19 +228,26 @@ class Benchmark {
     }
     Profiler profiler;
     NaivePlanner planner(&q, &candidate_cardinality);
-    auto plan = planner.generatePlan(use_order, &profiler);
+    ExecutionPlan* plan;
+    if (vcs == Static) {
+      plan = planner.generatePlan(use_order, &profiler);
+    } else if (vcs == Eager) {
+      plan = planner.generatePlanWithEagerDynamicCover(use_order, &profiler);
+    } else {
+      LOG(ERROR) << "Unknown vertex cover strategy " << FLAGS_vertex_cover;
+      return;
+    }
     plan->setCandidateSets(candidates);  // swap
     plan->printPhysicalPlan();
     // plan->printLabelFrequency();
     plan->getOutputs().init(FLAGS_num_cores).limit(FLAGS_match_limit);
     LOG(INFO) << "limit per thread " << plan->getOutputs().getLimitPerThread();
-    LOG(INFO) << &profiler;
     auto start_execution = std::chrono::steady_clock::now();
     // ProfilerStart("benchmark.prof");
-    // bfsExecute(&g, plan);
     if (FLAGS_num_cores == 1) {
       LOG(INFO) << "batchDFSExecuteST";
       batchDFSExecuteST(&g, plan);
+      // bfsExecute(&g, plan);
     } else {
       batchDFSExecute(&g, plan);
     }
@@ -270,17 +286,21 @@ int main(int argc, char** argv) {
   Benchmark benchmark;
   // header: dataset,query_size,query_mode,query_index,load_time,filter_time,plan_time,enumerate_time,n_embeddings,order
   std::ostream* out;
+  std::ofstream fstream;
   if (FLAGS_output_file != "") {
-    std::ofstream fstream;
     fstream.open(FLAGS_output_file);
     CHECK(fstream.is_open());
     out = &fstream;
-    benchmark.run(FLAGS_dataset, FLAGS_query_size, FLAGS_query_mode, FLAGS_query_index, out);
-    fstream.close();
   } else {
     out = &std::cout;
-    benchmark.run(FLAGS_dataset, FLAGS_query_size, FLAGS_query_mode, FLAGS_query_index, out);
   }
+  FLAGS_profile = (FLAGS_profile_file != "");
+  if (FLAGS_vertex_cover == "static") {
+    benchmark.run<Static>(FLAGS_dataset, FLAGS_query_size, FLAGS_query_mode, FLAGS_query_index, out);
+  } else {
+    benchmark.run<Eager>(FLAGS_dataset, FLAGS_query_size, FLAGS_query_mode, FLAGS_query_index, out);
+  }
+  fstream.close();
 
   return 0;
 }

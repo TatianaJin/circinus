@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include <chrono>
+#include <cmath>
 #include <fstream>
 #include <string>
 #include <vector>
@@ -117,7 +118,7 @@ class Benchmark {
       candidate_cardinality.push_back(std::log(size));
     }
     NaivePlanner planner(&q, &candidate_cardinality);
-    auto delayed_steps = planner.analyzeDynamicCoreCoverEager(use_order);
+    auto delayed_steps = planner.analyzeDynamicCoreCoverEager(use_order).second;
     auto& order = planner.getMatchingOrder();
     auto dc = planner.analyzeDynamicCoreCoverMWVC();
     std::stringstream ss;

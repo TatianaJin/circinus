@@ -16,6 +16,7 @@
 
 #include <queue>
 #include <tuple>
+#include <utility>
 #include <vector>
 
 #include "algorithms/k_core.h"
@@ -28,10 +29,13 @@
 namespace circinus {
 
 bool NaivePlanner::hasValidCandidate() {
+  uint32_t i = 0;
   for (auto& cardinality : *candidate_cardinality_) {
-    if (cardinality < 1) {
+    if (cardinality < 0) {
+      LOG(INFO) << "candidate for vertex is empty " << i;
       return false;
     }
+    ++i;
   }
   return true;
 }
@@ -62,11 +66,10 @@ ExecutionPlan* NaivePlanner::generatePlan(const std::vector<QueryVertexID>& use_
     auto start_vertex = selectStartingVertex(cover);
 
     matching_order_ = generateMatchingOrder(query_graph_, core_table, start_vertex);
-    plan_.populatePhysicalPlan(query_graph_, matching_order_, select_cover, profiler);
   } else {
     matching_order_ = use_order;
-    plan_.populatePhysicalPlan(query_graph_, matching_order_, select_cover, profiler);
   }
+  plan_.populatePhysicalPlan(query_graph_, matching_order_, select_cover, profiler);
   return &plan_;
 }
 
@@ -132,16 +135,147 @@ QueryVertexID NaivePlanner::selectStartingVertex(const std::vector<QueryVertexID
   return start_vertex;
 }
 
-uint32_t NaivePlanner::analyzeDynamicCoreCoverEager(const std::vector<QueryVertexID>& use_order) {
-  // if any of the candidate cardinality is zero, there is no matching
-  if (!hasValidCandidate()) {
-    return 0;
+unordered_map<QueryVertexID, uint32_t> NaivePlanner::getDynamicCoreCoverEager(const std::vector<int>& select_cover) {
+  unordered_map<QueryVertexID, uint32_t> level_become_key;
+  DCHECK(hasValidCandidate());
+  auto cover = select_cover;
+  unordered_set<QueryVertexID> existing_vertices;
+  std::vector<uint32_t> vertex_order(matching_order_.size());
+  existing_vertices.reserve(matching_order_.size());
+  existing_vertices.insert(matching_order_.front());
+  vertex_order[matching_order_.front()] = 0;
+  // for the first query vertex, we always put it as key if it is in the cover. if this is changed, the implementation
+  // for populating execution plan must be changed accordingly
+  if (cover[matching_order_.front()] == 1) {
+    level_become_key.insert({matching_order_.front(), 0});
   }
+  for (uint32_t i = 1; i < matching_order_.size(); ++i) {
+    auto v = matching_order_[i];
+    vertex_order[v] = i;
+    auto nb = query_graph_->getOutNeighbors(v);
+    if (cover[v] == 1) {  // vertex v is in key, we eagerly check whether the current target can be put in key later
+      bool delay_enumeration = true;
+      // can be put in key later for a larger subquery if all the existing vertices connecting to v is in key
+      for (uint32_t j = 0; j < nb.second; ++j) {
+        if (existing_vertices.count(nb.first[j]) && cover[nb.first[j]] != 1) {
+          delay_enumeration = false;
+          break;
+        }
+      }
+      if (!delay_enumeration) {
+        level_become_key.insert({v, i});  // the level is the subquery size - 1
+        cover[v] = 1;
+      } else {
+        cover[v] = 0;
+      }
+    } else {  // vertex v is in set, we need to ensure that all its neighbors are in key
+      for (uint32_t j = 0; j < nb.second; ++j) {  // restore the delayed vertex as key
+        if (existing_vertices.count(nb.first[j]) && cover[nb.first[j]] != 1) {
+          CHECK_EQ(select_cover[nb.first[j]], 1);
+          cover[nb.first[j]] = 1;
+          if ((i - vertex_order[nb.first[j]]) == 1) {  // if enumerate in the consecutive subquery, then do not delay
+            level_become_key.insert({nb.first[j], vertex_order[nb.first[j]]});
+          } else {
+            level_become_key.insert({nb.first[j], i});  // the level is the subquery size - 1
+          }
+        }
+      }
+    }
+    existing_vertices.insert(v);
+  }
+  return level_become_key;
+}
+
+std::pair<uint32_t, uint32_t> NaivePlanner::analyzeDynamicCoreCoverEagerInner(const std::vector<int>& select_cover) {
+  DCHECK(hasValidCandidate());
+  uint32_t sum_delayed_steps = 0;
+  auto cover = select_cover;
+  unordered_set<QueryVertexID> existing_vertices;
+  std::vector<uint32_t> vertex_order(matching_order_.size());
+  existing_vertices.reserve(matching_order_.size());
+  existing_vertices.insert(matching_order_.front());
+  vertex_order[matching_order_.front()] = 0;
+  auto current_subquery_key_size = (select_cover[matching_order_.front()] == 1);
+  uint32_t key_sizes = current_subquery_key_size;
+  LOG(INFO) << "analyzeDynamicCoreCoverEagerInner";
+  for (uint32_t i = 1; i < matching_order_.size(); ++i) {
+    auto v = matching_order_[i];
+    vertex_order[v] = i;
+    auto nb = query_graph_->getOutNeighbors(v);
+    if (cover[v] == 1) {  // vertex v is in key, we eagerly check whether the current target can be put in key later
+      bool delay_enumeration = true;
+      // can be put in key later for a larger subquery if all the existing vertices connecting to v is in key
+      for (uint32_t j = 0; j < nb.second; ++j) {
+        if (existing_vertices.count(nb.first[j]) && cover[nb.first[j]] != 1) {
+          delay_enumeration = false;
+          break;
+        }
+      }
+      cover[v] = !delay_enumeration;
+      current_subquery_key_size += !delay_enumeration;
+    } else {  // vertex v is in set, we need to ensure that all its neighbors are in key
+      for (uint32_t j = 0; j < nb.second; ++j) {  // restore the delayed vertex as key
+        if (existing_vertices.count(nb.first[j]) && cover[nb.first[j]] != 1) {
+          CHECK_EQ(select_cover[nb.first[j]], 1);
+          cover[nb.first[j]] = 1;
+          current_subquery_key_size += 1;
+          if ((i - vertex_order[nb.first[j]]) == 1) {  // if enumerate in the consecutive subquery, then do not delay
+            current_subquery_key_size += 1;            // restore for the last subquery
+          } else {
+            sum_delayed_steps += (i - vertex_order[nb.first[j]]);
+            LOG(INFO) << nb.first[j] << " delayed from " << vertex_order[nb.first[j]] << " for "
+                      << (i - vertex_order[nb.first[j]]) << " steps";
+          }
+        }
+      }
+    }
+    key_sizes += current_subquery_key_size;
+    existing_vertices.insert(v);
+  }
+  return std::make_pair(key_sizes, sum_delayed_steps);
+}
+
+std::pair<uint32_t, uint32_t> NaivePlanner::analyzeDynamicCoreCoverEager(const std::vector<QueryVertexID>& use_order) {
+  CHECK(hasValidCandidate());
   vertex_cover_solver_.computeVertexCover();
   auto& covers = vertex_cover_solver_.getBestCovers();
   CHECK_GT(covers.size(), 0);  // at least one cover should be obtained
   auto select_cover = covers[BnB::getSmallestCover(covers).first.front()];
-  if (use_order.empty()) {  // generate a matching order if not specified
+  if (!use_order.empty()) {
+    matching_order_ = use_order;
+  }
+  if (matching_order_.empty()) {
+    TwoCoreSolver solver;
+    auto& core_table = solver.get2CoreTable(query_graph_);
+    // now we only consider a random smallest MWVC from covers
+    QueryVertexID v = 0;
+    std::vector<QueryVertexID> cover;
+    for (auto assignment : select_cover) {
+      if (assignment == 1) {
+        cover.push_back(v);
+      }
+      ++v;
+    }
+    // start matching from the vertex with the smallest cardinality in cover
+    auto start_vertex = selectStartingVertex(cover);
+    matching_order_ = generateMatchingOrder(query_graph_, core_table, start_vertex);
+  }
+  return analyzeDynamicCoreCoverEagerInner(select_cover);
+}
+
+ExecutionPlan* NaivePlanner::generatePlanWithEagerDynamicCover(const std::vector<QueryVertexID>& use_order,
+                                                               Profiler* profiler) {
+  // if any of the candidate cardinality is zero, there is no matching
+  if (!hasValidCandidate()) {
+    return nullptr;
+  }
+  vertex_cover_solver_.computeVertexCover();
+  auto& covers = vertex_cover_solver_.getBestCovers();
+  CHECK_GT(covers.size(), 0);  // at least one cover should be obtained
+  auto smallest_covers = BnB::getSmallestCover(covers);
+  auto select_cover = covers[smallest_covers.first.front()];
+
+  if (use_order.empty()) {
     TwoCoreSolver solver;
     auto& core_table = solver.get2CoreTable(query_graph_);
     // now we only consider a random smallest MWVC from covers
@@ -160,48 +294,31 @@ uint32_t NaivePlanner::analyzeDynamicCoreCoverEager(const std::vector<QueryVerte
     matching_order_ = use_order;
   }
 
-  uint32_t sum_delayed_steps = 0;
-  auto cover = select_cover;
-  unordered_set<QueryVertexID> existing_vertices;
-  std::vector<uint32_t> vertex_order(matching_order_.size());
-  existing_vertices.reserve(matching_order_.size());
-  existing_vertices.insert(matching_order_.front());
-  vertex_order[matching_order_.front()] = 0;
-  // TODO(tatiana): use mwvc to decide the dynamic cover
-  for (uint32_t i = 1; i < matching_order_.size(); ++i) {
-    auto v = matching_order_[i];
-    vertex_order[v] = i;
-    auto nb = query_graph_->getOutNeighbors(v);
-    if (cover[v] == 1) {  // vertex v is in key, we eagerly check whether the current target can be put in key later
-      bool delay_enumeration = true;
-      // can be put in key later for a larger subquery if all the existing vertices connecting to v is in key
-      for (uint32_t j = 0; j < nb.second; ++j) {
-        if (existing_vertices.count(nb.first[j]) && cover[nb.first[j]] != 1) {
-          delay_enumeration = false;
-          break;
-        }
-      }
-      cover[v] = !delay_enumeration;
-    } else {
-      for (uint32_t j = 0; j < nb.second; ++j) {  // restore the delayed vertex as key
-        if (existing_vertices.count(nb.first[j]) && cover[nb.first[j]] != 1) {
-          CHECK_EQ(select_cover[nb.first[j]], 1);
-          cover[nb.first[j]] = 1;
-          sum_delayed_steps += (i - vertex_order[nb.first[j]]);
-          LOG(INFO) << nb.first[j] << " delayed from " << vertex_order[nb.first[j]] << " for "
-                    << (i - vertex_order[nb.first[j]]) << " steps";
-        }
-      }
+  // select a cover with minimum key sizes
+  auto select_cover_index = 0;
+  uint32_t min_key_sizes = ~0u;
+  for (auto cover_idx : smallest_covers.first) {
+    auto current_key_sizes = analyzeDynamicCoreCoverEagerInner(covers[cover_idx]).first;
+    if (current_key_sizes < min_key_sizes) {
+      min_key_sizes = current_key_sizes;
+      select_cover_index = cover_idx;
     }
-    existing_vertices.insert(v);
   }
-  return sum_delayed_steps;
+
+  plan_.populatePhysicalPlan(query_graph_, matching_order_, covers[select_cover_index],
+                             getDynamicCoreCoverEager(covers[select_cover_index]));
+  plan_.setProfiler(profiler);
+  return &plan_;
 }
 
-std::tuple<uint32_t, uint32_t, uint32_t> NaivePlanner::analyzeDynamicCoreCoverMWVC() {
+std::tuple<uint32_t, uint32_t, uint32_t> NaivePlanner::analyzeDynamicCoreCoverMWVC(
+    const std::vector<QueryVertexID>& use_order) {
   // if any of the candidate cardinality is zero, there is no matching
   if (!hasValidCandidate()) {
     return std::tuple(0, 0, 0);
+  }
+  if (!use_order.empty()) {
+    matching_order_ = use_order;
   }
   CHECK(!matching_order_.empty());
 
