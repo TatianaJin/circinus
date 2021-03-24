@@ -23,6 +23,7 @@
 #include "graph/types.h"
 #include "ops/operator.h"
 #include "utils/hashmap.h"
+#include "utils/utils.h"
 
 namespace circinus {
 
@@ -81,6 +82,17 @@ class TraverseOperator : public Operator {
   const std::vector<CompressedSubgraphs>* current_inputs_ = nullptr;
   const Graph* current_data_graph_ = nullptr;
 
+  /* for profiling */
+  uint32_t total_input_size_ = 0;
+  uint32_t total_num_input_subgraphs_ = 0;
+
+  uint32_t total_output_size_ = 0;
+  uint32_t intersection_count_ = 0;
+  uint32_t total_intersection_input_size_ = 0;
+  uint32_t total_intersection_output_size_ = 0;
+  uint32_t total_num_output_subgraphs_ = 0;
+  double total_time_in_milliseconds_ = 0;
+
  public:
   virtual ~TraverseOperator() {}
 
@@ -95,6 +107,16 @@ class TraverseOperator : public Operator {
   }
 
   virtual uint32_t expand(std::vector<CompressedSubgraphs>* outputs, uint32_t cap) = 0;
+
+  virtual void inputAndProfile(const std::vector<CompressedSubgraphs>& inputs, const Graph* data_graph) {
+    input(inputs, data_graph);
+    total_input_size_ += inputs.size();
+    total_num_input_subgraphs_ += getNumSubgraphs(inputs, 0, inputs.size());
+  }
+
+  virtual uint32_t expandAndProfile(std::vector<CompressedSubgraphs>* outputs, uint32_t cap) {
+    return expand(outputs, cap);
+  }
 };
 
 }  // namespace circinus

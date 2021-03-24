@@ -49,6 +49,11 @@ ExecutionPlan* NaivePlanner::generatePlan(const std::vector<QueryVertexID>& use_
   auto& covers = vertex_cover_solver_.getBestCovers();
   CHECK_GT(covers.size(), 0);  // at least one cover should be obtained
   auto select_cover = covers[BnB::getSmallestCover(covers).first.front()];
+  std::stringstream ss;
+  for (QueryVertexID i = 0; i < select_cover.size(); ++i) {
+    ss << ' ' << i << ':' << (select_cover[i] == 1 ? "key" : "set");
+  }
+  LOG(INFO) << "cover" << ss.str();
 
   if (use_order.empty()) {
     TwoCoreSolver solver;

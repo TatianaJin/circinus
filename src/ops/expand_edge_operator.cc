@@ -15,6 +15,7 @@
 #include "ops/expand_edge_operator.h"
 
 #include <algorithm>
+#include <chrono>
 #include <queue>
 #include <string>
 #include <vector>
@@ -50,6 +51,21 @@ class ExpandEdgeKeyToSetOperator : public ExpandEdgeOperator {
     return n;
   }
 
+  uint32_t expandAndProfile(std::vector<CompressedSubgraphs>* outputs, uint32_t cap) override {
+    auto start = std::chrono::steady_clock::now();
+    uint32_t n = 0;
+    uint32_t old_input_index = input_index_;
+    for (; n < cap && input_index_ < current_inputs_->size(); ++input_index_) {
+      n += expandAndProfileInner(outputs, (*current_inputs_)[input_index_]);
+    }
+    auto stop = std::chrono::steady_clock::now();
+    intersection_count_ += input_index_ - old_input_index;
+    total_output_size_ += n;
+    total_num_output_subgraphs_ += getNumSubgraphs(*outputs, outputs->size() - n, outputs->size());
+    total_time_in_milliseconds_ += std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count();
+    return n;
+  }
+
   std::string toString() const override {
     std::stringstream ss;
     ss << "ExpandEdgeKeyToSetOperator";
@@ -75,6 +91,20 @@ class ExpandEdgeKeyToSetOperator : public ExpandEdgeOperator {
     outputs->emplace_back(input, std::make_shared<std::vector<VertexID>>(std::move(targets)));
     return true;
   }
+
+  inline bool expandAndProfileInner(std::vector<CompressedSubgraphs>* outputs, const CompressedSubgraphs& input) {
+    std::vector<VertexID> targets;
+    auto parent_match = input.getKeyVal(parent_index_);
+    // intersect(*candidates_, current_data_graph_->getOutNeighbors(parent_match), &targets, input.getKeyMap());
+    intersect(candidate_set_, current_data_graph_->getOutNeighbors(parent_match), &targets, input.getKeyMap());
+    total_intersection_input_size_ += candidate_set_.size() + current_data_graph_->getVertexOutDegree(parent_match);
+    total_intersection_output_size_ += targets.size();
+    if (targets.empty()) {
+      return false;
+    }
+    outputs->emplace_back(input, std::make_shared<std::vector<VertexID>>(std::move(targets)));
+    return true;
+  }
 };
 
 class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
@@ -92,7 +122,8 @@ class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
     candidate_set_.insert(candidates->begin(), candidates->end());
   }
 
-  uint32_t expand(std::vector<CompressedSubgraphs>* outputs, uint32_t cap) override {
+  template <bool profile>
+  uint32_t expandInner(std::vector<CompressedSubgraphs>* outputs, uint32_t cap) {
     uint32_t n = 0;
     while (true) {
       // if there are existing targets from the last input, consume first
@@ -111,9 +142,25 @@ class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
         return n;
       }
       // consume the next input
-      expandInner((*current_inputs_)[input_index_]);
+      expandInner<profile>((*current_inputs_)[input_index_]);
       ++input_index_;
     }
+    return n;
+  }
+
+  uint32_t expand(std::vector<CompressedSubgraphs>* outputs, uint32_t cap) override {
+    return expandInner<false>(outputs, cap);
+  }
+
+  uint32_t expandAndProfile(std::vector<CompressedSubgraphs>* outputs, uint32_t cap) override {
+    auto old_input_index = input_index_;
+    auto start = std::chrono::steady_clock::now();
+    auto n = expandInner<true>(outputs, cap);
+    auto stop = std::chrono::steady_clock::now();
+    total_time_in_milliseconds_ += std::chrono::duration_cast<std::chrono::milliseconds>(stop - start).count();
+    total_num_output_subgraphs_ += getNumSubgraphs(*outputs, outputs->size() - n, outputs->size());
+    total_output_size_ += n;
+    intersection_count_ += input_index_ - old_input_index;
     return n;
   }
 
@@ -133,11 +180,17 @@ class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
   }
 
  private:
+  template <bool profile>
   inline void expandInner(const CompressedSubgraphs& input) {
     current_targets_.clear();
     current_target_index_ = 0;
     auto parent_match = input.getKeyVal(parent_index_);
     intersect(candidate_set_, current_data_graph_->getOutNeighbors(parent_match), &current_targets_, input.getKeyMap());
+    if
+      constexpr(profile) {
+        total_intersection_input_size_ += candidate_set_.size() + current_data_graph_->getVertexOutDegree(parent_match);
+        total_intersection_output_size_ += current_targets_.size();
+      }
     // intersect(*candidates_, current_data_graph_->getOutNeighbors(parent_match), &current_targets_,
     // input.getKeyMap());
   }
