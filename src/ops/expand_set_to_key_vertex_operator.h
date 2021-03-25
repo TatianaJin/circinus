@@ -95,6 +95,8 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
     uint32_t output_num = 0;
     while (input_index_ < current_inputs_->size()) {
       auto min_parent_set = getMinimumParent();
+      // TODO(tatiana): how to calculate the ideal si count for this case? consider reuse of partial intersection
+      // results? how to use unordered_set on tuples with sizes only known at runtime?
       if (min_parent_set.first * 20 < candidates_->size()) {
         DLOG(INFO) << "fromSetNeighborStrategy";
         output_num += fromSetNeighborStrategy<profile>(outputs, min_parent_set.second);

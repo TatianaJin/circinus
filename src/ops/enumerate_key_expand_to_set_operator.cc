@@ -113,6 +113,8 @@ uint32_t EnumerateKeyExpandToSetOperator::expandInner(std::vector<CompressedSubg
           continue;
         }
         DCHECK(target_sets_[enumerate_key_depth + 1].empty());
+        // TODO(tatiana): how to calculate the ideal si count for this case? consider reuse of partial intersection
+        // results? how to use unordered_set on tuples with sizes only known at runtime?
         intersect(target_sets_[enumerate_key_depth], current_data_graph_->getOutNeighbors(key_vid),
                   &target_sets_[enumerate_key_depth + 1]);
         if
@@ -183,6 +185,8 @@ bool EnumerateKeyExpandToSetOperator::expandInner() {  // handles a new input an
     uint32_t key = query_vertex_indices_[existing_key_parents_[i]];
     uint32_t key_vid = input.getKeyVal(key);
     auto target_set_size = target_set.size();
+    // TODO(tatiana): how to calculate the ideal si count for this case? consider reuse of partial intersection
+    // results? how to use unordered_set on tuples with sizes only known at runtime?
     intersectInplace(target_set, current_data_graph_->getOutNeighbors(key_vid), &target_set);
     if
       constexpr(profile) {

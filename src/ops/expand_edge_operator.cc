@@ -33,6 +33,7 @@ namespace circinus {
 
 class ExpandEdgeKeyToSetOperator : public ExpandEdgeOperator {
   unordered_set<VertexID> candidate_set_;
+  unordered_set<VertexID> parent_set_;  // for profile
 
  public:
   ExpandEdgeKeyToSetOperator(uint32_t parent_index, uint32_t target_index, QueryVertexID parent, QueryVertexID target)
@@ -83,6 +84,7 @@ class ExpandEdgeKeyToSetOperator : public ExpandEdgeOperator {
     intersect(candidate_set_, current_data_graph_->getOutNeighbors(parent_match), &targets, input.getKeyMap());
     if
       constexpr(profile) {
+        distinct_intersection_count_ += parent_set_.insert(parent_match).second;
         total_intersection_input_size_ += candidate_set_.size() + current_data_graph_->getVertexOutDegree(parent_match);
         total_intersection_output_size_ += targets.size();
       }
@@ -99,6 +101,7 @@ class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
   std::vector<VertexID> current_targets_;
   uint32_t current_target_index_ = 0;
   unordered_set<VertexID> candidate_set_;
+  unordered_set<VertexID> parent_set_;  // for profile
 
  public:
   ExpandEdgeKeyToKeyOperator(uint32_t parent_index, uint32_t target_index, QueryVertexID parent, QueryVertexID target)
@@ -170,6 +173,7 @@ class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
     intersect(candidate_set_, current_data_graph_->getOutNeighbors(parent_match), &current_targets_, input.getKeyMap());
     if
       constexpr(profile) {
+        distinct_intersection_count_ += parent_set_.insert(parent_match).second;
         total_intersection_input_size_ += candidate_set_.size() + current_data_graph_->getVertexOutDegree(parent_match);
         total_intersection_output_size_ += current_targets_.size();
       }
@@ -334,6 +338,7 @@ class ExpandEdgeSetToKeyOperator : public ExpandEdgeOperator {
 
   uint64_t candidates_neighbor_size_ = 0;
   CurrentResults* current_results_ = nullptr;
+  unordered_set<VertexID> parent_set_;  // for profile
 
  public:
   ExpandEdgeSetToKeyOperator(uint32_t parent_index, uint32_t target_index, QueryVertexID parent, QueryVertexID target)
@@ -427,6 +432,13 @@ class ExpandEdgeSetToKeyOperator : public ExpandEdgeOperator {
           return cap - needed;
         }
 
+        if
+          constexpr(profile) {
+            auto& parent_set = *(*current_inputs_)[input_index_ - 1].getSet(parent_index_);
+            for (auto parent_match : parent_set) {
+              distinct_intersection_count_ += parent_set_.insert(parent_match).second;
+            }
+          }
         delete current_results_;
         current_results_ = nullptr;
       }

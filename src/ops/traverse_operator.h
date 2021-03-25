@@ -94,6 +94,8 @@ class TraverseOperator : public Operator {
   uint32_t intersection_count_ = 0;
   uint32_t total_intersection_input_size_ = 0;
   uint32_t total_intersection_output_size_ = 0;
+  uint32_t distinct_intersection_count_ =
+      0;  // the minimal number of intersection needed if all intersection function call results can be cached
 
  public:
   virtual ~TraverseOperator() {}
@@ -138,7 +140,8 @@ class TraverseOperator : public Operator {
     std::stringstream ss;
     ss << toString() << ',' << total_time_in_milliseconds_ << ',' << getTotalInputSize() << ',' << total_output_size_
        << ',' << total_num_input_subgraphs_ << ',' << total_num_output_subgraphs_ << ',' << intersection_count_ << ','
-       << total_intersection_input_size_ << ',' << total_intersection_output_size_;
+       << total_intersection_input_size_ << ',' << total_intersection_output_size_ << ','
+       << distinct_intersection_count_;
     return ss.str();
   }
 

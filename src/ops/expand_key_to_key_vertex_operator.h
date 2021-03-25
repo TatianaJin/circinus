@@ -62,6 +62,8 @@ class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
       for (uint32_t i = 0; i < parents_.size(); ++i) {
         uint32_t key = query_vertex_indices_[parents_[i]];
         uint32_t key_vid = input.getKeyVal(key);
+        // TODO(tatiana): how to calculate the ideal si count for this case? consider reuse of partial intersection
+        // results? how to use unordered_set on tuples with sizes only known at runtime?
         if (i == 0) {
           intersect(*candidates_, current_data_graph_->getOutNeighbors(key_vid), &new_keys);
           if

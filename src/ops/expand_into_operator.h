@@ -68,6 +68,8 @@ class ExpandIntoOperator : public TraverseOperator {
       for (QueryVertexID vid : parents_) {
         std::vector<VertexID> new_set;
         uint32_t id = query_vertex_indices_[vid];
+        // TODO(tatiana): how to calculate the ideal si count for this case? combine with the previous expand key to key
+        // operator?
         intersect(*(input.getSet(id)), key_out_neighbors, &new_set);
         if
           constexpr(profile) {
