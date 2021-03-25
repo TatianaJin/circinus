@@ -11,6 +11,7 @@ jobs:
     runs-on: ubuntu-18.04
 
     steps:
+    - run: echo "event commit $GITHUB_REF/${GITHUB_SHA}"
     - uses: actions/checkout@v2
 
     - name: Install dependencies
