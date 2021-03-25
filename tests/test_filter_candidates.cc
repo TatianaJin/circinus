@@ -143,7 +143,8 @@ std::vector<std::vector<VertexID>> getCandidateSets(const Graph& g, const QueryG
 }
 void run(const std::string& dataset, const std::string& filter, std::vector<std::string>& answers) {
   auto graph_path = dataset + "/data_graph/" + dataset + ".graph";
-  Graph g(data_dir + "/" + graph_path);  // load data graph
+  auto data_dir_str = std::string(data_dir);
+  Graph g(data_dir_str + "/" + graph_path);  // load data graph
                                          //  LOG(INFO) << "========================";
                                          // LOG(INFO) << "graph " << graph_path << " query " << query_path;
   int index = 0;
@@ -152,7 +153,7 @@ void run(const std::string& dataset, const std::string& filter, std::vector<std:
       for (int i = query_index_range.first; i <= query_index_range.second; ++i) {
         auto query_path = dataset + "/query_graph/query_" + query_mode + "_" + std::to_string(query_size) + "_" +
                           std::to_string(i) + ".graph";
-        auto query_dir = data_dir + "/" + query_path;
+        auto query_dir = data_dir_str + "/" + query_path;
         std::ifstream infile(query_dir);
         if (!infile) continue;
         QueryGraph q(query_dir);  // load query graph
@@ -170,7 +171,7 @@ void run(const std::string& dataset, const std::string& filter, std::vector<std:
 }
 
 bool getAnswers(const std::string& filter, const std::string& dataset, std::vector<std::string>& answers) {
-  auto answer_path = answer_dir + filter;
+  auto answer_path = std::string(answer_dir) + filter;
   std::ifstream in(answer_path);
   if (in) {
     std::string line;

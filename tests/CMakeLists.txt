@@ -33,7 +33,7 @@ if(GTEST_FOUND)
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
   )
 
-  add_executable(TestFilterCandidates unittest_main.cc test_filter_candidates.cc)
+  add_executable(TestFilterCandidates test_filter_candidates.cc)
   target_link_libraries(TestFilterCandidates circinus ${GTEST_LIBRARY} ${EXTERNAL_LIBRARY})
   add_test(NAME TestFilterCandidates
     COMMAND TestFilterCandidates
