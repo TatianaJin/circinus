@@ -257,7 +257,7 @@ class CurrentResultsByExtension : public CurrentResults {
     current_keys_ = input_->getKeyMap();
     for (; extensions_.size() < cap && parent_match_index_ < parent_set.size(); ++parent_match_index_) {
       auto parent_match = parent_set[parent_match_index_];
-      if (current_key_.find(parent_match) != current_keys_.end()) {
+      if (current_keys_.find(parent_match) != current_keys_.end()) {
         continue;
       }
 
