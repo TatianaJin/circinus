@@ -30,6 +30,31 @@ class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
       : ExpandVertexOperator(parents, target_vertex, query_vertex_indices) {}
 
   uint32_t expand(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size) override {
+    return expandInner<false>(outputs, batch_size);
+  }
+
+  uint32_t expandAndProfileInner(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size) override {
+    return expandInner<true>(outputs, batch_size);
+  }
+
+  std::string toString() const override {
+    std::stringstream ss;
+    ss << "ExpandKeyToKeyVertexOperator";
+    toStringInner(ss);
+    return ss.str();
+  }
+
+  Operator* clone() const override {
+    // TODO(tatiana): for now next_ is not handled because it is only used for printing plan
+    auto ret = new ExpandKeyToKeyVertexOperator(parents_, target_vertex_, query_vertex_indices_);
+    DCHECK(candidates_ != nullptr);
+    ret->candidates_ = candidates_;
+    return ret;
+  }
+
+ protected:
+  template <bool profile>
+  inline uint32_t expandInner(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size) {
     uint32_t output_num = 0;
     while (input_index_ < current_inputs_->size()) {
       std::vector<VertexID> new_keys;
@@ -39,8 +64,18 @@ class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
         uint32_t key_vid = input.getKeyVal(key);
         if (i == 0) {
           intersect(*candidates_, current_data_graph_->getOutNeighbors(key_vid), &new_keys);
+          if
+            constexpr(profile) {
+              updateIntersectInfo(candidates_->size() + current_data_graph_->getVertexOutDegree(key_vid),
+                                  new_keys.size());
+            }
         } else {
+          auto new_keys_size = new_keys.size();
           intersectInplace(new_keys, current_data_graph_->getOutNeighbors(key_vid), &new_keys);
+          if
+            constexpr(profile) {
+              updateIntersectInfo(new_keys_size + current_data_graph_->getVertexOutDegree(key_vid), new_keys.size());
+            }
         }
         if (new_keys.size() == 0) {
           break;
@@ -61,21 +96,6 @@ class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
       new_keys.clear();
     }
     return output_num;
-  }
-
-  std::string toString() const override {
-    std::stringstream ss;
-    ss << "ExpandKeyToKeyVertexOperator";
-    toStringInner(ss);
-    return ss.str();
-  }
-
-  Operator* clone() const override {
-    // TODO(tatiana): for now next_ is not handled because it is only used for printing plan
-    auto ret = new ExpandKeyToKeyVertexOperator(parents_, target_vertex_, query_vertex_indices_);
-    DCHECK(candidates_ != nullptr);
-    ret->candidates_ = candidates_;
-    return ret;
   }
 };
 

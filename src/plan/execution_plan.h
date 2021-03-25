@@ -63,6 +63,17 @@ class ExecutionPlan {
     printOperatorChain(operators_.root());
   }
 
+  void printProfiledPlan(std::ostream& oss) const {
+    if (operators_.empty()) return;
+    uint32_t op_idx = 0;
+    auto op = operators_.root();
+    while (op != nullptr) {
+      oss << op_idx << "," << op->toProfileString() << std::endl;
+      ++op_idx;
+      op = op->getNext();
+    }
+  }
+
   void printLabelFrequency() const {
     unordered_map<LabelID, std::vector<QueryVertexID>> labels;
     uint32_t n_keys = 0;

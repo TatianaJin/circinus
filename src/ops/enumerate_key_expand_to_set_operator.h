@@ -45,7 +45,13 @@ class EnumerateKeyExpandToSetOperator : public ExpandVertexOperator {
                                   const std::vector<QueryVertexID>& keys_to_enumerate,
                                   const std::vector<int>& cover_table);
 
-  uint32_t expand(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size) override;
+  uint32_t expand(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size) override {
+    return expandInner<false>(outputs, batch_size);
+  }
+
+  uint32_t expandAndProfileInner(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size) override {
+    return expandInner<true>(outputs, batch_size);
+  }
 
   std::string toString() const override;
 
@@ -55,6 +61,10 @@ class EnumerateKeyExpandToSetOperator : public ExpandVertexOperator {
   }
 
  private:
+  template <bool profile>
+  uint32_t expandInner(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size);
+
+  template <bool profile>
   bool expandInner();
 };
 

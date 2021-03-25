@@ -15,6 +15,7 @@
 #pragma once
 
 #include <algorithm>
+#include <chrono>
 #include <utility>
 #include <vector>
 
@@ -82,16 +83,17 @@ class TraverseOperator : public Operator {
   const std::vector<CompressedSubgraphs>* current_inputs_ = nullptr;
   const Graph* current_data_graph_ = nullptr;
 
+  uint32_t current_inputs_size_ = 0;
   /* for profiling */
   uint32_t total_input_size_ = 0;
-  uint32_t total_num_input_subgraphs_ = 0;
-
   uint32_t total_output_size_ = 0;
+  uint32_t total_num_input_subgraphs_ = 0;
+  uint32_t total_num_output_subgraphs_ = 0;
+  double total_time_in_milliseconds_ = 0;
+  // to be updated in derived class
   uint32_t intersection_count_ = 0;
   uint32_t total_intersection_input_size_ = 0;
   uint32_t total_intersection_output_size_ = 0;
-  uint32_t total_num_output_subgraphs_ = 0;
-  double total_time_in_milliseconds_ = 0;
 
  public:
   virtual ~TraverseOperator() {}
@@ -110,13 +112,39 @@ class TraverseOperator : public Operator {
 
   virtual void inputAndProfile(const std::vector<CompressedSubgraphs>& inputs, const Graph* data_graph) {
     input(inputs, data_graph);
+    current_inputs_size_ = inputs.size();
     total_input_size_ += inputs.size();
     total_num_input_subgraphs_ += getNumSubgraphs(inputs, 0, inputs.size());
   }
 
-  virtual uint32_t expandAndProfile(std::vector<CompressedSubgraphs>* outputs, uint32_t cap) {
-    return expand(outputs, cap);
+  uint32_t expandAndProfile(std::vector<CompressedSubgraphs>* outputs, uint32_t cap) {
+    auto start = std::chrono::high_resolution_clock::now();
+    auto n = expandAndProfileInner(outputs, cap);
+    auto stop = std::chrono::high_resolution_clock::now();
+    total_time_in_milliseconds_ +=
+        (std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start).count() / 1000000.0);
+    total_num_output_subgraphs_ += getNumSubgraphs(*outputs, outputs->size() - n, outputs->size());
+    total_output_size_ += n;
+    return n;
   }
+
+  void updateIntersectInfo(uint32_t input_size, uint32_t output_size) {
+    ++intersection_count_;
+    total_intersection_input_size_ += input_size;
+    total_intersection_output_size_ += output_size;
+  }
+
+  std::string toProfileString() const override {
+    std::stringstream ss;
+    ss << toString() << ',' << total_time_in_milliseconds_ << ',' << getTotalInputSize() << ',' << total_output_size_
+       << ',' << total_num_input_subgraphs_ << ',' << total_num_output_subgraphs_ << ',' << intersection_count_ << ','
+       << total_intersection_input_size_ << ',' << total_intersection_output_size_;
+    return ss.str();
+  }
+
+ protected:
+  virtual uint32_t expandAndProfileInner(std::vector<CompressedSubgraphs>* outputs, uint32_t cap) = 0;
+  inline uint32_t getTotalInputSize() const { return total_input_size_ - (current_inputs_size_ - input_index_); }
 };
 
 }  // namespace circinus

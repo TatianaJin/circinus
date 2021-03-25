@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <chrono>
 #include <string>
 #include <vector>
 
@@ -30,34 +31,11 @@ class ExpandIntoOperator : public TraverseOperator {
       : parents_(parents), target_vertex_(target_vertex), query_vertex_indices_(query_vertex_indices) {}
 
   uint32_t expand(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size) override {
-    uint32_t output_num = 0;
-    while (input_index_ < current_inputs_->size()) {
-      auto input = (*current_inputs_)[input_index_];
-      auto key_vertex_id = input.getKeyVal(query_vertex_indices_[target_vertex_]);
-      auto key_out_neighbors = current_data_graph_->getOutNeighbors(key_vertex_id);
-      bool add = true;
-      for (QueryVertexID vid : parents_) {
-        std::vector<VertexID> new_set;
-        uint32_t id = query_vertex_indices_[vid];
-        intersect(*(input.getSet(id)), key_out_neighbors, &new_set);
-        if (new_set.size() == 0) {
-          add = false;
-          break;
-        }
-        input.UpdateSets(id, std::make_shared<std::vector<VertexID>>(std::move(new_set)));
-      }
+    return expandInner<false>(outputs, batch_size);
+  }
 
-      if (add) {
-        outputs->emplace_back(std::move(input));
-        output_num++;
-      }
-      input_index_++;
-
-      if (output_num >= batch_size) {
-        break;
-      }
-    }
-    return output_num;
+  uint32_t expandAndProfileInner(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size) override {
+    return expandInner<true>(outputs, batch_size);
   }
 
   std::string toString() const override {
@@ -79,6 +57,42 @@ class ExpandIntoOperator : public TraverseOperator {
   }
 
  protected:
+  template <bool profile>
+  inline uint32_t expandInner(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size) {
+    uint32_t output_num = 0;
+    while (input_index_ < current_inputs_->size()) {
+      auto input = (*current_inputs_)[input_index_];
+      auto key_vertex_id = input.getKeyVal(query_vertex_indices_[target_vertex_]);
+      auto key_out_neighbors = current_data_graph_->getOutNeighbors(key_vertex_id);
+      bool add = true;
+      for (QueryVertexID vid : parents_) {
+        std::vector<VertexID> new_set;
+        uint32_t id = query_vertex_indices_[vid];
+        intersect(*(input.getSet(id)), key_out_neighbors, &new_set);
+        if
+          constexpr(profile) {
+            updateIntersectInfo(input.getSet(id)->size() + key_out_neighbors.second, new_set.size());
+          }
+        if (new_set.size() == 0) {
+          add = false;
+          break;
+        }
+        input.UpdateSets(id, std::make_shared<std::vector<VertexID>>(std::move(new_set)));
+      }
+
+      if (add) {
+        outputs->emplace_back(std::move(input));
+        output_num++;
+      }
+      input_index_++;
+
+      if (output_num >= batch_size) {
+        break;
+      }
+    }
+    return output_num;
+  }
+
   std::vector<QueryVertexID> parents_;
   QueryVertexID target_vertex_;
   unordered_map<QueryVertexID, uint32_t> query_vertex_indices_;

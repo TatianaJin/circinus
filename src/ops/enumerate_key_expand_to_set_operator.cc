@@ -62,12 +62,13 @@ EnumerateKeyExpandToSetOperator::EnumerateKeyExpandToSetOperator(
   CHECK_EQ(query_vertex_indices_[target_vertex_], output_query_vertex_indices.size() - n_input_keys - 1);
 }
 
-uint32_t EnumerateKeyExpandToSetOperator::expand(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size) {
+template <bool profile>
+uint32_t EnumerateKeyExpandToSetOperator::expandInner(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size) {
   uint32_t n_outputs = 0;
   while (input_index_ < current_inputs_->size()) {
     if (target_sets_.front().empty()) {
       // find next input with non-empty candidate target set
-      while (input_index_ < current_inputs_->size() && expandInner()) {
+      while (input_index_ < current_inputs_->size() && expandInner<profile>()) {
         ++input_index_;
       }
       if (target_sets_.front().empty()) {  // all inputs are consumed
@@ -114,6 +115,12 @@ uint32_t EnumerateKeyExpandToSetOperator::expand(std::vector<CompressedSubgraphs
         DCHECK(target_sets_[enumerate_key_depth + 1].empty());
         intersect(target_sets_[enumerate_key_depth], current_data_graph_->getOutNeighbors(key_vid),
                   &target_sets_[enumerate_key_depth + 1]);
+        if
+          constexpr(profile) {
+            updateIntersectInfo(
+                target_sets_[enumerate_key_depth].size() + current_data_graph_->getVertexOutDegree(key_vid),
+                target_sets_[enumerate_key_depth + 1].size());
+          }
         if (target_sets_[enumerate_key_depth + 1].empty()) {
           ++enumerate_key_idx_[enumerate_key_depth];
           continue;
@@ -167,6 +174,7 @@ std::string EnumerateKeyExpandToSetOperator::toString() const {
   return ss.str();
 }
 
+template <bool profile>
 bool EnumerateKeyExpandToSetOperator::expandInner() {  // handles a new input and init the transient states
   auto& input = (*current_inputs_)[input_index_];
   auto& target_set = target_sets_.front();
@@ -174,7 +182,12 @@ bool EnumerateKeyExpandToSetOperator::expandInner() {  // handles a new input an
   for (uint32_t i = 0; i < existing_key_parents_.size(); ++i) {
     uint32_t key = query_vertex_indices_[existing_key_parents_[i]];
     uint32_t key_vid = input.getKeyVal(key);
+    auto target_set_size = target_set.size();
     intersectInplace(target_set, current_data_graph_->getOutNeighbors(key_vid), &target_set);
+    if
+      constexpr(profile) {
+        updateIntersectInfo(target_set_size + current_data_graph_->getVertexOutDegree(key_vid), target_set.size());
+      }
     if (target_set.empty()) {
       break;
     }

@@ -30,8 +30,7 @@ class Operator {
 
   virtual std::string toString() const { return "Operator"; }
 
-  // TODO(tatiana): profile info
-  virtual std::string toProfileString() const { return "Operator"; }
+  virtual std::string toProfileString() const { return toString(); }
 
   virtual Operator* clone() const = 0;
 };

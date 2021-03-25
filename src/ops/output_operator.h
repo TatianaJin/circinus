@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <chrono>
 #include <fstream>
 #include <string>
 #include <vector>
@@ -22,6 +23,7 @@
 
 #include "graph/compressed_subgraphs.h"
 #include "ops/operator.h"
+#include "utils/utils.h"
 
 namespace circinus {
 
@@ -64,11 +66,29 @@ class Outputs {
 class OutputOperator : public Operator {
  protected:
   Outputs* outputs_;
+  double total_time_in_milliseconds_ = 0;
+  uint32_t total_num_input_subgraphs_ = 0;
 
  public:
   explicit OutputOperator(Outputs* outputs) : outputs_(outputs) {}
   static OutputOperator* newOutputOperator(OutputType type, Outputs* outputs);
   virtual bool validateAndOutput(const std::vector<CompressedSubgraphs>& input, uint32_t output_index) = 0;
+
+  inline bool validateAndOutputAndProfile(const std::vector<CompressedSubgraphs>& input, uint32_t output_index) {
+    auto start = std::chrono::high_resolution_clock::now();
+    auto ret = validateAndOutput(input, output_index);
+    auto stop = std::chrono::high_resolution_clock::now();
+    total_time_in_milliseconds_ +=
+        (std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start).count() / 1000000.0);
+    total_num_input_subgraphs_ += getNumSubgraphs(input, 0, input.size());
+    return ret;
+  }
+
+  std::string toProfileString() const override {
+    std::stringstream ss;
+    ss << toString() << ',' << total_time_in_milliseconds_ << ",,," << total_num_input_subgraphs_;
+    return ss.str();
+  }
 };
 
 class CountOutputOperator : public OutputOperator {

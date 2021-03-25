@@ -161,11 +161,22 @@ class Benchmark {
   void batchDFSExecuteST(const Graph* g, ExecutionPlan* plan) {
     auto seeds = plan->getCandidateSet(plan->getRootQueryVertexID());
     if (plan->isInCover(plan->getRootQueryVertexID())) {
-      plan->getOperators().handleInput(g, std::vector<CompressedSubgraphs>(seeds.begin(), seeds.end()));
+      plan->getOperators().execute(g, std::vector<CompressedSubgraphs>(seeds.begin(), seeds.end()));
     } else {
       std::vector<CompressedSubgraphs> input;
       input.emplace_back(std::make_shared<std::vector<VertexID>>(std::move(seeds)));
-      plan->getOperators().handleInput(g, input);
+      plan->getOperators().execute(g, input);
+    }
+  }
+
+  void batchDFSProfileST(const Graph* g, ExecutionPlan* plan) {
+    auto seeds = plan->getCandidateSet(plan->getRootQueryVertexID());
+    if (plan->isInCover(plan->getRootQueryVertexID())) {
+      plan->getOperators().profile(g, std::vector<CompressedSubgraphs>(seeds.begin(), seeds.end()));
+    } else {
+      std::vector<CompressedSubgraphs> input;
+      input.emplace_back(std::make_shared<std::vector<VertexID>>(std::move(seeds)));
+      plan->getOperators().profile(g, input);
     }
   }
 
@@ -253,8 +264,12 @@ class Benchmark {
     auto start_execution = std::chrono::steady_clock::now();
     // ProfilerStart("benchmark.prof");
     if (FLAGS_num_cores == 1) {
-      LOG(INFO) << "batchDFSExecuteST";
-      batchDFSExecuteST(&g, plan);
+      if (FLAGS_profile) {
+        batchDFSProfileST(&g, plan);
+      } else {
+        LOG(INFO) << "batchDFSExecuteST";
+        batchDFSExecuteST(&g, plan);
+      }
       // bfsExecute(&g, plan);
     } else {
       batchDFSExecute(&g, plan);
@@ -268,10 +283,15 @@ class Benchmark {
       ss << v << ' ';
     }
 
-    if (FLAGS_profile_file != "") {
+    if (FLAGS_profile_file != "" && FLAGS_num_cores > 1) {
       std::ofstream profile_stream;
       profile_stream.open(FLAGS_profile_file);
       profiler.profile(&profile_stream);
+      profile_stream.close();
+    } else if (FLAGS_profile_file != "") {
+      std::ofstream profile_stream;
+      profile_stream.open(FLAGS_profile_file);
+      plan->printProfiledPlan(profile_stream);
       profile_stream.close();
     }
 
