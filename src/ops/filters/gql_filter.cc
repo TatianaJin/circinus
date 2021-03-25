@@ -17,22 +17,35 @@
 namespace circinus {
 
 GQLFilter::GQLFilter(const QueryGraph* query_graph, QueryVertexID query_vid,
-                     std::unordered_map<QueryVertexID, std::unordered_set<VertexID>>* valid_candidates)
+                     unordered_map<QueryVertexID, unordered_set<VertexID>>* valid_candidates)
     : FilterBase(query_graph, nullptr), query_vid_(query_vid), valid_candidates_(valid_candidates) {}
 
 void GQLFilter::preFilter(const Graph& data_graph, std::vector<VertexID>& candidates) {
+  uint32_t num = 0;
   for (auto& data_vertex : candidates) {
+    if (data_vertex == INVALID_VERTEX_ID) {
+      continue;
+    }
+
     if (!verify(data_graph, data_vertex)) {
-      data_vertex = INVALID_VERTEX_ID;
+      num++;
       valid_candidates_->at(query_vid_).erase(data_vertex);
+      data_vertex = INVALID_VERTEX_ID;
     }
   }
 }
 
 uint32_t GQLFilter::Filter(const Graph& data_graph, std::vector<VertexID>& candidates, std::vector<VertexID>* output) {
   for (auto& data_vertex : candidates) {
-    if (data_vertex != INVALID_VERTEX_ID && verify(data_graph, data_vertex)) {
+    if (data_vertex == INVALID_VERTEX_ID) {
+      continue;
+    }
+
+    if (verify(data_graph, data_vertex)) {
       output->emplace_back(data_vertex);
+    } else {
+      valid_candidates_->at(query_vid_).erase(data_vertex);
+      data_vertex = INVALID_VERTEX_ID;
     }
   }
   return output->size();
@@ -45,18 +58,21 @@ bool GQLFilter::verify(const Graph& data_graph, VertexID data_vertex) {
   std::vector<uint32_t> left_to_right_edge;
   uint32_t* left_to_right_offset = new uint32_t[query_vertex_neighbors.second + 1];
   uint32_t edge_count = 0;
+
   for (uint32_t i = 0; i < query_vertex_neighbors.second; ++i) {
     QueryVertexID query_vertex_neighbor = query_vertex_neighbors.first[i];
     left_to_right_offset[i] = edge_count;
+    auto& valid_candidates = valid_candidates_->at(query_vertex_neighbor);
     for (uint32_t j = 0; j < data_vertex_neighbors.second; ++j) {
       VertexID data_vertex_neighbor = data_vertex_neighbors.first[j];
 
-      if (valid_candidates_->at(query_vertex_neighbor).count(data_vertex_neighbor) != 0) {
+      if (valid_candidates.find(data_vertex_neighbor) != valid_candidates.end()) {
         left_to_right_edge.emplace_back(j);
         edge_count++;
       }
     }
   }
+
   left_to_right_offset[query_vertex_neighbors.second] = edge_count;
   bool res = semiperfectBipartiteMatching(left_to_right_offset, left_to_right_edge, query_vertex_neighbors.second,
                                           data_vertex_neighbors.second);

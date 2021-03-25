@@ -20,8 +20,6 @@ namespace circinus {
 DPISOFilter::DPISOFilter(const QueryGraph* query_graph, const Graph* data_graph, QueryVertexID start_vertex)
     : FilterBase(query_graph, data_graph), start_vertex_(start_vertex) {
   uint32_t query_vertices_num = query_graph->getNumVertices();
-  tree_.resize(query_vertices_num);
-  bfs_order_.reserve(query_vertices_num);
   bfs(query_graph, start_vertex, tree_, bfs_order_);
   std::vector<uint32_t> order_index(query_vertices_num);
   for (uint32_t i = 0; i < query_vertices_num; ++i) {
@@ -51,12 +49,16 @@ void DPISOFilter::Filter(std::vector<std::vector<VertexID>>& candidates) {
     if (refine_time % 2 == 0) {
       for (QueryVertexID query_vertex : bfs_order_) {
         TreeNode& node = tree_[query_vertex];
-        pruneByPivotVertices(query_vertex, node.bn_, candidates);
+        if (node.bn_.size() > 0) {
+          pruneByPivotVertices(query_vertex, node.bn_, candidates);
+        }
       }
     } else {
       for (auto it = bfs_order_.rbegin(); it != bfs_order_.rend(); ++it) {
         TreeNode& node = tree_[*it];
-        pruneByPivotVertices(*it, node.fn_, candidates);
+        if (node.fn_.size() > 0) {
+          pruneByPivotVertices(*it, node.fn_, candidates);
+        }
       }
     }
   }
