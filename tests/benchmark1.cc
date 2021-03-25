@@ -100,8 +100,9 @@ class Benchmark1 {
       while (scan.Scan(&buffer, BATCH_SIZE) > 0) {
         if (FLAGS_filter == "dpiso") {
           candidates[v].insert(candidates[v].end(), buffer.begin(), buffer.end());
-        } else
+        } else {
           filter.Filter(g, buffer, &candidates[v]);
+        }
         buffer.clear();
       }
       candidate_size[v] = candidates[v].size();
