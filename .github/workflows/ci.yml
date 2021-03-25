@@ -12,7 +12,15 @@ jobs:
 
     steps:
     - run: echo "event commit $GITHUB_REF/${GITHUB_SHA}"
-    - uses: actions/checkout@v2
+
+    - name: Checkout
+      uses: actions/checkout@v2
+
+    - name: Checkout PR HEAD
+      if: ${{ GITHUB_EVENT_NAME == 'pull_request_target' }}
+      uses: actions/checkout@v2
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
 
     - name: Install dependencies
       run: |
