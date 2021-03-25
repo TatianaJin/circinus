@@ -145,8 +145,8 @@ void run(const std::string& dataset, const std::string& filter, std::vector<std:
   auto graph_path = dataset + "/data_graph/" + dataset + ".graph";
   auto data_dir_str = std::string(data_dir);
   Graph g(data_dir_str + "/" + graph_path);  // load data graph
-                                         //  LOG(INFO) << "========================";
-                                         // LOG(INFO) << "graph " << graph_path << " query " << query_path;
+                                             //  LOG(INFO) << "========================";
+                                             // LOG(INFO) << "graph " << graph_path << " query " << query_path;
   int index = 0;
   for (auto& query_size : query_size_list)
     for (auto& query_mode : query_mode_list)
