@@ -63,8 +63,8 @@ using circinus::unordered_set;
 
 const std::vector<std::string> datasets_ = {"dblp",    "eu2005",  "hprd",  "human",
                                             "patents", "wordnet", "yeast", "youtube"};
-const std::string data_dir = "/data/share/project/haxe/data/subgraph_matching_datasets";
-const std::string answer_dir = "/data/share/users/qlma/circinus-test/answer/";
+const char data_dir[] = "/data/share/project/haxe/data/subgraph_matching_datasets";
+const char answer_dir[] = "/data/share/users/qlma/circinus-test/answer/";
 const std::vector<int> query_size_list = {4, 8, 12, 16, 20, 24, 32};
 const std::vector<std::string> query_mode_list = {"dense", "sparse"};
 const std::pair<int, int> query_index_range = {1, 200};
@@ -83,8 +83,9 @@ std::vector<std::vector<VertexID>> getCandidateSets(const Graph& g, const QueryG
     while (scan.Scan(&buffer, BATCH_SIZE) > 0) {
       if (strcmp(filter_cstr, "dpiso") == 0) {
         candidates[v].insert(candidates[v].end(), buffer.begin(), buffer.end());
-      } else
+      } else {
         filter.Filter(g, buffer, &candidates[v]);
+      }
       buffer.clear();
     }
     candidate_size[v] = candidates[v].size();
@@ -160,8 +161,7 @@ void run(const std::string& dataset, const std::string& filter, std::vector<std:
           ss << v.size() << ' ';
         }
         std::string result_str = ss.str();
-        result_str.pop_back();  // delete blank
-                                //				LOG(INFO)<<result_str;
+        result_str.pop_back();
         std::string expect_str = answers[index++];
         EXPECT_EQ(result_str, expect_str);
       }
@@ -170,8 +170,7 @@ void run(const std::string& dataset, const std::string& filter, std::vector<std:
 bool getAnswers(const std::string& filter, const std::string& dataset, std::vector<std::string>& answers) {
   auto answer_path = answer_dir + filter;
   std::ifstream in(answer_path);
-  if (in)  // file exists
-  {
+  if (in) {
     std::string line;
     while (getline(in, line)) {
       if (line.rfind(dataset, 0) == 0) answers.emplace_back(line);
