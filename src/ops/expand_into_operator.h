@@ -20,22 +20,31 @@
 
 #include "graph/query_graph.h"
 #include "ops/traverse_operator.h"
+#include "ops/types.h"
 #include "utils/hashmap.h"
 
 namespace circinus {
 
 class ExpandIntoOperator : public TraverseOperator {
+  // for profiling
+  std::vector<QueryVertexID> key_parents_;  // the key parents of the previous operator
+  std::vector<unordered_set<std::string>> parent_tuple_sets_;
+
  public:
   ExpandIntoOperator(const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
-                     const unordered_map<QueryVertexID, uint32_t>& query_vertex_indices)
-      : parents_(parents), target_vertex_(target_vertex), query_vertex_indices_(query_vertex_indices) {}
+                     const unordered_map<QueryVertexID, uint32_t>& query_vertex_indices,
+                     const std::vector<QueryVertexID>& prev_key_parents)
+      : parents_(parents),
+        target_vertex_(target_vertex),
+        query_vertex_indices_(query_vertex_indices),
+        key_parents_(prev_key_parents) {}
 
   uint32_t expand(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size) override {
-    return expandInner<false>(outputs, batch_size);
+    return expandInner<QueryType::Execute>(outputs, batch_size);
   }
 
   uint32_t expandAndProfileInner(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size) override {
-    return expandInner<true>(outputs, batch_size);
+    return expandInner<QueryType::Profile>(outputs, batch_size);
   }
 
   std::string toString() const override {
@@ -52,27 +61,74 @@ class ExpandIntoOperator : public TraverseOperator {
 
   Operator* clone() const override {
     // TODO(tatiana): for now next_ is not handled because it is only used for printing plan
-    auto ret = new ExpandIntoOperator(parents_, target_vertex_, query_vertex_indices_);
+    auto ret = new ExpandIntoOperator(*this);
     return ret;
   }
 
  protected:
-  template <bool profile>
+  template <QueryType profile>
   inline uint32_t expandInner(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size) {
     uint32_t output_num = 0;
+    // for profiling distinct si count, consider the cost as expanding from all parents of the current target without
+    // compression
+    std::vector<VertexID> parent_tuple;
+    if
+      constexpr(isProfileMode(profile)) {
+        parent_tuple.resize(key_parents_.size() + parents_.size());
+        parent_tuple_sets_.resize(parents_.size());
+      }
     while (input_index_ < current_inputs_->size()) {
       auto input = (*current_inputs_)[input_index_];
       auto key_vertex_id = input.getKeyVal(query_vertex_indices_[target_vertex_]);
       auto key_out_neighbors = current_data_graph_->getOutNeighbors(key_vertex_id);
       bool add = true;
+      if
+        constexpr(isProfileMode(profile)) {
+          unordered_set<VertexID> prefix_set;
+          for (uint32_t i = 0; i < key_parents_.size(); ++i) {
+            parent_tuple[i] = input.getKeyVal(query_vertex_indices_[key_parents_[i]]);
+            prefix_set.insert(parent_tuple[i]);
+          }
+          std::vector<std::vector<VertexID>*> parent_set_ptrs;
+          parent_set_ptrs.reserve(parents_.size());
+          for (auto parent : parents_) {
+            parent_set_ptrs.push_back(input.getSet(query_vertex_indices_[parent]).get());
+          }
+          uint32_t depth = 0, last_depth = parents_.size() - 1;
+          std::vector<uint32_t> set_index(parents_.size(), 0);
+          while (true) {
+            while (set_index[depth] < parent_set_ptrs[depth]->size()) {
+              auto parent_vid = (*parent_set_ptrs[depth])[set_index[depth]];
+              if (prefix_set.count(parent_vid)) {
+                ++set_index[depth];
+                continue;
+              }
+              auto pidx = depth + key_parents_.size();
+              parent_tuple[pidx] = parent_vid;
+              distinct_intersection_count_ +=
+                  parent_tuple_sets_[depth].emplace((char*)parent_tuple.data(), (pidx + 1) * sizeof(VertexID)).second;
+              if (depth == last_depth) {
+                ++set_index[depth];
+              } else {
+                prefix_set.insert(parent_vid);
+                ++depth;
+                set_index[depth] = 0;
+              }
+            }
+            if (depth == 0) {
+              break;
+            }
+            --depth;
+            prefix_set.erase((*parent_set_ptrs[depth])[set_index[depth]]);
+            ++set_index[depth];
+          }
+        }
       for (QueryVertexID vid : parents_) {
         std::vector<VertexID> new_set;
         uint32_t id = query_vertex_indices_[vid];
-        // TODO(tatiana): how to calculate the ideal si count for this case? combine with the previous expand key to key
-        // operator?
         intersect(*(input.getSet(id)), key_out_neighbors, &new_set);
         if
-          constexpr(profile) {
+          constexpr(isProfileMode(profile)) {
             updateIntersectInfo(input.getSet(id)->size() + key_out_neighbors.second, new_set.size());
           }
         if (new_set.size() == 0) {

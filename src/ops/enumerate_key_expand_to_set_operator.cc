@@ -21,6 +21,7 @@
 
 #include "graph/types.h"
 #include "ops/expand_vertex_operator.h"
+#include "ops/types.h"
 #include "utils/hashmap.h"
 
 namespace circinus {
@@ -62,9 +63,15 @@ EnumerateKeyExpandToSetOperator::EnumerateKeyExpandToSetOperator(
   CHECK_EQ(query_vertex_indices_[target_vertex_], output_query_vertex_indices.size() - n_input_keys - 1);
 }
 
-template <bool profile>
+template <QueryType profile>
 uint32_t EnumerateKeyExpandToSetOperator::expandInner(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size) {
   uint32_t n_outputs = 0;
+  if
+    constexpr(isProfileMode(profile)) {
+      parent_tuple_sets_.resize(parents_.size());
+      parent_tuple_.resize(parents_.size());
+    }
+
   while (input_index_ < current_inputs_->size()) {
     if (target_sets_.front().empty()) {
       // find next input with non-empty candidate target set
@@ -113,15 +120,17 @@ uint32_t EnumerateKeyExpandToSetOperator::expandInner(std::vector<CompressedSubg
           continue;
         }
         DCHECK(target_sets_[enumerate_key_depth + 1].empty());
-        // TODO(tatiana): how to calculate the ideal si count for this case? consider reuse of partial intersection
-        // results? how to use unordered_set on tuples with sizes only known at runtime?
         intersect(target_sets_[enumerate_key_depth], current_data_graph_->getOutNeighbors(key_vid),
                   &target_sets_[enumerate_key_depth + 1]);
         if
-          constexpr(profile) {
+          constexpr(isProfileMode(profile)) {
             updateIntersectInfo(
                 target_sets_[enumerate_key_depth].size() + current_data_graph_->getVertexOutDegree(key_vid),
                 target_sets_[enumerate_key_depth + 1].size());
+            auto pidx = enumerate_key_depth + existing_key_parents_.size();  // parent index
+            parent_tuple_[pidx] = key_vid;
+            distinct_intersection_count_ +=
+                parent_tuple_sets_[pidx].emplace((char*)parent_tuple_.data(), (pidx + 1) * sizeof(VertexID)).second;
           }
         if (target_sets_[enumerate_key_depth + 1].empty()) {
           ++enumerate_key_idx_[enumerate_key_depth];
@@ -176,7 +185,7 @@ std::string EnumerateKeyExpandToSetOperator::toString() const {
   return ss.str();
 }
 
-template <bool profile>
+template <QueryType profile>
 bool EnumerateKeyExpandToSetOperator::expandInner() {  // handles a new input and init the transient states
   auto& input = (*current_inputs_)[input_index_];
   auto& target_set = target_sets_.front();
@@ -185,13 +194,15 @@ bool EnumerateKeyExpandToSetOperator::expandInner() {  // handles a new input an
     uint32_t key = query_vertex_indices_[existing_key_parents_[i]];
     uint32_t key_vid = input.getKeyVal(key);
     auto target_set_size = target_set.size();
-    // TODO(tatiana): how to calculate the ideal si count for this case? consider reuse of partial intersection
-    // results? how to use unordered_set on tuples with sizes only known at runtime?
     intersectInplace(target_set, current_data_graph_->getOutNeighbors(key_vid), &target_set);
     if
-      constexpr(profile) {
+      constexpr(isProfileMode(profile)) {
         updateIntersectInfo(target_set_size + current_data_graph_->getVertexOutDegree(key_vid), target_set.size());
+        parent_tuple_[i] = key_vid;
+        distinct_intersection_count_ +=
+            parent_tuple_sets_[i].emplace((char*)parent_tuple_.data(), (i + 1) * sizeof(VertexID)).second;
       }
+
     if (target_set.empty()) {
       break;
     }

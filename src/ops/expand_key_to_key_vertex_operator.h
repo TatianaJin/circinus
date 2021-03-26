@@ -17,24 +17,27 @@
 #include <string>
 #include <vector>
 
-#include "graph/query_graph.h"
+#include "graph/types.h"
 #include "ops/expand_vertex_operator.h"
+#include "ops/types.h"
 #include "utils/hashmap.h"
 
 namespace circinus {
 
 class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
+  std::vector<unordered_set<std::string>> parent_tuple_sets_;
+
  public:
   ExpandKeyToKeyVertexOperator(const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
                                const unordered_map<QueryVertexID, uint32_t>& query_vertex_indices)
       : ExpandVertexOperator(parents, target_vertex, query_vertex_indices) {}
 
   uint32_t expand(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size) override {
-    return expandInner<false>(outputs, batch_size);
+    return expandInner<QueryType::Execute>(outputs, batch_size);
   }
 
   uint32_t expandAndProfileInner(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size) override {
-    return expandInner<true>(outputs, batch_size);
+    return expandInner<QueryType::Profile>(outputs, batch_size);
   }
 
   std::string toString() const override {
@@ -53,8 +56,10 @@ class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
   }
 
  protected:
-  template <bool profile>
+  template <QueryType profile>
   inline uint32_t expandInner(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size) {
+    if
+      constexpr(isProfileMode(profile)) { parent_tuple_sets_.resize(parents_.size()); }
     uint32_t output_num = 0;
     while (input_index_ < current_inputs_->size()) {
       std::vector<VertexID> new_keys;
@@ -62,12 +67,10 @@ class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
       for (uint32_t i = 0; i < parents_.size(); ++i) {
         uint32_t key = query_vertex_indices_[parents_[i]];
         uint32_t key_vid = input.getKeyVal(key);
-        // TODO(tatiana): how to calculate the ideal si count for this case? consider reuse of partial intersection
-        // results? how to use unordered_set on tuples with sizes only known at runtime?
         if (i == 0) {
           intersect(*candidates_, current_data_graph_->getOutNeighbors(key_vid), &new_keys);
           if
-            constexpr(profile) {
+            constexpr(isProfileMode(profile)) {
               updateIntersectInfo(candidates_->size() + current_data_graph_->getVertexOutDegree(key_vid),
                                   new_keys.size());
             }
@@ -75,7 +78,7 @@ class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
           auto new_keys_size = new_keys.size();
           intersectInplace(new_keys, current_data_graph_->getOutNeighbors(key_vid), &new_keys);
           if
-            constexpr(profile) {
+            constexpr(isProfileMode(profile)) {
               updateIntersectInfo(new_keys_size + current_data_graph_->getVertexOutDegree(key_vid), new_keys.size());
             }
         }
@@ -83,6 +86,17 @@ class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
           break;
         }
       }
+      if
+        constexpr(isProfileMode(profile)) {
+          // consider reuse of partial intersection results at each parent
+          std::vector<VertexID> parent_tuple(parents_.size());
+          for (uint32_t i = 0; i < parents_.size(); ++i) {
+            uint32_t key_vid = input.getKeyVal(query_vertex_indices_[parents_[i]]);
+            parent_tuple[i] = key_vid;
+            distinct_intersection_count_ +=
+                parent_tuple_sets_[i].emplace((char*)parent_tuple.data(), (i + 1) * sizeof(VertexID)).second;
+          }
+        }
       if (new_keys.size() != 0) {
         for (VertexID new_key : new_keys) {
           if (input.isExisting(new_key)) {

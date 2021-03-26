@@ -228,7 +228,7 @@ class TestSubgraphMatching : public testing::Test {
               outputs[!(i & 1)].clear();
               delete op0;
               start = std::chrono::high_resolution_clock::now();
-              auto op1 = new ExpandIntoOperator(set_parents, target, indices);
+              auto op1 = new ExpandIntoOperator(set_parents, target, indices, key_parents);
               op1->setCandidateSets(&candidates[target]);
               op1->input(outputs[i & 1], &g);
               while (op1->expand(&outputs[!(i & 1)], batch_size) > 0) {

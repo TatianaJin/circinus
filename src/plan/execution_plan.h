@@ -139,7 +139,8 @@ class ExecutionPlan {
   TraverseOperator* newExpandKeyKeyVertexOperator(std::vector<QueryVertexID>& parents, QueryVertexID target_vertex);
   TraverseOperator* newExpandSetVertexOperator(std::vector<QueryVertexID>& parents, QueryVertexID target_vertex);
   TraverseOperator* newExpandSetToKeyVertexOperator(std::vector<QueryVertexID>& parents, QueryVertexID target_vertex);
-  TraverseOperator* newExpandIntoOperator(std::vector<QueryVertexID>& parents, QueryVertexID target_vertex);
+  TraverseOperator* newExpandIntoOperator(const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
+                                          const std::vector<QueryVertexID>& prev_key_parents);
   TraverseOperator* newEnumerateKeyExpandToSetOperator(
       const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
       const std::vector<QueryVertexID>& keys_to_enumerate,

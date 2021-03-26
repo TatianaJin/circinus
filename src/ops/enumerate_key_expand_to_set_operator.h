@@ -20,6 +20,7 @@
 
 #include "graph/types.h"
 #include "ops/expand_vertex_operator.h"
+#include "ops/types.h"
 #include "utils/hashmap.h"
 
 namespace circinus {
@@ -38,6 +39,10 @@ class EnumerateKeyExpandToSetOperator : public ExpandVertexOperator {
   std::vector<std::vector<VertexID>> target_sets_;  // now we store and reuse the intermediate intersection results
   unordered_set<VertexID> existing_key_vertices_;
 
+  /* for profiling */
+  std::vector<unordered_set<std::string>> parent_tuple_sets_;
+  std::vector<VertexID> parent_tuple_;
+
  public:
   EnumerateKeyExpandToSetOperator(const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
                                   const unordered_map<QueryVertexID, uint32_t>& input_query_vertex_indices,
@@ -46,11 +51,11 @@ class EnumerateKeyExpandToSetOperator : public ExpandVertexOperator {
                                   const std::vector<int>& cover_table);
 
   uint32_t expand(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size) override {
-    return expandInner<false>(outputs, batch_size);
+    return expandInner<QueryType::Execute>(outputs, batch_size);
   }
 
   uint32_t expandAndProfileInner(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size) override {
-    return expandInner<true>(outputs, batch_size);
+    return expandInner<QueryType::Profile>(outputs, batch_size);
   }
 
   std::string toString() const override;
@@ -61,10 +66,10 @@ class EnumerateKeyExpandToSetOperator : public ExpandVertexOperator {
   }
 
  private:
-  template <bool profile>
+  template <QueryType>
   uint32_t expandInner(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size);
 
-  template <bool profile>
+  template <QueryType>
   bool expandInner();
 };
 

@@ -33,7 +33,6 @@ namespace circinus {
 bool OperatorTree::handleTask(Task* task, TaskQueue* queue, uint32_t thread_id) {
   auto op = operators_[task->getLevel()];
 
-  // TODO(tatiana): handle non-traverse operators
   auto traverse_op = dynamic_cast<TraverseOperator*>(op);
   if (traverse_op == nullptr) {
     auto output_op = dynamic_cast<OutputOperator*>(op);
