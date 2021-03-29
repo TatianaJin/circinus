@@ -84,7 +84,7 @@ class ExecutionPlan {
   inline OperatorTree& getOperators() { return operators_; }
 
   inline void setCandidateSets(std::vector<std::vector<VertexID>>& cs) {
-    candidate_sets_.swap(cs);
+    candidate_sets_ = cs;
     uint64_t total_key_candidate_size = 1, total_set_candidate_size = 1;
     for (uint32_t i = 0; i < candidate_sets_.size(); ++i) {
       DLOG(INFO) << "query vertex " << i << ": " << candidate_sets_[i].size() << " candidates";
@@ -102,8 +102,16 @@ class ExecutionPlan {
   }
 
   inline const std::vector<VertexID>& getCandidateSet(QueryVertexID id) const {
-    DCHECK_LT(id, candidate_sets_.size());
+    CHECK_LT(id, candidate_sets_.size());
     return candidate_sets_[id];
+  }
+  
+  inline const bool isToKey(QueryVertexID id) const {
+    return dynamic_cover_key_level_.count(id) != 0;
+  }
+
+  inline const uint32_t getToKeyLevel(QueryVertexID id) const {
+    return dynamic_cover_key_level_.find(id)->second;
   }
 
   inline OperatorTree cloneOperators() const { return operators_.clone(); }

@@ -26,6 +26,14 @@
 
 namespace circinus {
 
+struct CoverNode {
+  std::vector<QueryVertexID> cover_;
+  uint64_t cover_bits_;
+  uint32_t cardinality_;
+  uint32_t parents_all_keys_cardinality_;
+  std::vector<uint32_t> parents_;
+};
+
 class NaivePlanner {
  private:
   const QueryGraph* query_graph_;
@@ -33,7 +41,10 @@ class NaivePlanner {
   WeightedBnB vertex_cover_solver_;
   ExecutionPlan plan_;
 
+  std::vector<std::vector<CoverNode>> covers_;
+  std::vector<std::vector<QueryVertexID>> to_intersect_vertices_;
   std::vector<QueryVertexID> matching_order_;
+  std::vector<double> level_cost_;
 
  public:
   NaivePlanner(QueryGraph* query_graph, std::vector<double>* candidate_cardinality)
@@ -44,10 +55,16 @@ class NaivePlanner {
   bool hasValidCandidate();
 
   const auto& getMatchingOrder() const { return matching_order_; }
+  const auto& getCovers() const { return covers_; }
+  const auto& getToIntersectVertices() const { return to_intersect_vertices_; }
 
   ExecutionPlan* generatePlan(const std::vector<QueryVertexID>& use_order = {}, Profiler* profiler = nullptr);
+  ExecutionPlan* generateSamplePlan(const std::vector<QueryVertexID>& use_order = {}, Profiler* profiler = nullptr);
   ExecutionPlan* generatePlanWithEagerDynamicCover(const std::vector<QueryVertexID>& use_order = {},
-                                                   Profiler* profiler = nullptr);
+                                               Profiler* profiler = nullptr);
+
+ExecutionPlan* generatePlanWithSampleExecution (const std::vector<std::vector<double>>& cardinality, const std::vector<double>& level_cost, Profiler* profiler);
+  void generateCoverNode (const std::vector<QueryVertexID>& use_order);
 
   std::pair<uint32_t, uint32_t> analyzeDynamicCoreCoverEager(const std::vector<QueryVertexID>& use_order = {});
   std::tuple<uint32_t, uint32_t, uint32_t> analyzeDynamicCoreCoverMWVC(

@@ -165,7 +165,10 @@ class CompressedSubgraphs {
   }
 
   /** Get the value of the key vertex at key_idx. */
-  VertexID getKeyVal(uint32_t key_idx) const { return keys_[key_idx]; }
+  VertexID getKeyVal(uint32_t key_idx) const { 
+    CHECK(key_idx < keys_.size()) << key_idx << "  " << keys_.size();
+    return keys_[key_idx]; 
+  }
 
   const std::vector<VertexID>& getKeys() const { return keys_; }
   std::vector<VertexID>& getKeys() { return keys_; }

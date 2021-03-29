@@ -18,4 +18,5 @@
 
 DEFINE_int32(batch_size, 1024, "Batch size for input and output.");
 DEFINE_int32(num_cores, 1, "The number of cores to use for thread pool.");
+DEFINE_int32(cover_size, 10, "The number of candidated ceovers size.");
 DEFINE_bool(profile, false, "True means profiling the execution");

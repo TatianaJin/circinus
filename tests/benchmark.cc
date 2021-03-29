@@ -17,6 +17,7 @@
 #include <fstream>
 #include <string>
 #include <vector>
+#include <random>
 
 #include "gflags/gflags.h"
 #include "glog/logging.h"
@@ -37,6 +38,7 @@
 #include "plan/naive_planner.h"
 #include "utils/flags.h"
 #include "utils/profiler.h"
+#include "utils/hashmap.h"
 
 using circinus::CompressedSubgraphs;
 using circinus::ExecutionPlan;
@@ -54,6 +56,7 @@ using circinus::VertexID;
 using circinus::Profiler;
 using circinus::DPISOFilter;
 using circinus::OrderBase;
+using circinus::CoverNode;
 
 #define BATCH_SIZE FLAGS_batch_size
 #define toSeconds(start, end) \
@@ -71,7 +74,7 @@ DEFINE_string(filter, "nlf", "filter");
 DEFINE_string(profile_file, "", "profile file");
 DEFINE_string(vertex_cover, "static", "Vertex cover strategy: static, eager");
 
-enum VertexCoverStrategy : uint32_t { Static = 0, Eager };
+enum VertexCoverStrategy : uint32_t { Static = 0, Eager , Sample};
 
 class Benchmark {
  protected:
@@ -159,12 +162,16 @@ class Benchmark {
   }
 
   void batchDFSExecuteST(const Graph* g, ExecutionPlan* plan) {
+    LOG(INFO) << plan->getRootQueryVertexID();
     auto seeds = plan->getCandidateSet(plan->getRootQueryVertexID());
-    if (plan->isInCover(plan->getRootQueryVertexID())) {
+    LOG(INFO) << plan->getRootQueryVertexID();
+    if (plan->isInCover(plan->getRootQueryVertexID()) 
+        && (FLAGS_vertex_cover != "sample" || plan->getToKeyLevel(plan->getRootQueryVertexID()) == 0)) {
+      LOG(INFO) << "key";
       plan->getOperators().handleInput(g, std::vector<CompressedSubgraphs>(seeds.begin(), seeds.end()));
     } else {
-      std::vector<CompressedSubgraphs> input;
-      input.emplace_back(std::make_shared<std::vector<VertexID>>(std::move(seeds)));
+      std::vector<CompressedSubgraphs> input = {CompressedSubgraphs(std::make_shared<std::vector<VertexID>>(seeds))};
+      LOG(INFO) << "set";
       plan->getOperators().handleInput(g, input);
     }
   }
@@ -198,6 +205,99 @@ class Benchmark {
     }
   }
 
+  std::string merge(const std::vector<VertexID>& arr, char delim) {
+    std::string res = "";
+    for (uint32_t i = 0; i < arr.size(); ++i) {
+      res += std::to_string(arr[i]) + (i + 1 == arr.size() ? "" : ",");
+    }
+    return res;
+  }
+
+  void processOutput(const std::vector<CompressedSubgraphs>& outputs, const std::vector<uint32_t>& order_idx, const std::vector<CoverNode>& cover_nodes, const std::vector<QueryVertexID>& to_intersect_vertices, std::vector<double>& cardinality) {
+  
+    for (const auto& cover_node : cover_nodes) {
+      std::unordered_set<std::string> match_set;
+      for (const auto& compressed_subgraph : outputs) {
+        std::vector<VertexID> match;
+        for (uint32_t qid : cover_node.cover_) {
+          bool not_in_interset = true;
+          for (QueryVertexID to_intersect_vertex : to_intersect_vertices) {
+            if (qid == to_intersect_vertex) {
+              not_in_interset = false;
+            }
+          }
+          if (not_in_interset) {
+            match.emplace_back(compressed_subgraph.getKeyVal(order_idx[qid]));
+          }
+        }
+
+        for (QueryVertexID to_intersect_vertex : to_intersect_vertices) {
+          match.emplace_back(compressed_subgraph.getKeyVal(order_idx[to_intersect_vertex]));
+        }
+
+        match_set.insert(merge(match, ','));
+      } 
+      cardinality.emplace_back(match_set.size());
+    } 
+  }
+
+  void sampleBfsExecute(const Graph* g, const ExecutionPlan* plan, const std::vector<uint32_t>& order_idx, const std::vector<std::vector<CoverNode>>& cover_nodes, const std::vector<std::vector<QueryVertexID>>& to_intersect_vertices, std::vector<std::vector<double>>& cardinality, std::vector<double>& level_cost) {
+    auto seeds = plan->getCandidateSet(plan->getRootQueryVertexID());
+    std::vector<CompressedSubgraphs> outputs;
+    cardinality.resize(order_idx.size());
+    std::vector<double> level_size;
+    std::vector<double> sample_ratio;
+    // level, cover_vertex_id, number
+    std::vector<VertexID> sample_seeds;
+    std::sample(seeds.begin(), seeds.end(), std::back_inserter(sample_seeds), 1000, std::mt19937{std::random_device{}()});
+    std::vector<CompressedSubgraphs> input(sample_seeds.begin(), sample_seeds.end());
+    auto current_op = plan->getOperators().root();
+    auto op = dynamic_cast<circinus::TraverseOperator*>(current_op);
+    uint32_t op_idx = 0;
+    level_size.emplace_back(seeds.size());
+    sample_ratio.emplace_back(seeds.size() / (double)sample_seeds.size());
+    // the first level
+    cardinality[0].push_back(seeds.size());
+    cardinality[0].push_back(seeds.size());
+
+    while (op != nullptr) {
+      auto start = std::chrono::steady_clock::now();
+      op->input(input, g);
+      LOG(INFO) << typeid(*op).name() ;
+      while (op->expand(&outputs, FLAGS_batch_size) > 0) {
+      }
+      auto end = std::chrono::steady_clock::now();
+      input.clear();
+      level_size.emplace_back(outputs.size());
+      LOG(INFO) << op_idx++ << ": # groups " << outputs.size() << " # matches " << getNumIsomorphicSubgraphs(outputs)
+                << '/' << getNumSubgraphs(outputs) << " " << op->toString() << " " << toSeconds(start, end) << "s";
+      level_cost.emplace_back(toSeconds(start, end));
+      processOutput(outputs, order_idx, cover_nodes[op_idx], to_intersect_vertices[op_idx], cardinality[op_idx]);
+      LOG(INFO) << "processOutput " << op_idx << " finished.";
+      std::sample(outputs.begin(), outputs.end(), std::back_inserter(input), 100, std::mt19937{std::random_device{}()});
+      sample_ratio.emplace_back(outputs.size() / (double)input.size());
+      outputs.clear();
+      current_op = current_op->getNext();
+      op = dynamic_cast<circinus::TraverseOperator*>(current_op);
+    }
+    
+    level_size[0] = seeds.size();
+    for (uint32_t i = 1; i < level_size.size(); ++i) {
+      sample_ratio[i] *= sample_ratio[i-1];
+      level_size[i] *= sample_ratio[i-1];
+      LOG(INFO) << "level " << i << " size " << sample_ratio[i];
+      for (auto& car : cardinality[i]) {
+        car *= sample_ratio[i-1];
+      }
+    }
+    for (uint32_t i = 0; i < level_size.size(); ++i) {
+      LOG(INFO) << "level " << i << " size " << level_size[i];
+    }
+    for (uint32_t i = 0; i < level_cost.size(); ++i) {
+      LOG(INFO) << "op " << i << " time usage " << level_cost[i];
+    }
+  }
+
   std::vector<QueryVertexID> getOrder(const std::string& order_str, uint32_t size) {
     std::vector<QueryVertexID> order;
     if (order_str.empty()) return order;
@@ -216,6 +316,32 @@ class Benchmark {
     return order;
   }
 
+  void run_sample(Graph& g, QueryGraph& q, std::vector<std::vector<VertexID>>& candidates, const std::vector<QueryVertexID>& use_order, const std::vector<std::vector<CoverNode>>& covers, const std::vector<std::vector<QueryVertexID>>& to_intersect_vertices, std::vector<std::vector<double>>& cardinality, std::vector<double>& level_cost) {
+    std::vector<double> candidate_cardinality;
+    candidate_cardinality.reserve(candidates.size());
+    for (auto& set : candidates) {
+      double size = set.size();
+      candidate_cardinality.push_back(std::log2(size));
+    }
+    
+    NaivePlanner planner(&q, &candidate_cardinality);
+    ExecutionPlan* plan;
+    plan = planner.generateSamplePlan(use_order); 
+    plan->setCandidateSets(candidates);  // swap
+    plan->printPhysicalPlan();
+    plan->getOutputs().init(FLAGS_num_cores).limit(FLAGS_match_limit);
+   
+    // order to order_idx
+    std::vector<uint32_t> order_idx(use_order.size(), 0);
+    for (uint32_t i = 0; i < use_order.size(); ++i) {
+      order_idx[use_order[i]] = i;
+    }
+    auto start = std::chrono::steady_clock::now();
+    sampleBfsExecute(&g, plan, order_idx, covers, to_intersect_vertices, cardinality, level_cost);
+    auto end = std::chrono::steady_clock::now();
+    LOG(INFO) << "sample execution time " << toSeconds(start, end); 
+  }
+  
   template <VertexCoverStrategy vcs>
   void run(const std::string& graph_path, const std::string& query_path, std::ostream* out) {
     auto start_loading = std::chrono::steady_clock::now();
@@ -241,6 +367,16 @@ class Benchmark {
       plan = planner.generatePlan(use_order, &profiler);
     } else if (vcs == Eager) {
       plan = planner.generatePlanWithEagerDynamicCover(use_order, &profiler);
+    } else if (vcs == Sample) {
+      planner.generateCoverNode(use_order);
+      const auto& match_order = planner.getMatchingOrder();
+      const auto& covers = planner.getCovers();
+      const auto& to_intersect_vertices = planner.getToIntersectVertices();
+      std::vector<std::vector<double>> cardinality;
+      std::vector<double> level_cost;
+      run_sample(g, q, candidates, match_order, covers, to_intersect_vertices, cardinality, level_cost);
+      LOG(INFO) << "Sample Execution Finished.";
+      plan = planner.generatePlanWithSampleExecution(cardinality, level_cost, &profiler);
     } else {
       LOG(ERROR) << "Unknown vertex cover strategy " << FLAGS_vertex_cover;
       return;
@@ -305,8 +441,10 @@ int main(int argc, char** argv) {
   FLAGS_profile = (FLAGS_profile_file != "");
   if (FLAGS_vertex_cover == "static") {
     benchmark.run<Static>(FLAGS_dataset, FLAGS_query_size, FLAGS_query_mode, FLAGS_query_index, out);
-  } else {
+  } else if (FLAGS_vertex_cover == "eager") {
     benchmark.run<Eager>(FLAGS_dataset, FLAGS_query_size, FLAGS_query_mode, FLAGS_query_index, out);
+  } else {
+    benchmark.run<Sample>(FLAGS_dataset, FLAGS_query_size, FLAGS_query_mode, FLAGS_query_index, out);
   }
   fstream.close();
 
