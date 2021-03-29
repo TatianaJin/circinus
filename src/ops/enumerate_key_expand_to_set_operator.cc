@@ -51,6 +51,7 @@ EnumerateKeyExpandToSetOperator::EnumerateKeyExpandToSetOperator(
       n_input_keys += (keys_to_enumerate_set.count(pair.first) == 0);
     }
   }
+  n_input_keys_ = n_input_keys;
   for (auto v : keys_to_enumerate_) {
     DCHECK(input_query_vertex_indices.count(v));
     enumerate_key_old_indices_[v] = input_query_vertex_indices.at(v);
@@ -84,20 +85,23 @@ uint32_t EnumerateKeyExpandToSetOperator::expand(std::vector<CompressedSubgraphs
       }
       existing_key_vertices_.clear();
       existing_key_vertices_.insert(input.getKeys().begin(), input.getKeys().end());
+      DCHECK_EQ(existing_key_vertices_.size(), n_input_keys_) << input.getNumKeys();
     }
 
     const auto& input = (*current_inputs_)[input_index_];
     const uint32_t enumerate_key_size = keys_to_enumerate_.size();
     // set existing matched vertices in output
-    CompressedSubgraphs output(input.getNumKeys() + enumerate_key_size, input.getNumVertices() + 1);
+    CompressedSubgraphs output(n_input_keys_ + enumerate_key_size, input.getNumVertices() + 1);
     std::copy(input.getKeys().begin(), input.getKeys().end(), output.getKeys().begin());
     DCHECK_EQ(set_old_to_new_pos_.size(), output.getNumSets() - 1);
     for (auto& pair : set_old_to_new_pos_) {
       output.UpdateSets(pair.second, input.getSet(pair.first));
     }  // TODO(tatiana): partially set output
-    uint32_t enumerate_key_depth = existing_key_vertices_.size() - input.getNumKeys();
+    uint32_t enumerate_key_depth = existing_key_vertices_.size() - n_input_keys_;
     if (enumerate_key_depth != 0) {  // if continuing from a previously processed input
-      CHECK_EQ(enumerate_key_depth, enumerate_key_size - 1);
+      CHECK_EQ(enumerate_key_depth, enumerate_key_size - 1)
+          << "existing_key_vertices_.size()=" << existing_key_vertices_.size()
+          << ", input.getNumKeys()=" << input.getNumKeys() << '/' << n_input_keys_;
     }
     while (true) {
       while (enumerate_key_idx_[enumerate_key_depth] < enumerate_key_pos_sets_[enumerate_key_depth]->size()) {

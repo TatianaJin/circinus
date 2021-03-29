@@ -104,7 +104,11 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
   uint32_t fromCandidateStrategy(std::vector<CompressedSubgraphs>* outputs) {
     auto& input = (*current_inputs_)[input_index_];
     uint32_t output_num = 0;
+    auto key_map = input.getKeyMap();
     for (VertexID key_vertex_id : *candidates_) {
+      if (key_map.count(key_vertex_id)) {
+        continue;
+      }
       auto key_out_neighbors = current_data_graph_->getOutNeighbors(key_vertex_id);
       // TODO(by) hash key_out_neighbors
       CompressedSubgraphs new_output(input, key_vertex_id);
@@ -133,10 +137,14 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
     auto& input = (*current_inputs_)[input_index_];
     uint32_t output_num = 0;
     const auto& parent_match = input.getSet(query_vertex_indices_[min_parent]);
+    auto key_map = input.getKeyMap();
     for (VertexID vid : *parent_match) {
       const auto& out_neighbors = current_data_graph_->getOutNeighbors(vid);
       for (uint32_t i = 0; i < out_neighbors.second; ++i) {
         VertexID key_vertex_id = out_neighbors.first[i];
+        if (key_map.count(key_vertex_id)) {
+          continue;
+        }
         if (visited.insert(key_vertex_id).second) {
           if (!isInCandidates(key_vertex_id)) {
             continue;
