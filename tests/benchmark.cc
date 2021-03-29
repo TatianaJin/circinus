@@ -15,6 +15,7 @@
 #include <chrono>
 #include <cmath>
 #include <fstream>
+#include <random>
 #include <string>
 #include <vector>
 
@@ -36,6 +37,7 @@
 #include "plan/execution_plan.h"
 #include "plan/naive_planner.h"
 #include "utils/flags.h"
+#include "utils/hashmap.h"
 #include "utils/profiler.h"
 
 using circinus::CompressedSubgraphs;
@@ -54,6 +56,8 @@ using circinus::VertexID;
 using circinus::Profiler;
 using circinus::DPISOFilter;
 using circinus::OrderBase;
+using circinus::CoverNode;
+using circinus::QueryType;
 
 #define BATCH_SIZE FLAGS_batch_size
 #define toSeconds(start, end) \
@@ -71,7 +75,7 @@ DEFINE_string(filter, "nlf", "filter");
 DEFINE_string(profile_file, "", "profile file");
 DEFINE_string(vertex_cover, "static", "Vertex cover strategy: static, eager, all");
 
-enum VertexCoverStrategy : uint32_t { Static = 0, Eager, All };
+enum VertexCoverStrategy : uint32_t { Static = 0, Eager, Sample, Dynamic, All };
 
 class Benchmark {
  protected:
@@ -160,7 +164,9 @@ class Benchmark {
 
   void batchDFSExecuteST(const Graph* g, ExecutionPlan* plan) {
     auto seeds = plan->getCandidateSet(plan->getRootQueryVertexID());
-    if (plan->isInCover(plan->getRootQueryVertexID())) {
+    if (plan->isInCover(plan->getRootQueryVertexID()) &&
+        (FLAGS_vertex_cover == "static" || FLAGS_vertex_cover == "all" ||
+         plan->getToKeyLevel(plan->getRootQueryVertexID()) == 0)) {
       plan->getOperators().execute(g, std::vector<CompressedSubgraphs>(seeds.begin(), seeds.end()));
     } else {
       std::vector<CompressedSubgraphs> input;
@@ -171,7 +177,9 @@ class Benchmark {
 
   void batchDFSProfileST(const Graph* g, ExecutionPlan* plan) {
     auto seeds = plan->getCandidateSet(plan->getRootQueryVertexID());
-    if (plan->isInCover(plan->getRootQueryVertexID())) {
+    if (plan->isInCover(plan->getRootQueryVertexID()) &&
+        (FLAGS_vertex_cover == "static" || FLAGS_vertex_cover == "all" ||
+         plan->getToKeyLevel(plan->getRootQueryVertexID()) == 0)) {
       plan->getOperators().profile(g, std::vector<CompressedSubgraphs>(seeds.begin(), seeds.end()));
     } else {
       std::vector<CompressedSubgraphs> input;
@@ -209,6 +217,66 @@ class Benchmark {
     }
   }
 
+  void sampleBfsExecute(const Graph* g, const ExecutionPlan* plan, const std::vector<uint32_t>& order_idx,
+                        std::vector<std::vector<double>>& cardinality, std::vector<double>& level_cost) {
+    auto seeds = plan->getCandidateSet(plan->getRootQueryVertexID());
+    std::vector<CompressedSubgraphs> outputs;
+    cardinality.resize(order_idx.size());
+    std::vector<double> sample_ratio;
+
+    const uint32_t sample_num = 5000;
+    std::vector<VertexID> sample_seeds;
+    std::random_device rd;
+    std::sample(seeds.begin(), seeds.end(), std::back_inserter(sample_seeds), sample_num, std::mt19937(rd()));
+    std::vector<CompressedSubgraphs> input(sample_seeds.begin(), sample_seeds.end());
+    auto current_op = plan->getOperators().root();
+    auto op = dynamic_cast<circinus::TraverseOperator*>(current_op);
+    uint32_t op_idx = 0;
+    sample_ratio.emplace_back(seeds.size() / (double)sample_seeds.size());
+    // the first level
+    cardinality[0].emplace_back(seeds.size());
+    while (op != nullptr) {
+      auto start = std::chrono::steady_clock::now();
+      op->input(input, g);
+      while (op->expandAndProfile(&outputs, FLAGS_batch_size) > 0) {
+      }
+      auto end = std::chrono::steady_clock::now();
+      double time = toSeconds(start, end);
+      level_cost.emplace_back(time);
+      LOG(INFO) << time << "  " << op->getIntersectionCount() << "  " << op->getTotalIntersectionInputSize() << "  "
+                << op->getTotalIntersectionOutputSize() << "  " << op->getDistinctIntersectionCount();
+
+      LOG(INFO) << op_idx++ << ": # groups " << outputs.size() << " # matches " << getNumIsomorphicSubgraphs(outputs)
+                << '/' << getNumSubgraphs(outputs) << " " << op->toString() << " " << toSeconds(start, end) << "s";
+      cardinality[op_idx].resize(order_idx.size());
+      for (uint32_t i = 0; i <= op_idx; ++i) {
+        circinus::unordered_set<VertexID> vertex_set;
+        for (const auto& output : outputs) {
+          vertex_set.insert(output.getKeyVal(i));
+        }
+        cardinality[op_idx][i] = vertex_set.size();
+      }
+      input.clear();
+      std::sample(outputs.begin(), outputs.end(), std::back_inserter(input), sample_num, std::mt19937(rd()));
+
+      sample_ratio.emplace_back(outputs.size() / (double)input.size());
+      outputs.clear();
+      current_op = current_op->getNext();
+      op = dynamic_cast<circinus::TraverseOperator*>(current_op);
+    }
+
+    for (uint32_t i = 0; i < cardinality.size(); ++i) {
+      std::string s = "level " + std::to_string(i) + " ";
+      for (uint32_t j = 0; j < i + 1; ++j) {
+        s += std::to_string(cardinality[i][j]) + " ";
+      }
+      LOG(INFO) << s;
+    }
+    for (uint32_t i = 0; i < level_cost.size(); ++i) {
+      DLOG(INFO) << "op " << i << " time usage " << level_cost[i];
+    }
+  }
+
   std::vector<QueryVertexID> getOrder(const std::string& order_str, uint32_t size) {
     std::vector<QueryVertexID> order;
     if (order_str.empty()) return order;
@@ -227,6 +295,42 @@ class Benchmark {
     return order;
   }
 
+  void run_sample(Graph& g, QueryGraph& q, std::vector<std::vector<VertexID>>& candidates,
+                  const std::vector<QueryVertexID>& use_order, std::vector<std::vector<double>>& cardinality,
+                  std::vector<double>& level_cost) {
+    std::vector<double> candidate_cardinality;
+    candidate_cardinality.reserve(candidates.size());
+    for (auto& set : candidates) {
+      double size = set.size();
+      candidate_cardinality.push_back(size);
+    }
+
+    NaivePlanner planner(&q, &candidate_cardinality);
+    ExecutionPlan* plan;
+    plan = planner.generatePlanWithoutCompression(use_order);
+    plan->setCandidateSets(candidates);  // swap
+    plan->printPhysicalPlan();
+    plan->getOutputs().init(FLAGS_num_cores).limit(FLAGS_match_limit);
+
+    // order to order_idx
+    std::vector<uint32_t> order_idx(use_order.size(), 0);
+    for (uint32_t i = 0; i < use_order.size(); ++i) {
+      order_idx[use_order[i]] = i;
+    }
+    auto start = std::chrono::steady_clock::now();
+    std::vector<std::vector<double>> cardinality_tmp;
+    sampleBfsExecute(&g, plan, order_idx, cardinality_tmp, level_cost);
+    cardinality.resize(cardinality_tmp.size());
+    for (uint32_t i = 0; i < cardinality_tmp.size(); ++i) {
+      cardinality[i].resize(use_order.size());
+      for (uint32_t j = 0; j < cardinality_tmp[i].size(); ++j) {
+        cardinality[i][use_order[j]] = cardinality_tmp[i][j];
+      }
+    }
+    auto end = std::chrono::steady_clock::now();
+    LOG(INFO) << "sample execution time " << toSeconds(start, end);
+  }
+
   template <VertexCoverStrategy vcs>
   void run(const std::string& graph_path, const std::string& query_path, std::ostream* out) {
     auto start_loading = std::chrono::steady_clock::now();
@@ -243,7 +347,7 @@ class Benchmark {
     candidate_cardinality.reserve(candidates.size());
     for (auto& set : candidates) {
       double size = set.size();
-      candidate_cardinality.push_back(std::log2(size));
+      candidate_cardinality.push_back(size);
     }
     Profiler profiler;
     NaivePlanner planner(&q, &candidate_cardinality);
@@ -254,10 +358,25 @@ class Benchmark {
       plan = planner.generatePlanWithEagerDynamicCover(use_order, &profiler);
     } else if (vcs == All) {
       plan = planner.generatePlanWithoutCompression(use_order, &profiler);
+    } else if (vcs == Sample) {
+      planner.generateOrder(use_order);
+      const auto& match_order = planner.getMatchingOrder();
+      std::vector<std::vector<double>> cardinality;
+      std::vector<double> level_cost;
+      run_sample(g, q, candidates, match_order, cardinality, level_cost);
+      planner.setCandidateCardinality(&cardinality.back());
+      planner.generateCoverNode(cardinality);
+      plan = planner.generatePlanWithSampleExecution(cardinality, level_cost, &profiler);
+    } else if (vcs == Dynamic) {
+      planner.generateOrder(use_order);
+      std::vector<std::vector<double>> cardinality(candidate_cardinality.size(), candidate_cardinality);
+      planner.generateCoverNode(cardinality);
+      plan = planner.generatePlanWithDynamicCover(&profiler);
     } else {
       LOG(ERROR) << "Unknown vertex cover strategy " << FLAGS_vertex_cover;
       return;
     }
+    LOG(INFO) << "Generate Plan Finish.";
     plan->setCandidateSets(candidates);  // swap
     plan->printPhysicalPlan();
     // plan->printLabelFrequency();
@@ -332,8 +451,12 @@ int main(int argc, char** argv) {
     benchmark.run<Static>(FLAGS_dataset, FLAGS_query_size, FLAGS_query_mode, FLAGS_query_index, out);
   } else if (FLAGS_vertex_cover == "all") {
     benchmark.run<All>(FLAGS_dataset, FLAGS_query_size, FLAGS_query_mode, FLAGS_query_index, out);
-  } else {
+  } else if (FLAGS_vertex_cover == "eager") {
     benchmark.run<Eager>(FLAGS_dataset, FLAGS_query_size, FLAGS_query_mode, FLAGS_query_index, out);
+  } else if (FLAGS_vertex_cover == "dynamic") {
+    benchmark.run<Dynamic>(FLAGS_dataset, FLAGS_query_size, FLAGS_query_mode, FLAGS_query_index, out);
+  } else {
+    benchmark.run<Sample>(FLAGS_dataset, FLAGS_query_size, FLAGS_query_mode, FLAGS_query_index, out);
   }
   fstream.close();
 

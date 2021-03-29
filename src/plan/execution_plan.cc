@@ -159,7 +159,7 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
 
   uint32_t n_keys = 0, n_sets = 0;
   std::vector<QueryVertexID> set_vertices;
-  set_vertices.reserve(matching_order.size() - dynamic_cover_key_level_.size());
+  set_vertices.reserve(matching_order.size());
   Operator *current, *prev = nullptr;
   // existing vertices in current query subgraph
   unordered_set<QueryVertexID> existing_vertices;
@@ -169,6 +169,7 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
   auto& set_parents = parents[0];
   key_parents.reserve(g->getNumVertices() - 1);
   set_parents.reserve(g->getNumVertices() - 1);
+  std::vector<std::vector<QueryVertexID>> add_keys_at_level(matching_order.size());
 
   // handle first vertex
   auto parent = matching_order.front();
@@ -177,11 +178,18 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
     set_vertices.push_back(parent);
     ++n_sets;
   } else {
-    ++n_keys;
+    if (dynamic_cover_key_level_.find(parent)->second == 0) {
+      ++n_keys;
+    } else {
+      ++n_sets;
+      set_vertices.push_back(parent);
+      add_keys_at_level[dynamic_cover_key_level_.find(parent)->second].push_back(parent);  // add to key later
+      cover_table_[parent] = 0;
+    }
   }
+
   existing_vertices.insert(parent);
   label_existing_vertices_map[query_graph_->getVertexLabel(parent)].push_back(parent);
-  std::vector<std::vector<QueryVertexID>> add_keys_at_level(matching_order.size());
   unordered_map<QueryVertexID, uint32_t> input_query_vertex_indices;
 
   // handle following traversals
@@ -205,16 +213,7 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
       DCHECK_NE(cover_table_[target_vertex], 1);
       if (!add_keys_at_level[i].empty()) {
         input_query_vertex_indices = query_vertex_indices_;
-        for (auto v : add_keys_at_level[i]) {
-          auto& v_idx = query_vertex_indices_[v];
-          CHECK_EQ(v, set_vertices[v_idx]);
-          // swap with the last set vertex
-          set_vertices[v_idx] = set_vertices.back();
-          set_vertices.pop_back();
-          query_vertex_indices_[set_vertices[v_idx]] = v_idx;
-          v_idx = n_keys++;
-          cover_table_[v] = 1;
-        }
+        addKeys(add_keys_at_level[i], set_vertices, n_keys);
         n_sets -= add_keys_at_level[i].size();
       }
       query_vertex_indices_[target_vertex] = n_sets;
@@ -224,17 +223,30 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
       query_vertex_indices_[target_vertex] = n_keys;
       ++n_keys;
     } else {  // target vertex is in key in some later subqueries
-      /* now we assume the existing vertices will not be turned into key if target vertex is in the vertex cover */
-      CHECK(add_keys_at_level[i].empty());
+      if (!add_keys_at_level[i].empty()) {
+        input_query_vertex_indices = query_vertex_indices_;
+        addKeys(add_keys_at_level[i], set_vertices, n_keys);
+        n_sets -= add_keys_at_level[i].size();
+      }
       query_vertex_indices_[target_vertex] = n_sets;
       ++n_sets;
       set_vertices.push_back(target_vertex);
       add_keys_at_level[key_level_pos->second].push_back(target_vertex);  // add to key later
       cover_table_[target_vertex] = 0;
     }
-
     if (i == 1) {  // the first edge: target has one and only one parent
-      if (cover_table_[target_vertex] != 1) {
+      if (cover_table_[target_vertex] != 1 && !add_keys_at_level[i].empty()) {
+        auto neighbors = g->getOutNeighbors(target_vertex);
+        for (uint32_t j = 0; j < neighbors.second; ++j) {
+          if (existing_vertices.count(neighbors.first[j])) {
+            parents[cover_table_[neighbors.first[j]] == 1].push_back(neighbors.first[j]);
+          }
+        }
+        prev = newEnumerateKeyExpandToSetOperator(key_parents, target_vertex, add_keys_at_level[i],
+                                                  input_query_vertex_indices, same_label_indices,
+                                                  label_existing_vertices_map);
+        add_keys_at_level[i].clear();
+      } else if (cover_table_[target_vertex] != 1) {
         prev = newExpandEdgeKeyToSetOperator(parent, target_vertex, same_label_indices);
       } else if (cover_table_[parent] == 1) {
         prev = newExpandEdgeKeyToKeyOperator(parent, target_vertex, same_label_indices);
@@ -251,7 +263,7 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
       }
       // create operators
       if (cover_table_[target_vertex] == 1) {  // target is in key
-        CHECK(add_keys_at_level[i].empty());
+        CHECK(add_keys_at_level[i].empty()) << i;
         if (key_parents.size() != 0 && set_parents.size() != 0) {
           if (key_parents.size() == 1) {
             current = newExpandEdgeKeyToKeyOperator(key_parents.front(), target_vertex, same_label_indices);
@@ -286,9 +298,9 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
       }
       prev->setNext(current);
       prev = current;
-      key_parents.clear();
-      set_parents.clear();
     }
+    key_parents.clear();
+    set_parents.clear();
     existing_vertices.insert(target_vertex);
     label_existing_vertices_map[target_label].push_back(target_vertex);
   }
