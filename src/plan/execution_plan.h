@@ -145,8 +145,16 @@ class ExecutionPlan {
 
   // TODO(tatiana): unused
   inline const std::vector<VertexID>& getCandidateSet(QueryVertexID id) const {
-    DCHECK_LT(id, candidate_sets_.size());
+    CHECK_LT(id, candidate_sets_.size());
     return candidate_sets_[id];
+  }
+  
+  inline const bool isToKey(QueryVertexID id) const {
+    return dynamic_cover_key_level_.count(id) != 0;
+  }
+
+  inline const uint32_t getToKeyLevel(QueryVertexID id) const {
+    return dynamic_cover_key_level_.find(id)->second;
   }
 
   // TODO(tatiana): unused

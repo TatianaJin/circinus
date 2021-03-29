@@ -121,6 +121,36 @@ ExecutionPlan* NaivePlanner::generatePlanWithoutCompression(const std::vector<Qu
   return &plan_;
 }
 
+ExecutionPlan* NaivePlanner::generateSamplePlan(const std::vector<QueryVertexID>& use_order, Profiler* profiler) {
+  // if any of the candidate cardinality is zero, there is no matching
+  if (!hasValidCandidate()) {
+    return nullptr;
+  }
+  std::vector<int> select_cover(query_graph_->getNumVertices(), 1);
+
+  if (use_order.empty()) {
+    TwoCoreSolver solver;
+    auto& core_table = solver.get2CoreTable(query_graph_);
+    // now we only consider a random smallest MWVC from covers
+    QueryVertexID v = 0;
+    std::vector<QueryVertexID> cover;
+    for (auto assignment : select_cover) {
+      if (assignment == 1) {
+        cover.push_back(v);
+      }
+      ++v;
+    }
+    // start matching from the vertex with the smallest cardinality in cover
+    auto start_vertex = selectStartingVertex(cover);
+
+    matching_order_ = generateMatchingOrder(query_graph_, core_table, start_vertex);
+  } else {
+    matching_order_ = use_order;
+  }
+  plan_.populatePhysicalPlan(query_graph_, matching_order_, select_cover, profiler);
+  return &plan_;
+}
+
 std::vector<QueryVertexID> NaivePlanner::generateMatchingOrder(const QueryGraph* g, const std::vector<int>& core_table,
                                                                QueryVertexID start_vertex) {
   std::vector<bool> visited(g->getNumVertices(), false);  // visited when pushed into the queue
@@ -599,7 +629,6 @@ void NaivePlanner::generateOrder(const std::vector<QueryVertexID>& use_order) {
     s += std::to_string(select_cover[j]) + " ";
   }
   LOG(INFO) << s;
-
   if (use_order.empty()) {
     TwoCoreSolver solver;
     auto& core_table = solver.get2CoreTable(query_graph_);
@@ -794,6 +823,7 @@ void NaivePlanner::generateCoverNode(const std::vector<std::vector<double>>& car
         }
       }
       if (!existing) {
+
         covers_[j].emplace_back(nxt_cover_node);
       }
     }

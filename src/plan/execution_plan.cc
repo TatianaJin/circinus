@@ -177,7 +177,6 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
   key_parents.reserve(g->getNumVertices() - 1);
   set_parents.reserve(g->getNumVertices() - 1);
   std::vector<std::vector<QueryVertexID>> add_keys_at_level(matching_order.size());
-
   // handle first vertex
   auto parent = matching_order.front();
   query_vertex_indices_[parent] = 0;
