@@ -63,7 +63,7 @@ class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
     uint32_t output_num = 0;
     while (input_index_ < current_inputs_->size()) {
       std::vector<VertexID> new_keys;
-      const auto& input = (*current_inputs_)[input_index_++];
+      const auto& input = (*current_inputs_)[input_index_];
       for (uint32_t i = 0; i < parents_.size(); ++i) {
         uint32_t key = query_vertex_indices_[parents_[i]];
         uint32_t key_vid = input.getKeyVal(key);
@@ -88,6 +88,7 @@ class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
       }
       if
         constexpr(isProfileMode(profile)) {
+          total_num_input_subgraphs_ += (*current_inputs_)[input_index_].getNumSubgraphs();
           // consider reuse of partial intersection results at each parent
           std::vector<VertexID> parent_tuple(parents_.size());
           for (uint32_t i = 0; i < parents_.size(); ++i) {
@@ -106,6 +107,7 @@ class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
           ++output_num;
         }
       }
+      ++input_index_;
       if (output_num >= batch_size) {
         break;
       }

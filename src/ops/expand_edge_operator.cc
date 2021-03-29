@@ -25,6 +25,7 @@
 #include "graph/query_graph.h"
 #include "graph/types.h"
 #include "ops/traverse_operator.h"
+#include "ops/types.h"
 #include "utils/hashmap.h"
 
 namespace circinus {
@@ -47,7 +48,7 @@ class ExpandEdgeKeyToSetOperator : public ExpandEdgeOperator {
   uint32_t expand(std::vector<CompressedSubgraphs>* outputs, uint32_t cap) override {
     uint32_t n = 0;
     for (; n < cap && input_index_ < current_inputs_->size(); ++input_index_) {
-      n += expandInner<false>(outputs, (*current_inputs_)[input_index_]);
+      n += expandInner<QueryType::Execute>(outputs, (*current_inputs_)[input_index_]);
     }
     return n;
   }
@@ -56,7 +57,8 @@ class ExpandEdgeKeyToSetOperator : public ExpandEdgeOperator {
     uint32_t old_input_index = input_index_;
     uint32_t n = 0;
     for (; n < cap && input_index_ < current_inputs_->size(); ++input_index_) {
-      n += expandInner<true>(outputs, (*current_inputs_)[input_index_]);
+      n += expandInner<QueryType::Profile>(outputs, (*current_inputs_)[input_index_]);
+      total_num_input_subgraphs_ += (*current_inputs_)[input_index_].getNumSubgraphs();
     }
     intersection_count_ += input_index_ - old_input_index;
     return n;
@@ -76,14 +78,14 @@ class ExpandEdgeKeyToSetOperator : public ExpandEdgeOperator {
 
  private:
   /** @returns True if one CompressedSubgraphs is generated, else false. */
-  template <bool profile>
+  template <QueryType profile>
   inline bool expandInner(std::vector<CompressedSubgraphs>* outputs, const CompressedSubgraphs& input) {
     std::vector<VertexID> targets;
     auto parent_match = input.getKeyVal(parent_index_);
     // intersect(*candidates_, current_data_graph_->getOutNeighbors(parent_match), &targets, input.getKeyMap());
     intersect(candidate_set_, current_data_graph_->getOutNeighbors(parent_match), &targets, input.getKeyMap());
     if
-      constexpr(profile) {
+      constexpr(isProfileMode(profile)) {
         distinct_intersection_count_ += parent_set_.insert(parent_match).second;
         total_intersection_input_size_ += candidate_set_.size() + current_data_graph_->getVertexOutDegree(parent_match);
         total_intersection_output_size_ += targets.size();
@@ -112,7 +114,7 @@ class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
     candidate_set_.insert(candidates->begin(), candidates->end());
   }
 
-  template <bool profile>
+  template <QueryType profile>
   uint32_t expandInner(std::vector<CompressedSubgraphs>* outputs, uint32_t cap) {
     uint32_t n = 0;
     while (true) {
@@ -120,8 +122,9 @@ class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
       if (current_target_index_ < current_targets_.size()) {
         auto target_end = std::min(current_target_index_ + cap - n, (uint32_t)current_targets_.size());
         n += target_end - current_target_index_;
+        auto& input = (*current_inputs_)[input_index_ - 1];
         for (; current_target_index_ < target_end; ++current_target_index_) {
-          outputs->emplace_back((*current_inputs_)[input_index_ - 1], current_targets_[current_target_index_]);
+          outputs->emplace_back(input, current_targets_[current_target_index_]);
         }
         if (n == cap) {
           return n;
@@ -133,18 +136,21 @@ class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
       }
       // consume the next input
       expandInner<profile>((*current_inputs_)[input_index_]);
+      if (isProfileMode(profile)) {
+        total_num_input_subgraphs_ += (*current_inputs_)[input_index_].getNumSubgraphs();
+      }
       ++input_index_;
     }
     return n;
   }
 
   uint32_t expand(std::vector<CompressedSubgraphs>* outputs, uint32_t cap) override {
-    return expandInner<false>(outputs, cap);
+    return expandInner<QueryType::Execute>(outputs, cap);
   }
 
   uint32_t expandAndProfileInner(std::vector<CompressedSubgraphs>* outputs, uint32_t cap) override {
     auto old_input_index = input_index_;
-    auto n = expandInner<true>(outputs, cap);
+    auto n = expandInner<QueryType::Profile>(outputs, cap);
     intersection_count_ += input_index_ - old_input_index;
     return n;
   }
@@ -165,14 +171,14 @@ class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
   }
 
  private:
-  template <bool profile>
+  template <QueryType profile>
   inline void expandInner(const CompressedSubgraphs& input) {
     current_targets_.clear();
     current_target_index_ = 0;
     auto parent_match = input.getKeyVal(parent_index_);
     intersect(candidate_set_, current_data_graph_->getOutNeighbors(parent_match), &current_targets_, input.getKeyMap());
     if
-      constexpr(profile) {
+      constexpr(isProfileMode(profile)) {
         distinct_intersection_count_ += parent_set_.insert(parent_match).second;
         total_intersection_input_size_ += candidate_set_.size() + current_data_graph_->getVertexOutDegree(parent_match);
         total_intersection_output_size_ += current_targets_.size();
@@ -200,7 +206,7 @@ class CurrentResults {
   virtual uint32_t getResults(std::vector<CompressedSubgraphs>* outputs, uint32_t cap) = 0;
 };
 
-template <bool profile>
+template <QueryType profile>
 class CurrentResultsByCandidate : public CurrentResults {
  private:
   uint32_t candidate_index_ = 0;
@@ -223,7 +229,7 @@ class CurrentResultsByCandidate : public CurrentResults {
       }
       intersect(*parent_set, data_graph_->getOutNeighbors(candidate), &parents, current_keys);
       if
-        constexpr(profile) {
+        constexpr(isProfileMode(profile)) {
           owner_->updateIntersectInfo(parent_set->size() + data_graph_->getVertexOutDegree(candidate), parents.size());
         }
       if (parents.empty()) {
@@ -237,7 +243,7 @@ class CurrentResultsByCandidate : public CurrentResults {
   }
 };
 
-template <bool profile>
+template <QueryType profile>
 class CurrentResultsByParent : public CurrentResults {
  public:
   CurrentResultsByParent(const std::vector<VertexID>* candidates, const CompressedSubgraphs* input,
@@ -255,7 +261,7 @@ class CurrentResultsByParent : public CurrentResults {
       std::vector<VertexID> targets;
       intersect(*candidates_, data_graph_->getOutNeighbors(parent_match), &targets, current_keys);
       if
-        constexpr(profile) {
+        constexpr(isProfileMode(profile)) {
           owner_->updateIntersectInfo(candidates_->size() + data_graph_->getVertexOutDegree(parent_match),
                                       targets.size());
         }
@@ -274,7 +280,7 @@ class CurrentResultsByParent : public CurrentResults {
   }
 };
 
-template <bool profile>
+template <QueryType profile>
 class CurrentResultsByExtension : public CurrentResults {
  private:
   unordered_set<VertexID> seen_extensions_;
@@ -298,7 +304,7 @@ class CurrentResultsByExtension : public CurrentResults {
       std::vector<VertexID> parents;  // valid parents for current candidate
       intersect(parent_set, data_graph_->getOutNeighbors(candidate), &parents, current_keys_);
       if
-        constexpr(profile) {
+        constexpr(isProfileMode(profile)) {
           owner_->updateIntersectInfo(parent_set.size() + data_graph_->getVertexOutDegree(candidate), parents.size());
         }
       outputs->emplace_back(*input_, parent_index_, std::make_shared<std::vector<VertexID>>(std::move(parents)),
@@ -320,7 +326,7 @@ class CurrentResultsByExtension : public CurrentResults {
       std::vector<VertexID> current_extensions;
       intersect(*candidates_, data_graph_->getOutNeighbors(parent_match), &current_extensions, current_keys_);
       if
-        constexpr(profile) {
+        constexpr(isProfileMode(profile)) {
           owner_->updateIntersectInfo(candidates_->size() + data_graph_->getVertexOutDegree(parent_match),
                                       current_extensions.size());
         }
@@ -365,11 +371,11 @@ class ExpandEdgeSetToKeyOperator : public ExpandEdgeOperator {
   }
 
   uint32_t expand(std::vector<CompressedSubgraphs>* outputs, uint32_t cap) override {
-    return expandInner<false>(outputs, cap);
+    return expandInner<QueryType::Execute>(outputs, cap);
   }
 
   uint32_t expandAndProfileInner(std::vector<CompressedSubgraphs>* outputs, uint32_t cap) override {
-    return expandInner<true>(outputs, cap);
+    return expandInner<QueryType::Profile>(outputs, cap);
   }
 
   std::string toString() const override {
@@ -418,7 +424,7 @@ class ExpandEdgeSetToKeyOperator : public ExpandEdgeOperator {
     return ByExtension;
   }
 
-  template <bool profile>
+  template <QueryType profile>
   uint32_t expandInner(std::vector<CompressedSubgraphs>* outputs, uint32_t cap) {
     DCHECK_GT(cap, 0);
     uint32_t needed = cap;
@@ -433,7 +439,7 @@ class ExpandEdgeSetToKeyOperator : public ExpandEdgeOperator {
         }
 
         if
-          constexpr(profile) {
+          constexpr(isProfileMode(profile)) {
             auto& parent_set = *(*current_inputs_)[input_index_ - 1].getSet(parent_index_);
             for (auto parent_match : parent_set) {
               distinct_intersection_count_ += parent_set_.insert(parent_match).second;
@@ -446,12 +452,16 @@ class ExpandEdgeSetToKeyOperator : public ExpandEdgeOperator {
         return cap - needed;
       }
       expandInner<profile>((*current_inputs_)[input_index_], needed);
+      if
+        constexpr(isProfileMode(profile)) {
+          total_num_input_subgraphs_ += (*current_inputs_)[input_index_].getNumSubgraphs();
+        }
       ++input_index_;
     }
     return cap - needed;
   }
 
-  template <bool profile>
+  template <QueryType profile>
   void expandInner(const CompressedSubgraphs& input, uint32_t cap) {
     auto& parent_set = input.getSet(parent_index_);
     DCHECK(current_results_ == nullptr);

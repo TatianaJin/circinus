@@ -113,6 +113,10 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
         DLOG(INFO) << "fromCandidateStrategy";
         output_num += fromCandidateStrategy<profile>(outputs);
       }
+      if
+        constexpr(isProfileMode(profile)) {
+          total_num_input_subgraphs_ += (*current_inputs_)[input_index_].getNumSubgraphs();
+        }
       input_index_++;
       if (output_num >= batch_size) {
         break;

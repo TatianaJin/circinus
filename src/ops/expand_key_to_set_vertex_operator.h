@@ -59,8 +59,8 @@ class ExpandKeyToSetVertexOperator : public ExpandVertexOperator {
   template <QueryType profile>
   inline uint32_t expandInner(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size) {
     uint32_t output_num = 0;
-    while (input_index_ < current_inputs_->size()) {
-      const auto& input = (*current_inputs_)[input_index_++];
+    for (; input_index_ < current_inputs_->size(); ++input_index_) {
+      const auto& input = (*current_inputs_)[input_index_];
       std::vector<VertexID> new_set;
       for (uint32_t i = 0; i < parents_.size(); ++i) {
         uint32_t key = query_vertex_indices_[parents_[i]];
@@ -86,6 +86,7 @@ class ExpandKeyToSetVertexOperator : public ExpandVertexOperator {
       }
       if
         constexpr(isProfileMode(profile)) {
+          total_num_input_subgraphs_ += (*current_inputs_)[input_index_].getNumSubgraphs();
           // consider reuse of partial intersection results at each parent
           std::vector<VertexID> parent_tuple(parents_.size());
           parent_tuple_sets_.resize(parents_.size());

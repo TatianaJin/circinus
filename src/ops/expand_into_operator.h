@@ -87,6 +87,7 @@ class ExpandIntoOperator : public TraverseOperator {
       bool add = true;
       if
         constexpr(isProfileMode(profile)) {
+          total_num_input_subgraphs_ += (*current_inputs_)[input_index_].getNumSubgraphs();
           unordered_set<VertexID> prefix_set;
           for (uint32_t i = 0; i < key_parents_.size(); ++i) {
             parent_tuple[i] = input.getKeyVal(query_vertex_indices_[key_parents_[i]]);

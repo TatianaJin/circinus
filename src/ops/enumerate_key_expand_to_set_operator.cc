@@ -76,11 +76,13 @@ uint32_t EnumerateKeyExpandToSetOperator::expandInner(std::vector<CompressedSubg
     if (target_sets_.front().empty()) {
       // find next input with non-empty candidate target set
       while (input_index_ < current_inputs_->size() && expandInner<profile>()) {
+        total_num_input_subgraphs_ += (*current_inputs_)[input_index_].getNumSubgraphs();
         ++input_index_;
       }
       if (target_sets_.front().empty()) {  // all inputs are consumed
         return 0;
       }
+      total_num_input_subgraphs_ += (*current_inputs_)[input_index_].getNumSubgraphs();
       // reset index
       enumerate_key_idx_[0] = 0;
       // get sets to enumerate as compression key
@@ -121,7 +123,7 @@ uint32_t EnumerateKeyExpandToSetOperator::expandInner(std::vector<CompressedSubg
         }
         DCHECK(target_sets_[enumerate_key_depth + 1].empty());
         intersect(target_sets_[enumerate_key_depth], current_data_graph_->getOutNeighbors(key_vid),
-                  &target_sets_[enumerate_key_depth + 1]);
+                  &target_sets_[enumerate_key_depth + 1], existing_key_vertices_);
         if
           constexpr(isProfileMode(profile)) {
             updateIntersectInfo(
