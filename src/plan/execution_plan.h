@@ -50,6 +50,19 @@ class ExecutionPlan {
    * For non-key vertices, the index n_sets-th key following the matching order */
   unordered_map<QueryVertexID, uint32_t> query_vertex_indices_;
 
+  void addKeys(const std::vector<QueryVertexID>& keys_to_add, std::vector<QueryVertexID>& set_vertices,
+               uint32_t& n_keys) {
+    for (auto v : keys_to_add) {
+      auto& v_idx = query_vertex_indices_[v];
+      // swap with the last set vertex
+      set_vertices[v_idx] = set_vertices.back();
+      set_vertices.pop_back();
+      query_vertex_indices_[set_vertices[v_idx]] = v_idx;
+      v_idx = n_keys++;
+      cover_table_[v] = 1;
+    }
+  }
+
  public:
   ~ExecutionPlan() {
     for (auto filter : subgraph_filters_) {
@@ -104,7 +117,7 @@ class ExecutionPlan {
   inline OperatorTree& getOperators() { return operators_; }
 
   inline void setCandidateSets(std::vector<std::vector<VertexID>>& cs) {
-    candidate_sets_.swap(cs);
+    candidate_sets_ = cs;
     uint64_t total_key_candidate_size = 1, total_set_candidate_size = 1;
     for (uint32_t i = 0; i < candidate_sets_.size(); ++i) {
       DLOG(INFO) << "query vertex " << i << ": " << candidate_sets_[i].size() << " candidates";
@@ -125,6 +138,10 @@ class ExecutionPlan {
     DCHECK_LT(id, candidate_sets_.size());
     return candidate_sets_[id];
   }
+
+  inline const bool isToKey(QueryVertexID id) const { return dynamic_cover_key_level_.count(id) != 0; }
+
+  inline const uint32_t getToKeyLevel(QueryVertexID id) const { return dynamic_cover_key_level_.find(id)->second; }
 
   inline OperatorTree cloneOperators() const { return operators_.clone(); }
 

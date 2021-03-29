@@ -47,7 +47,7 @@ class WeightedBnB {
    * @param g The query graph for which we find the minimum vertex cover(s).
    * @param cutoff_time The time limit of the execution. The best cover found within cutoff_time will be returned
    */
-  WeightedBnB(const QueryGraph* g, const std::vector<double>& vertex_weights, double cutoff_time = 3)
+  WeightedBnB(const QueryGraph* g, const std::vector<double>& vertex_weights, double cutoff_time = 10)
       : graph_(g), vertex_weights_(vertex_weights), cutoff_time_(cutoff_time) {
     best_cover_weight_ = 0;
     for (auto w : vertex_weights_) {
