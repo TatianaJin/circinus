@@ -30,6 +30,7 @@ class EnumerateKeyExpandToSetOperator : public ExpandVertexOperator {
   unordered_map<QueryVertexID, uint32_t> enumerate_key_old_indices_;
   std::vector<int> cover_table_;
   std::vector<std::pair<uint32_t, int>> set_old_to_new_pos_;
+  uint32_t n_input_keys_ = 0;
 
   /* transient */
   std::vector<uint32_t> enumerate_key_idx_;                     // size = keys_to_enumerate_.size();
