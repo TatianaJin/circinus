@@ -26,6 +26,9 @@
 namespace circinus {
 
 class ExpandIntoOperator : public TraverseOperator {
+  std::vector<QueryVertexID> parents_;
+  QueryVertexID target_vertex_;
+  unordered_map<QueryVertexID, uint32_t> query_vertex_indices_;
   // for profiling
   std::vector<QueryVertexID> key_parents_;  // the key parents of the previous operator
   std::vector<unordered_set<std::string>> parent_tuple_sets_;
@@ -150,10 +153,6 @@ class ExpandIntoOperator : public TraverseOperator {
     }
     return output_num;
   }
-
-  std::vector<QueryVertexID> parents_;
-  QueryVertexID target_vertex_;
-  unordered_map<QueryVertexID, uint32_t> query_vertex_indices_;
 };
 
 }  // namespace circinus
