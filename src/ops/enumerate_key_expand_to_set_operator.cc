@@ -37,7 +37,9 @@ EnumerateKeyExpandToSetOperator::EnumerateKeyExpandToSetOperator(
       cover_table_(cover_table),
       enumerate_key_idx_(keys_to_enumerate.size(), 0),
       enumerate_key_pos_sets_(keys_to_enumerate.size()),
-      target_sets_(keys_to_enumerate.size() + 1) {
+      target_sets_(keys_to_enumerate.size() + 1),
+      output_(output_query_vertex_indices.size() - 1 - output_query_vertex_indices.at(target_vertex),
+              output_query_vertex_indices.size()) {
   existing_key_parents_.reserve(parents_.size() - keys_to_enumerate_.size());
   unordered_set<QueryVertexID> keys_to_enumerate_set(keys_to_enumerate.begin(), keys_to_enumerate.end());
   for (auto v : parents) {
@@ -53,10 +55,11 @@ EnumerateKeyExpandToSetOperator::EnumerateKeyExpandToSetOperator(
       n_input_keys += (keys_to_enumerate_set.count(pair.first) == 0);
     }
   }
-  n_input_keys_ = n_input_keys;
   for (auto v : keys_to_enumerate_) {
     DCHECK(input_query_vertex_indices.count(v));
-    enumerate_key_old_indices_[v] = input_query_vertex_indices.at(v);
+    auto pos = input_query_vertex_indices.at(v);
+    enumerate_key_old_indices_[v] = pos;
+    enumerate_key_pos_.insert(pos);
     CHECK_EQ(query_vertex_indices_[v], n_input_keys);  // assume contiguous indices after existing keys
     ++n_input_keys;
   }
@@ -94,37 +97,33 @@ uint32_t EnumerateKeyExpandToSetOperator::expandInner(std::vector<CompressedSubg
         enumerate_key_pos_sets_[depth] = input.getSet(pos).get();
         ++depth;
       }
-      existing_key_vertices_.clear();
-      existing_key_vertices_.insert(input.getKeys().begin(), input.getKeys().end());
-      DCHECK_EQ(existing_key_vertices_.size(), n_input_keys_) << input.getNumKeys();
+      // set existing matched vertices in output
+      std::copy(input.getKeys().begin(), input.getKeys().end(), output_.getKeys().begin());
+      DCHECK_EQ(set_old_to_new_pos_.size(), output_.getNumSets() - 1);
+      for (auto& pair : set_old_to_new_pos_) {
+        output_.UpdateSets(pair.second, input.getSet(pair.first));
+      }
     }
 
     const auto& input = (*current_inputs_)[input_index_];
     const uint32_t enumerate_key_size = keys_to_enumerate_.size();
-    // set existing matched vertices in output
-    CompressedSubgraphs output(n_input_keys_ + enumerate_key_size, input.getNumVertices() + 1);
-    std::copy(input.getKeys().begin(), input.getKeys().end(), output.getKeys().begin());
-    DCHECK_EQ(set_old_to_new_pos_.size(), output.getNumSets() - 1);
-    for (auto& pair : set_old_to_new_pos_) {
-      output.UpdateSets(pair.second, input.getSet(pair.first));
-    }  // TODO(tatiana): partially set output
-    uint32_t enumerate_key_depth = existing_key_vertices_.size() - n_input_keys_;
+    uint32_t enumerate_key_depth = existing_vertices_.size() - n_exceptions_;
     if (enumerate_key_depth != 0) {  // if continuing from a previously processed input
       DCHECK_EQ(enumerate_key_depth, enumerate_key_size - 1)
-          << "existing_key_vertices_.size()=" << existing_key_vertices_.size()
-          << ", input.getNumKeys()=" << input.getNumKeys() << '/' << n_input_keys_;
+          << "existing_vertices_.size()=" << existing_vertices_.size() << ", input.getNumKeys()=" << input.getNumKeys()
+          << '/' << n_exceptions_;
     }
     while (true) {
       while (enumerate_key_idx_[enumerate_key_depth] < enumerate_key_pos_sets_[enumerate_key_depth]->size()) {
         // update target set
         auto key_vid = (*enumerate_key_pos_sets_[enumerate_key_depth])[enumerate_key_idx_[enumerate_key_depth]];
-        if (existing_key_vertices_.count(key_vid) == 1) {  // skip current key to ensure isomorphism
+        if (existing_vertices_.count(key_vid) == 1) {  // skip current key to ensure isomorphism
           ++enumerate_key_idx_[enumerate_key_depth];
           continue;
         }
         DCHECK(target_sets_[enumerate_key_depth + 1].empty());
         intersect(target_sets_[enumerate_key_depth], current_data_graph_->getOutNeighbors(key_vid),
-                  &target_sets_[enumerate_key_depth + 1], existing_key_vertices_);
+                  &target_sets_[enumerate_key_depth + 1], existing_vertices_);
         if
           constexpr(isProfileMode(profile)) {
             updateIntersectInfo(
@@ -143,16 +142,16 @@ uint32_t EnumerateKeyExpandToSetOperator::expandInner(std::vector<CompressedSubg
           // the last key query vertex to enumerate, ready to output
           auto& target_set = target_sets_.back();
           for (uint32_t key_i = 0; key_i < enumerate_key_size; ++key_i) {
-            output.UpdateKey(input.getNumKeys() + key_i, (*enumerate_key_pos_sets_[key_i])[enumerate_key_idx_[key_i]]);
+            output_.UpdateKey(input.getNumKeys() + key_i, (*enumerate_key_pos_sets_[key_i])[enumerate_key_idx_[key_i]]);
           }
-          output.UpdateSets(output.getNumSets() - 1, std::make_shared<std::vector<VertexID>>(std::move(target_set)));
-          outputs->push_back(output);
+          output_.UpdateSets(output_.getNumSets() - 1, std::make_shared<std::vector<VertexID>>(std::move(target_set)));
+          outputs->push_back(output_);
           ++enumerate_key_idx_[enumerate_key_depth];
           if (++n_outputs == batch_size) {
             return n_outputs;
           }
         } else {  // dfs next key depth
-          existing_key_vertices_.insert(key_vid);
+          existing_vertices_.insert(key_vid);
           ++enumerate_key_depth;
           enumerate_key_idx_[enumerate_key_depth] = 0;  // start from the first match in the next depth
         }
@@ -163,7 +162,7 @@ uint32_t EnumerateKeyExpandToSetOperator::expandInner(std::vector<CompressedSubg
         break;
       }
       --enumerate_key_depth;
-      existing_key_vertices_.erase(
+      existing_vertices_.erase(
           (*enumerate_key_pos_sets_[enumerate_key_depth])[enumerate_key_idx_[enumerate_key_depth]]);
       ++enumerate_key_idx_[enumerate_key_depth];
     }
@@ -200,13 +199,15 @@ bool EnumerateKeyExpandToSetOperator::expandInner() {  // handles a new input an
         distinct_intersection_count_ +=
             parent_tuple_sets_[i].emplace((char*)parent_tuple_.data(), (i + 1) * sizeof(VertexID)).second;
       }
-
     if (target_set.empty()) {
-      break;
+      return true;
     }
   }
+  existing_vertices_.clear();
+  input.getExceptions(existing_vertices_, enumerate_key_pos_);
+  n_exceptions_ = existing_vertices_.size();
   target_set.erase(std::remove_if(target_set.begin(), target_set.end(),
-                                  [&input](VertexID set_vertex) { return input.isExisting(set_vertex); }),
+                                  [this](VertexID set_vertex) { return existing_vertices_.count(set_vertex); }),
                    target_set.end());
   return target_set.empty();
 }

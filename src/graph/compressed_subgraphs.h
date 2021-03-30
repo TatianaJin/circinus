@@ -172,6 +172,17 @@ class CompressedSubgraphs {
 
   unordered_set<VertexID> getKeyMap() const { return unordered_set<VertexID>(keys_.begin(), keys_.end()); }
 
+  // exceptions include keys and single-element sets
+  void getExceptions(unordered_set<VertexID>& exception, const unordered_set<uint32_t> not_include_set) const {
+    exception.insert(keys_.begin(), keys_.end());
+    for (uint32_t i = 0; i < getNumSets(); ++i) {
+      auto& set = sets_[i];
+      if (set->size() == 1 && not_include_set.count(i) == 0) {
+        exception.insert(set->front());
+      }
+    }
+  }
+
   /** Get the matching set of the non-key vertex at key_idx. */
   const VertexSet& getSet(uint32_t key_idx) const { return sets_[key_idx]; }
 

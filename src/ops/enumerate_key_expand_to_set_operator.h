@@ -31,13 +31,15 @@ class EnumerateKeyExpandToSetOperator : public ExpandVertexOperator {
   unordered_map<QueryVertexID, uint32_t> enumerate_key_old_indices_;
   std::vector<int> cover_table_;
   std::vector<std::pair<uint32_t, int>> set_old_to_new_pos_;
-  uint32_t n_input_keys_ = 0;
+  unordered_set<uint32_t> enumerate_key_pos_;
 
   /* transient */
   std::vector<uint32_t> enumerate_key_idx_;                     // size = keys_to_enumerate_.size();
   std::vector<std::vector<VertexID>*> enumerate_key_pos_sets_;  // size = keys_to_enumerate_.size();
   std::vector<std::vector<VertexID>> target_sets_;  // now we store and reuse the intermediate intersection results
-  unordered_set<VertexID> existing_key_vertices_;
+  unordered_set<VertexID> existing_vertices_;
+  uint32_t n_exceptions_ = 0;
+  CompressedSubgraphs output_;
 
   /* for profiling */
   std::vector<unordered_set<std::string>> parent_tuple_sets_;
