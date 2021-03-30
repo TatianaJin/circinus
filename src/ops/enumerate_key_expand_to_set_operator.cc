@@ -15,6 +15,7 @@
 #include "ops/enumerate_key_expand_to_set_operator.h"
 
 #include <algorithm>
+#include <iostream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -80,7 +81,7 @@ uint32_t EnumerateKeyExpandToSetOperator::expandInner(std::vector<CompressedSubg
         ++input_index_;
       }
       if (target_sets_.front().empty()) {  // all inputs are consumed
-        return 0;
+        return n_outputs;
       }
       total_num_input_subgraphs_ += (*current_inputs_)[input_index_].getNumSubgraphs();
       // reset index
@@ -109,7 +110,7 @@ uint32_t EnumerateKeyExpandToSetOperator::expandInner(std::vector<CompressedSubg
     }  // TODO(tatiana): partially set output
     uint32_t enumerate_key_depth = existing_key_vertices_.size() - n_input_keys_;
     if (enumerate_key_depth != 0) {  // if continuing from a previously processed input
-      CHECK_EQ(enumerate_key_depth, enumerate_key_size - 1)
+      DCHECK_EQ(enumerate_key_depth, enumerate_key_size - 1)
           << "existing_key_vertices_.size()=" << existing_key_vertices_.size()
           << ", input.getNumKeys()=" << input.getNumKeys() << '/' << n_input_keys_;
     }
@@ -141,19 +142,14 @@ uint32_t EnumerateKeyExpandToSetOperator::expandInner(std::vector<CompressedSubg
         if (enumerate_key_depth == enumerate_key_size - 1) {
           // the last key query vertex to enumerate, ready to output
           auto& target_set = target_sets_.back();
-          if (!target_set.empty()) {
-            for (uint32_t key_i = 0; key_i < enumerate_key_size; ++key_i) {
-              output.UpdateKey(input.getNumKeys() + key_i,
-                               (*enumerate_key_pos_sets_[key_i])[enumerate_key_idx_[key_i]]);
-            }
-            output.UpdateSets(output.getNumSets() - 1, std::make_shared<std::vector<VertexID>>(std::move(target_set)));
-            outputs->push_back(output);
-            ++enumerate_key_idx_[enumerate_key_depth];
-            if (++n_outputs == batch_size) {
-              return n_outputs;
-            }
-          } else {
-            ++enumerate_key_idx_[enumerate_key_depth];
+          for (uint32_t key_i = 0; key_i < enumerate_key_size; ++key_i) {
+            output.UpdateKey(input.getNumKeys() + key_i, (*enumerate_key_pos_sets_[key_i])[enumerate_key_idx_[key_i]]);
+          }
+          output.UpdateSets(output.getNumSets() - 1, std::make_shared<std::vector<VertexID>>(std::move(target_set)));
+          outputs->push_back(output);
+          ++enumerate_key_idx_[enumerate_key_depth];
+          if (++n_outputs == batch_size) {
+            return n_outputs;
           }
         } else {  // dfs next key depth
           existing_key_vertices_.insert(key_vid);
