@@ -82,6 +82,7 @@ class CompressedSubgraphs {
   CompressedSubgraphs(const CompressedSubgraphs& subgraphs, uint32_t replacing_set_index, VertexSet&& new_set,
                       VertexID key)
       : keys_(subgraphs.getNumKeys() + 1), sets_(subgraphs.getNumSets()) {
+    // FIXME(tatiana): check old sets for new key
     std::copy(subgraphs.keys_.begin(), subgraphs.keys_.end(), keys_.begin());
     keys_.back() = key;
     sets_ = subgraphs.sets_;
@@ -107,6 +108,9 @@ class CompressedSubgraphs {
     if (sets_.empty()) {
       return !keys_.empty();
     }
+    auto sets_sorted_by_size = sets_;
+    std::sort(sets_sorted_by_size.begin(), sets_sorted_by_size.end(),
+              [](const auto& set1, const auto& set2) { return set1->size() < set2->size(); });
     // dfs sets_ chain
     uint64_t count = 0;
     std::vector<uint32_t> set_index(sets_.size(), 0);
@@ -116,8 +120,8 @@ class CompressedSubgraphs {
     uint32_t last_depth = sets_.size() - 1;
     uint32_t current_depth = 0;
     while (true) {
-      while (set_index[current_depth] < (*sets_[current_depth]).size()) {
-        auto v = (*sets_[current_depth])[set_index[current_depth]];
+      while (set_index[current_depth] < (*sets_sorted_by_size[current_depth]).size()) {
+        auto v = (*sets_sorted_by_size[current_depth])[set_index[current_depth]];
         ++set_index[current_depth];
         if (existing_vertices.count(v) == 0) {  // v is valid
           if (current_depth == last_depth) {    // reaching a leave in dfs
@@ -133,7 +137,7 @@ class CompressedSubgraphs {
         break;
       }
       --current_depth;
-      existing_vertices.erase((*sets_[current_depth])[set_index[current_depth] - 1]);
+      existing_vertices.erase((*sets_sorted_by_size[current_depth])[set_index[current_depth] - 1]);
     }
     return count;
   }
@@ -147,7 +151,7 @@ class CompressedSubgraphs {
     return false;
   }
 
-  std::string toString() {
+  std::string toString() const {
     std::string s = "{";
     s += "key_size:" + std::to_string(keys_.size()) + "," + "set_size:" + std::to_string(sets_.size()) + ",";
     for (VertexID key : keys_) {
@@ -171,6 +175,17 @@ class CompressedSubgraphs {
   std::vector<VertexID>& getKeys() { return keys_; }
 
   unordered_set<VertexID> getKeyMap() const { return unordered_set<VertexID>(keys_.begin(), keys_.end()); }
+
+  // exceptions include keys and single-element sets
+  void getExceptions(unordered_set<VertexID>& exception, const unordered_set<uint32_t> not_include_set) const {
+    exception.insert(keys_.begin(), keys_.end());
+    for (uint32_t i = 0; i < getNumSets(); ++i) {
+      auto& set = sets_[i];
+      if (set->size() == 1 && not_include_set.count(i) == 0) {
+        exception.insert(set->front());
+      }
+    }
+  }
 
   /** Get the matching set of the non-key vertex at key_idx. */
   const VertexSet& getSet(uint32_t key_idx) const { return sets_[key_idx]; }

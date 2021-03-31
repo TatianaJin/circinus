@@ -14,25 +14,12 @@
 
 #pragma once
 
-#include <string>
+#include <cinttypes>
 
 namespace circinus {
 
-class Operator {
- private:
-  Operator* next_ = nullptr;
+enum class QueryType : uint8_t { Execute = 0, Profile, SampleExecute };
 
- public:
-  virtual ~Operator() {}
-
-  inline void setNext(Operator* next) { next_ = next; }
-  inline Operator* getNext() const { return next_; }
-
-  virtual std::string toString() const { return "Operator"; }
-
-  virtual std::string toProfileString() const { return toString(); }
-
-  virtual Operator* clone() const = 0;
-};
+inline constexpr bool isProfileMode(QueryType profile) { return profile == QueryType::Profile; }
 
 }  // namespace circinus

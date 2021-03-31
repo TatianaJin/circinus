@@ -88,7 +88,7 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
             }
             prev->setNext(current);
             prev = current;
-            current = newExpandIntoOperator(set_parents, target_vertex);
+            current = newExpandIntoOperator(set_parents, target_vertex, key_parents);
           } else if (key_parents.size() != 0) {
             current = newExpandKeyKeyVertexOperator(key_parents, target_vertex);
           } else {
@@ -214,7 +214,7 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
           }
           prev->setNext(current);
           prev = current;
-          current = newExpandIntoOperator(set_parents, target_vertex);
+          current = newExpandIntoOperator(set_parents, target_vertex, key_parents);
         } else if (key_parents.size() == 1) {
           current = newExpandEdgeOperator(key_parents.front(), target_vertex, cover_table_);
         } else if (key_parents.size() > 1) {
@@ -259,9 +259,10 @@ TraverseOperator* ExecutionPlan::newExpandEdgeOperator(QueryVertexID parent_vert
   return ret;
 }
 
-TraverseOperator* ExecutionPlan::newExpandIntoOperator(std::vector<QueryVertexID>& parents,
-                                                       QueryVertexID target_vertex) {
-  auto ret = new ExpandIntoOperator(parents, target_vertex, query_vertex_indices_);
+TraverseOperator* ExecutionPlan::newExpandIntoOperator(const std::vector<QueryVertexID>& parents,
+                                                       QueryVertexID target_vertex,
+                                                       const std::vector<QueryVertexID>& prev_key_parents) {
+  auto ret = new ExpandIntoOperator(parents, target_vertex, query_vertex_indices_, prev_key_parents);
   operators_.push_back(ret);
   return ret;
 }

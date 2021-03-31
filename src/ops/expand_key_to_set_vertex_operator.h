@@ -20,43 +20,25 @@
 
 #include "graph/types.h"
 #include "ops/expand_vertex_operator.h"
+#include "ops/types.h"
 #include "utils/hashmap.h"
 
 namespace circinus {
 
 class ExpandKeyToSetVertexOperator : public ExpandVertexOperator {
+  std::vector<unordered_set<std::string>> parent_tuple_sets_;
+
  public:
   ExpandKeyToSetVertexOperator(const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
                                const unordered_map<QueryVertexID, uint32_t>& query_vertex_indices)
       : ExpandVertexOperator(parents, target_vertex, query_vertex_indices) {}
 
   uint32_t expand(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size) override {
-    uint32_t output_num = 0;
-    while (input_index_ < current_inputs_->size()) {
-      const auto& input = (*current_inputs_)[input_index_++];
-      std::vector<VertexID> new_set;
-      for (uint32_t i = 0; i < parents_.size(); ++i) {
-        uint32_t key = query_vertex_indices_[parents_[i]];
-        uint32_t key_vid = input.getKeyVal(key);
-        if (i == 0) {
-          intersect(*candidates_, current_data_graph_->getOutNeighbors(key_vid), &new_set);
-        } else {
-          intersectInplace(new_set, current_data_graph_->getOutNeighbors(key_vid), &new_set);
-        }
-        if (new_set.size() == 0) {
-          break;
-        }
-      }
-      new_set.erase(std::remove_if(new_set.begin(), new_set.end(),
-                                   [&input](VertexID set_vertex) { return input.isExisting(set_vertex); }),
-                    new_set.end());
-      if (new_set.size() != 0) {
-        outputs->emplace_back(input, std::make_shared<std::vector<VertexID>>(std::move(new_set)));
-        ++output_num;
-        // TODO(by) break if batch_size is reached
-      }
-    }
-    return output_num;
+    return expandInner<QueryType::Execute>(outputs, batch_size);
+  }
+
+  uint32_t expandAndProfileInner(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size) override {
+    return expandInner<QueryType::Profile>(outputs, batch_size);
   }
 
   std::string toString() const override {
@@ -71,6 +53,60 @@ class ExpandKeyToSetVertexOperator : public ExpandVertexOperator {
     auto ret = new ExpandKeyToSetVertexOperator(parents_, target_vertex_, query_vertex_indices_);
     ret->candidates_ = candidates_;
     return ret;
+  }
+
+ protected:
+  template <QueryType profile>
+  inline uint32_t expandInner(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size) {
+    uint32_t output_num = 0;
+    for (; input_index_ < current_inputs_->size(); ++input_index_) {
+      const auto& input = (*current_inputs_)[input_index_];
+      std::vector<VertexID> new_set;
+      for (uint32_t i = 0; i < parents_.size(); ++i) {
+        uint32_t key = query_vertex_indices_[parents_[i]];
+        uint32_t key_vid = input.getKeyVal(key);
+        if (i == 0) {
+          intersect(*candidates_, current_data_graph_->getOutNeighbors(key_vid), &new_set);
+          if
+            constexpr(isProfileMode(profile)) {
+              updateIntersectInfo(candidates_->size() + current_data_graph_->getVertexOutDegree(key_vid),
+                                  new_set.size());
+            }
+        } else {
+          auto new_set_size = new_set.size();
+          intersectInplace(new_set, current_data_graph_->getOutNeighbors(key_vid), &new_set);
+          if
+            constexpr(isProfileMode(profile)) {
+              updateIntersectInfo(new_set_size + current_data_graph_->getVertexOutDegree(key_vid), new_set.size());
+            }
+        }
+        if (new_set.size() == 0) {
+          break;
+        }
+      }
+      if
+        constexpr(isProfileMode(profile)) {
+          total_num_input_subgraphs_ += (*current_inputs_)[input_index_].getNumSubgraphs();
+          // consider reuse of partial intersection results at each parent
+          std::vector<VertexID> parent_tuple(parents_.size());
+          parent_tuple_sets_.resize(parents_.size());
+          for (uint32_t i = 0; i < parents_.size(); ++i) {
+            uint32_t key_vid = input.getKeyVal(query_vertex_indices_[parents_[i]]);
+            parent_tuple[i] = key_vid;
+            distinct_intersection_count_ +=
+                parent_tuple_sets_[i].emplace((char*)parent_tuple.data(), (i + 1) * sizeof(VertexID)).second;
+          }
+        }
+      new_set.erase(std::remove_if(new_set.begin(), new_set.end(),
+                                   [&input](VertexID set_vertex) { return input.isExisting(set_vertex); }),
+                    new_set.end());
+      if (new_set.size() != 0) {
+        outputs->emplace_back(input, std::make_shared<std::vector<VertexID>>(std::move(new_set)));
+        ++output_num;
+        // TODO(by) break if batch_size is reached
+      }
+    }
+    return output_num;
   }
 };
 

@@ -18,6 +18,7 @@
 #include <queue>
 #include <vector>
 
+#include "graph/compressed_subgraphs.h"
 #include "graph/graph.h"
 #include "graph/query_graph.h"
 #include "graph/tree_node.h"
@@ -116,6 +117,14 @@ static bool semiperfectBipartiteMatching(uint32_t* col_ptrs, const std::vector<u
     }
   }
   return true;
+}
+
+static inline uint64_t getNumSubgraphs(const std::vector<CompressedSubgraphs>& groups, uint32_t start, uint32_t end) {
+  uint64_t count = 0;
+  for (uint32_t i = start; i < end; ++i) {
+    count += groups[i].getNumSubgraphs();
+  }
+  return count;
 }
 
 }  // namespace circinus

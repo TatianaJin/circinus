@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <chrono>
 #include <fstream>
 #include <string>
 #include <vector>
@@ -22,6 +23,7 @@
 
 #include "graph/compressed_subgraphs.h"
 #include "ops/operator.h"
+#include "utils/utils.h"
 
 namespace circinus {
 
@@ -64,11 +66,30 @@ class Outputs {
 class OutputOperator : public Operator {
  protected:
   Outputs* outputs_;
+  double total_time_in_milliseconds_ = 0;
+  uint64_t total_num_input_subgraphs_ = 0;
+  uint64_t leftover_input_ = 0;
 
  public:
   explicit OutputOperator(Outputs* outputs) : outputs_(outputs) {}
   static OutputOperator* newOutputOperator(OutputType type, Outputs* outputs);
   virtual bool validateAndOutput(const std::vector<CompressedSubgraphs>& input, uint32_t output_index) = 0;
+
+  inline bool validateAndOutputAndProfile(const std::vector<CompressedSubgraphs>& input, uint32_t output_index) {
+    auto start = std::chrono::high_resolution_clock::now();
+    auto ret = validateAndOutput(input, output_index);
+    auto stop = std::chrono::high_resolution_clock::now();
+    total_time_in_milliseconds_ +=
+        (std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start).count() / 1000000.0);
+    total_num_input_subgraphs_ += getNumSubgraphs(input, 0, input.size() - leftover_input_);
+    return ret;
+  }
+
+  std::string toProfileString() const override {
+    std::stringstream ss;
+    ss << toString() << ',' << total_time_in_milliseconds_ << ",,," << total_num_input_subgraphs_;
+    return ss.str();
+  }
 };
 
 class CountOutputOperator : public OutputOperator {
@@ -81,10 +102,15 @@ class CountOutputOperator : public OutputOperator {
 
   bool validateAndOutput(const std::vector<CompressedSubgraphs>& input, uint32_t output_index) override {
     auto count_acc = outputs_->getCount(output_index);
+    leftover_input_ = input.size();
     for (auto& group : input) {
-      count_acc = outputs_->updateCount(group.getNumIsomorphicSubgraphs(outputs_->getLimitPerThread() - count_acc),
-                                        output_index);
-      if (count_acc >= outputs_->getLimitPerThread()) return true;
+      --leftover_input_;
+      auto update = group.getNumIsomorphicSubgraphs(outputs_->getLimitPerThread() - count_acc);
+      count_acc = outputs_->updateCount(update, output_index);
+      if (count_acc >= outputs_->getLimitPerThread()) {
+        LOG(INFO) << "last input num subgraphs " << group.getNumSubgraphs() << " isomorphic " << update;
+        return true;
+      }
     }
     return false;
   }

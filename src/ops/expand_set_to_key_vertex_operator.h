@@ -20,34 +20,25 @@
 
 #include "graph/query_graph.h"
 #include "ops/expand_vertex_operator.h"
+#include "ops/types.h"
 #include "utils/hashmap.h"
 
 namespace circinus {
 
 class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
+  std::vector<unordered_set<std::string>> parent_tuple_sets_;
+
  public:
   ExpandSetToKeyVertexOperator(const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
                                const unordered_map<QueryVertexID, uint32_t>& query_vertex_indices)
       : ExpandVertexOperator(parents, target_vertex, query_vertex_indices) {}
 
-  // TODO(tatiana): see if hard limit on output size is needed
   uint32_t expand(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size) override {
-    uint32_t output_num = 0;
-    while (input_index_ < current_inputs_->size()) {
-      auto min_parent_set = getMinimumParent();
-      if (min_parent_set.first * 20 < candidates_->size()) {
-        DLOG(INFO) << "fromSetNeighborStrategy";
-        output_num += fromSetNeighborStrategy(outputs, min_parent_set.second);
-      } else {
-        DLOG(INFO) << "fromCandidateStrategy";
-        output_num += fromCandidateStrategy(outputs);
-      }
-      input_index_++;
-      if (output_num >= batch_size) {
-        break;
-      }
-    }
-    return output_num;
+    return expandInner<QueryType::Execute>(outputs, batch_size);
+  }
+
+  uint32_t expandAndProfileInner(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size) override {
+    return expandInner<QueryType::Profile>(outputs, batch_size);
   }
 
   std::string toString() const override {
@@ -101,6 +92,40 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
     return std::make_pair(size, parent);
   }
 
+  /** Calculate the ideal si count as if we expand parent 1, 2, ... n for n = parents_.size() in normal backtracing
+   * implementation. */
+  void updateDistinctSICount();
+
+  // TODO(tatiana): see if hard limit on output size is needed
+  template <QueryType profile>
+  inline uint32_t expandInner(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size) {
+    if
+      constexpr(isProfileMode(profile)) { parent_tuple_sets_.resize(parents_.size()); }
+    uint32_t output_num = 0;
+    while (input_index_ < current_inputs_->size()) {
+      auto min_parent_set = getMinimumParent();
+      if
+        constexpr(isProfileMode(profile)) { updateDistinctSICount(); }
+      if (min_parent_set.first * 20 < candidates_->size()) {
+        DLOG(INFO) << "fromSetNeighborStrategy";
+        output_num += fromSetNeighborStrategy<profile>(outputs, min_parent_set.second);
+      } else {
+        DLOG(INFO) << "fromCandidateStrategy";
+        output_num += fromCandidateStrategy<profile>(outputs);
+      }
+      if
+        constexpr(isProfileMode(profile)) {
+          total_num_input_subgraphs_ += (*current_inputs_)[input_index_].getNumSubgraphs();
+        }
+      input_index_++;
+      if (output_num >= batch_size) {
+        break;
+      }
+    }
+    return output_num;
+  }
+
+  template <QueryType profile>
   uint32_t fromCandidateStrategy(std::vector<CompressedSubgraphs>* outputs) {
     auto& input = (*current_inputs_)[input_index_];
     uint32_t output_num = 0;
@@ -117,6 +142,10 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
         std::vector<VertexID> new_set;
         uint32_t id = query_vertex_indices_[set_vid];
         intersect(*input.getSet(id), key_out_neighbors, &new_set);
+        if
+          constexpr(isProfileMode(profile)) {
+            updateIntersectInfo(input.getSet(id)->size() + key_out_neighbors.second, new_set.size());
+          }
         if (new_set.empty()) {
           add = false;
           break;
@@ -132,6 +161,7 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
     return output_num;
   }
 
+  template <QueryType profile>
   uint32_t fromSetNeighborStrategy(std::vector<CompressedSubgraphs>* outputs, QueryVertexID min_parent) {
     unordered_set<VertexID> visited;
     auto& input = (*current_inputs_)[input_index_];
@@ -157,6 +187,10 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
             std::vector<VertexID> new_set;
             uint32_t id = query_vertex_indices_[set_vid];
             intersect(*input.getSet(id), key_out_neighbors, &new_set);
+            if
+              constexpr(isProfileMode(profile)) {
+                updateIntersectInfo(input.getSet(id)->size() + key_out_neighbors.second, new_set.size());
+              }
             if (new_set.empty()) {
               add = false;
               break;
