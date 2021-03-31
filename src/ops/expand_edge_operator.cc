@@ -83,7 +83,8 @@ class ExpandEdgeKeyToSetOperator : public ExpandEdgeOperator {
     std::vector<VertexID> targets;
     auto parent_match = input.getKeyVal(parent_index_);
     // intersect(*candidates_, current_data_graph_->getOutNeighbors(parent_match), &targets, input.getKeyMap());
-    intersect(candidate_set_, current_data_graph_->getOutNeighbors(parent_match), &targets, input.getKeyMap());
+    // intersect(candidate_set_, current_data_graph_->getOutNeighbors(parent_match), &targets, input.getKeyMap());
+    intersect(candidate_set_, current_data_graph_->getOutNeighbors(parent_match), &targets, input.getExceptions());
     if
       constexpr(isProfileMode(profile)) {
         distinct_intersection_count_ += parent_set_.insert(parent_match).second;
@@ -125,6 +126,10 @@ class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
         auto& input = (*current_inputs_)[input_index_ - 1];
         for (; current_target_index_ < target_end; ++current_target_index_) {
           outputs->emplace_back(input, current_targets_[current_target_index_]);
+          // FIXME
+          // if (outputs->back().empty()) {
+          //   outputs->pop_back();
+          // }
         }
         if (n == cap) {
           return n;
@@ -176,7 +181,10 @@ class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
     current_targets_.clear();
     current_target_index_ = 0;
     auto parent_match = input.getKeyVal(parent_index_);
-    intersect(candidate_set_, current_data_graph_->getOutNeighbors(parent_match), &current_targets_, input.getKeyMap());
+    // intersect(candidate_set_, current_data_graph_->getOutNeighbors(parent_match), &current_targets_,
+    // input.getKeyMap());
+    intersect(candidate_set_, current_data_graph_->getOutNeighbors(parent_match), &current_targets_,
+              input.getExceptions());
     if
       constexpr(isProfileMode(profile)) {
         distinct_intersection_count_ += parent_set_.insert(parent_match).second;
@@ -220,14 +228,14 @@ class CurrentResultsByCandidate : public CurrentResults {
     uint32_t n = 0;
     auto& parent_set = input_->getSet(parent_index_);
 
-    auto current_keys = input_->getKeyMap();
+    auto exceptions = input_->getExceptions(parent_index_);
     for (; n < cap && candidate_index_ < candidates_->size(); ++candidate_index_) {
       std::vector<VertexID> parents;
       auto candidate = (*candidates_)[candidate_index_];
-      if (input_->isExisting(candidate)) {
+      if (exceptions.count(candidate)) {
         continue;
       }
-      intersect(*parent_set, data_graph_->getOutNeighbors(candidate), &parents, current_keys);
+      intersect(*parent_set, data_graph_->getOutNeighbors(candidate), &parents, exceptions);
       if
         constexpr(isProfileMode(profile)) {
           owner_->updateIntersectInfo(parent_set->size() + data_graph_->getVertexOutDegree(candidate), parents.size());
@@ -254,12 +262,12 @@ class CurrentResultsByParent : public CurrentResults {
     auto& parent_set = *input_->getSet(parent_index_);
     unordered_map<VertexID, uint32_t> group_index;
     uint32_t n = 0;
-    auto current_keys = input_->getKeyMap();
+    auto exceptions = input_->getExceptions();
     for (uint32_t i = 0; i < parent_set.size(); ++i) {
       auto parent_match = parent_set[i];
       if (input_->isExisting(parent_match)) continue;
       std::vector<VertexID> targets;
-      intersect(*candidates_, data_graph_->getOutNeighbors(parent_match), &targets, current_keys);
+      intersect(*candidates_, data_graph_->getOutNeighbors(parent_match), &targets, exceptions);
       if
         constexpr(isProfileMode(profile)) {
           owner_->updateIntersectInfo(candidates_->size() + data_graph_->getVertexOutDegree(parent_match),
@@ -286,7 +294,7 @@ class CurrentResultsByExtension : public CurrentResults {
   unordered_set<VertexID> seen_extensions_;
   std::queue<VertexID> extensions_;
   uint32_t parent_match_index_ = 0;
-  unordered_set<VertexID> current_keys_;
+  unordered_set<VertexID> current_exceptions_;
 
  public:
   CurrentResultsByExtension(const std::vector<VertexID>* candidates, const CompressedSubgraphs* input,
@@ -302,7 +310,7 @@ class CurrentResultsByExtension : public CurrentResults {
       auto candidate = extensions_.front();
       extensions_.pop();
       std::vector<VertexID> parents;  // valid parents for current candidate
-      intersect(parent_set, data_graph_->getOutNeighbors(candidate), &parents, current_keys_);
+      intersect(parent_set, data_graph_->getOutNeighbors(candidate), &parents, current_exceptions_);
       if
         constexpr(isProfileMode(profile)) {
           owner_->updateIntersectInfo(parent_set.size() + data_graph_->getVertexOutDegree(candidate), parents.size());
@@ -316,15 +324,15 @@ class CurrentResultsByExtension : public CurrentResults {
  private:
   inline void getExtensions(uint32_t cap) {
     auto& parent_set = *input_->getSet(parent_index_);
-    current_keys_ = input_->getKeyMap();
+    current_exceptions_ = input_->getExceptions(parent_index_);
     for (; extensions_.size() < cap && parent_match_index_ < parent_set.size(); ++parent_match_index_) {
       auto parent_match = parent_set[parent_match_index_];
-      if (current_keys_.find(parent_match) != current_keys_.end()) {
+      if (current_exceptions_.count(parent_match)) {
         continue;
       }
 
       std::vector<VertexID> current_extensions;
-      intersect(*candidates_, data_graph_->getOutNeighbors(parent_match), &current_extensions, current_keys_);
+      intersect(*candidates_, data_graph_->getOutNeighbors(parent_match), &current_extensions, current_exceptions_);
       if
         constexpr(isProfileMode(profile)) {
           owner_->updateIntersectInfo(candidates_->size() + data_graph_->getVertexOutDegree(parent_match),

@@ -67,6 +67,7 @@ class OutputOperator : public Operator {
  protected:
   Outputs* outputs_;
   double total_time_in_milliseconds_ = 0;
+  uint64_t total_input_size_ = 0;
   uint64_t total_num_input_subgraphs_ = 0;
   uint64_t leftover_input_ = 0;
 
@@ -82,12 +83,14 @@ class OutputOperator : public Operator {
     total_time_in_milliseconds_ +=
         (std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start).count() / 1000000.0);
     total_num_input_subgraphs_ += getNumSubgraphs(input, 0, input.size() - leftover_input_);
+    total_input_size_ += input.size() - leftover_input_;
     return ret;
   }
 
   std::string toProfileString() const override {
     std::stringstream ss;
-    ss << toString() << ',' << total_time_in_milliseconds_ << ",,," << total_num_input_subgraphs_;
+    ss << toString() << ',' << total_time_in_milliseconds_ << ',' << total_input_size_ << ",,"
+       << total_num_input_subgraphs_;
     return ss.str();
   }
 };
@@ -108,7 +111,8 @@ class CountOutputOperator : public OutputOperator {
       auto update = group.getNumIsomorphicSubgraphs(outputs_->getLimitPerThread() - count_acc);
       count_acc = outputs_->updateCount(update, output_index);
       if (count_acc >= outputs_->getLimitPerThread()) {
-        LOG(INFO) << "last input num subgraphs " << group.getNumSubgraphs() << " isomorphic " << update;
+        DLOG(INFO) << "last input num subgraphs " << group.getNumSubgraphs() << " isomorphic " << update << " total "
+                   << count_acc;
         return true;
       }
     }

@@ -55,9 +55,11 @@ class CompressedSubgraphs {
    */
   CompressedSubgraphs(const CompressedSubgraphs& subgraphs, VertexID key)
       : keys_(subgraphs.getNumKeys() + 1), sets_(subgraphs.getNumSets()) {
+    // isomorphism check for pruning sets that are completely conflicting with keys
+    // TODO(tatiana): remove empty CompressedSubraphs from output
+    pruneAndAddExistingSets(subgraphs, key, subgraphs.getNumSets());
     std::copy(subgraphs.keys_.begin(), subgraphs.keys_.end(), keys_.begin());
     keys_.back() = key;
-    sets_ = subgraphs.sets_;
   }
 
   /**
@@ -66,8 +68,12 @@ class CompressedSubgraphs {
    */
   CompressedSubgraphs(const CompressedSubgraphs& subgraphs, VertexSet&& new_set)
       : keys_(subgraphs.getNumKeys()), sets_(subgraphs.getNumSets() + 1) {
+    if (new_set->size() == 1) {
+      pruneAndAddExistingSets(subgraphs, new_set->front(), subgraphs.getNumSets());
+    } else {
+      std::copy(subgraphs.sets_.begin(), subgraphs.sets_.end(), sets_.begin());
+    }
     keys_ = subgraphs.keys_;
-    std::copy(subgraphs.sets_.begin(), subgraphs.sets_.end(), sets_.begin());
     sets_.back() = std::move(new_set);
   }
 
@@ -82,10 +88,10 @@ class CompressedSubgraphs {
   CompressedSubgraphs(const CompressedSubgraphs& subgraphs, uint32_t replacing_set_index, VertexSet&& new_set,
                       VertexID key)
       : keys_(subgraphs.getNumKeys() + 1), sets_(subgraphs.getNumSets()) {
-    // FIXME(tatiana): check old sets for new key
+    // TODO(tatiana): prune when `new_set.size() == 1`
+    pruneAndAddExistingSets(subgraphs, key, replacing_set_index);
     std::copy(subgraphs.keys_.begin(), subgraphs.keys_.end(), keys_.begin());
     keys_.back() = key;
-    sets_ = subgraphs.sets_;
     sets_[replacing_set_index] = std::move(new_set);
   }
 
@@ -177,6 +183,7 @@ class CompressedSubgraphs {
   unordered_set<VertexID> getKeyMap() const { return unordered_set<VertexID>(keys_.begin(), keys_.end()); }
 
   // exceptions include keys and single-element sets
+  // TODO(tatiana): give same-label key/set indices instead of `not_include_set`
   void getExceptions(unordered_set<VertexID>& exception, const unordered_set<uint32_t> not_include_set) const {
     exception.insert(keys_.begin(), keys_.end());
     for (uint32_t i = 0; i < getNumSets(); ++i) {
@@ -185,6 +192,26 @@ class CompressedSubgraphs {
         exception.insert(set->front());
       }
     }
+  }
+
+  // exceptions include keys and single-element sets
+  // TODO(tatiana): give same-label key/set indices instead of `not_include_set`
+  unordered_set<VertexID> getExceptions(uint32_t not_include_set = ~0u) const {
+    unordered_set<VertexID> exception(keys_.begin(), keys_.end());
+    for (uint32_t i = 0; i < getNumSets(); ++i) {
+      auto& set = sets_[i];
+      CHECK(set != nullptr);
+      if (set->size() == 1 && i != not_include_set) {
+        exception.insert(set->front());
+        // if (!exception.insert(set->front()).second) {
+        //  LOG(WARNING) << "set front " << set->front();
+        //  for (auto v : keys_) {
+        //    LOG(WARNING) << "key " << v;
+        //  }
+        //}
+      }
+    }
+    return exception;
   }
 
   /** Get the matching set of the non-key vertex at key_idx. */
@@ -209,6 +236,36 @@ class CompressedSubgraphs {
       ss << ',';
     }
     ss << std::endl;
+  }
+
+  bool empty() const { return keys_.empty(); }
+
+  bool pruneAndAddExistingSets(const CompressedSubgraphs& subgraphs, VertexID v, uint32_t exclude_set_index,
+                               uint32_t set_size_threshold = ~0u) {
+    bool is_empty = false;
+    for (uint32_t i = 0; i < subgraphs.getNumSets(); ++i) {
+      if (i == exclude_set_index) continue;
+      auto& set = subgraphs.sets_[i];
+      if (!is_empty && set->size() <= set_size_threshold) {
+        // TODO(tatiana): using linear scan is faster for small threshold
+        auto lb = std::lower_bound(set->begin(), set->end(), v);
+        if (lb != set->end() && *lb == v) {
+          if (set->size() == 1) {
+            is_empty = true;  // return true;
+          }
+          auto new_set = std::make_shared<std::vector<VertexID>>();
+          new_set->insert(new_set->end(), set->begin(), lb);
+          new_set->insert(new_set->end(), lb + 1, set->end());
+          sets_[i] = std::move(new_set);
+          continue;
+        }
+      }
+      sets_[i] = set;
+    }
+    if (is_empty) {
+      LOG(WARNING) << "empty CompressedSubgraphs";
+    }
+    return is_empty;
   }
 };
 
