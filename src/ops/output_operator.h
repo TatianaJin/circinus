@@ -111,8 +111,8 @@ class CountOutputOperator : public OutputOperator {
       auto update = group.getNumIsomorphicSubgraphs(outputs_->getLimitPerThread() - count_acc);
       count_acc = outputs_->updateCount(update, output_index);
       if (count_acc >= outputs_->getLimitPerThread()) {
-        DLOG(INFO) << "last input num subgraphs " << group.getNumSubgraphs() << " isomorphic " << update << " total "
-                   << count_acc;
+        LOG(INFO) << "last input num subgraphs " << group.getNumSubgraphs() << " isomorphic " << update << " total "
+                  << count_acc;
         return true;
       }
     }

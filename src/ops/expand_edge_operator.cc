@@ -94,7 +94,12 @@ class ExpandEdgeKeyToSetOperator : public ExpandEdgeOperator {
     if (targets.empty()) {
       return false;
     }
-    outputs->emplace_back(input, std::make_shared<std::vector<VertexID>>(std::move(targets)));
+    // TODO(tatiana): same-label set indices
+    CompressedSubgraphs output(input, std::move(targets));
+    if (output.empty()) {  // actively prune existing sets
+      return false;
+    }
+    outputs->emplace_back(std::move(output));
     return true;
   }
 };
@@ -121,15 +126,16 @@ class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
     while (true) {
       // if there are existing targets from the last input, consume first
       if (current_target_index_ < current_targets_.size()) {
-        auto target_end = std::min(current_target_index_ + cap - n, (uint32_t)current_targets_.size());
-        n += target_end - current_target_index_;
         auto& input = (*current_inputs_)[input_index_ - 1];
-        for (; current_target_index_ < target_end; ++current_target_index_) {
-          outputs->emplace_back(input, current_targets_[current_target_index_]);
-          // FIXME
-          // if (outputs->back().empty()) {
-          //   outputs->pop_back();
-          // }
+        while (current_target_index_ < current_targets_.size()) {
+          // TODO(tatiana): same-label set indices
+          CompressedSubgraphs output(input, current_targets_[current_target_index_]);
+          ++current_target_index_;
+          if (output.empty()) continue;
+          outputs->emplace_back(std::move(output));
+          if (++n == cap) {
+            return n;
+          }
         }
         if (n == cap) {
           return n;
@@ -243,9 +249,11 @@ class CurrentResultsByCandidate : public CurrentResults {
       if (parents.empty()) {
         continue;
       }
+      CompressedSubgraphs output(*input_, parent_index_, std::make_shared<std::vector<VertexID>>(std::move(parents)),
+                                 candidate, true);
+      if (output.empty()) continue;
       ++n;
-      outputs->emplace_back(*input_, parent_index_, std::make_shared<std::vector<VertexID>>(std::move(parents)),
-                            candidate);
+      outputs->emplace_back(std::move(output));
     }
     return n;
   }
@@ -253,21 +261,24 @@ class CurrentResultsByCandidate : public CurrentResults {
 
 template <QueryType profile>
 class CurrentResultsByParent : public CurrentResults {
+  unordered_set<VertexID> exceptions_;
+
  public:
   CurrentResultsByParent(const std::vector<VertexID>* candidates, const CompressedSubgraphs* input,
                          const Graph* data_graph, uint32_t parent_index, TraverseOperator* owner)
-      : CurrentResults(candidates, input, data_graph, parent_index, owner) {}
+      : CurrentResults(candidates, input, data_graph, parent_index, owner) {
+    exceptions_ = input_->getExceptions(parent_index_);
+  }
 
   uint32_t getResults(std::vector<CompressedSubgraphs>* outputs, uint32_t cap) override {
     auto& parent_set = *input_->getSet(parent_index_);
     unordered_map<VertexID, uint32_t> group_index;
     uint32_t n = 0;
-    auto exceptions = input_->getExceptions();
     for (uint32_t i = 0; i < parent_set.size(); ++i) {
       auto parent_match = parent_set[i];
-      if (input_->isExisting(parent_match)) continue;
+      if (exceptions_.count(parent_match)) continue;
       std::vector<VertexID> targets;
-      intersect(*candidates_, data_graph_->getOutNeighbors(parent_match), &targets, exceptions);
+      intersect(*candidates_, data_graph_->getOutNeighbors(parent_match), &targets, exceptions_);
       if
         constexpr(isProfileMode(profile)) {
           owner_->updateIntersectInfo(candidates_->size() + data_graph_->getVertexOutDegree(parent_match),
@@ -277,7 +288,8 @@ class CurrentResultsByParent : public CurrentResults {
         auto pos = group_index.find(target);
         if (pos == group_index.end()) {
           group_index[target] = outputs->size();
-          outputs->emplace_back(*input_, parent_index_, makeVertexSet(parent_match)), target);
+          // TODO(tatiana): check for group whose updated parent set has size 1 and prune
+          outputs->emplace_back(*input_, parent_index_, makeVertexSet(parent_match)), target, false);
           ++n;
         } else {
           (*outputs)[pos->second].UpdateSet(parent_index_, parent_match);
@@ -299,49 +311,57 @@ class CurrentResultsByExtension : public CurrentResults {
  public:
   CurrentResultsByExtension(const std::vector<VertexID>* candidates, const CompressedSubgraphs* input,
                             const Graph* data_graph, uint32_t parent_index, TraverseOperator* owner)
-      : CurrentResults(candidates, input, data_graph, parent_index, owner) {}
+      : CurrentResults(candidates, input, data_graph, parent_index, owner) {
+    current_exceptions_ = input_->getExceptions(parent_index_);
+  }
 
   uint32_t getResults(std::vector<CompressedSubgraphs>* outputs, uint32_t cap) override {
-    getExtensions(cap);
-
+    uint32_t n = 0;
     auto& parent_set = *input_->getSet(parent_index_);
-    uint32_t n = std::min(cap, (uint32_t)extensions_.size());
-    for (uint32_t i = 0; i < n; ++i) {
-      auto candidate = extensions_.front();
-      extensions_.pop();
-      std::vector<VertexID> parents;  // valid parents for current candidate
-      intersect(parent_set, data_graph_->getOutNeighbors(candidate), &parents, current_exceptions_);
-      if
-        constexpr(isProfileMode(profile)) {
-          owner_->updateIntersectInfo(parent_set.size() + data_graph_->getVertexOutDegree(candidate), parents.size());
+    while (true) {
+      // check existing extensions first
+      while (!extensions_.empty()) {
+        auto candidate = extensions_.front();
+        extensions_.pop();
+        std::vector<VertexID> parents;  // valid parents for current candidate
+        intersect(parent_set, data_graph_->getOutNeighbors(candidate), &parents, current_exceptions_);
+        if
+          constexpr(isProfileMode(profile)) {
+            owner_->updateIntersectInfo(parent_set.size() + data_graph_->getVertexOutDegree(candidate), parents.size());
+          }
+        CompressedSubgraphs output(*input_, parent_index_, std::make_shared<std::vector<VertexID>>(std::move(parents)),
+                                   candidate, true);
+        if (output.empty()) {
+          continue;
         }
-      outputs->emplace_back(*input_, parent_index_, std::make_shared<std::vector<VertexID>>(std::move(parents)),
-                            candidate);
+        outputs->emplace_back(std::move(output));
+        if (++n == cap) return n;
+      }
+      // all parent match extended
+      if (parent_match_index_ == parent_set.size()) break;
+      // get more extensions by extending from the next parent match
+      auto parent_match = parent_set[parent_match_index_];
+      getExtensions(parent_match);
+      ++parent_match_index_;
     }
     return n;
   }
 
  private:
-  inline void getExtensions(uint32_t cap) {
-    auto& parent_set = *input_->getSet(parent_index_);
-    current_exceptions_ = input_->getExceptions(parent_index_);
-    for (; extensions_.size() < cap && parent_match_index_ < parent_set.size(); ++parent_match_index_) {
-      auto parent_match = parent_set[parent_match_index_];
-      if (current_exceptions_.count(parent_match)) {
-        continue;
+  inline void getExtensions(VertexID parent_match) {
+    if (current_exceptions_.count(parent_match)) {
+      return;
+    }
+    std::vector<VertexID> current_extensions;
+    intersect(*candidates_, data_graph_->getOutNeighbors(parent_match), &current_extensions, current_exceptions_);
+    if
+      constexpr(isProfileMode(profile)) {
+        owner_->updateIntersectInfo(candidates_->size() + data_graph_->getVertexOutDegree(parent_match),
+                                    current_extensions.size());
       }
-
-      std::vector<VertexID> current_extensions;
-      intersect(*candidates_, data_graph_->getOutNeighbors(parent_match), &current_extensions, current_exceptions_);
-      if
-        constexpr(isProfileMode(profile)) {
-          owner_->updateIntersectInfo(candidates_->size() + data_graph_->getVertexOutDegree(parent_match),
-                                      current_extensions.size());
-        }
-      for (VertexID neighbor : current_extensions) {
-        if (seen_extensions_.insert(neighbor).second) {
-          extensions_.push(neighbor);
-        }
+    for (VertexID neighbor : current_extensions) {
+      if (seen_extensions_.insert(neighbor).second) {
+        extensions_.push(neighbor);
       }
     }
   }

@@ -125,6 +125,22 @@ class TraverseOperator : public Operator {
     auto stop = std::chrono::high_resolution_clock::now();
     total_time_in_milliseconds_ +=
         (std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start).count() / 1000000.0);
+    {
+      uint32_t size = 0;
+      auto offset = outputs->size() - n;
+      for (uint32_t i = 0; i < n; ++i) {
+        if ((*outputs)[offset + i].getNumIsomorphicSubgraphs(1) == 0) {
+          CHECK(false) << toString() << "\n\t" << (*outputs)[offset + i].toString();
+          continue;
+        }
+        if (size != i) {
+          (*outputs)[offset + size] = std::move((*outputs)[offset + i]);
+        }
+        ++size;
+      }
+      outputs->erase(outputs->begin() + (offset + size), outputs->end());
+      n = size;
+    }
     total_num_output_subgraphs_ += getNumSubgraphs(*outputs, outputs->size() - n, outputs->size());
     total_output_size_ += n;
     return n;
