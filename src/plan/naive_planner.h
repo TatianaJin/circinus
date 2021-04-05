@@ -48,6 +48,8 @@ class NaivePlanner {
   ExecutionPlan* generatePlan(const std::vector<QueryVertexID>& use_order = {}, Profiler* profiler = nullptr);
   ExecutionPlan* generatePlanWithEagerDynamicCover(const std::vector<QueryVertexID>& use_order = {},
                                                    Profiler* profiler = nullptr);
+  ExecutionPlan* generatePlanWithoutCompression(const std::vector<QueryVertexID>& use_order = {},
+                                                Profiler* profiler = nullptr);
 
   std::pair<uint32_t, uint32_t> analyzeDynamicCoreCoverEager(const std::vector<QueryVertexID>& use_order = {});
   std::tuple<uint32_t, uint32_t, uint32_t> analyzeDynamicCoreCoverMWVC(
