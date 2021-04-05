@@ -14,6 +14,7 @@
 
 #include "plan/naive_planner.h"
 
+#include <numeric>
 #include <queue>
 #include <tuple>
 #include <utility>
@@ -74,6 +75,32 @@ ExecutionPlan* NaivePlanner::generatePlan(const std::vector<QueryVertexID>& use_
   } else {
     matching_order_ = use_order;
   }
+  plan_.populatePhysicalPlan(query_graph_, matching_order_, select_cover, profiler);
+  return &plan_;
+}
+
+ExecutionPlan* NaivePlanner::generatePlanWithoutCompression(const std::vector<QueryVertexID>& use_order,
+                                                            Profiler* profiler) {
+  // if any of the candidate cardinality is zero, there is no matching
+  if (!hasValidCandidate()) {
+    return nullptr;
+  }
+  // all query vertices are in cover, so that no compression is done
+  std::vector<int> select_cover(query_graph_->getNumVertices(), 1);
+
+  if (use_order.empty()) {
+    TwoCoreSolver solver;
+    auto& core_table = solver.get2CoreTable(query_graph_);
+    // now we only consider a random smallest MWVC from covers
+    std::vector<QueryVertexID> cover(query_graph_->getNumVertices());
+    std::iota(cover.begin(), cover.end(), 0);
+    // start matching from the vertex with the smallest cardinality in cover
+    auto start_vertex = selectStartingVertex(cover);
+    matching_order_ = generateMatchingOrder(query_graph_, core_table, start_vertex);
+  } else {
+    matching_order_ = use_order;
+  }
+
   plan_.populatePhysicalPlan(query_graph_, matching_order_, select_cover, profiler);
   return &plan_;
 }

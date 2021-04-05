@@ -69,9 +69,9 @@ DEFINE_uint64(query_index, 1, "The index of query in the same category");
 DEFINE_string(match_order, "", "Matching order");
 DEFINE_string(filter, "nlf", "filter");
 DEFINE_string(profile_file, "", "profile file");
-DEFINE_string(vertex_cover, "static", "Vertex cover strategy: static, eager");
+DEFINE_string(vertex_cover, "static", "Vertex cover strategy: static, eager, all");
 
-enum VertexCoverStrategy : uint32_t { Static = 0, Eager };
+enum VertexCoverStrategy : uint32_t { Static = 0, Eager, All };
 
 class Benchmark {
  protected:
@@ -252,6 +252,8 @@ class Benchmark {
       plan = planner.generatePlan(use_order, &profiler);
     } else if (vcs == Eager) {
       plan = planner.generatePlanWithEagerDynamicCover(use_order, &profiler);
+    } else if (vcs == All) {
+      plan = planner.generatePlanWithoutCompression(use_order, &profiler);
     } else {
       LOG(ERROR) << "Unknown vertex cover strategy " << FLAGS_vertex_cover;
       return;
@@ -325,6 +327,8 @@ int main(int argc, char** argv) {
   FLAGS_profile = (FLAGS_profile_file != "");
   if (FLAGS_vertex_cover == "static") {
     benchmark.run<Static>(FLAGS_dataset, FLAGS_query_size, FLAGS_query_mode, FLAGS_query_index, out);
+  } else if (FLAGS_vertex_cover == "all") {
+    benchmark.run<All>(FLAGS_dataset, FLAGS_query_size, FLAGS_query_mode, FLAGS_query_index, out);
   } else {
     benchmark.run<Eager>(FLAGS_dataset, FLAGS_query_size, FLAGS_query_mode, FLAGS_query_index, out);
   }
