@@ -61,12 +61,13 @@ class ExpandKeyToSetVertexOperator : public ExpandVertexOperator {
     uint32_t output_num = 0;
     for (; input_index_ < current_inputs_->size(); ++input_index_) {
       const auto& input = (*current_inputs_)[input_index_];
+      auto exceptions = input.getExceptions();
       std::vector<VertexID> new_set;
       for (uint32_t i = 0; i < parents_.size(); ++i) {
         uint32_t key = query_vertex_indices_[parents_[i]];
         uint32_t key_vid = input.getKeyVal(key);
         if (i == 0) {
-          intersect(*candidates_, current_data_graph_->getOutNeighbors(key_vid), &new_set);
+          intersect(*candidates_, current_data_graph_->getOutNeighbors(key_vid), &new_set, exceptions);
           if
             constexpr(isProfileMode(profile)) {
               updateIntersectInfo(candidates_->size() + current_data_graph_->getVertexOutDegree(key_vid),
@@ -97,11 +98,13 @@ class ExpandKeyToSetVertexOperator : public ExpandVertexOperator {
                 parent_tuple_sets_[i].emplace((char*)parent_tuple.data(), (i + 1) * sizeof(VertexID)).second;
           }
         }
-      new_set.erase(std::remove_if(new_set.begin(), new_set.end(),
-                                   [&input](VertexID set_vertex) { return input.isExisting(set_vertex); }),
-                    new_set.end());
-      if (new_set.size() != 0) {
-        outputs->emplace_back(input, std::make_shared<std::vector<VertexID>>(std::move(new_set)));
+      if (!new_set.empty()) {
+        // TODO(tatiana): same-label set indices
+        CompressedSubgraphs output(input, std::move(new_set));
+        if (output.empty()) {
+          continue;
+        }
+        outputs->emplace_back(std::move(output));
         ++output_num;
         // TODO(by) break if batch_size is reached
       }

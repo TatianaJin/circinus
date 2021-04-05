@@ -64,11 +64,12 @@ class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
     while (input_index_ < current_inputs_->size()) {
       std::vector<VertexID> new_keys;
       const auto& input = (*current_inputs_)[input_index_];
+      auto exceptions = input.getExceptions();
       for (uint32_t i = 0; i < parents_.size(); ++i) {
         uint32_t key = query_vertex_indices_[parents_[i]];
         uint32_t key_vid = input.getKeyVal(key);
         if (i == 0) {
-          intersect(*candidates_, current_data_graph_->getOutNeighbors(key_vid), &new_keys);
+          intersect(*candidates_, current_data_graph_->getOutNeighbors(key_vid), &new_keys, exceptions);
           if
             constexpr(isProfileMode(profile)) {
               updateIntersectInfo(candidates_->size() + current_data_graph_->getVertexOutDegree(key_vid),
@@ -100,10 +101,12 @@ class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
         }
       if (new_keys.size() != 0) {
         for (VertexID new_key : new_keys) {
-          if (input.isExisting(new_key)) {
-            continue;
-          }
-          outputs->emplace_back(input, new_key);
+          // FIXME(tatiana): remove this check
+          CHECK(!input.isExisting(new_key));
+          // TODO(tatiana): same-label set indices
+          CompressedSubgraphs output(input, new_key);
+          if (output.empty()) continue;
+          outputs->emplace_back(std::move(output));
           ++output_num;
         }
       }

@@ -105,6 +105,11 @@ uint32_t EnumerateKeyExpandToSetOperator::expandInner(std::vector<CompressedSubg
       }
     }
 
+    unordered_set<uint32_t> set_indices;
+    for (uint32_t i = 0; i < output_.getNumSets() - 1; ++i) {
+      set_indices.insert(i);
+    }
+
     const auto& input = (*current_inputs_)[input_index_];
     const uint32_t enumerate_key_size = keys_to_enumerate_.size();
     uint32_t enumerate_key_depth = existing_vertices_.size() - n_exceptions_;
@@ -141,11 +146,21 @@ uint32_t EnumerateKeyExpandToSetOperator::expandInner(std::vector<CompressedSubg
         if (enumerate_key_depth == enumerate_key_size - 1) {
           // the last key query vertex to enumerate, ready to output
           auto& target_set = target_sets_.back();
+          auto output = output_;
           for (uint32_t key_i = 0; key_i < enumerate_key_size; ++key_i) {
-            output_.UpdateKey(input.getNumKeys() + key_i, (*enumerate_key_pos_sets_[key_i])[enumerate_key_idx_[key_i]]);
+            output.UpdateKey(input.getNumKeys() + key_i, (*enumerate_key_pos_sets_[key_i])[enumerate_key_idx_[key_i]]);
+            if (output.pruneExistingSets((*enumerate_key_pos_sets_[key_i])[enumerate_key_idx_[key_i]],
+                                         set_indices)) {  // actively prune
+              ++enumerate_key_idx_[enumerate_key_depth];
+              continue;
+            }
           }
-          output_.UpdateSets(output_.getNumSets() - 1, std::make_shared<std::vector<VertexID>>(std::move(target_set)));
-          outputs->push_back(output_);
+          if (target_set.size() == 1 && output.pruneExistingSets(target_set.front(), set_indices)) {
+            ++enumerate_key_idx_[enumerate_key_depth];
+            continue;
+          }
+          output.UpdateSets(output.getNumSets() - 1, std::make_shared<std::vector<VertexID>>(std::move(target_set)));
+          outputs->push_back(std::move(output));
           ++enumerate_key_idx_[enumerate_key_depth];
           if (++n_outputs == batch_size) {
             return n_outputs;
