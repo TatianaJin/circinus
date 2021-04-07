@@ -72,7 +72,7 @@ class Graph {
   }
 
   /// vertex accessers
-  inline VertexID getVertexOutDegree(VertexID id) const { return vlist_[id + 1] - vlist_[id]; }
+  virtual inline VertexID getVertexOutDegree(VertexID id) const { return vlist_[id + 1] - vlist_[id]; }
   inline LabelID getVertexLabel(VertexID id) const { return labels_[id]; }
 
   inline const std::vector<VertexID>* getVerticesByLabel(LabelID lid) const {
@@ -90,7 +90,7 @@ class Graph {
   }
 
   /** * @returns a pair { starting neighbor pointer, out degree } */
-  inline std::pair<const VertexID*, uint32_t> getOutNeighbors(VertexID id) const {
+  virtual inline std::pair<const VertexID*, uint32_t> getOutNeighbors(VertexID id) const {
     DCHECK_LT(id, vlist_.size() - 1);
     return std::make_pair(&elist_[vlist_[id]], vlist_[id + 1] - vlist_[id]);
   }
