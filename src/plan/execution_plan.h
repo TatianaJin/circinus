@@ -23,6 +23,7 @@
 #include "ops/output_operator.h"
 #include "ops/traverse_operator.h"
 #include "plan/operator_tree.h"
+#include "utils/flags.h"
 #include "utils/hashmap.h"
 #include "utils/profiler.h"
 
@@ -127,6 +128,12 @@ class ExecutionPlan {
   inline Outputs& getOutputs() { return outputs_; }
 
  private:
+  inline uint64_t getSetPruningThreshold(QueryVertexID pruning_qv) {
+    return FLAGS_set_pruning_threshold == 0
+               ? query_graph_->getVertexCardinalityByLabel(query_graph_->getVertexLabel(pruning_qv))
+               : FLAGS_set_pruning_threshold;
+  }
+
   inline void printOperatorChain(const Operator* root, const std::string& indent = "") const {
     LOG(INFO) << indent << root->toString();
     if (root->getNext() != nullptr) {
@@ -135,16 +142,21 @@ class ExecutionPlan {
   }
 
   TraverseOperator* newExpandEdgeOperator(QueryVertexID parent_vertex, QueryVertexID target_vertex,
-                                          const std::vector<int>& cover_table);
-  TraverseOperator* newExpandKeyKeyVertexOperator(std::vector<QueryVertexID>& parents, QueryVertexID target_vertex);
-  TraverseOperator* newExpandSetVertexOperator(std::vector<QueryVertexID>& parents, QueryVertexID target_vertex);
-  TraverseOperator* newExpandSetToKeyVertexOperator(std::vector<QueryVertexID>& parents, QueryVertexID target_vertex);
+                                          const std::vector<int>& cover_table,
+                                          const std::array<std::vector<uint32_t>, 2>& same_label_indices);
+  TraverseOperator* newExpandKeyKeyVertexOperator(std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
+                                                  const std::array<std::vector<uint32_t>, 2>& same_label_indices);
+  TraverseOperator* newExpandSetVertexOperator(std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
+                                               const std::array<std::vector<uint32_t>, 2>& same_label_indices);
+  TraverseOperator* newExpandSetToKeyVertexOperator(std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
+                                                    const std::array<std::vector<uint32_t>, 2>& same_label_indices);
   TraverseOperator* newExpandIntoOperator(const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
                                           const std::vector<QueryVertexID>& prev_key_parents);
   TraverseOperator* newEnumerateKeyExpandToSetOperator(
       const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
       const std::vector<QueryVertexID>& keys_to_enumerate,
-      unordered_map<QueryVertexID, uint32_t> input_query_vertex_indices);
+      unordered_map<QueryVertexID, uint32_t> input_query_vertex_indices,
+      const std::array<std::vector<uint32_t>, 2>& same_label_indices);
   Operator* newOutputOperator();
 };
 

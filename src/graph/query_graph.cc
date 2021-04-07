@@ -48,6 +48,7 @@ QueryGraph::QueryGraph(const std::string& path) {
     labels_[id] = label;
     vlist_[id + 1] = vlist_[id] + degree;
     max_degree_ = std::max(max_degree_, degree);
+    vertex_cardinality_by_label_[label] += 1;
   }
 
   // next n_edges_ lines should be of type e

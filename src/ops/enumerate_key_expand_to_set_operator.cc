@@ -31,8 +31,11 @@ EnumerateKeyExpandToSetOperator::EnumerateKeyExpandToSetOperator(
     const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
     const unordered_map<QueryVertexID, uint32_t>& input_query_vertex_indices,
     const unordered_map<QueryVertexID, uint32_t>& output_query_vertex_indices,
-    const std::vector<QueryVertexID>& keys_to_enumerate, const std::vector<int>& cover_table)
-    : ExpandVertexOperator(parents, target_vertex, output_query_vertex_indices),
+    const std::vector<QueryVertexID>& keys_to_enumerate, const std::vector<int>& cover_table,
+    const std::vector<uint32_t>& same_label_key_indices, const std::vector<uint32_t>& same_label_set_indices,
+    uint64_t set_pruning_threshold)
+    : ExpandVertexOperator(parents, target_vertex, output_query_vertex_indices, same_label_key_indices,
+                           same_label_set_indices, set_pruning_threshold),
       keys_to_enumerate_(keys_to_enumerate),
       cover_table_(cover_table),
       enumerate_key_idx_(keys_to_enumerate.size(), 0),
@@ -47,24 +50,36 @@ EnumerateKeyExpandToSetOperator::EnumerateKeyExpandToSetOperator(
       existing_key_parents_.push_back(v);
     }
   }
+  const unordered_set<uint32_t> tmp_set_indices(same_label_set_indices_.begin(), same_label_set_indices_.end());
+  same_label_set_indices_.clear();  // exclude enumerate key indices, store the set indices in the input
+
   uint32_t n_input_keys = 0;
   for (auto& pair : input_query_vertex_indices) {
     if (cover_table_[pair.first] != 1) {
-      set_old_to_new_pos_.emplace_back(pair.second, query_vertex_indices_.at(pair.first));
+      auto new_pos = query_vertex_indices_.at(pair.first);
+      set_old_to_new_pos_.emplace_back(pair.second, new_pos);
+      if (tmp_set_indices.count(pair.second)) {  // set is same-label with the target
+        same_label_set_indices_.push_back(pair.second);
+        set_indices_.insert(new_pos);
+      }
     } else {
       n_input_keys += (keys_to_enumerate_set.count(pair.first) == 0);
     }
   }
   for (auto v : keys_to_enumerate_) {
     DCHECK(input_query_vertex_indices.count(v));
-    auto pos = input_query_vertex_indices.at(v);
-    enumerate_key_old_indices_[v] = pos;
-    enumerate_key_pos_.insert(pos);
+    enumerate_key_old_indices_[v] = input_query_vertex_indices.at(v);
     CHECK_EQ(query_vertex_indices_[v], n_input_keys);  // assume contiguous indices after existing keys
     ++n_input_keys;
   }
   // assume target is the last set in output
   CHECK_EQ(query_vertex_indices_[target_vertex_], output_query_vertex_indices.size() - n_input_keys - 1);
+
+  // temporary, for pruning by the enumerated keys
+  // TODO(tatiana): enumerated keys may have different labels
+  for (uint32_t i = 0; i < output_.getNumSets() - 1; ++i) {
+    enumerated_key_same_label_set_indices_.insert(i);
+  }
 }
 
 template <QueryType profile>
@@ -103,11 +118,6 @@ uint32_t EnumerateKeyExpandToSetOperator::expandInner(std::vector<CompressedSubg
       for (auto& pair : set_old_to_new_pos_) {
         output_.UpdateSets(pair.second, input.getSet(pair.first));
       }
-    }
-
-    unordered_set<uint32_t> set_indices;
-    for (uint32_t i = 0; i < output_.getNumSets() - 1; ++i) {
-      set_indices.insert(i);
     }
 
     const auto& input = (*current_inputs_)[input_index_];
@@ -150,12 +160,13 @@ uint32_t EnumerateKeyExpandToSetOperator::expandInner(std::vector<CompressedSubg
           for (uint32_t key_i = 0; key_i < enumerate_key_size; ++key_i) {
             output.UpdateKey(input.getNumKeys() + key_i, (*enumerate_key_pos_sets_[key_i])[enumerate_key_idx_[key_i]]);
             if (output.pruneExistingSets((*enumerate_key_pos_sets_[key_i])[enumerate_key_idx_[key_i]],
-                                         set_indices)) {  // actively prune
+                                         enumerated_key_same_label_set_indices_, ~0u)) {
               ++enumerate_key_idx_[enumerate_key_depth];
               continue;
             }
           }
-          if (target_set.size() == 1 && output.pruneExistingSets(target_set.front(), set_indices)) {
+          if (target_set.size() == 1 &&
+              output.pruneExistingSets(target_set.front(), set_indices_, set_pruning_threshold_)) {
             ++enumerate_key_idx_[enumerate_key_depth];
             continue;
           }
@@ -219,7 +230,7 @@ bool EnumerateKeyExpandToSetOperator::expandInner() {  // handles a new input an
     }
   }
   existing_vertices_.clear();
-  input.getExceptions(existing_vertices_, enumerate_key_pos_);
+  input.getExceptions(existing_vertices_, same_label_key_indices_, same_label_set_indices_);
   n_exceptions_ = existing_vertices_.size();
   target_set.erase(std::remove_if(target_set.begin(), target_set.end(),
                                   [this](VertexID set_vertex) { return existing_vertices_.count(set_vertex); }),
