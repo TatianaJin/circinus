@@ -19,6 +19,7 @@
 
 #include "graph/graph.h"
 #include "graph/query_graph.h"
+#include "ops/filters/subgraph_filter.h"
 #include "ops/operator.h"
 #include "ops/output_operator.h"
 #include "ops/traverse_operator.h"
@@ -37,6 +38,7 @@ class ExecutionPlan {
   unordered_map<QueryVertexID, Operator*> target_vertex_to_ops_;
   OperatorTree operators_;
   Outputs outputs_;
+  std::vector<SubgraphFilter*> subgraph_filters_;  // owned, need to delete upon destruction
 
   QueryVertexID root_query_vertex_;
   std::vector<int> cover_table_;
@@ -48,7 +50,12 @@ class ExecutionPlan {
   unordered_map<QueryVertexID, uint32_t> query_vertex_indices_;
 
  public:
-  ~ExecutionPlan() {}
+  ~ExecutionPlan() {
+    for (auto filter : subgraph_filters_) {
+      delete filter;
+    }
+    subgraph_filters_.clear();
+  }
 
   void populatePhysicalPlan(const QueryGraph* g, const std::vector<QueryVertexID>& matching_order,
                             const std::vector<int>& cover_table, Profiler* profiler = nullptr);
@@ -127,7 +134,89 @@ class ExecutionPlan {
   inline const Outputs& getOutputs() const { return outputs_; }
   inline Outputs& getOutputs() { return outputs_; }
 
- private:
+ protected:
+  inline SubgraphFilter* createFilter(std::vector<std::vector<uint32_t>>&& pruning_set_indices) {
+    SubgraphFilter* filter = nullptr;
+    if (pruning_set_indices.empty()) {
+      filter = SubgraphFilter::newDummyFilter();
+    } else {
+      filter = SubgraphFilter::newSetPrunningSubgraphFilter(std::move(pruning_set_indices));
+    }
+    subgraph_filters_.push_back(filter);
+    return filter;
+  }
+
+  inline void getPruningSetsForParents(
+      const std::vector<QueryVertexID>& parents,
+      const unordered_map<LabelID, std::array<std::vector<uint32_t>, 2>>& label_existing_vertices_indices,
+      unordered_set<LabelID>& pruning_labels, std::vector<std::vector<uint32_t>>& pruning_set_indices) {
+    for (auto& p : parents) {
+      auto label = query_graph_->getVertexLabel(p);
+      if (pruning_labels.insert(label).second) {
+        auto pos = label_existing_vertices_indices.find(label);
+        if (pos != label_existing_vertices_indices.end() && pos->second[0].size() > 1) {
+          pruning_set_indices.push_back(pos->second[0]);
+        }
+      }
+    }
+  }
+
+  inline void getPruningSetsForParents(const std::vector<QueryVertexID>& parents,
+                                       const unordered_map<LabelID, std::vector<uint32_t>>& label_existing_vertices_map,
+                                       unordered_set<LabelID>& pruning_labels,
+                                       std::vector<std::vector<uint32_t>>& pruning_set_indices) const {
+    for (auto& p : parents) {
+      auto label = query_graph_->getVertexLabel(p);
+      if (pruning_labels.insert(label).second) {
+        auto pos = label_existing_vertices_map.find(label);
+        if (pos != label_existing_vertices_map.end() && pos->second.size() > 1) {
+          std::vector<uint32_t> indices;
+          for (auto v : pos->second) {
+            // note that here cover_table_ reflect the cover in the target-expanded output
+            if (cover_table_[v] != 1) {
+              indices.push_back(query_vertex_indices_.at(v));
+            }
+          }
+          if (indices.size() > 1) {
+            pruning_set_indices.push_back(std::move(indices));
+          }
+        }
+      }
+    }
+  }
+
+  inline std::vector<int> getPruningSets(
+      const std::vector<QueryVertexID>& query_vertices,
+      const unordered_map<LabelID, std::vector<uint32_t>>& label_existing_vertices_map,
+      unordered_map<LabelID, int>& pruning_labels, std::vector<std::vector<uint32_t>>& pruning_set_indices) const {
+    std::vector<int> vertex_pruning_set_indices;
+    vertex_pruning_set_indices.resize(query_vertices.size(), -1);
+    for (uint32_t i = 0; i < query_vertices.size(); ++i) {
+      auto label = query_graph_->getVertexLabel(query_vertices[i]);
+      auto inserted = pruning_labels.insert({label, -1});
+      if (inserted.second) {
+        auto pos = label_existing_vertices_map.find(label);
+        if (pos != label_existing_vertices_map.end() && pos->second.size() > 1) {
+          std::vector<uint32_t> indices;
+          for (auto v : pos->second) {
+            // note that here cover_table_ reflect the cover in the target-expanded output
+            if (cover_table_[v] != 1) {
+              indices.push_back(query_vertex_indices_.at(v));
+            }
+          }
+          if (indices.size() > 1) {
+            vertex_pruning_set_indices[i] = pruning_set_indices.size();
+            inserted.first->second = pruning_set_indices.size();
+            pruning_set_indices.push_back(std::move(indices));
+          }
+        }
+      } else {
+        vertex_pruning_set_indices[i] = inserted.first->second;
+      }
+    }
+    return vertex_pruning_set_indices;
+  }
+
   inline uint64_t getSetPruningThreshold(QueryVertexID pruning_qv) {
     return FLAGS_set_pruning_threshold == 0
                ? query_graph_->getVertexCardinalityByLabel(query_graph_->getVertexLabel(pruning_qv))
@@ -141,23 +230,117 @@ class ExecutionPlan {
     }
   }
 
-  TraverseOperator* newExpandEdgeOperator(QueryVertexID parent_vertex, QueryVertexID target_vertex,
-                                          const std::vector<int>& cover_table,
-                                          const std::array<std::vector<uint32_t>, 2>& same_label_indices);
+  TraverseOperator* newExpandEdgeKeyToKeyOperator(QueryVertexID parent_vertex, QueryVertexID target_vertex,
+                                                  const std::array<std::vector<uint32_t>, 2>& same_label_indices);
+  TraverseOperator* newExpandEdgeKeyToSetOperator(QueryVertexID parent_vertex, QueryVertexID target_vertex,
+                                                  const std::array<std::vector<uint32_t>, 2>& same_label_indices);
+  TraverseOperator* newExpandEdgeSetToKeyOperator(QueryVertexID parent_vertex, QueryVertexID target_vertex,
+                                                  const std::array<std::vector<uint32_t>, 2>& target_same_label_indices,
+                                                  const std::vector<uint32_t>& parent_same_label_indices);
   TraverseOperator* newExpandKeyKeyVertexOperator(std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
                                                   const std::array<std::vector<uint32_t>, 2>& same_label_indices);
   TraverseOperator* newExpandSetVertexOperator(std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
                                                const std::array<std::vector<uint32_t>, 2>& same_label_indices);
-  TraverseOperator* newExpandSetToKeyVertexOperator(std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
-                                                    const std::array<std::vector<uint32_t>, 2>& same_label_indices);
+  TraverseOperator* newExpandSetToKeyVertexOperator(const std::vector<QueryVertexID>& parents,
+                                                    QueryVertexID target_vertex,
+                                                    const std::array<std::vector<uint32_t>, 2>& same_label_indices,
+                                                    std::vector<std::vector<uint32_t>>&& pruning_set_indices);
   TraverseOperator* newExpandIntoOperator(const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
-                                          const std::vector<QueryVertexID>& prev_key_parents);
+                                          const std::vector<QueryVertexID>& prev_key_parents,
+                                          std::vector<std::vector<uint32_t>>&& pruning_set_indices);
   TraverseOperator* newEnumerateKeyExpandToSetOperator(
       const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
       const std::vector<QueryVertexID>& keys_to_enumerate,
       unordered_map<QueryVertexID, uint32_t> input_query_vertex_indices,
-      const std::array<std::vector<uint32_t>, 2>& same_label_indices);
+      const std::array<std::vector<uint32_t>, 2>& same_label_indices,
+      const unordered_map<LabelID, std::vector<uint32_t>>& label_existing_vertices_map);
   Operator* newOutputOperator();
+
+  inline TraverseOperator* newExpandEdgeSetToKeyOperator(
+      QueryVertexID parent_vertex, QueryVertexID target_vertex,
+      const std::array<std::vector<uint32_t>, 2>& target_same_label_indices,
+      const unordered_map<LabelID, std::vector<uint32_t>>& label_existing_vertices_map) {
+    std::vector<uint32_t> parent_prune;
+#ifdef USE_FILTER
+    auto parent_label = query_graph_->getVertexLabel(parent_vertex);
+    auto parent_pos = label_existing_vertices_map.find(parent_label);
+    if (parent_label != query_graph_->getVertexLabel(target_vertex) &&
+        parent_pos != label_existing_vertices_map.end() && parent_pos->second.size() > 1) {
+      for (auto v : parent_pos->second) {
+        if (cover_table_[v] != 1) {
+          parent_prune.push_back(query_vertex_indices_[v]);
+        }
+      }
+    }
+#endif
+    return newExpandEdgeSetToKeyOperator(parent_vertex, target_vertex, target_same_label_indices, parent_prune);
+  }
+
+  inline TraverseOperator* newExpandSetToKeyVertexOperator(
+      const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
+      const std::array<std::vector<uint32_t>, 2>& same_label_indices,
+      const unordered_map<LabelID, std::array<std::vector<uint32_t>, 2>>& label_existing_vertices_indices) {
+#ifdef USE_FILTER
+    unordered_set<LabelID> pruning_labels;
+    std::vector<std::vector<uint32_t>> pruning_set_indices;
+    pruning_labels.insert(query_graph_->getVertexLabel(target_vertex));
+    if (same_label_indices[0].size() > 1) {
+      pruning_set_indices.push_back(same_label_indices[0]);
+    }
+    getPruningSetsForParents(parents, label_existing_vertices_indices, pruning_labels, pruning_set_indices);
+    return newExpandSetToKeyVertexOperator(parents, target_vertex, same_label_indices, std::move(pruning_set_indices));
+#else
+    return newExpandSetToKeyVertexOperator(parents, target_vertex, same_label_indices,
+                                           std::vector<std::vector<uint32_t>>{});
+#endif
+  }
+
+  inline TraverseOperator* newExpandSetToKeyVertexOperator(
+      const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
+      const std::array<std::vector<uint32_t>, 2>& same_label_indices,
+      const unordered_map<LabelID, std::vector<uint32_t>>& label_existing_vertices_map) {
+#ifdef USE_FILTER
+    unordered_set<LabelID> pruning_labels;
+    std::vector<std::vector<uint32_t>> pruning_set_indices;
+    pruning_labels.insert(query_graph_->getVertexLabel(target_vertex));
+    if (same_label_indices[0].size() > 1) {
+      pruning_set_indices.push_back(same_label_indices[0]);
+    }
+    getPruningSetsForParents(parents, label_existing_vertices_map, pruning_labels, pruning_set_indices);
+    return newExpandSetToKeyVertexOperator(parents, target_vertex, same_label_indices, std::move(pruning_set_indices));
+#else
+    return newExpandSetToKeyVertexOperator(parents, target_vertex, same_label_indices,
+                                           std::vector<std::vector<uint32_t>>{});
+#endif
+  }
+
+  inline TraverseOperator* newExpandIntoOperator(
+      const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
+      const std::vector<QueryVertexID>& prev_key_parents,
+      const unordered_map<LabelID, std::array<std::vector<uint32_t>, 2>>& label_existing_vertices_indices) {
+#ifdef USE_FILTER
+    unordered_set<LabelID> pruning_labels;
+    std::vector<std::vector<uint32_t>> pruning_set_indices;
+    getPruningSetsForParents(parents, label_existing_vertices_indices, pruning_labels, pruning_set_indices);
+    return newExpandIntoOperator(parents, target_vertex, prev_key_parents, std::move(pruning_set_indices));
+#else
+    return newExpandIntoOperator(parents, target_vertex, prev_key_parents, std::vector<std::vector<uint32_t>>{});
+#endif
+  }
+
+  inline TraverseOperator* newExpandIntoOperator(
+      const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
+      const std::vector<QueryVertexID>& prev_key_parents,
+      const unordered_map<LabelID, std::vector<uint32_t>>& label_existing_vertices_map) {
+#ifdef USE_FILTER
+    unordered_set<LabelID> pruning_labels;
+    std::vector<std::vector<uint32_t>> pruning_set_indices;
+    getPruningSetsForParents(parents, label_existing_vertices_map, pruning_labels, pruning_set_indices);
+    return newExpandIntoOperator(parents, target_vertex, prev_key_parents, std::move(pruning_set_indices));
+#else
+    return newExpandIntoOperator(parents, target_vertex, prev_key_parents, std::vector<std::vector<uint32_t>>{});
+#endif
+  }
 };
 
 }  // namespace circinus

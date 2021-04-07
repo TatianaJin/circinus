@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "graph/types.h"
+#include "ops/filters/subgraph_filter.h"
 #include "ops/traverse_operator.h"
 #include "utils/hashmap.h"
 
@@ -36,17 +37,29 @@ class ExpandEdgeOperator : public TraverseOperator {
    *
    * @param indices The map from the id of a query vertex to its index in the CompressedSubgraphs
    */
-  static TraverseOperator* newExpandEdgeOperator(QueryVertexID parent_vertex, QueryVertexID target_vertex,
-                                                 const std::vector<int>& cover_table,
-                                                 const unordered_map<QueryVertexID, uint32_t>& indices,
-                                                 const std::vector<uint32_t>& same_label_key_indices,
-                                                 const std::vector<uint32_t>& same_label_set_indices,
-                                                 uint64_t set_pruning_threshold);
+  static TraverseOperator* newExpandEdgeKeyToKeyOperator(QueryVertexID parent_vertex, QueryVertexID target_vertex,
+                                                         const unordered_map<QueryVertexID, uint32_t>& indices,
+                                                         const std::vector<uint32_t>& same_label_key_indices,
+                                                         const std::vector<uint32_t>& same_label_set_indices,
+                                                         uint64_t set_pruning_threshold, SubgraphFilter* filter);
+
+  static TraverseOperator* newExpandEdgeKeyToSetOperator(QueryVertexID parent_vertex, QueryVertexID target_vertex,
+                                                         const unordered_map<QueryVertexID, uint32_t>& indices,
+                                                         const std::vector<uint32_t>& same_label_key_indices,
+                                                         const std::vector<uint32_t>& same_label_set_indices,
+                                                         uint64_t set_pruning_threshold, SubgraphFilter* filter);
+
+  static TraverseOperator* newExpandEdgeSetToKeyOperator(QueryVertexID parent_vertex, QueryVertexID target_vertex,
+                                                         const unordered_map<QueryVertexID, uint32_t>& indices,
+                                                         const std::vector<uint32_t>& same_label_key_indices,
+                                                         const std::vector<uint32_t>& same_label_set_indices,
+                                                         uint64_t set_pruning_threshold, SubgraphFilter* filter);
 
   ExpandEdgeOperator(uint32_t parent_index, uint32_t target_index, QueryVertexID parent, QueryVertexID target,
                      const std::vector<uint32_t>& same_label_key_indices,
-                     const std::vector<uint32_t>& same_label_set_indices, uint64_t set_pruning_threshold)
-      : TraverseOperator(same_label_key_indices, same_label_set_indices, set_pruning_threshold),
+                     const std::vector<uint32_t>& same_label_set_indices, uint64_t set_pruning_threshold,
+                     SubgraphFilter* filter)
+      : TraverseOperator(same_label_key_indices, same_label_set_indices, set_pruning_threshold, filter),
         parent_index_(parent_index),
         target_index_(target_index),
         parent_id_(parent),
