@@ -32,9 +32,10 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
   ExpandSetToKeyVertexOperator(const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
                                const unordered_map<QueryVertexID, uint32_t>& query_vertex_indices,
                                const std::vector<uint32_t>& same_label_key_indices,
-                               const std::vector<uint32_t>& same_label_set_indices, uint64_t set_pruning_threshold)
+                               const std::vector<uint32_t>& same_label_set_indices, uint64_t set_pruning_threshold,
+                               SubgraphFilter* subgraph_filter = nullptr)
       : ExpandVertexOperator(parents, target_vertex, query_vertex_indices, same_label_key_indices,
-                             same_label_set_indices, set_pruning_threshold) {}
+                             same_label_set_indices, set_pruning_threshold, subgraph_filter) {}
 
   uint32_t expand(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size) override {
     return expandInner<QueryType::Execute>(outputs, batch_size);
@@ -142,13 +143,14 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
         continue;
       }
       bool add = true;
+#ifndef USE_FILTER
       // TODO(tatiana): `ExpandSetToKey` requires different groups of same-label indices for the parent sets
       // for active pruning, should use same-label set indices >>>
       unordered_set<uint32_t> set_indices;
       for (uint32_t i = 0; i < new_output.getNumSets(); ++i) {
         set_indices.insert(i);
-      }
-      // <<< for active pruning, should use same-label set indices
+      }  // <<< for active pruning, should use same-label set indices
+#endif
       for (uint32_t set_vid : parents_) {
         std::vector<VertexID> new_set;
         uint32_t id = query_vertex_indices_[set_vid];
@@ -161,6 +163,13 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
           add = false;
           break;
         }
+#ifdef USE_FILTER
+        new_output.UpdateSets(id, std::make_shared<std::vector<VertexID>>(std::move(new_set)));
+        if (filter(new_output)) {
+          add = false;
+          break;
+        }
+#else
         if (new_set.size() == 1) {  // actively prune existing sets
           set_indices.erase(id);
           if (new_output.pruneExistingSets(new_set.front(), set_indices, ~0u)) {
@@ -169,6 +178,7 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
           }
         }
         new_output.UpdateSets(id, std::make_shared<std::vector<VertexID>>(std::move(new_set)));
+#endif
       }
 
       if (add) {
@@ -205,13 +215,15 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
             continue;
           }
           bool add = true;
+#ifndef USE_FILTER
           // TODO(tatiana): `ExpandSetToKey` requires different groups of same-label indices for the parent sets
           // for active pruning, should use same-label set indices >>>
           unordered_set<uint32_t> set_indices;
           for (uint32_t i = 0; i < new_output.getNumSets(); ++i) {
             set_indices.insert(i);
           }
-          // <<< for active pruning, should use same-label set indices
+// <<< for active pruning, should use same-label set indices
+#endif
           for (uint32_t set_vid : parents_) {
             std::vector<VertexID> new_set;
             uint32_t id = query_vertex_indices_[set_vid];
@@ -224,6 +236,13 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
               add = false;
               break;
             }
+#ifdef USE_FILTER
+            new_output.UpdateSets(id, std::make_shared<std::vector<VertexID>>(std::move(new_set)));
+            if (filter(input)) {
+              add = false;
+              break;
+            }
+#else
             if (new_set.size() == 1) {  // actively prune existing sets
               set_indices.erase(id);
               if (new_output.pruneExistingSets(new_set.front(), set_indices, ~0u)) {
@@ -232,6 +251,7 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
               }
             }
             new_output.UpdateSets(id, std::make_shared<std::vector<VertexID>>(std::move(new_set)));
+#endif
           }
 
           if (add) {

@@ -36,8 +36,9 @@ class ExpandIntoOperator : public TraverseOperator {
  public:
   ExpandIntoOperator(const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
                      const unordered_map<QueryVertexID, uint32_t>& query_vertex_indices,
-                     const std::vector<QueryVertexID>& prev_key_parents)
-      : parents_(parents),
+                     const std::vector<QueryVertexID>& prev_key_parents, SubgraphFilter* subgraph_filter = nullptr)
+      : TraverseOperator(subgraph_filter),
+        parents_(parents),
         target_vertex_(target_vertex),
         query_vertex_indices_(query_vertex_indices),
         key_parents_(prev_key_parents) {}
@@ -127,13 +128,14 @@ class ExpandIntoOperator : public TraverseOperator {
             ++set_index[depth];
           }
         }
+#ifndef USE_FILTER
       // TODO(tatiana): `ExpandInto` requires different groups of same-label indices for the parent sets
       // for active pruning, should use same-label set indices >>>
       unordered_set<uint32_t> set_indices;
       for (uint32_t i = 0; i < input.getNumSets(); ++i) {
         set_indices.insert(i);
-      }
-      // <<< for active pruning, should use same-label set indices
+      }  // <<< for active pruning, should use same-label set indices
+#endif
       // TODO(tatiana): consider sorting of parents in ascending order of set size, for better pruning?
       for (QueryVertexID vid : parents_) {
         std::vector<VertexID> new_set;
@@ -147,6 +149,13 @@ class ExpandIntoOperator : public TraverseOperator {
           add = false;
           break;
         }
+#ifdef USE_FILTER
+        input.UpdateSets(id, std::make_shared<std::vector<VertexID>>(std::move(new_set)));
+        if (filter(input)) {
+          add = false;
+          break;
+        }
+#else
         if (new_set.size() == 1) {  // actively prune existing sets
           set_indices.erase(id);
           if (input.pruneExistingSets(new_set.front(), set_indices, set_pruning_threshold_)) {
@@ -155,6 +164,7 @@ class ExpandIntoOperator : public TraverseOperator {
           }
         }
         input.UpdateSets(id, std::make_shared<std::vector<VertexID>>(std::move(new_set)));
+#endif
       }
 
       if (add) {

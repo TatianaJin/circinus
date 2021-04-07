@@ -21,4 +21,4 @@ DEFINE_int32(num_cores, 1, "The number of cores to use for thread pool.");
 DEFINE_bool(profile, false, "True means profiling the execution");
 DEFINE_uint64(set_pruning_threshold, 0,
               "The threshold to prune by non-repeated-vertex check the same-label sets whose sizes are below the "
-              "threshold. If 0, use the label frequency of the pruning query vertex.");
+              "threshold. If 0, use the label frequency of the pruning query vertex. Default is 0.");

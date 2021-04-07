@@ -34,8 +34,9 @@ class ExpandVertexOperator : public TraverseOperator {
   ExpandVertexOperator(const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
                        const unordered_map<QueryVertexID, uint32_t>& query_vertex_indices,
                        const std::vector<uint32_t>& same_label_key_indices,
-                       const std::vector<uint32_t>& same_label_set_indices, uint64_t set_pruning_threshold)
-      : TraverseOperator(same_label_key_indices, same_label_set_indices, set_pruning_threshold),
+                       const std::vector<uint32_t>& same_label_set_indices, uint64_t set_pruning_threshold,
+                       SubgraphFilter* subgraph_filter)
+      : TraverseOperator(same_label_key_indices, same_label_set_indices, set_pruning_threshold, subgraph_filter),
         parents_(parents),
         target_vertex_(target_vertex),
         query_vertex_indices_(query_vertex_indices) {}

@@ -32,9 +32,10 @@ class ExpandKeyToSetVertexOperator : public ExpandVertexOperator {
   ExpandKeyToSetVertexOperator(const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
                                const unordered_map<QueryVertexID, uint32_t>& query_vertex_indices,
                                const std::vector<uint32_t>& same_label_key_indices,
-                               const std::vector<uint32_t>& same_label_set_indices, uint64_t set_pruning_threshold)
+                               const std::vector<uint32_t>& same_label_set_indices, uint64_t set_pruning_threshold,
+                               SubgraphFilter* filter = nullptr)
       : ExpandVertexOperator(parents, target_vertex, query_vertex_indices, same_label_key_indices,
-                             same_label_set_indices, set_pruning_threshold) {}
+                             same_label_set_indices, set_pruning_threshold, filter) {}
 
   uint32_t expand(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size) override {
     return expandInner<QueryType::Execute>(outputs, batch_size);
@@ -100,10 +101,17 @@ class ExpandKeyToSetVertexOperator : public ExpandVertexOperator {
           }
         }
       if (!new_set.empty()) {
+#ifdef USE_FILTER
+        CompressedSubgraphs output(input, std::move(new_set));
+        if (filter(output)) {
+          continue;
+        }
+#else
         CompressedSubgraphs output(input, std::move(new_set), same_label_set_indices_, set_pruning_threshold_);
         if (output.empty()) {
           continue;
         }
+#endif
         outputs->emplace_back(std::move(output));
         ++output_num;
         // TODO(by) break if batch_size is reached

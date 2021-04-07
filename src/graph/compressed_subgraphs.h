@@ -65,12 +65,13 @@ class CompressedSubgraphs {
    * @param set_pruning_threshold The existing sets are only pruned if their sizes are smaller than the threshold.
    */
   CompressedSubgraphs(const CompressedSubgraphs& subgraphs, VertexID key,
-                      const std::vector<uint32_t>& pruning_set_indices, uint64_t set_pruning_threshold)
+                      const std::vector<uint32_t>& pruning_set_indices, uint64_t set_pruning_threshold,
+                      bool recursive_prune = true)
       : keys_(subgraphs.getNumKeys() + 1), sets_(subgraphs.getNumSets()) {
     unordered_set<uint32_t> set_indices(pruning_set_indices.begin(), pruning_set_indices.end());
     sets_ = subgraphs.sets_;
     // isomorphism check for pruning sets that are completely conflicting with keys
-    if (pruneExistingSets(key, set_indices, set_pruning_threshold)) {
+    if (pruneExistingSets(key, set_indices, set_pruning_threshold, recursive_prune)) {
       keys_.clear();
       return;
     }
@@ -307,7 +308,8 @@ class CompressedSubgraphs {
 
   bool empty() const { return keys_.empty(); }
 
-  bool pruneExistingSets(VertexID v, unordered_set<uint32_t>& set_indices, uint32_t set_size_threshold) {
+  bool pruneExistingSets(VertexID v, unordered_set<uint32_t>& set_indices, uint32_t set_size_threshold,
+                         bool recursive_prune = true) {
     unordered_map<VertexID, uint32_t> new_v;  // vertex, set_index
     for (uint32_t i : set_indices) {
       auto& set = *sets_[i];
@@ -331,10 +333,12 @@ class CompressedSubgraphs {
     if (new_v.empty()) {
       return false;
     }
-    for (auto& pair : new_v) {
-      set_indices.erase(pair.second);
-      if (pruneExistingSets(pair.first, set_indices, set_size_threshold)) {
-        return true;
+    if (recursive_prune) {
+      for (auto& pair : new_v) {
+        set_indices.erase(pair.second);
+        if (pruneExistingSets(pair.first, set_indices, set_size_threshold)) {
+          return true;
+        }
       }
     }
     return false;

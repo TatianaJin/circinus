@@ -54,13 +54,23 @@ add_subdirectory(src)
 # Shared
 if (BUILD_SHARED)
   add_library(circinus SHARED ${circinus_sources})
+  target_compile_definitions(circinus PUBLIC "USE_FILTER")
   target_link_libraries(circinus ${EXTERNAL_LIBRARY})
   add_dependencies(circinus phmap_ep)
+
+  add_library(circinus_no_filter SHARED ${circinus_sources})
+  target_link_libraries(circinus_no_filter ${EXTERNAL_LIBRARY})
+  add_dependencies(circinus_no_filter phmap_ep)
 else()
   # Static
   add_library(circinus STATIC ${circinus_objs})
+  target_compile_definitions(circinus PUBLIC "USE_FILTER")
   target_link_libraries(circinus ${EXTERNAL_LIBRARY})
   add_dependencies(circinus phmap_ep)
+
+  add_library(circinus_no_filter STATIC ${circinus_objs})
+  target_link_libraries(circinus_no_filter ${EXTERNAL_LIBRARY})
+  add_dependencies(circinus_no_filter phmap_ep)
 endif()
 
 
