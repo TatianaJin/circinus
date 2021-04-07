@@ -79,6 +79,11 @@ class TraverseOperator : public Operator {
  protected:
   const std::vector<VertexID>* candidates_ = nullptr;
 
+  /* for non-repeated-vertex check */
+  uint64_t set_pruning_threshold_ = ~0u;
+  std::vector<uint32_t> same_label_key_indices_;
+  std::vector<uint32_t> same_label_set_indices_;
+
   /* transient variables for recording the current inputs */
   uint32_t input_index_ = 0;
   const std::vector<CompressedSubgraphs>* current_inputs_ = nullptr;
@@ -99,11 +104,20 @@ class TraverseOperator : public Operator {
       0;  // the minimal number of intersection needed if all intersection function call results can be cached
 
  public:
+  TraverseOperator() {}
+  TraverseOperator(const std::vector<uint32_t>& same_label_key_indices,
+                   const std::vector<uint32_t>& same_label_set_indices, uint64_t set_pruning_threshold)
+      : set_pruning_threshold_(set_pruning_threshold),
+        same_label_key_indices_(same_label_key_indices),
+        same_label_set_indices_(same_label_set_indices) {}
   virtual ~TraverseOperator() {}
 
   inline virtual void setCandidateSets(const std::vector<VertexID>* candidates) { candidates_ = candidates; }
   inline const std::vector<VertexID>* getCandidateSets() const { return candidates_; }
   inline const uint32_t getInputIndex() const { return input_index_; }
+  inline const auto& getSameLabelKeyIndices() const { return same_label_key_indices_; }
+  inline const auto& getSameLabelSetIndices() const { return same_label_set_indices_; }
+  inline auto getSetPruningThreshold() const { return set_pruning_threshold_; }
 
   virtual void input(const std::vector<CompressedSubgraphs>& inputs, const Graph* data_graph) {
     current_inputs_ = &inputs;

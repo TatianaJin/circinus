@@ -127,12 +127,13 @@ class ExpandIntoOperator : public TraverseOperator {
             ++set_index[depth];
           }
         }
+      // TODO(tatiana): `ExpandInto` requires different groups of same-label indices for the parent sets
       // for active pruning, should use same-label set indices >>>
       unordered_set<uint32_t> set_indices;
       for (uint32_t i = 0; i < input.getNumSets(); ++i) {
         set_indices.insert(i);
       }
-      // <<<  for active pruning, should use same-label set indices
+      // <<< for active pruning, should use same-label set indices
       // TODO(tatiana): consider sorting of parents in ascending order of set size, for better pruning?
       for (QueryVertexID vid : parents_) {
         std::vector<VertexID> new_set;
@@ -148,7 +149,7 @@ class ExpandIntoOperator : public TraverseOperator {
         }
         if (new_set.size() == 1) {  // actively prune existing sets
           set_indices.erase(id);
-          if (input.pruneExistingSets(new_set.front(), set_indices)) {
+          if (input.pruneExistingSets(new_set.front(), set_indices, set_pruning_threshold_)) {
             add = false;
             break;
           }

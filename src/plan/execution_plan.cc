@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "ops/operators.h"
+#include "utils/hashmap.h"
 
 namespace circinus {
 
@@ -38,7 +39,9 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
   uint32_t n_keys = 0, n_sets = 0;
   Operator *current, *prev = nullptr;
   // existing vertices in current query subgraph
-  std::unordered_set<QueryVertexID> existing_vertices;
+  unordered_set<QueryVertexID> existing_vertices;
+  // label: {set index}, {key index}
+  unordered_map<LabelID, std::array<std::vector<uint32_t>, 2>> label_existing_vertices_indices;
   std::array<std::vector<QueryVertexID>, 2> parents;
   auto& key_parents = parents[1];
   auto& set_parents = parents[0];
@@ -51,10 +54,13 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
   n_keys += (cover_table[parent] == 1);
   n_sets += (cover_table[parent] != 1);
   existing_vertices.insert(parent);
+  label_existing_vertices_indices[query_graph_->getVertexLabel(parent)][cover_table[parent] == 1].push_back(0);
 
   // handle following traversals
   for (uint32_t i = 1; i < matching_order.size(); ++i) {
     auto target_vertex = matching_order[i];
+    auto target_label = query_graph_->getVertexLabel(target_vertex);
+    const auto& same_label_v_indices = label_existing_vertices_indices[target_label];
     // record query vertex index
     if (cover_table[target_vertex] == 1) {
       query_vertex_indices_[target_vertex] = n_keys;
@@ -65,7 +71,7 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
     }
 
     if (i == 1) {  // the first edge: target has one and only one parent
-      prev = newExpandEdgeOperator(parent, target_vertex, cover_table);
+      prev = newExpandEdgeOperator(parent, target_vertex, cover_table, same_label_v_indices);
     } else {
       // find parent vertices
       auto neighbors = g->getOutNeighbors(target_vertex);
@@ -77,25 +83,25 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
       // create operators
       if (key_parents.size() + set_parents.size() == 1) {  // only one parent, ExpandEdge
         auto front = key_parents.size() == 1 ? key_parents.front() : set_parents.front();
-        current = newExpandEdgeOperator(front, target_vertex, cover_table);
+        current = newExpandEdgeOperator(front, target_vertex, cover_table, same_label_v_indices);
       } else {  // more than one parents, ExpandVertex (use set intersection)
         if (cover_table[target_vertex] == 1) {
           if (key_parents.size() != 0 && set_parents.size() != 0) {
             if (key_parents.size() == 1) {
-              current = newExpandEdgeOperator(key_parents.front(), target_vertex, cover_table);
+              current = newExpandEdgeOperator(key_parents.front(), target_vertex, cover_table, same_label_v_indices);
             } else {
-              current = newExpandKeyKeyVertexOperator(key_parents, target_vertex);
+              current = newExpandKeyKeyVertexOperator(key_parents, target_vertex, same_label_v_indices);
             }
             prev->setNext(current);
             prev = current;
             current = newExpandIntoOperator(set_parents, target_vertex, key_parents);
           } else if (key_parents.size() != 0) {
-            current = newExpandKeyKeyVertexOperator(key_parents, target_vertex);
+            current = newExpandKeyKeyVertexOperator(key_parents, target_vertex, same_label_v_indices);
           } else {
-            current = newExpandSetToKeyVertexOperator(set_parents, target_vertex);
+            current = newExpandSetToKeyVertexOperator(set_parents, target_vertex, same_label_v_indices);
           }
         } else {
-          current = newExpandSetVertexOperator(key_parents, target_vertex);
+          current = newExpandSetVertexOperator(key_parents, target_vertex, same_label_v_indices);
         }
       }
       prev->setNext(current);
@@ -105,6 +111,8 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
     }
 
     existing_vertices.insert(target_vertex);
+    label_existing_vertices_indices[target_label][cover_table[target_vertex] == 1].push_back(
+        query_vertex_indices_[target_vertex]);
   }
 
   // output
@@ -132,7 +140,8 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
   set_vertices.reserve(matching_order.size() - dynamic_cover_key_level_.size());
   Operator *current, *prev = nullptr;
   // existing vertices in current query subgraph
-  std::unordered_set<QueryVertexID> existing_vertices;
+  unordered_set<QueryVertexID> existing_vertices;
+  unordered_map<LabelID, std::vector<uint32_t>> label_existing_vertices_map;
   std::array<std::vector<QueryVertexID>, 2> parents;
   auto& key_parents = parents[1];
   auto& set_parents = parents[0];
@@ -149,6 +158,7 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
     ++n_keys;
   }
   existing_vertices.insert(parent);
+  label_existing_vertices_map[query_graph_->getVertexLabel(parent)].push_back(parent);
   std::vector<std::vector<QueryVertexID>> add_keys_at_level(matching_order.size());
   unordered_map<QueryVertexID, uint32_t> input_query_vertex_indices;
 
@@ -159,6 +169,15 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
       CHECK_EQ(query_vertex_indices_[set_vertices[set_i]], set_i);
     }
     auto target_vertex = matching_order[i];
+    auto target_label = query_graph_->getVertexLabel(target_vertex);
+
+    const auto& same_label_vertices = label_existing_vertices_map[target_label];
+    std::array<std::vector<uint32_t>, 2> same_label_indices;
+    for (auto v : same_label_vertices) {
+      // note that here cover_table_ reflects the compression key of the input instead of the output
+      same_label_indices[cover_table_[v] == 1].push_back(query_vertex_indices_[v]);
+    }
+
     // record query vertex index
     auto key_level_pos = dynamic_cover_key_level_.find(target_vertex);
     if (key_level_pos == dynamic_cover_key_level_.end()) {  // target vertex is in set
@@ -194,7 +213,7 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
     }
 
     if (i == 1) {  // the first edge: target has one and only one parent
-      prev = newExpandEdgeOperator(parent, target_vertex, cover_table_);
+      prev = newExpandEdgeOperator(parent, target_vertex, cover_table_, same_label_indices);
     } else {
       // find parent vertices
       auto neighbors = g->getOutNeighbors(target_vertex);
@@ -208,31 +227,31 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
         CHECK(add_keys_at_level[i].empty());
         if (key_parents.size() != 0 && set_parents.size() != 0) {
           if (key_parents.size() == 1) {
-            current = newExpandEdgeOperator(key_parents.front(), target_vertex, cover_table_);
+            current = newExpandEdgeOperator(key_parents.front(), target_vertex, cover_table_, same_label_indices);
           } else {
-            current = newExpandKeyKeyVertexOperator(key_parents, target_vertex);
+            current = newExpandKeyKeyVertexOperator(key_parents, target_vertex, same_label_indices);
           }
           prev->setNext(current);
           prev = current;
           current = newExpandIntoOperator(set_parents, target_vertex, key_parents);
         } else if (key_parents.size() == 1) {
-          current = newExpandEdgeOperator(key_parents.front(), target_vertex, cover_table_);
+          current = newExpandEdgeOperator(key_parents.front(), target_vertex, cover_table_, same_label_indices);
         } else if (key_parents.size() > 1) {
-          current = newExpandKeyKeyVertexOperator(key_parents, target_vertex);
+          current = newExpandKeyKeyVertexOperator(key_parents, target_vertex, same_label_indices);
         } else if (set_parents.size() == 1) {
-          current = newExpandEdgeOperator(set_parents.front(), target_vertex, cover_table_);
+          current = newExpandEdgeOperator(set_parents.front(), target_vertex, cover_table_, same_label_indices);
         } else {
-          current = newExpandSetToKeyVertexOperator(set_parents, target_vertex);
+          current = newExpandSetToKeyVertexOperator(set_parents, target_vertex, same_label_indices);
         }
       } else {  // target is in set, then  all parents should be in key, and key enumeration may be needed
         if (!add_keys_at_level[i].empty()) {  // key enumeration is needed
           current = newEnumerateKeyExpandToSetOperator(key_parents, target_vertex, add_keys_at_level[i],
-                                                       input_query_vertex_indices);
+                                                       input_query_vertex_indices, same_label_indices);
           add_keys_at_level[i].clear();
         } else if (key_parents.size() == 1) {
-          current = newExpandEdgeOperator(key_parents.front(), target_vertex, cover_table_);
+          current = newExpandEdgeOperator(key_parents.front(), target_vertex, cover_table_, same_label_indices);
         } else {
-          current = newExpandSetVertexOperator(key_parents, target_vertex);
+          current = newExpandSetVertexOperator(key_parents, target_vertex, same_label_indices);
         }
       }
       prev->setNext(current);
@@ -241,6 +260,7 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
       set_parents.clear();
     }
     existing_vertices.insert(target_vertex);
+    label_existing_vertices_map[target_label].push_back(target_vertex);
   }
 
   // output
@@ -251,9 +271,11 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
 }
 
 TraverseOperator* ExecutionPlan::newExpandEdgeOperator(QueryVertexID parent_vertex, QueryVertexID target_vertex,
-                                                       const std::vector<int>& cover_table) {
-  auto ret =
-      ExpandEdgeOperator::newExpandEdgeOperator(parent_vertex, target_vertex, cover_table, query_vertex_indices_);
+                                                       const std::vector<int>& cover_table,
+                                                       const std::array<std::vector<uint32_t>, 2>& same_label_indices) {
+  auto ret = ExpandEdgeOperator::newExpandEdgeOperator(parent_vertex, target_vertex, cover_table, query_vertex_indices_,
+                                                       same_label_indices[1], same_label_indices[0],
+                                                       getSetPruningThreshold(target_vertex));
   target_vertex_to_ops_[target_vertex] = ret;
   operators_.push_back(ret);
   return ret;
@@ -267,25 +289,31 @@ TraverseOperator* ExecutionPlan::newExpandIntoOperator(const std::vector<QueryVe
   return ret;
 }
 
-TraverseOperator* ExecutionPlan::newExpandSetVertexOperator(std::vector<QueryVertexID>& parents,
-                                                            QueryVertexID target_vertex) {
-  auto ret = new ExpandKeyToSetVertexOperator(parents, target_vertex, query_vertex_indices_);
+TraverseOperator* ExecutionPlan::newExpandSetVertexOperator(
+    std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
+    const std::array<std::vector<uint32_t>, 2>& same_label_indices) {
+  auto ret = new ExpandKeyToSetVertexOperator(parents, target_vertex, query_vertex_indices_, same_label_indices[1],
+                                              same_label_indices[0], getSetPruningThreshold(target_vertex));
   target_vertex_to_ops_[target_vertex] = ret;
   operators_.push_back(ret);
   return ret;
 }
 
-TraverseOperator* ExecutionPlan::newExpandSetToKeyVertexOperator(std::vector<QueryVertexID>& parents,
-                                                                 QueryVertexID target_vertex) {
-  auto ret = new ExpandSetToKeyVertexOperator(parents, target_vertex, query_vertex_indices_);
+TraverseOperator* ExecutionPlan::newExpandSetToKeyVertexOperator(
+    std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
+    const std::array<std::vector<uint32_t>, 2>& same_label_indices) {
+  auto ret = new ExpandSetToKeyVertexOperator(parents, target_vertex, query_vertex_indices_, same_label_indices[1],
+                                              same_label_indices[0], getSetPruningThreshold(target_vertex));
   target_vertex_to_ops_[target_vertex] = ret;
   operators_.push_back(ret);
   return ret;
 }
 
-TraverseOperator* ExecutionPlan::newExpandKeyKeyVertexOperator(std::vector<QueryVertexID>& parents,
-                                                               QueryVertexID target_vertex) {
-  auto ret = new ExpandKeyToKeyVertexOperator(parents, target_vertex, query_vertex_indices_);
+TraverseOperator* ExecutionPlan::newExpandKeyKeyVertexOperator(
+    std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
+    const std::array<std::vector<uint32_t>, 2>& same_label_indices) {
+  auto ret = new ExpandKeyToKeyVertexOperator(parents, target_vertex, query_vertex_indices_, same_label_indices[1],
+                                              same_label_indices[0], getSetPruningThreshold(target_vertex));
   target_vertex_to_ops_[target_vertex] = ret;
   operators_.push_back(ret);
   return ret;
@@ -300,9 +328,11 @@ Operator* ExecutionPlan::newOutputOperator() {
 TraverseOperator* ExecutionPlan::newEnumerateKeyExpandToSetOperator(
     const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
     const std::vector<QueryVertexID>& keys_to_enumerate,
-    unordered_map<QueryVertexID, uint32_t> input_query_vertex_indices) {
-  auto ret = new EnumerateKeyExpandToSetOperator(parents, target_vertex, input_query_vertex_indices,
-                                                 query_vertex_indices_, keys_to_enumerate, cover_table_);
+    unordered_map<QueryVertexID, uint32_t> input_query_vertex_indices,
+    const std::array<std::vector<uint32_t>, 2>& same_label_indices) {
+  auto ret = new EnumerateKeyExpandToSetOperator(
+      parents, target_vertex, input_query_vertex_indices, query_vertex_indices_, keys_to_enumerate, cover_table_,
+      same_label_indices[1], same_label_indices[0], getSetPruningThreshold(target_vertex));
   target_vertex_to_ops_[target_vertex] = ret;
   operators_.push_back(ret);
   return ret;
