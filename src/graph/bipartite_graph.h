@@ -30,7 +30,7 @@ class BipartiteGraph : public Graph {  // only use variable:vlist_,elist_  funct
  public:
   explicit BipartiteGraph(Graph g, std::vector<VertexID> candidate_set1, std::vector<VertexID> candidate_set2)
       : Graph() {
-    unordered_set<VertexID> vset(candidate_set2.begin(),candidate_set2.end());
+    unordered_set<VertexID> vset(candidate_set2.begin(), candidate_set2.end());
     vlist_.emplace_back(0);
     for (size_t i = 0; i < candidate_set1.size(); ++i) {
       VertexID v1Id = candidate_set1[i];
