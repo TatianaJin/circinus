@@ -14,7 +14,10 @@
 
 #pragma once
 
+#include <vector>
+
 #include "utils/hashmap.h"
+#include "graph/types.h"
 
 namespace circinus {
 

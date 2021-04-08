@@ -26,7 +26,7 @@
 namespace circinus {
 
 class Graph {
- private:
+ protected:
   VertexID n_vertices_ = 0;
   EdgeID n_edges_ = 0;
   VertexID max_degree_ = 0;
