@@ -49,7 +49,7 @@ class Graph {
    * e src_id dst_id 0     => n_edges lines, put the end vertex with smaller id first for each edge
    */
   explicit Graph(const std::string& path);
-
+  Graph() {}
   /// graph metadata
   inline VertexID getNumVertices() const { return n_vertices_; }
   inline EdgeID getNumEdges() const { return n_edges_; }

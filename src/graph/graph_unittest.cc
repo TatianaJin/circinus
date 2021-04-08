@@ -17,9 +17,9 @@
 
 #include "gflags/gflags.h"
 #include "glog/logging.h"
-#include "gtest/gtest.h"
 #include "graph/bipartite_graph.h"
 #include "graph/query_graph.h"
+#include "gtest/gtest.h"
 #include "ops/filters.h"
 
 using circinus::VertexID;
