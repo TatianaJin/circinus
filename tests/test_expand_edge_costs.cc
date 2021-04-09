@@ -76,7 +76,7 @@ class TestExpandEdgeCosts : public testing::Test {
   static uint64_t getNumSubgraphs(const std::vector<CompressedSubgraphs>& outputs) {
     uint64_t n = 0;
     for (auto& output : outputs) {
-      n += output.getNumSubgraphs();
+      n += output.getNumIsomorphicSubgraphs();
     }
     return n;
   }
@@ -119,8 +119,8 @@ class TestExpandEdgeCosts : public testing::Test {
                                                                 same_label_indices[0], ~0u, filter),
               filter};
     }
-    return {ExpandEdgeOperator::newExpandEdgeSetToKeyOperator(parent, target, indices, same_label_indices[1],
-                                                              same_label_indices[0], ~0u, filter),
+    return {ExpandEdgeOperator::newExpandEdgeSetToKeyOperator(parent, target, indices, same_label_indices[1], {}, ~0u,
+                                                              filter),
             filter};
   }
 
@@ -193,7 +193,7 @@ class TestExpandEdgeCosts : public testing::Test {
     delete filter;
 #endif
 
-    // expand vertex operator
+    // expand edge operator
     auto op_filter = newExpandEdgeOperator(parent, target, cover, indices, q);
     auto op_expand_edge = op_filter.first;
     start = std::chrono::high_resolution_clock::now();
