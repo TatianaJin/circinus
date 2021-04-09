@@ -17,6 +17,8 @@
 #include <algorithm>
 #include <vector>
 
+#include "glog/logging.h"
+
 #include "graph/compressed_subgraphs.h"
 
 namespace circinus {

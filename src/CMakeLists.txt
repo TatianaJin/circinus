@@ -20,6 +20,7 @@ set(circinus_algo_sources
   ${PROJECT_SOURCE_DIR}/src/algorithms/k_core.cc
 )
 set(circinus_graph_sources
+  ${PROJECT_SOURCE_DIR}/src/graph/compressed_subgraphs.cc
   ${PROJECT_SOURCE_DIR}/src/graph/graph.cc
   ${PROJECT_SOURCE_DIR}/src/graph/query_graph.cc
 )

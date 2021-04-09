@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <array>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include "ops/operators.h"
@@ -131,7 +132,13 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
   }
 
   // output
-  auto output_op = newOutputOperator();
+  std::vector<std::pair<std::vector<uint32_t>, std::vector<uint32_t>>> same_label_indices;  // {{keys},{sets}}
+  for (auto& pair : label_existing_vertices_indices) {
+    if ((!pair.second[1].empty() && !pair.second[0].empty()) || pair.second[0].size() > 1) {
+      same_label_indices.emplace_back(std::move(pair.second[1]), std::move(pair.second[0]));
+    }
+  }
+  auto output_op = newOutputOperator(std::move(same_label_indices));
   prev->setNext(output_op);
 
   DCHECK_EQ(existing_vertices.size(), g->getNumVertices());
@@ -156,7 +163,7 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
   Operator *current, *prev = nullptr;
   // existing vertices in current query subgraph
   unordered_set<QueryVertexID> existing_vertices;
-  unordered_map<LabelID, std::vector<uint32_t>> label_existing_vertices_map;
+  unordered_map<LabelID, std::vector<QueryVertexID>> label_existing_vertices_map;
   std::array<std::vector<QueryVertexID>, 2> parents;
   auto& key_parents = parents[1];
   auto& set_parents = parents[0];
@@ -287,7 +294,22 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
   }
 
   // output
-  auto output_op = newOutputOperator();
+  std::vector<std::pair<std::vector<uint32_t>, std::vector<uint32_t>>> same_label_indices;  // {{keys},{sets}}
+  for (auto& pair : label_existing_vertices_map) {
+    std::vector<uint32_t> same_label_sets;
+    std::vector<uint32_t> same_label_keys;
+    for (auto v : pair.second) {
+      if (cover_table_[v] == 1) {
+        same_label_keys.push_back(query_vertex_indices_[v]);
+      } else {  // set vertex
+        same_label_sets.push_back(query_vertex_indices_[v]);
+      }
+    }
+    if ((!same_label_keys.empty() && !same_label_sets.empty()) || same_label_sets.size() > 1) {
+      same_label_indices.emplace_back(std::move(same_label_keys), std::move(same_label_sets));
+    }
+  }
+  auto output_op = newOutputOperator(std::move(same_label_indices));
   prev->setNext(output_op);
 
   DCHECK_EQ(existing_vertices.size(), g->getNumVertices());
@@ -432,8 +454,9 @@ TraverseOperator* ExecutionPlan::newExpandKeyKeyVertexOperator(
   return ret;
 }
 
-Operator* ExecutionPlan::newOutputOperator() {
-  auto ret = OutputOperator::newOutputOperator(OutputType::Count, &outputs_);
+Operator* ExecutionPlan::newOutputOperator(
+    std::vector<std::pair<std::vector<uint32_t>, std::vector<uint32_t>>>&& same_label_indices) {
+  auto ret = OutputOperator::newOutputOperator(OutputType::Count, &outputs_, std::move(same_label_indices));
   operators_.push_back(ret);
   return ret;
 }

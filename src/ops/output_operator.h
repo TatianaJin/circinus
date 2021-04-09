@@ -17,6 +17,7 @@
 #include <chrono>
 #include <fstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "glog/logging.h"
@@ -65,15 +66,27 @@ class Outputs {
 
 class OutputOperator : public Operator {
  protected:
+  using SameLabelIndices = std::vector<std::pair<std::vector<uint32_t>, std::vector<uint32_t>>>;  // {{keys}, {sets}}
+
   Outputs* outputs_;
+  SameLabelIndices same_label_indices_;
+
   double total_time_in_milliseconds_ = 0;
   uint64_t total_input_size_ = 0;
   uint64_t total_num_input_subgraphs_ = 0;
   uint64_t leftover_input_ = 0;
 
  public:
-  explicit OutputOperator(Outputs* outputs) : outputs_(outputs) {}
-  static OutputOperator* newOutputOperator(OutputType type, Outputs* outputs);
+  explicit OutputOperator(Outputs* outputs, SameLabelIndices&& same_label_indices)
+      : outputs_(outputs), same_label_indices_(std::move(same_label_indices)) {}
+
+  /**
+   * @param same_label_indices The indices of vertices of the same label {{keys}, {sets}}
+   */
+  static OutputOperator* newOutputOperator(
+      OutputType type, Outputs* outputs,
+      std::vector<std::pair<std::vector<uint32_t>, std::vector<uint32_t>>>&& same_label_indices);
+
   virtual bool validateAndOutput(const std::vector<CompressedSubgraphs>& input, uint32_t output_index) = 0;
 
   inline bool validateAndOutputAndProfile(const std::vector<CompressedSubgraphs>& input, uint32_t output_index) {
@@ -92,31 +105,6 @@ class OutputOperator : public Operator {
     ss << toString() << ',' << total_time_in_milliseconds_ << ',' << total_input_size_ << ",,"
        << total_num_input_subgraphs_;
     return ss.str();
-  }
-};
-
-class CountOutputOperator : public OutputOperator {
- public:
-  std::string toString() const override { return "CountOutputOperator"; }
-  // all clones share the same Outputs instance
-  Operator* clone() const override { return new CountOutputOperator(outputs_); }
-
-  explicit CountOutputOperator(Outputs* outputs) : OutputOperator(outputs) {}
-
-  bool validateAndOutput(const std::vector<CompressedSubgraphs>& input, uint32_t output_index) override {
-    auto count_acc = outputs_->getCount(output_index);
-    leftover_input_ = input.size();
-    for (auto& group : input) {
-      --leftover_input_;
-      auto update = group.getNumIsomorphicSubgraphs(outputs_->getLimitPerThread() - count_acc);
-      count_acc = outputs_->updateCount(update, output_index);
-      if (count_acc >= outputs_->getLimitPerThread()) {
-        DLOG(INFO) << "last input num subgraphs " << group.getNumSubgraphs() << " isomorphic " << update << " total "
-                   << count_acc;
-        return true;
-      }
-    }
-    return false;
   }
 };
 

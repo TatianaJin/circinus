@@ -15,6 +15,7 @@
 #pragma once
 
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "graph/graph.h"
@@ -254,7 +255,7 @@ class ExecutionPlan {
       unordered_map<QueryVertexID, uint32_t> input_query_vertex_indices,
       const std::array<std::vector<uint32_t>, 2>& same_label_indices,
       const unordered_map<LabelID, std::vector<uint32_t>>& label_existing_vertices_map);
-  Operator* newOutputOperator();
+  Operator* newOutputOperator(std::vector<std::pair<std::vector<uint32_t>, std::vector<uint32_t>>>&&);
 
   inline TraverseOperator* newExpandEdgeSetToKeyOperator(
       QueryVertexID parent_vertex, QueryVertexID target_vertex,

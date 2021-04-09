@@ -17,10 +17,11 @@
 #include <algorithm>
 #include <cinttypes>
 #include <memory>
+#include <numeric>
+#include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
-
-#include "glog/logging.h"
 
 #include "graph/types.h"
 #include "utils/hashmap.h"
@@ -42,6 +43,11 @@ class CompressedSubgraphs {
   std::vector<VertexSet> sets_;
 
  public:
+  /**
+   * {{key indices},{set indices}}, set indices must not be empty.
+   */
+  using PruningIndexGroups = std::vector<std::pair<std::vector<uint32_t>, std::vector<uint32_t>>>;
+
   /**
    * @param key_size The number of key vertices.
    * @param n_vertices The number of vertices in each compressed subgraph.
@@ -186,45 +192,29 @@ class CompressedSubgraphs {
     return n_subgraphs;
   }
 
-  uint64_t getNumIsomorphicSubgraphs(uint64_t limit = ~0u) const {
+  uint64_t getNumIsomorphicSubgraphs(const PruningIndexGroups& pruning_indices, uint64_t limit = ~0u) const;
+
+  inline uint64_t getNumIsomorphicSubgraphs(uint64_t limit = ~0u) const {
     if (sets_.empty()) {
       return !keys_.empty();
     }
-    auto sets_sorted_by_size = sets_;
-    std::sort(sets_sorted_by_size.begin(), sets_sorted_by_size.end(),
-              [](const auto& set1, const auto& set2) { return set1->size() < set2->size(); });
-    // dfs sets_ chain
-    uint64_t count = 0;
-    std::vector<uint32_t> set_index(sets_.size(), 0);
-    unordered_set<VertexID> existing_vertices;
-    existing_vertices.reserve(getNumVertices());
-    existing_vertices.insert(keys_.begin(), keys_.end());
-    uint32_t last_depth = sets_.size() - 1;
-    uint32_t current_depth = 0;
-    while (true) {
-      while (set_index[current_depth] < (*sets_sorted_by_size[current_depth]).size()) {
-        auto v = (*sets_sorted_by_size[current_depth])[set_index[current_depth]];
-        ++set_index[current_depth];
-        if (existing_vertices.count(v) == 0) {  // v is valid
-          if (current_depth == last_depth) {    // reaching a leave in dfs
-            if (++count == limit) return count;
-          } else {
-            existing_vertices.insert(v);
-            ++current_depth;
-            set_index[current_depth] = 0;  // start from the first vertex in the next set
-          }
-        }
-      }
-      if (current_depth == 0) {
-        break;
-      }
-      --current_depth;
-      existing_vertices.erase((*sets_sorted_by_size[current_depth])[set_index[current_depth] - 1]);
+    std::vector<std::vector<VertexID>*> set_ptrs(sets_.size());
+    for (uint32_t i = 0; i < sets_.size(); ++i) {
+      set_ptrs[i] = sets_[i].get();
     }
-    return count;
+    unordered_set<VertexID> existing_vertices;
+    existing_vertices.reserve(getNumVertices() - 1);
+    existing_vertices.insert(keys_.begin(), keys_.end());
+    return getNumIsomorphicSubgraphs(existing_vertices, set_ptrs, limit);
   }
 
-  bool isExisting(uint32_t key) const {
+  /**
+   * Count isomorphic subgraphs projected on the given sets
+   */
+  static uint64_t getNumIsomorphicSubgraphs(unordered_set<VertexID>& existing_vertices,
+                                            std::vector<std::vector<VertexID>*>& set_ptrs, uint64_t limit = ~0u);
+
+  [[deprecated]] bool isExisting(uint32_t key) const {
     for (uint32_t existing_key : keys_) {
       if (existing_key == key) {
         return true;
@@ -250,6 +240,20 @@ class CompressedSubgraphs {
     return s;
   }
 
+  inline void logString(std::ostream& ss) const {
+    for (auto key : keys_) {
+      ss << key << ',';
+    }
+    for (auto& set : sets_) {
+      ss << '[';
+      for (auto v : *set) {
+        ss << v << ' ';
+      }
+      ss << "],";
+    }
+    ss << std::endl;
+  }
+
   /** Get the value of the key vertex at key_idx. */
   VertexID getKeyVal(uint32_t key_idx) const { return keys_[key_idx]; }
 
@@ -259,8 +263,8 @@ class CompressedSubgraphs {
   unordered_set<VertexID> getKeyMap() const { return unordered_set<VertexID>(keys_.begin(), keys_.end()); }
 
   // exceptions include keys and single-element sets with the same label
-  void getExceptions(unordered_set<VertexID>& exception, const std::vector<uint32_t>& exception_key_indices,
-                     const std::vector<uint32_t>& exception_set_indices) const {
+  inline void getExceptions(unordered_set<VertexID>& exception, const std::vector<uint32_t>& exception_key_indices,
+                            const std::vector<uint32_t>& exception_set_indices) const {
     exception.reserve(exception_key_indices.size() + exception_set_indices.size());
     for (auto idx : exception_key_indices) {
       exception.insert(keys_[idx]);
@@ -275,8 +279,8 @@ class CompressedSubgraphs {
   }
 
   // exceptions include keys and single-element sets with the same label
-  unordered_set<VertexID> getExceptions(const std::vector<uint32_t>& exception_key_indices,
-                                        const std::vector<uint32_t>& exception_set_indices) const {
+  inline unordered_set<VertexID> getExceptions(const std::vector<uint32_t>& exception_key_indices,
+                                               const std::vector<uint32_t>& exception_set_indices) const {
     unordered_set<VertexID> exception;
     getExceptions(exception, exception_key_indices, exception_set_indices);
     return exception;
@@ -293,56 +297,10 @@ class CompressedSubgraphs {
   /** Add a vertex val to the vertex set at set_idx. */
   void UpdateSet(uint32_t set_idx, VertexID val) { sets_[set_idx]->push_back(val); }
 
-  void logString(std::ostream& ss) const {
-    for (auto key : keys_) {
-      ss << key << ',';
-    }
-    for (auto& set : sets_) {
-      for (auto v : *set) {
-        ss << v << ' ';
-      }
-      ss << ',';
-    }
-    ss << std::endl;
-  }
-
   bool empty() const { return keys_.empty(); }
 
   bool pruneExistingSets(VertexID v, unordered_set<uint32_t>& set_indices, uint32_t set_size_threshold,
-                         bool recursive_prune = true) {
-    unordered_map<VertexID, uint32_t> new_v;  // vertex, set_index
-    for (uint32_t i : set_indices) {
-      auto& set = *sets_[i];
-      if (set.size() <= set_size_threshold) {
-        auto lb = circinus::lower_bound(set.begin(), set.end(), v);
-        if (lb != set.end() && *lb == v) {  // conflict found
-          if (set.size() == 1) {
-            return true;
-          }
-          auto new_set = std::make_shared<std::vector<VertexID>>();
-          new_set->insert(new_set->end(), set.begin(), lb);
-          new_set->insert(new_set->end(), lb + 1, set.end());
-          // recursively prune when set size becomes 1
-          if (new_set->size() == 1 && !new_v.insert({new_set->front(), i}).second) {
-            return true;
-          }
-          sets_[i] = std::move(new_set);
-        }
-      }
-    }
-    if (new_v.empty()) {
-      return false;
-    }
-    if (recursive_prune) {
-      for (auto& pair : new_v) {
-        set_indices.erase(pair.second);
-        if (pruneExistingSets(pair.first, set_indices, set_size_threshold)) {
-          return true;
-        }
-      }
-    }
-    return false;
-  }
+                         bool recursive_prune = true);
 };
 
 }  // namespace circinus

@@ -98,13 +98,40 @@ class TestExpandEdgeCosts : public testing::Test {
     return candidates;
   }
 
+  std::pair<circinus::TraverseOperator*, circinus::SubgraphFilter*> newExpandEdgeOperator(
+      QueryVertexID parent, QueryVertexID target, const std::vector<int>& cover,
+      const circinus::unordered_map<QueryVertexID, uint32_t>& indices, const QueryGraph& q) {
+    std::array<std::vector<uint32_t>, 2> same_label_indices;  // indices in the input
+    if (q.getVertexLabel(parent) == q.getVertexLabel(target)) {
+      same_label_indices[cover[parent] == 1].push_back(indices.at(parent));
+    }
+    circinus::SubgraphFilter* filter = nullptr;
+#ifdef USE_FILTER
+    filter = circinus::SubgraphFilter::newDummyFilter();
+#endif
+    if (cover[target] != 1) {
+      return {ExpandEdgeOperator::newExpandEdgeKeyToSetOperator(parent, target, indices, same_label_indices[1],
+                                                                same_label_indices[0], ~0u, filter),
+              filter};
+    }
+    if (cover[parent] == 1) {
+      return {ExpandEdgeOperator::newExpandEdgeKeyToKeyOperator(parent, target, indices, same_label_indices[1],
+                                                                same_label_indices[0], ~0u, filter),
+              filter};
+    }
+    return {ExpandEdgeOperator::newExpandEdgeSetToKeyOperator(parent, target, indices, same_label_indices[1],
+                                                              same_label_indices[0], ~0u, filter),
+            filter};
+  }
+
   uint32_t getNumMatches(QueryVertexID parent, QueryVertexID target, const std::vector<int>& cover,
                          const std::vector<std::vector<VertexID>>& candidates,
-                         const std::vector<CompressedSubgraphs>& seeds, const Graph& g) {
+                         const std::vector<CompressedSubgraphs>& seeds, const Graph& g, const QueryGraph& q) {
     circinus::unordered_map<QueryVertexID, uint32_t> indices;
     indices[parent] = 0;
-    indices[target] = 1;
-    auto op = ExpandEdgeOperator::newExpandEdgeOperator(parent, target, cover, indices);
+    indices[target] = (cover[target] == cover[parent]);
+    auto op_filter = newExpandEdgeOperator(parent, target, cover, indices, q);
+    auto op = op_filter.first;
     auto start = std::chrono::high_resolution_clock::now();
     op->setCandidateSets(&candidates[target]);
     op->input(seeds, &g);
@@ -113,6 +140,9 @@ class TestExpandEdgeCosts : public testing::Test {
     }
     auto end = std::chrono::high_resolution_clock::now();
     delete op;
+#ifdef USE_FILTER
+    delete op_filter.second;
+#endif
     auto ret = getNumSubgraphs(outputs);
     LOG(INFO) << ((cover[parent] == 1) ? "key" : "set") << "to" << ((cover[target] == 1) ? "key " : "set ") << parent
               << "->" << target << ' ' << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count()
@@ -122,19 +152,31 @@ class TestExpandEdgeCosts : public testing::Test {
 
   uint32_t expandVertex(QueryVertexID parent, QueryVertexID target, const std::vector<int>& cover,
                         const std::vector<std::vector<VertexID>>& candidates,
-                        const std::vector<CompressedSubgraphs>& seeds, const Graph& g) {
+                        const std::vector<CompressedSubgraphs>& seeds, const Graph& g, const QueryGraph& q) {
     circinus::unordered_map<QueryVertexID, uint32_t> indices;
     indices[parent] = 0;
-    indices[target] = 1;
+    indices[target] = (cover[target] == cover[parent]);
+
+    std::array<std::vector<uint32_t>, 2> same_label_indices;  // indices in the input
+    if (q.getVertexLabel(parent) == q.getVertexLabel(target)) {
+      same_label_indices[cover[parent] == 1].push_back(indices.at(parent));
+    }
+    circinus::SubgraphFilter* filter = nullptr;
+#ifdef USE_FILTER
+    filter = circinus::SubgraphFilter::newDummyFilter();
+#endif
 
     // expand vertex operator
     circinus::TraverseOperator* op;
     if (cover[parent] == 1 && cover[target] == 1) {  // key to key
-      op = new ExpandKeyToKeyVertexOperator(std::vector<QueryVertexID>{parent}, target, indices);
+      op = new ExpandKeyToKeyVertexOperator(std::vector<QueryVertexID>{parent}, target, indices, same_label_indices[1],
+                                            same_label_indices[0], ~0u, filter);
     } else if (cover[parent] == 1) {  // key to set
-      op = new ExpandKeyToSetVertexOperator(std::vector<QueryVertexID>{parent}, target, indices);
+      op = new ExpandKeyToSetVertexOperator(std::vector<QueryVertexID>{parent}, target, indices, same_label_indices[1],
+                                            same_label_indices[0], ~0u, filter);
     } else {  // set to key
-      op = new ExpandSetToKeyVertexOperator(std::vector<QueryVertexID>{parent}, target, indices);
+      op = new ExpandSetToKeyVertexOperator(std::vector<QueryVertexID>{parent}, target, indices, same_label_indices[1],
+                                            same_label_indices[0], ~0u, filter);
     }
     auto start = std::chrono::high_resolution_clock::now();
     op->setCandidateSets(&candidates[target]);
@@ -147,9 +189,13 @@ class TestExpandEdgeCosts : public testing::Test {
     outputs.clear();
     auto expand_vertex_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
     delete op;
+#ifdef USE_FILTER
+    delete filter;
+#endif
 
     // expand vertex operator
-    auto op_expand_edge = ExpandEdgeOperator::newExpandEdgeOperator(parent, target, cover, indices);
+    auto op_filter = newExpandEdgeOperator(parent, target, cover, indices, q);
+    auto op_expand_edge = op_filter.first;
     start = std::chrono::high_resolution_clock::now();
     op_expand_edge->setCandidateSets(&candidates[target]);
     op_expand_edge->input(seeds, &g);
@@ -159,6 +205,9 @@ class TestExpandEdgeCosts : public testing::Test {
     EXPECT_EQ(ret, getNumSubgraphs(outputs));
     auto expand_edge_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
     delete op_expand_edge;
+#ifdef USE_FILTER
+    delete op_filter.second;
+#endif
 
     if (expand_vertex_time < expand_edge_time) {
       LOG(INFO) << ((cover[parent] == 1) ? "key" : "set") << "to" << ((cover[target] == 1) ? "key " : "set ") << parent
@@ -205,27 +254,27 @@ class TestExpandEdgeCosts : public testing::Test {
             cover[v] = 1;
             cover[target] = 0;
             if (compare_expand_vertex) {
-              n_output = expandVertex(v, target, cover, candidates, seed_keys, g);
+              n_output = expandVertex(v, target, cover, candidates, seed_keys, g, q);
             } else {
-              n_output = getNumMatches(v, target, cover, candidates, seed_keys, g);
+              n_output = getNumMatches(v, target, cover, candidates, seed_keys, g, q);
             }
           }
           { /* key to key */
             cover[v] = 1;
             cover[target] = 1;
             if (compare_expand_vertex) {
-              EXPECT_EQ(n_output, expandVertex(v, target, cover, candidates, seed_keys, g));
+              EXPECT_EQ(n_output, expandVertex(v, target, cover, candidates, seed_keys, g, q));
             } else {
-              EXPECT_EQ(n_output, getNumMatches(v, target, cover, candidates, seed_keys, g));
+              EXPECT_EQ(n_output, getNumMatches(v, target, cover, candidates, seed_keys, g, q));
             }
           }
           { /* set to key */
             cover[v] = 0;
             cover[target] = 1;
             if (compare_expand_vertex) {
-              ASSERT_EQ(n_output, expandVertex(v, target, cover, candidates, seed_sets, g));
+              ASSERT_EQ(n_output, expandVertex(v, target, cover, candidates, seed_sets, g, q));
             } else {
-              ASSERT_EQ(n_output, getNumMatches(v, target, cover, candidates, seed_sets, g));
+              ASSERT_EQ(n_output, getNumMatches(v, target, cover, candidates, seed_sets, g, q));
             }
           }
           LOG(INFO) << "-------";
