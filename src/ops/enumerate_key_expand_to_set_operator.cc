@@ -66,6 +66,11 @@ EnumerateKeyExpandToSetOperator::EnumerateKeyExpandToSetOperator(
     set_indices_.insert(pruning_sets->begin(), pruning_sets->end());
   }
 #endif
+  for (auto v : keys_to_enumerate_) {
+    auto pos =
+        std::find(same_label_set_indices_.begin(), same_label_set_indices_.end(), input_query_vertex_indices.at(v));
+    if (pos != same_label_set_indices_.end()) same_label_set_indices_.erase(pos);
+  }
 
   // get index mapping of enumerated key vertex indices and set vertex indices
   uint32_t n_input_keys = 0;
@@ -169,6 +174,7 @@ uint32_t EnumerateKeyExpandToSetOperator::expandInner(std::vector<CompressedSubg
             if (enumerated_key_pruning_indices_[key_i] != -1) {
               const auto& pruning_sets = *subgraph_filter_->getPruningSets(enumerated_key_pruning_indices_[key_i]);
               unordered_set<uint32_t> indices(pruning_sets.begin(), pruning_sets.end());
+              indices.erase(output.getNumSets() - 1);
               auto thres = subgraph_filter_->getSetPruningThreshold(enumerated_key_pruning_indices_[key_i]);
 #ifdef USE_FILTER
               bool recursive_prune = false;  // only prune by key

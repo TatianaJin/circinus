@@ -141,4 +141,68 @@ uint64_t CompressedSubgraphs::getNumIsomorphicSubgraphs(const PruningIndexGroups
   return std::min(count, limit);
 }
 
+std::ostream& CompressedSubgraphs::logEnumerated(std::ostream& ss, std::vector<std::pair<bool, uint32_t>>& log_indices,
+                                                 uint64_t limit) const {
+  if (sets_.empty()) {
+    if (!keys_.empty()) {
+      for (auto& pair : log_indices) {
+        CHECK(pair.first);
+        ss << keys_[pair.second] << ',';
+      }
+      ss << '\n';
+    }
+    return ss;
+  }
+
+  std::vector<VertexID> set_tuple(sets_.size(), -1);
+  std::vector<std::vector<VertexID>*> set_ptrs(sets_.size());
+  for (uint32_t i = 0; i < sets_.size(); ++i) {
+    set_ptrs[i] = sets_[i].get();
+  }
+  unordered_set<VertexID> existing_vertices;
+  existing_vertices.reserve(getNumVertices() - 1);
+  existing_vertices.insert(keys_.begin(), keys_.end());
+  std::vector<uint32_t> set_indices(sets_.size());
+  std::iota(set_indices.begin(), set_indices.end(), 0);
+  std::sort(set_indices.begin(), set_indices.end(),
+            [&set_ptrs](uint32_t set1, uint32_t set2) { return set_ptrs[set1]->size() < set_ptrs[set2]->size(); });
+  std::sort(set_ptrs.begin(), set_ptrs.end(),
+            [](const auto& set1, const auto& set2) { return set1->size() < set2->size(); });
+  // dfs sets_ chain
+  uint64_t count = 0;
+  std::vector<uint32_t> set_index(set_ptrs.size(), 0);
+  uint32_t last_depth = set_ptrs.size() - 1;
+  uint32_t current_depth = 0;
+  while (true) {
+    while (set_index[current_depth] < (*set_ptrs[current_depth]).size()) {
+      auto v = (*set_ptrs[current_depth])[set_index[current_depth]];
+      ++set_index[current_depth];
+      if (existing_vertices.count(v) == 0) {  // v is valid
+        set_tuple[set_indices[current_depth]] = v;
+        if (current_depth == last_depth) {  // reaching a leave in dfs
+          for (auto& pair : log_indices) {
+            if (pair.first) {
+              ss << keys_[pair.second] << ',';
+            } else {
+              ss << set_tuple[pair.second] << ',';
+            }
+          }
+          ss << '\n';
+          if (++count == limit) return ss;
+        } else {
+          existing_vertices.insert(v);
+          ++current_depth;
+          set_index[current_depth] = 0;  // start from the first vertex in the next set
+        }
+      }
+    }
+    if (current_depth == 0) {
+      break;
+    }
+    --current_depth;
+    existing_vertices.erase((*set_ptrs[current_depth])[set_index[current_depth] - 1]);
+  }
+  return ss;
+}
+
 }  // namespace circinus

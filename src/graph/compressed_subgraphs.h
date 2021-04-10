@@ -240,19 +240,8 @@ class CompressedSubgraphs {
     return s;
   }
 
-  inline void logString(std::ostream& ss) const {
-    for (auto key : keys_) {
-      ss << key << ',';
-    }
-    for (auto& set : sets_) {
-      ss << '[';
-      for (auto v : *set) {
-        ss << v << ' ';
-      }
-      ss << "],";
-    }
-    ss << std::endl;
-  }
+  std::ostream& logEnumerated(std::ostream& ss, std::vector<std::pair<bool, uint32_t>>& log_indices,
+                              uint64_t limit = ~0u) const;
 
   /** Get the value of the key vertex at key_idx. */
   VertexID getKeyVal(uint32_t key_idx) const { return keys_[key_idx]; }
