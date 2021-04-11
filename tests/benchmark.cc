@@ -16,6 +16,7 @@
 #include <cmath>
 #include <fstream>
 #include <random>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -74,6 +75,7 @@ DEFINE_string(match_order, "", "Matching order");
 DEFINE_string(filter, "nlf", "filter");
 DEFINE_string(profile_file, "", "profile file");
 DEFINE_string(vertex_cover, "static", "Vertex cover strategy: static, eager, all");
+DEFINE_string(batch_file, "", "Batch query file");
 
 enum VertexCoverStrategy : uint32_t { Static = 0, Eager, Sample, Dynamic, All };
 
@@ -92,6 +94,27 @@ class Benchmark {
 
     (*out) << dataset << ',' << query_size << ',' << query_mode << ',' << index << ',';
     run<vcs>(graph_path, query_path, out);
+  }
+
+  template <VertexCoverStrategy vcs>
+  void run(double load_time, const Graph& data_graph, const std::string& dataset, uint32_t query_size,
+           const std::string& query_mode, uint32_t index, std::ostream* out) {
+    auto graph_path = dataset + "/data_graph/" + dataset + ".graph";
+    auto query_path = dataset + "/query_graph/query_" + query_mode + "_" + std::to_string(query_size) + "_" +
+                      std::to_string(index) + ".graph";
+
+    (*out) << dataset << ',' << query_size << ',' << query_mode << ',' << index << ',';
+    run<vcs>(load_time, data_graph, query_path, out);
+  }
+
+  void loadDataset(Graph& data_graph, const std::string& dataset, double& load_time) {
+    auto graph_path = dataset + "/data_graph/" + dataset + ".graph";
+    auto start_loading = std::chrono::steady_clock::now();
+    data_graph = Graph(FLAGS_data_dir + "/" + graph_path);
+    auto end_loading = std::chrono::steady_clock::now();
+    LOG(INFO) << "========================";
+    LOG(INFO) << "graph " << graph_path;
+    load_time = toSeconds(start_loading, end_loading);
   }
 
  protected:
@@ -295,7 +318,7 @@ class Benchmark {
     return order;
   }
 
-  void run_sample(Graph& g, QueryGraph& q, std::vector<std::vector<VertexID>>& candidates,
+  void run_sample(const Graph& g, QueryGraph& q, std::vector<std::vector<VertexID>>& candidates,
                   const std::vector<QueryVertexID>& use_order, std::vector<std::vector<double>>& cardinality,
                   std::vector<double>& level_cost) {
     std::vector<double> candidate_cardinality;
@@ -338,6 +361,12 @@ class Benchmark {
     auto end_loading = std::chrono::steady_clock::now();
     LOG(INFO) << "========================";
     LOG(INFO) << "graph " << graph_path << " query " << query_path;
+    auto load_time = toSeconds(start_loading, end_loading);
+    run<vcs>(load_time, g, query_path, out);
+  }
+
+  template <VertexCoverStrategy vcs>
+  void run(double load_time, const Graph& g, const std::string& query_path, std::ostream* out) {
     QueryGraph q(FLAGS_data_dir + "/" + query_path);  // load query graph
     auto use_order = getOrder(FLAGS_match_order, q.getNumVertices());
     auto start_filter = std::chrono::steady_clock::now();
@@ -416,11 +445,134 @@ class Benchmark {
       profile_stream.close();
     }
 
-    (*out) << toSeconds(start_loading, end_loading) << ',' << toSeconds(start_filter, end_filter) << ','
-           << toSeconds(end_filter, start_execution) << ',' << toSeconds(start_execution, end) << ',' << n_matches
-           << ',' << ss.str() << '\n';
+    (*out) << load_time << ',' << toSeconds(start_filter, end_filter) << ',' << toSeconds(end_filter, start_execution)
+           << ',' << toSeconds(start_execution, end) << ',' << n_matches << ',' << ss.str();
   }
 };
+
+class QueryConfig {
+ public:
+  std::string dataset;
+  uint32_t query_size;
+  std::string query_mode;
+  uint32_t query_index;
+  std::string match_order;
+
+  bool skipConfig() const { return skip_; }
+
+  void readNextConfig(std::istream& str) {
+    skip_ = false;
+    std::string::size_type pos = 0;
+    auto old_pos = pos;
+    std::getline(str, line_);
+    // parse dataset
+    if ((pos = line_.find(',', pos)) == std::string::npos) {
+      skip_ = true;
+      return;
+    }
+    dataset = std::string(&line_[old_pos], pos - old_pos);
+    if (dataset.substr(0, 7) == "dataset") {
+      skip_ = true;
+      return;
+    }
+    old_pos = ++pos;
+    // parse query_size
+    CHECK_NE((pos = line_.find(',', pos)), std::string::npos);
+    line_[pos] = '\0';
+    query_size = std::atoi(&line_[old_pos]);
+    old_pos = ++pos;
+    // parse query_mode
+    CHECK_NE((pos = line_.find(',', pos)), std::string::npos);
+    query_mode = std::string(&line_[old_pos], pos - old_pos);
+    old_pos = ++pos;
+    // parse query_index
+    CHECK_NE((pos = line_.find(',', pos)), std::string::npos);
+    line_[pos] = '\0';
+    query_index = std::atoi(&line_[old_pos]);
+    old_pos = ++pos;
+    // parse match_order
+    pos = line_.find(',', pos);
+    if (pos == line_.npos) {
+      pos = line_.size();
+    }
+    if (line_[pos - 1] == ' ') {
+      match_order = std::string(&line_[old_pos], pos - old_pos - 1);
+    } else {
+      match_order = std::string(&line_[old_pos], pos - old_pos);
+    }
+  }
+
+  std::ostream& toString(std::ostream& ss, char delimiter = ',') {
+    if (skip_) return ss;
+    ss << dataset << delimiter << query_size << delimiter << query_mode << delimiter << query_index << delimiter
+       << match_order << std::endl;
+    return ss;
+  }
+
+ private:
+  std::string line_;
+  bool skip_ = false;
+};
+
+std::istream& operator>>(std::istream& str, QueryConfig& config) {
+  config.readNextConfig(str);
+  return str;
+}
+
+void run_benchmark(const std::string& query_file, std::ostream* out) {
+  std::ifstream query_f(query_file);
+  LOG(INFO) << "batch query file" << query_file;
+  CHECK(query_f.is_open());
+
+  (*out) << "dataset,query_size,query_mode,query_index,load_time,filter_time,plan_time,enumerate_time,n_embeddings,"
+            "order\n";
+  Benchmark benchmark;
+  QueryConfig config;
+  std::string dataset = "";
+  Graph data_graph;
+  double load_time = 0;
+  while (query_f >> config) {
+    if (config.skipConfig()) continue;
+    config.toString(LOG(INFO));
+    // load graph if not cached
+    if (config.dataset != dataset) {
+      dataset = config.dataset;
+      benchmark.loadDataset(data_graph, dataset, load_time);
+    }
+    std::thread timer;
+    std::thread runner([&]() {
+      FLAGS_match_order = config.match_order;
+      if (FLAGS_vertex_cover == "static") {
+        benchmark.run<Static>(load_time, data_graph, config.dataset, config.query_size, config.query_mode,
+                              config.query_index, out);
+      } else if (FLAGS_vertex_cover == "all") {
+        benchmark.run<All>(load_time, data_graph, config.dataset, config.query_size, config.query_mode,
+                           config.query_index, out);
+      } else if (FLAGS_vertex_cover == "eager") {
+        benchmark.run<Eager>(load_time, data_graph, config.dataset, config.query_size, config.query_mode,
+                             config.query_index, out);
+      } else if (FLAGS_vertex_cover == "dynamic") {
+        benchmark.run<Dynamic>(load_time, data_graph, config.dataset, config.query_size, config.query_mode,
+                               config.query_index, out);
+      } else {
+        benchmark.run<Sample>(load_time, data_graph, config.dataset, config.query_size, config.query_mode,
+                              config.query_index, out);
+      }
+      if (timer.joinable()) {
+        pthread_cancel(timer.native_handle());
+      }
+    });
+    timer = std::thread([&runner]() {  // 5 min timeout for each query
+      std::this_thread::sleep_for(std::chrono::seconds(300));
+      if (runner.joinable()) {
+        pthread_cancel(runner.native_handle());
+      }
+    });
+    runner.join();
+    timer.join();
+    (*out) << std::endl;
+  }
+}
 
 int main(int argc, char** argv) {
 #ifndef NDEBUG
@@ -447,6 +599,12 @@ int main(int argc, char** argv) {
     FLAGS_match_limit = ~0u;
   }
   FLAGS_profile = (FLAGS_profile_file != "");
+
+  if (FLAGS_batch_file != "") {
+    run_benchmark(FLAGS_batch_file, out);
+    return 0;
+  }
+
   if (FLAGS_vertex_cover == "static") {
     benchmark.run<Static>(FLAGS_dataset, FLAGS_query_size, FLAGS_query_mode, FLAGS_query_index, out);
   } else if (FLAGS_vertex_cover == "all") {
@@ -458,6 +616,8 @@ int main(int argc, char** argv) {
   } else {
     benchmark.run<Sample>(FLAGS_dataset, FLAGS_query_size, FLAGS_query_mode, FLAGS_query_index, out);
   }
+  (*out) << std::endl;
+
   fstream.close();
 
   return 0;
