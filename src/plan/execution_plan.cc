@@ -22,6 +22,7 @@
 
 #include "ops/operators.h"
 #include "utils/hashmap.h"
+#include "graph/bipartite_graph.h"
 
 namespace circinus {
 
@@ -44,6 +45,7 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
   unordered_set<QueryVertexID> existing_vertices;
   // label: {set index}, {key index}
   unordered_map<LabelID, std::array<std::vector<uint32_t>, 2>> label_existing_vertices_indices;
+  unordered_map<std::pair<QueryVertexID,QueryVertexID>,BipartiteGraph*> pair_to_bipartite_graph;
   std::array<std::vector<QueryVertexID>, 2> parents;
   auto& key_parents = parents[1];
   auto& set_parents = parents[0];
@@ -80,6 +82,7 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
       } else {
         prev = newExpandEdgeSetToKeyOperator(parent, target_vertex, same_label_v_indices, std::vector<uint32_t>{});
       }
+      addBipartiteGraphToOperator(parent,target_vertex,prev,pair_to_bipartite_graph);
     } else {
       // find parent vertices
       auto neighbors = g->getOutNeighbors(target_vertex);
@@ -119,6 +122,14 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
         } else {
           current = newExpandSetVertexOperator(key_parents, target_vertex, same_label_v_indices);
         }
+      }
+      for(auto& qv:key_parents)
+      {
+        addBipartiteGraphToOperator(qv,target_vertex,current,pair_to_bipartite_graph);
+      }
+      for(auto& qv:set_parents)
+      {
+        addBipartiteGraphToOperator(qv,target_vertex,current,pair_to_bipartite_graph);
       }
       prev->setNext(current);
       prev = current;
@@ -489,6 +500,20 @@ Operator* ExecutionPlan::newOutputOperator(
   auto ret = OutputOperator::newOutputOperator(OutputType::Count, &outputs_, std::move(same_label_indices));
   operators_.push_back(ret);
   return ret;
+}
+
+void addBipartiteGraphToOperator(QueryVertexID qv1,QueryVertexID qv2,TraverseOperator* op,unordered_map<std::pair<QueryVertexID,QueryVertexID>,BipartiteGraph*>& pair_to_bipartite_graph)
+{
+  BipartiteGraph* res=pair_to_bipartite_graph.find({qv1,qv2});
+  if(res!=pair_to_bipartite_graph.end())
+  {
+    op->addBipartiteGraph(res);
+  }
+  else{
+    BipartiteGraph* bg=new BipartiteGraph(qv1,qv2);
+    pair_to_bipartite_graph.insert({{qv1,qv2},bg});
+    op->addBipartiteGraph(bg);
+  }
 }
 
 TraverseOperator* ExecutionPlan::newEnumerateKeyExpandToSetOperator(

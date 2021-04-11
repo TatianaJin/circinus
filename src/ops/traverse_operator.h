@@ -31,6 +31,16 @@
 
 namespace circinus {
 
+inline void removeExceptions(const std::pair<const VertexID*, uint32_t>& setPair, std::vector<VertexID>* res,
+                             const unordered_set<VertexID>& except = {}) {
+  for(uint32_t i = 0; i < setPair.second; ++i)
+  {
+    auto vid = setPair.first[i];
+    if(except.count(vid) == 0) res->emplace_back(vid);
+  }
+}
+
+
 /** set1 and set2 must be sorted in ascending order */
 inline void intersect(const std::pair<const VertexID*, uint32_t>& set1,
                       const std::pair<const VertexID*, uint32_t>& set2, std::vector<VertexID>* intersection,
@@ -106,6 +116,7 @@ class TraverseOperator : public Operator {
   uint64_t distinct_intersection_count_ =
       0;  // the minimal number of intersection needed if all intersection function call results can be cached
   std::vector<BipartiteGraph*> bg_pointers_;
+  bool use_bipartite_graph_flag=false;
 
  public:
   TraverseOperator() {}
@@ -190,6 +201,20 @@ class TraverseOperator : public Operator {
        << total_intersection_input_size_ << ',' << total_intersection_output_size_ << ','
        << distinct_intersection_count_;
     return ss.str();
+  }
+
+  void addBipartiteGraph(BipartiteGraph* bg)
+  {
+    bg_pointers_.emplace_back(bg);
+  }
+
+  void useBipartiteGraph(std::vector<std::vector<VertexID>> candidate_sets) // must used after input() called
+  {
+    use_bipartite_graph_flag=1;
+    for(auto p:bg_pointers_)
+    {
+      p->populateGraph(current_data_graph_,candidate_sets);
+    }
   }
 
  protected:

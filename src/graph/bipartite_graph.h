@@ -27,9 +27,17 @@ class BipartiteGraph : public Graph {  // only use variable:vlist_,elist_  funct
  private:
   unordered_map<VertexID, uint32_t> offset_by_vertex_;
   bool populated=0;
+  VertexID sourceId,destinationId;
 
  public:
-  void populateGraph(Graph g, std::vector<VertexID> candidate_set1, std::vector<VertexID> candidate_set2) {
+  BipartiteGraph(VertexID id1,VertexID id2):Graph(),sourceId(id1),destinationId(id2) {}
+
+  void populateGraph(Graph* g, std::vector<std::vector<VertexID>> candidate_sets)
+  {
+    populateGraph(g,candidate_sets[sourceId],candidate_sets[destinationId]);
+  }
+
+  void populateGraph(Graph* g, std::vector<VertexID> candidate_set1, std::vector<VertexID> candidate_set2) {
     if(populated)return;
     populated=1;
     unordered_set<VertexID> vset(candidate_set2.begin(), candidate_set2.end());
@@ -37,7 +45,7 @@ class BipartiteGraph : public Graph {  // only use variable:vlist_,elist_  funct
     for (size_t i = 0; i < candidate_set1.size(); ++i) {
       VertexID v1Id = candidate_set1[i];
       offset_by_vertex_.insert({v1Id, i});
-      auto[dest_nodes, cnt] = g.getOutNeighbors(v1Id);
+      auto[dest_nodes, cnt] = g->getOutNeighbors(v1Id);
       for (uint32_t j = 0; j < cnt; ++j)
         if (vset.find(dest_nodes[j]) != vset.end()) elist_.emplace_back(dest_nodes[j]);
       vlist_.emplace_back(elist_.size());
