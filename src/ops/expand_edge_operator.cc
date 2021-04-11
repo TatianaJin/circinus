@@ -207,7 +207,9 @@ class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
     auto parent_match = input.getKeyVal(parent_index_);
     // intersect(candidate_set_, current_data_graph_->getOutNeighbors(parent_match), &current_targets_,
     // input.getKeyMap());
-    intersect(candidate_set_, current_data_graph_->getOutNeighbors(parent_match), &current_targets_,
+    if(use_bipartite_graph_flag)removeExceptions(current_data_graph_->getOutNeighbors(parent_match), &current_targets_,
+              input.getExceptions(same_label_key_indices_, same_label_set_indices_));
+    else intersect(candidate_set_, current_data_graph_->getOutNeighbors(parent_match), &current_targets_,
               input.getExceptions(same_label_key_indices_, same_label_set_indices_));
     if
       constexpr(isProfileMode(profile)) {
@@ -299,7 +301,7 @@ class CurrentResultsByParent : public CurrentResults {
       auto parent_match = parent_set[i];
       if (exceptions_.count(parent_match)) continue;
       std::vector<VertexID> targets;
-      owner_->intersectOrNot(*candidates_, data_graph_->getOutNeighbors(parent_match), &targets, exceptions_);
+      intersect(*candidates_, data_graph_->getOutNeighbors(parent_match), &targets, exceptions_);
       if
         constexpr(isProfileMode(profile)) {
           owner_->updateIntersectInfo(candidates_->size() + data_graph_->getVertexOutDegree(parent_match),
@@ -380,7 +382,7 @@ class CurrentResultsByExtension : public CurrentResults {
       return;
     }
     std::vector<VertexID> current_extensions;
-    owner_->intersectOrNot(*candidates_, data_graph_->getOutNeighbors(parent_match), &current_extensions, current_exceptions_);
+    intersect(*candidates_, data_graph_->getOutNeighbors(parent_match), &current_extensions, current_exceptions_);
     if
       constexpr(isProfileMode(profile)) {
         owner_->updateIntersectInfo(candidates_->size() + data_graph_->getVertexOutDegree(parent_match),
@@ -515,7 +517,6 @@ class ExpandEdgeSetToKeyOperator : public ExpandEdgeOperator {
 
   template <QueryType profile>
   void expandInner(const CompressedSubgraphs& input, uint32_t cap) {
-    if(use_bipartite_graph_flag)current_data_graph_=bg_pointers_.front();// must only use validate things in BipartiteGraph then
     auto& parent_set = input.getSet(parent_index_);
     DCHECK(current_results_ == nullptr);
     ExecutionMode mode = getExecutionMode(parent_set.get(), cap);
