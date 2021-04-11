@@ -85,6 +85,8 @@ class NaivePlanner {
 
   std::pair<uint32_t, uint32_t> analyzeDynamicCoreCoverEagerInner(const std::vector<int>& query_graph_cover);
   unordered_map<QueryVertexID, uint32_t> getDynamicCoreCoverEager(const std::vector<int>& query_graph_cover);
+
+  std::vector<int> getCoverByOrder() const;
 };
 
 }  // namespace circinus

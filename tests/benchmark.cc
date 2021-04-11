@@ -502,10 +502,10 @@ class QueryConfig {
     }
   }
 
-  std::ostream& toString(std::ostream& ss, char delimiter = ',') {
+  std::ostream& toString(std::ostream& ss) {
     if (skip_) return ss;
-    ss << dataset << delimiter << query_size << delimiter << query_mode << delimiter << query_index << delimiter
-       << match_order << std::endl;
+    ss << "-dataset " << dataset << " -query_size " << query_size << " -query_mode " << query_mode << " -query_index "
+       << query_index << " -match_order " << match_order << std::endl;
     return ss;
   }
 
@@ -533,7 +533,8 @@ void run_benchmark(const std::string& query_file, std::ostream* out) {
   double load_time = 0;
   while (query_f >> config) {
     if (config.skipConfig()) continue;
-    config.toString(LOG(INFO));
+    config.toString(LOG(INFO) << ">>>>>>>>>>>>>>>>> query config -vertex_cover " << FLAGS_vertex_cover << " -filter "
+                              << FLAGS_filter << " -match_limit " << FLAGS_match_limit << ' ');
     // load graph if not cached
     if (config.dataset != dataset) {
       dataset = config.dataset;
@@ -558,15 +559,11 @@ void run_benchmark(const std::string& query_file, std::ostream* out) {
         benchmark.run<Sample>(load_time, data_graph, config.dataset, config.query_size, config.query_mode,
                               config.query_index, out);
       }
-      if (timer.joinable()) {
-        pthread_cancel(timer.native_handle());
-      }
+      pthread_cancel(timer.native_handle());
     });
     timer = std::thread([&runner]() {  // 5 min timeout for each query
       std::this_thread::sleep_for(std::chrono::seconds(300));
-      if (runner.joinable()) {
-        pthread_cancel(runner.native_handle());
-      }
+      pthread_cancel(runner.native_handle());
     });
     runner.join();
     timer.join();

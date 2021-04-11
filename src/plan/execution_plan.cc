@@ -236,14 +236,23 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
       add_keys_at_level[key_level_pos->second].push_back(target_vertex);  // add to key later
       cover_table_[target_vertex] = 0;
     }
+
+    // find parent vertices
+    auto neighbors = g->getOutNeighbors(target_vertex);
+    for (uint32_t j = 0; j < neighbors.second; ++j) {
+      if (existing_vertices.count(neighbors.first[j])) {
+        parents[cover_table_[neighbors.first[j]] == 1].push_back(neighbors.first[j]);
+      }
+    }
+    // print cover for current subquery
+    std::stringstream cover_ss;
+    for (uint32_t k = 0; k <= i; ++k) {
+      cover_ss << ' ' << matching_order_[k] << ':' << cover_table_[matching_order_[k]];
+    }
+    LOG(INFO) << (i + 1) << "-cover>" << cover_ss.str();
+
     if (i == 1) {  // the first edge: target has one and only one parent
       if (cover_table_[target_vertex] != 1 && !add_keys_at_level[i].empty()) {
-        auto neighbors = g->getOutNeighbors(target_vertex);
-        for (uint32_t j = 0; j < neighbors.second; ++j) {
-          if (existing_vertices.count(neighbors.first[j])) {
-            parents[cover_table_[neighbors.first[j]] == 1].push_back(neighbors.first[j]);
-          }
-        }
         prev = newEnumerateKeyExpandToSetOperator(key_parents, target_vertex, add_keys_at_level[i],
                                                   input_query_vertex_indices, same_label_indices,
                                                   label_existing_vertices_map);
@@ -256,16 +265,9 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
         prev = newExpandEdgeSetToKeyOperator(parent, target_vertex, same_label_indices, std::vector<uint32_t>{});
       }
     } else {
-      // find parent vertices
-      auto neighbors = g->getOutNeighbors(target_vertex);
-      for (uint32_t j = 0; j < neighbors.second; ++j) {
-        if (existing_vertices.count(neighbors.first[j])) {
-          parents[cover_table_[neighbors.first[j]] == 1].push_back(neighbors.first[j]);
-        }
-      }
       // create operators
       if (cover_table_[target_vertex] == 1) {  // target is in key
-        CHECK(add_keys_at_level[i].empty()) << i;
+        CHECK(add_keys_at_level[i].empty()) << i << " size " << add_keys_at_level[i].size();
         if (key_parents.size() != 0 && set_parents.size() != 0) {
           if (key_parents.size() == 1) {
             current = newExpandEdgeKeyToKeyOperator(key_parents.front(), target_vertex, same_label_indices);

@@ -85,7 +85,7 @@ EnumerateKeyExpandToSetOperator::EnumerateKeyExpandToSetOperator(
   for (auto v : keys_to_enumerate_) {
     DCHECK(input_query_vertex_indices.count(v));
     enumerate_key_old_indices_[v] = input_query_vertex_indices.at(v);
-    CHECK_EQ(query_vertex_indices_[v], n_input_keys);  // assume contiguous indices after existing keys
+    CHECK_EQ(query_vertex_indices_[v], n_input_keys) << v;  // assume contiguous indices after existing keys
     ++n_input_keys;
   }
   // assume target is the last set in output
