@@ -26,10 +26,12 @@ namespace circinus {
 class BipartiteGraph : public Graph {  // only use variable:vlist_,elist_  function:getVertexOutDegree,getOutNeighbors
  private:
   unordered_map<VertexID, uint32_t> offset_by_vertex_;
+  bool populated=0;
 
  public:
-  explicit BipartiteGraph(Graph g, std::vector<VertexID> candidate_set1, std::vector<VertexID> candidate_set2)
-      : Graph() {
+  void populateGraph(Graph g, std::vector<VertexID> candidate_set1, std::vector<VertexID> candidate_set2) {
+    if(populated)return;
+    populated=1;
     unordered_set<VertexID> vset(candidate_set2.begin(), candidate_set2.end());
     vlist_.emplace_back(0);
     for (size_t i = 0; i < candidate_set1.size(); ++i) {
@@ -41,11 +43,12 @@ class BipartiteGraph : public Graph {  // only use variable:vlist_,elist_  funct
       vlist_.emplace_back(elist_.size());
     }
   }
-  inline std::pair<const VertexID*, uint32_t> getOutNeighbors(VertexID id) const {
+
+  inline std::pair<const VertexID*, uint32_t> getOutNeighbors(VertexID id) const { // populated must be 1 now, but dont add if-else here for performance
     const uint32_t offset = offset_by_vertex_.at(id);
     return std::make_pair(&elist_[vlist_[offset]], vlist_[offset + 1] - vlist_[offset]);
   }
-  inline VertexID getVertexOutDegree(VertexID id) const {
+  inline VertexID getVertexOutDegree(VertexID id) const { // populated must be 1 now, but dont add if-else here for performance
     const uint32_t offset = offset_by_vertex_.at(id);
     return vlist_[offset + 1] - vlist_[offset];
   }

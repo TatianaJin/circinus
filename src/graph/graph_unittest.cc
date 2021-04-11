@@ -55,7 +55,8 @@ TEST_F(TestGraph, BipartiteGraph) {
   std::vector<VertexID> candidate_set1, candidate_set2;
   for (int i = 0; i < 10; ++i) candidate_set1.emplace_back(i);
   for (int i = 5; i < 15; ++i) candidate_set2.emplace_back(i);
-  BipartiteGraph bg(g, candidate_set1, candidate_set2);
+  BipartiteGraph bg;
+  bg.populateGraph(g, candidate_set1, candidate_set2);
   std::unordered_set<VertexID> vset(candidate_set2.begin(), candidate_set2.end());
   std::multiset<VertexID> resultSet, expectedSet;
   for (auto &v1Id : candidate_set1) {

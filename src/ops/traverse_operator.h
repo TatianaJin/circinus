@@ -22,6 +22,7 @@
 
 #include "graph/compressed_subgraphs.h"
 #include "graph/graph.h"
+#include "graph/bipartite_graph.h"
 #include "graph/types.h"
 #include "ops/filters/subgraph_filter.h"
 #include "ops/operator.h"
@@ -104,6 +105,7 @@ class TraverseOperator : public Operator {
   uint64_t total_intersection_output_size_ = 0;
   uint64_t distinct_intersection_count_ =
       0;  // the minimal number of intersection needed if all intersection function call results can be cached
+  std::vector<BipartiteGraph*> bg_pointers_;
 
  public:
   TraverseOperator() {}
