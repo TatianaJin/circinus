@@ -207,7 +207,7 @@ class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
     auto parent_match = input.getKeyVal(parent_index_);
     // intersect(candidate_set_, current_data_graph_->getOutNeighbors(parent_match), &current_targets_,
     // input.getKeyMap());
-    intersectOrNot(candidate_set_, current_data_graph_->getOutNeighbors(parent_match), &current_targets_,
+    intersect(candidate_set_, current_data_graph_->getOutNeighbors(parent_match), &current_targets_,
               input.getExceptions(same_label_key_indices_, same_label_set_indices_));
     if
       constexpr(isProfileMode(profile)) {

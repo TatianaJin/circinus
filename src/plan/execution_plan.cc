@@ -28,10 +28,10 @@ namespace circinus {
 
 void addBipartiteGraphToOperator(QueryVertexID qv1,QueryVertexID qv2,TraverseOperator* op,unordered_map<std::pair<QueryVertexID,QueryVertexID>,BipartiteGraph*>& pair_to_bipartite_graph)
 {
-  BipartiteGraph* res=pair_to_bipartite_graph.find({qv1,qv2});
+  auto res=pair_to_bipartite_graph.find({qv1,qv2});
   if(res!=pair_to_bipartite_graph.end())
   {
-    op->addBipartiteGraph(res);
+    op->addBipartiteGraph(res->second);
   }
   else{
     BipartiteGraph* bg=new BipartiteGraph(qv1,qv2);
@@ -96,7 +96,7 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
       } else {
         prev = newExpandEdgeSetToKeyOperator(parent, target_vertex, same_label_v_indices, std::vector<uint32_t>{});
       }
-      addBipartiteGraphToOperator(parent,target_vertex,prev,pair_to_bipartite_graph);
+      addBipartiteGraphToOperator(parent,target_vertex,(TraverseOperator *)prev,pair_to_bipartite_graph);
     } else {
       // find parent vertices
       auto neighbors = g->getOutNeighbors(target_vertex);
@@ -140,11 +140,11 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
       // careful with this key-first-set-later order
       for(auto& qv:key_parents)
       {
-        addBipartiteGraphToOperator(qv,target_vertex,current,pair_to_bipartite_graph);
+        addBipartiteGraphToOperator(qv,target_vertex,(TraverseOperator *)current,pair_to_bipartite_graph);
       }
       for(auto& qv:set_parents)
       {
-        addBipartiteGraphToOperator(qv,target_vertex,current,pair_to_bipartite_graph);
+        addBipartiteGraphToOperator(qv,target_vertex,(TraverseOperator *)current,pair_to_bipartite_graph);
       }
       prev->setNext(current);
       prev = current;
