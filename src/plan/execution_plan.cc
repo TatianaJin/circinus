@@ -26,6 +26,20 @@
 
 namespace circinus {
 
+void addBipartiteGraphToOperator(QueryVertexID qv1,QueryVertexID qv2,TraverseOperator* op,unordered_map<std::pair<QueryVertexID,QueryVertexID>,BipartiteGraph*>& pair_to_bipartite_graph)
+{
+  BipartiteGraph* res=pair_to_bipartite_graph.find({qv1,qv2});
+  if(res!=pair_to_bipartite_graph.end())
+  {
+    op->addBipartiteGraph(res);
+  }
+  else{
+    BipartiteGraph* bg=new BipartiteGraph(qv1,qv2);
+    pair_to_bipartite_graph.insert({{qv1,qv2},bg});
+    op->addBipartiteGraph(bg);
+  }
+}
+
 void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<QueryVertexID>& matching_order,
                                          const std::vector<int>& cover_table, Profiler* profiler) {
   query_graph_ = g;
@@ -501,20 +515,6 @@ Operator* ExecutionPlan::newOutputOperator(
   auto ret = OutputOperator::newOutputOperator(OutputType::Count, &outputs_, std::move(same_label_indices));
   operators_.push_back(ret);
   return ret;
-}
-
-void addBipartiteGraphToOperator(QueryVertexID qv1,QueryVertexID qv2,TraverseOperator* op,unordered_map<std::pair<QueryVertexID,QueryVertexID>,BipartiteGraph*>& pair_to_bipartite_graph)
-{
-  BipartiteGraph* res=pair_to_bipartite_graph.find({qv1,qv2});
-  if(res!=pair_to_bipartite_graph.end())
-  {
-    op->addBipartiteGraph(res);
-  }
-  else{
-    BipartiteGraph* bg=new BipartiteGraph(qv1,qv2);
-    pair_to_bipartite_graph.insert({{qv1,qv2},bg});
-    op->addBipartiteGraph(bg);
-  }
 }
 
 TraverseOperator* ExecutionPlan::newEnumerateKeyExpandToSetOperator(
