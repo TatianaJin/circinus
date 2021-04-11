@@ -30,8 +30,12 @@ class ExpandKeyToSetVertexOperator : public ExpandVertexOperator {
 
  public:
   ExpandKeyToSetVertexOperator(const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
-                               const unordered_map<QueryVertexID, uint32_t>& query_vertex_indices)
-      : ExpandVertexOperator(parents, target_vertex, query_vertex_indices) {}
+                               const unordered_map<QueryVertexID, uint32_t>& query_vertex_indices,
+                               const std::vector<uint32_t>& same_label_key_indices,
+                               const std::vector<uint32_t>& same_label_set_indices, uint64_t set_pruning_threshold,
+                               SubgraphFilter* filter = nullptr)
+      : ExpandVertexOperator(parents, target_vertex, query_vertex_indices, same_label_key_indices,
+                             same_label_set_indices, set_pruning_threshold, filter) {}
 
   uint32_t expand(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size) override {
     return expandInner<QueryType::Execute>(outputs, batch_size);
@@ -50,9 +54,7 @@ class ExpandKeyToSetVertexOperator : public ExpandVertexOperator {
 
   Operator* clone() const override {
     // TODO(tatiana): for now next_ is not handled because it is only used for printing plan
-    auto ret = new ExpandKeyToSetVertexOperator(parents_, target_vertex_, query_vertex_indices_);
-    ret->candidates_ = candidates_;
-    return ret;
+    return new ExpandKeyToSetVertexOperator(*this);
   }
 
  protected:
@@ -61,7 +63,7 @@ class ExpandKeyToSetVertexOperator : public ExpandVertexOperator {
     uint32_t output_num = 0;
     for (; input_index_ < current_inputs_->size(); ++input_index_) {
       const auto& input = (*current_inputs_)[input_index_];
-      auto exceptions = input.getExceptions();
+      auto exceptions = input.getExceptions(same_label_key_indices_, same_label_set_indices_);
       std::vector<VertexID> new_set;
       for (uint32_t i = 0; i < parents_.size(); ++i) {
         uint32_t key = query_vertex_indices_[parents_[i]];
@@ -99,11 +101,17 @@ class ExpandKeyToSetVertexOperator : public ExpandVertexOperator {
           }
         }
       if (!new_set.empty()) {
-        // TODO(tatiana): same-label set indices
+#ifdef USE_FILTER
         CompressedSubgraphs output(input, std::move(new_set));
+        if (filter(output)) {
+          continue;
+        }
+#else
+        CompressedSubgraphs output(input, std::move(new_set), same_label_set_indices_, set_pruning_threshold_);
         if (output.empty()) {
           continue;
         }
+#endif
         outputs->emplace_back(std::move(output));
         ++output_num;
         // TODO(by) break if batch_size is reached

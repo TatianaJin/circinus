@@ -324,6 +324,9 @@ int main(int argc, char** argv) {
   } else {
     out = &std::cout;
   }
+  if (FLAGS_match_limit == 0) {
+    FLAGS_match_limit = ~0u;
+  }
   FLAGS_profile = (FLAGS_profile_file != "");
   if (FLAGS_vertex_cover == "static") {
     benchmark.run<Static>(FLAGS_dataset, FLAGS_query_size, FLAGS_query_mode, FLAGS_query_index, out);

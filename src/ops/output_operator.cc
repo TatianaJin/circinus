@@ -25,6 +25,32 @@
 
 namespace circinus {
 
+class CountOutputOperator : public OutputOperator {
+ public:
+  std::string toString() const override { return "CountOutputOperator"; }
+  // all clones share the same Outputs instance
+  Operator* clone() const override { return new CountOutputOperator(*this); }
+
+  explicit CountOutputOperator(Outputs* outputs, SameLabelIndices&& same_label_indices)
+      : OutputOperator(outputs, std::move(same_label_indices)) {}
+
+  bool validateAndOutput(const std::vector<CompressedSubgraphs>& input, uint32_t output_index) override {
+    auto count_acc = outputs_->getCount(output_index);
+    leftover_input_ = input.size();
+    for (auto& group : input) {
+      --leftover_input_;
+      auto update = group.getNumIsomorphicSubgraphs(same_label_indices_, outputs_->getLimitPerThread() - count_acc);
+      count_acc = outputs_->updateCount(update, output_index);
+      if (count_acc >= outputs_->getLimitPerThread()) {
+        DLOG(INFO) << "last input num subgraphs " << group.getNumSubgraphs() << " isomorphic " << update << " total "
+                   << count_acc;
+        return true;
+      }
+    }
+    return false;
+  }
+};
+
 Outputs& Outputs::init(uint32_t n_threads, const std::string& path_prefix) {
   n_threads_ = n_threads;
   if (path_prefix != "") {
@@ -39,9 +65,10 @@ Outputs& Outputs::init(uint32_t n_threads, const std::string& path_prefix) {
   return *this;
 }
 
-OutputOperator* OutputOperator::newOutputOperator(OutputType type, Outputs* outputs) {
+OutputOperator* OutputOperator::newOutputOperator(OutputType type, Outputs* outputs,
+                                                  SameLabelIndices&& same_label_indices) {
   CHECK(type == OutputType::Count) << "unsupported output type " << ((uint32_t)type);
-  return new CountOutputOperator(outputs);
+  return new CountOutputOperator(outputs, std::move(same_label_indices));
 }
 
 }  // namespace circinus

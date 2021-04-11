@@ -23,6 +23,7 @@
 #include "graph/compressed_subgraphs.h"
 #include "graph/graph.h"
 #include "graph/types.h"
+#include "ops/filters/subgraph_filter.h"
 #include "ops/operator.h"
 #include "utils/hashmap.h"
 #include "utils/utils.h"
@@ -79,6 +80,12 @@ class TraverseOperator : public Operator {
  protected:
   const std::vector<VertexID>* candidates_ = nullptr;
 
+  /* for non-repeated-vertex check */
+  uint64_t set_pruning_threshold_ = ~0u;
+  std::vector<uint32_t> same_label_key_indices_;
+  std::vector<uint32_t> same_label_set_indices_;
+  SubgraphFilter* const subgraph_filter_ = nullptr;  // owned by the execution plan
+
   /* transient variables for recording the current inputs */
   uint32_t input_index_ = 0;
   const std::vector<CompressedSubgraphs>* current_inputs_ = nullptr;
@@ -99,11 +106,33 @@ class TraverseOperator : public Operator {
       0;  // the minimal number of intersection needed if all intersection function call results can be cached
 
  public:
+  TraverseOperator() {}
+  explicit TraverseOperator(SubgraphFilter* filter) : subgraph_filter_(filter) {}
+  TraverseOperator(const std::vector<uint32_t>& same_label_key_indices,
+                   const std::vector<uint32_t>& same_label_set_indices, uint64_t set_pruning_threshold,
+                   SubgraphFilter* filter = nullptr)
+      : set_pruning_threshold_(set_pruning_threshold),
+        same_label_key_indices_(same_label_key_indices),
+        same_label_set_indices_(same_label_set_indices),
+        subgraph_filter_(filter) {}
   virtual ~TraverseOperator() {}
 
   inline virtual void setCandidateSets(const std::vector<VertexID>* candidates) { candidates_ = candidates; }
   inline const std::vector<VertexID>* getCandidateSets() const { return candidates_; }
   inline const uint32_t getInputIndex() const { return input_index_; }
+  inline const auto& getSameLabelKeyIndices() const { return same_label_key_indices_; }
+  inline const auto& getSameLabelSetIndices() const { return same_label_set_indices_; }
+  inline auto getSetPruningThreshold() const { return set_pruning_threshold_; }
+
+  inline bool filter(const CompressedSubgraphs& subgraphs) {
+    DCHECK(subgraph_filter_ != nullptr);
+    return subgraph_filter_->filter(subgraphs);
+  }
+
+  inline bool filter(std::vector<CompressedSubgraphs>& subgraphs, uint32_t start, uint32_t end) {
+    DCHECK(subgraph_filter_ != nullptr);
+    return subgraph_filter_->filter(subgraphs, start, end);
+  }
 
   virtual void input(const std::vector<CompressedSubgraphs>& inputs, const Graph* data_graph) {
     current_inputs_ = &inputs;

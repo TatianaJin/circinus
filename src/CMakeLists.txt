@@ -20,6 +20,7 @@ set(circinus_algo_sources
   ${PROJECT_SOURCE_DIR}/src/algorithms/k_core.cc
 )
 set(circinus_graph_sources
+  ${PROJECT_SOURCE_DIR}/src/graph/compressed_subgraphs.cc
   ${PROJECT_SOURCE_DIR}/src/graph/graph.cc
   ${PROJECT_SOURCE_DIR}/src/graph/query_graph.cc
 )
@@ -32,6 +33,7 @@ set(circinus_ops_sources
   ${PROJECT_SOURCE_DIR}/src/ops/filters/tso_filter.cc
   ${PROJECT_SOURCE_DIR}/src/ops/filters/dpiso_filter.cc
   ${PROJECT_SOURCE_DIR}/src/ops/filters/gql_filter.cc
+  ${PROJECT_SOURCE_DIR}/src/ops/filters/subgraph_filter.cc
   ${PROJECT_SOURCE_DIR}/src/ops/order/cfl_order.cc
   ${PROJECT_SOURCE_DIR}/src/ops/order/tso_order.cc
   ${PROJECT_SOURCE_DIR}/src/ops/output_operator.cc

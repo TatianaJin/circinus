@@ -14,11 +14,14 @@
 
 #include "plan/execution_plan.h"
 
+#include <algorithm>
 #include <array>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include "ops/operators.h"
+#include "utils/hashmap.h"
 
 namespace circinus {
 
@@ -38,7 +41,9 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
   uint32_t n_keys = 0, n_sets = 0;
   Operator *current, *prev = nullptr;
   // existing vertices in current query subgraph
-  std::unordered_set<QueryVertexID> existing_vertices;
+  unordered_set<QueryVertexID> existing_vertices;
+  // label: {set index}, {key index}
+  unordered_map<LabelID, std::array<std::vector<uint32_t>, 2>> label_existing_vertices_indices;
   std::array<std::vector<QueryVertexID>, 2> parents;
   auto& key_parents = parents[1];
   auto& set_parents = parents[0];
@@ -51,10 +56,13 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
   n_keys += (cover_table[parent] == 1);
   n_sets += (cover_table[parent] != 1);
   existing_vertices.insert(parent);
+  label_existing_vertices_indices[query_graph_->getVertexLabel(parent)][cover_table[parent] == 1].push_back(0);
 
   // handle following traversals
   for (uint32_t i = 1; i < matching_order.size(); ++i) {
     auto target_vertex = matching_order[i];
+    auto target_label = query_graph_->getVertexLabel(target_vertex);
+    const auto& same_label_v_indices = label_existing_vertices_indices[target_label];
     // record query vertex index
     if (cover_table[target_vertex] == 1) {
       query_vertex_indices_[target_vertex] = n_keys;
@@ -65,7 +73,13 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
     }
 
     if (i == 1) {  // the first edge: target has one and only one parent
-      prev = newExpandEdgeOperator(parent, target_vertex, cover_table);
+      if (cover_table[target_vertex] != 1) {
+        prev = newExpandEdgeKeyToSetOperator(parent, target_vertex, same_label_v_indices);
+      } else if (cover_table[parent] == 1) {
+        prev = newExpandEdgeKeyToKeyOperator(parent, target_vertex, same_label_v_indices);
+      } else {
+        prev = newExpandEdgeSetToKeyOperator(parent, target_vertex, same_label_v_indices, std::vector<uint32_t>{});
+      }
     } else {
       // find parent vertices
       auto neighbors = g->getOutNeighbors(target_vertex);
@@ -76,26 +90,34 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
       }
       // create operators
       if (key_parents.size() + set_parents.size() == 1) {  // only one parent, ExpandEdge
-        auto front = key_parents.size() == 1 ? key_parents.front() : set_parents.front();
-        current = newExpandEdgeOperator(front, target_vertex, cover_table);
+        if (cover_table[target_vertex] != 1) {
+          current = newExpandEdgeKeyToSetOperator(key_parents.front(), target_vertex, same_label_v_indices);
+        } else if (key_parents.size() == 1) {
+          current = newExpandEdgeKeyToKeyOperator(key_parents.front(), target_vertex, same_label_v_indices);
+        } else {
+          current = newExpandEdgeSetToKeyOperator(
+              set_parents.front(), target_vertex, same_label_v_indices,
+              label_existing_vertices_indices[query_graph_->getVertexLabel(set_parents.front())][0]);
+        }
       } else {  // more than one parents, ExpandVertex (use set intersection)
         if (cover_table[target_vertex] == 1) {
           if (key_parents.size() != 0 && set_parents.size() != 0) {
             if (key_parents.size() == 1) {
-              current = newExpandEdgeOperator(key_parents.front(), target_vertex, cover_table);
+              current = newExpandEdgeKeyToKeyOperator(key_parents.front(), target_vertex, same_label_v_indices);
             } else {
-              current = newExpandKeyKeyVertexOperator(key_parents, target_vertex);
+              current = newExpandKeyKeyVertexOperator(key_parents, target_vertex, same_label_v_indices);
             }
             prev->setNext(current);
             prev = current;
-            current = newExpandIntoOperator(set_parents, target_vertex, key_parents);
+            current = newExpandIntoOperator(set_parents, target_vertex, key_parents, label_existing_vertices_indices);
           } else if (key_parents.size() != 0) {
-            current = newExpandKeyKeyVertexOperator(key_parents, target_vertex);
+            current = newExpandKeyKeyVertexOperator(key_parents, target_vertex, same_label_v_indices);
           } else {
-            current = newExpandSetToKeyVertexOperator(set_parents, target_vertex);
+            current = newExpandSetToKeyVertexOperator(set_parents, target_vertex, same_label_v_indices,
+                                                      label_existing_vertices_indices);
           }
         } else {
-          current = newExpandSetVertexOperator(key_parents, target_vertex);
+          current = newExpandSetVertexOperator(key_parents, target_vertex, same_label_v_indices);
         }
       }
       prev->setNext(current);
@@ -105,10 +127,18 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
     }
 
     existing_vertices.insert(target_vertex);
+    label_existing_vertices_indices[target_label][cover_table[target_vertex] == 1].push_back(
+        query_vertex_indices_[target_vertex]);
   }
 
   // output
-  auto output_op = newOutputOperator();
+  std::vector<std::pair<std::vector<uint32_t>, std::vector<uint32_t>>> same_label_indices;  // {{keys},{sets}}
+  for (auto& pair : label_existing_vertices_indices) {
+    if ((!pair.second[1].empty() && !pair.second[0].empty()) || pair.second[0].size() > 1) {
+      same_label_indices.emplace_back(std::move(pair.second[1]), std::move(pair.second[0]));
+    }
+  }
+  auto output_op = newOutputOperator(std::move(same_label_indices));
   prev->setNext(output_op);
 
   DCHECK_EQ(existing_vertices.size(), g->getNumVertices());
@@ -132,7 +162,8 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
   set_vertices.reserve(matching_order.size() - dynamic_cover_key_level_.size());
   Operator *current, *prev = nullptr;
   // existing vertices in current query subgraph
-  std::unordered_set<QueryVertexID> existing_vertices;
+  unordered_set<QueryVertexID> existing_vertices;
+  unordered_map<LabelID, std::vector<QueryVertexID>> label_existing_vertices_map;
   std::array<std::vector<QueryVertexID>, 2> parents;
   auto& key_parents = parents[1];
   auto& set_parents = parents[0];
@@ -149,16 +180,25 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
     ++n_keys;
   }
   existing_vertices.insert(parent);
+  label_existing_vertices_map[query_graph_->getVertexLabel(parent)].push_back(parent);
   std::vector<std::vector<QueryVertexID>> add_keys_at_level(matching_order.size());
   unordered_map<QueryVertexID, uint32_t> input_query_vertex_indices;
 
   // handle following traversals
   for (uint32_t i = 1; i < matching_order.size(); ++i) {
-    // FIXME(tatiana): for debug: check set vertices and query_vertex_indices_ are in correspondence
     for (uint32_t set_i = 0; set_i < set_vertices.size(); ++set_i) {
-      CHECK_EQ(query_vertex_indices_[set_vertices[set_i]], set_i);
+      DCHECK_EQ(query_vertex_indices_[set_vertices[set_i]], set_i);
     }
     auto target_vertex = matching_order[i];
+    auto target_label = query_graph_->getVertexLabel(target_vertex);
+
+    const auto& same_label_vertices = label_existing_vertices_map[target_label];
+    std::array<std::vector<uint32_t>, 2> same_label_indices;  // indices in the input
+    for (auto v : same_label_vertices) {
+      // note that here cover_table_ reflects the compression key of the input instead of the output
+      same_label_indices[cover_table_[v] == 1].push_back(query_vertex_indices_[v]);
+    }
+
     // record query vertex index
     auto key_level_pos = dynamic_cover_key_level_.find(target_vertex);
     if (key_level_pos == dynamic_cover_key_level_.end()) {  // target vertex is in set
@@ -194,7 +234,13 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
     }
 
     if (i == 1) {  // the first edge: target has one and only one parent
-      prev = newExpandEdgeOperator(parent, target_vertex, cover_table_);
+      if (cover_table_[target_vertex] != 1) {
+        prev = newExpandEdgeKeyToSetOperator(parent, target_vertex, same_label_indices);
+      } else if (cover_table_[parent] == 1) {
+        prev = newExpandEdgeKeyToKeyOperator(parent, target_vertex, same_label_indices);
+      } else {
+        prev = newExpandEdgeSetToKeyOperator(parent, target_vertex, same_label_indices, std::vector<uint32_t>{});
+      }
     } else {
       // find parent vertices
       auto neighbors = g->getOutNeighbors(target_vertex);
@@ -208,31 +254,34 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
         CHECK(add_keys_at_level[i].empty());
         if (key_parents.size() != 0 && set_parents.size() != 0) {
           if (key_parents.size() == 1) {
-            current = newExpandEdgeOperator(key_parents.front(), target_vertex, cover_table_);
+            current = newExpandEdgeKeyToKeyOperator(key_parents.front(), target_vertex, same_label_indices);
           } else {
-            current = newExpandKeyKeyVertexOperator(key_parents, target_vertex);
+            current = newExpandKeyKeyVertexOperator(key_parents, target_vertex, same_label_indices);
           }
           prev->setNext(current);
           prev = current;
-          current = newExpandIntoOperator(set_parents, target_vertex, key_parents);
+          current = newExpandIntoOperator(set_parents, target_vertex, key_parents, label_existing_vertices_map);
         } else if (key_parents.size() == 1) {
-          current = newExpandEdgeOperator(key_parents.front(), target_vertex, cover_table_);
+          current = newExpandEdgeKeyToKeyOperator(key_parents.front(), target_vertex, same_label_indices);
         } else if (key_parents.size() > 1) {
-          current = newExpandKeyKeyVertexOperator(key_parents, target_vertex);
+          current = newExpandKeyKeyVertexOperator(key_parents, target_vertex, same_label_indices);
         } else if (set_parents.size() == 1) {
-          current = newExpandEdgeOperator(set_parents.front(), target_vertex, cover_table_);
+          current = newExpandEdgeSetToKeyOperator(set_parents.front(), target_vertex, same_label_indices,
+                                                  label_existing_vertices_map);
         } else {
-          current = newExpandSetToKeyVertexOperator(set_parents, target_vertex);
+          current = newExpandSetToKeyVertexOperator(set_parents, target_vertex, same_label_indices,
+                                                    label_existing_vertices_map);
         }
       } else {  // target is in set, then  all parents should be in key, and key enumeration may be needed
         if (!add_keys_at_level[i].empty()) {  // key enumeration is needed
           current = newEnumerateKeyExpandToSetOperator(key_parents, target_vertex, add_keys_at_level[i],
-                                                       input_query_vertex_indices);
+                                                       input_query_vertex_indices, same_label_indices,
+                                                       label_existing_vertices_map);
           add_keys_at_level[i].clear();
         } else if (key_parents.size() == 1) {
-          current = newExpandEdgeOperator(key_parents.front(), target_vertex, cover_table_);
+          current = newExpandEdgeKeyToSetOperator(key_parents.front(), target_vertex, same_label_indices);
         } else {
-          current = newExpandSetVertexOperator(key_parents, target_vertex);
+          current = newExpandSetVertexOperator(key_parents, target_vertex, same_label_indices);
         }
       }
       prev->setNext(current);
@@ -241,19 +290,111 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
       set_parents.clear();
     }
     existing_vertices.insert(target_vertex);
+    label_existing_vertices_map[target_label].push_back(target_vertex);
   }
 
   // output
-  auto output_op = newOutputOperator();
+  std::vector<std::pair<std::vector<uint32_t>, std::vector<uint32_t>>> same_label_indices;  // {{keys},{sets}}
+  for (auto& pair : label_existing_vertices_map) {
+    std::vector<uint32_t> same_label_sets;
+    std::vector<uint32_t> same_label_keys;
+    for (auto v : pair.second) {
+      if (cover_table_[v] == 1) {
+        same_label_keys.push_back(query_vertex_indices_[v]);
+      } else {  // set vertex
+        same_label_sets.push_back(query_vertex_indices_[v]);
+      }
+    }
+    if ((!same_label_keys.empty() && !same_label_sets.empty()) || same_label_sets.size() > 1) {
+      same_label_indices.emplace_back(std::move(same_label_keys), std::move(same_label_sets));
+    }
+  }
+  auto output_op = newOutputOperator(std::move(same_label_indices));
   prev->setNext(output_op);
 
   DCHECK_EQ(existing_vertices.size(), g->getNumVertices());
 }
 
-TraverseOperator* ExecutionPlan::newExpandEdgeOperator(QueryVertexID parent_vertex, QueryVertexID target_vertex,
-                                                       const std::vector<int>& cover_table) {
-  auto ret =
-      ExpandEdgeOperator::newExpandEdgeOperator(parent_vertex, target_vertex, cover_table, query_vertex_indices_);
+TraverseOperator* ExecutionPlan::newExpandEdgeKeyToKeyOperator(
+    QueryVertexID parent_vertex, QueryVertexID target_vertex,
+    const std::array<std::vector<uint32_t>, 2>& same_label_indices) {
+  SubgraphFilter* filter = nullptr;
+#ifdef USE_FILTER
+  filter = SubgraphFilter::newSetPrunningSubgraphFilter(same_label_indices[0]);
+  subgraph_filters_.push_back(filter);
+#endif
+  auto ret = ExpandEdgeOperator::newExpandEdgeKeyToKeyOperator(parent_vertex, target_vertex, query_vertex_indices_,
+                                                               same_label_indices[1], same_label_indices[0],
+                                                               getSetPruningThreshold(target_vertex), filter);
+  target_vertex_to_ops_[target_vertex] = ret;
+  operators_.push_back(ret);
+  return ret;
+}
+
+TraverseOperator* ExecutionPlan::newExpandEdgeKeyToSetOperator(
+    QueryVertexID parent_vertex, QueryVertexID target_vertex,
+    const std::array<std::vector<uint32_t>, 2>& same_label_indices) {
+  SubgraphFilter* filter = nullptr;
+#ifdef USE_FILTER
+  if (same_label_indices[0].empty()) {
+    subgraph_filters_.push_back(SubgraphFilter::newDummyFilter());
+  } else {
+    std::vector<std::vector<uint32_t>> pruning_sets(1);
+    pruning_sets.front().resize(same_label_indices[0].size() + 1);
+    std::copy(same_label_indices[0].begin(), same_label_indices[0].end(), pruning_sets.front().begin());
+    pruning_sets.front().back() = query_vertex_indices_[target_vertex];
+    subgraph_filters_.push_back(SubgraphFilter::newSetPrunningSubgraphFilter(std::move(pruning_sets)));
+  }
+  filter = subgraph_filters_.back();
+#endif
+  auto ret = ExpandEdgeOperator::newExpandEdgeKeyToSetOperator(parent_vertex, target_vertex, query_vertex_indices_,
+                                                               same_label_indices[1], same_label_indices[0],
+                                                               getSetPruningThreshold(target_vertex), filter);
+  target_vertex_to_ops_[target_vertex] = ret;
+  operators_.push_back(ret);
+  return ret;
+}
+
+TraverseOperator* ExecutionPlan::newExpandEdgeSetToKeyOperator(
+    QueryVertexID parent_vertex, QueryVertexID target_vertex,
+    const std::array<std::vector<uint32_t>, 2>& target_same_label_indices,
+    const std::vector<uint32_t>& parent_same_label_set_indices) {
+  std::vector<uint32_t> target_same_label_set_indices = target_same_label_indices[0];
+  // if parent is in the same label indices, remove
+  if (query_graph_->getVertexLabel(parent_vertex) == query_graph_->getVertexLabel(target_vertex)) {
+    auto parent_index = query_vertex_indices_[parent_vertex];
+    for (uint32_t i = 0; i < target_same_label_set_indices.size(); ++i) {
+      if (target_same_label_set_indices[i] == parent_index) {
+        target_same_label_set_indices[i] = target_same_label_set_indices.back();
+        break;
+      }
+    }
+    target_same_label_set_indices.pop_back();
+  }
+#ifdef USE_FILTER
+  if (target_same_label_indices[0].size() < 2 && parent_same_label_set_indices.size() < 2) {
+    subgraph_filters_.push_back(SubgraphFilter::newDummyFilter());
+  } else if (target_same_label_indices[0].size() < 2) {
+    subgraph_filters_.push_back(SubgraphFilter::newSetPrunningSubgraphFilter(parent_same_label_set_indices));
+  } else if (parent_same_label_set_indices.size() < 2) {
+    subgraph_filters_.push_back(SubgraphFilter::newSetPrunningSubgraphFilter(target_same_label_indices[0]));
+  } else {
+    // if parent and target are of the same label, only one group of pruning sets
+    if (query_graph_->getVertexLabel(parent_vertex) == query_graph_->getVertexLabel(target_vertex)) {
+      subgraph_filters_.push_back(SubgraphFilter::newSetPrunningSubgraphFilter(target_same_label_indices[0]));
+    } else {
+      std::vector<std::vector<uint32_t>> pruning_sets{target_same_label_indices[0], parent_same_label_set_indices};
+      subgraph_filters_.push_back(SubgraphFilter::newSetPrunningSubgraphFilter(std::move(pruning_sets)));
+    }
+  }
+  auto ret = ExpandEdgeOperator::newExpandEdgeSetToKeyOperator(
+      parent_vertex, target_vertex, query_vertex_indices_, target_same_label_indices[1], target_same_label_set_indices,
+      getSetPruningThreshold(target_vertex), subgraph_filters_.back());
+#else
+  auto ret = ExpandEdgeOperator::newExpandEdgeSetToKeyOperator(
+      parent_vertex, target_vertex, query_vertex_indices_, target_same_label_indices[1], target_same_label_set_indices,
+      getSetPruningThreshold(target_vertex), nullptr);
+#endif
   target_vertex_to_ops_[target_vertex] = ret;
   operators_.push_back(ret);
   return ret;
@@ -261,38 +402,91 @@ TraverseOperator* ExecutionPlan::newExpandEdgeOperator(QueryVertexID parent_vert
 
 TraverseOperator* ExecutionPlan::newExpandIntoOperator(const std::vector<QueryVertexID>& parents,
                                                        QueryVertexID target_vertex,
-                                                       const std::vector<QueryVertexID>& prev_key_parents) {
-  auto ret = new ExpandIntoOperator(parents, target_vertex, query_vertex_indices_, prev_key_parents);
+                                                       const std::vector<QueryVertexID>& prev_key_parents,
+                                                       std::vector<std::vector<uint32_t>>&& pruning_set_indices) {
+  SubgraphFilter* filter = nullptr;
+#ifdef USE_FILTER
+  filter = createFilter(std::move(pruning_set_indices));
+#endif
+  auto ret = new ExpandIntoOperator(parents, target_vertex, query_vertex_indices_, prev_key_parents, filter);
   operators_.push_back(ret);
   return ret;
 }
 
-TraverseOperator* ExecutionPlan::newExpandSetVertexOperator(std::vector<QueryVertexID>& parents,
-                                                            QueryVertexID target_vertex) {
-  auto ret = new ExpandKeyToSetVertexOperator(parents, target_vertex, query_vertex_indices_);
+TraverseOperator* ExecutionPlan::newExpandSetVertexOperator(
+    std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
+    const std::array<std::vector<uint32_t>, 2>& same_label_indices) {
+  SubgraphFilter* filter = nullptr;
+#ifdef USE_FILTER
+  if (same_label_indices[0].empty()) {
+    filter = SubgraphFilter::newDummyFilter();
+  } else {
+    std::vector<std::vector<uint32_t>> pruning_sets(1);
+    pruning_sets.front().resize(same_label_indices[0].size() + 1);
+    std::copy(same_label_indices[0].begin(), same_label_indices[0].end(), pruning_sets.front().begin());
+    pruning_sets.front().back() = query_vertex_indices_[target_vertex];
+    filter = SubgraphFilter::newSetPrunningSubgraphFilter(std::move(pruning_sets));
+  }
+  subgraph_filters_.push_back(filter);
+#endif
+  auto ret = new ExpandKeyToSetVertexOperator(parents, target_vertex, query_vertex_indices_, same_label_indices[1],
+                                              same_label_indices[0], getSetPruningThreshold(target_vertex), filter);
   target_vertex_to_ops_[target_vertex] = ret;
   operators_.push_back(ret);
   return ret;
 }
 
-TraverseOperator* ExecutionPlan::newExpandSetToKeyVertexOperator(std::vector<QueryVertexID>& parents,
-                                                                 QueryVertexID target_vertex) {
-  auto ret = new ExpandSetToKeyVertexOperator(parents, target_vertex, query_vertex_indices_);
+TraverseOperator* ExecutionPlan::newExpandSetToKeyVertexOperator(
+    const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
+    const std::array<std::vector<uint32_t>, 2>& same_label_indices,
+    std::vector<std::vector<uint32_t>>&& pruning_set_indices) {
+  std::vector<uint32_t> target_same_label_set_indices = same_label_indices[0];
+
+  auto target_label = query_graph_->getVertexLabel(target_vertex);
+  unordered_set<uint32_t> same_label_parent_indices;
+  for (auto parent : parents) {
+    if (query_graph_->getVertexLabel(parent) == target_label) {
+      same_label_parent_indices.insert(query_vertex_indices_[parent]);
+    }
+  }
+  // if parent is in the same label indices, remove
+  if (!same_label_parent_indices.empty()) {
+    target_same_label_set_indices.erase(
+        std::remove_if(
+            target_same_label_set_indices.begin(), target_same_label_set_indices.end(),
+            [&same_label_parent_indices](uint32_t idx) { return same_label_parent_indices.count(idx) == 1; }),
+        target_same_label_set_indices.end());
+  }
+  SubgraphFilter* filter = nullptr;
+#ifdef USE_FILTER
+  filter = createFilter(std::move(pruning_set_indices));
+#endif
+  auto ret =
+      new ExpandSetToKeyVertexOperator(parents, target_vertex, query_vertex_indices_, same_label_indices[1],
+                                       target_same_label_set_indices, getSetPruningThreshold(target_vertex), filter);
   target_vertex_to_ops_[target_vertex] = ret;
   operators_.push_back(ret);
   return ret;
 }
 
-TraverseOperator* ExecutionPlan::newExpandKeyKeyVertexOperator(std::vector<QueryVertexID>& parents,
-                                                               QueryVertexID target_vertex) {
-  auto ret = new ExpandKeyToKeyVertexOperator(parents, target_vertex, query_vertex_indices_);
+TraverseOperator* ExecutionPlan::newExpandKeyKeyVertexOperator(
+    std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
+    const std::array<std::vector<uint32_t>, 2>& same_label_indices) {
+  SubgraphFilter* filter = nullptr;
+#ifdef USE_FILTER
+  filter = SubgraphFilter::newSetPrunningSubgraphFilter(same_label_indices[0]);
+  subgraph_filters_.push_back(filter);
+#endif
+  auto ret = new ExpandKeyToKeyVertexOperator(parents, target_vertex, query_vertex_indices_, same_label_indices[1],
+                                              same_label_indices[0], getSetPruningThreshold(target_vertex), filter);
   target_vertex_to_ops_[target_vertex] = ret;
   operators_.push_back(ret);
   return ret;
 }
 
-Operator* ExecutionPlan::newOutputOperator() {
-  auto ret = OutputOperator::newOutputOperator(OutputType::Count, &outputs_);
+Operator* ExecutionPlan::newOutputOperator(
+    std::vector<std::pair<std::vector<uint32_t>, std::vector<uint32_t>>>&& same_label_indices) {
+  auto ret = OutputOperator::newOutputOperator(OutputType::Count, &outputs_, std::move(same_label_indices));
   operators_.push_back(ret);
   return ret;
 }
@@ -300,9 +494,43 @@ Operator* ExecutionPlan::newOutputOperator() {
 TraverseOperator* ExecutionPlan::newEnumerateKeyExpandToSetOperator(
     const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
     const std::vector<QueryVertexID>& keys_to_enumerate,
-    unordered_map<QueryVertexID, uint32_t> input_query_vertex_indices) {
+    unordered_map<QueryVertexID, uint32_t> input_query_vertex_indices,
+    const std::array<std::vector<uint32_t>, 2>& same_label_indices,
+    const unordered_map<LabelID, std::vector<uint32_t>>& label_existing_vertices_map) {
+  unordered_map<LabelID, int> pruning_labels;              // label: index of pruning sets
+  std::vector<std::vector<uint32_t>> pruning_set_indices;  // indices in the output
+  // add indices of sets whose labels are the same with target_vertex
+  LabelID target_label = query_graph_->getVertexLabel(target_vertex);
+  auto insert = pruning_labels.insert({target_label, -1});
+  if (same_label_indices[0].size() - keys_to_enumerate.size() > 0) {
+    std::vector<uint32_t> target_same_label_set_indices;  // indices in the output
+    DCHECK_EQ(label_existing_vertices_map.count(target_label), 1);
+    for (auto v : label_existing_vertices_map.at(target_label)) {
+      if (cover_table_[v] != 1) {
+        target_same_label_set_indices.push_back(query_vertex_indices_.at(v));
+      }
+    }
+#ifdef USE_FILTER
+    target_same_label_set_indices.push_back(query_vertex_indices_.at(target_vertex));
+#endif
+    pruning_set_indices.emplace_back(std::move(target_same_label_set_indices));
+    insert.first->second = 0;
+  }
+  auto enumerated_key_pruning_indices =
+      getPruningSets(keys_to_enumerate, label_existing_vertices_map, pruning_labels, pruning_set_indices);
+  std::vector<uint64_t> pruning_set_thresholds(pruning_set_indices.size(), FLAGS_set_pruning_threshold);
+  SubgraphFilter* filter = createFilter(std::move(pruning_set_indices));
+  if (FLAGS_set_pruning_threshold == 0) {
+    for (auto& pair : pruning_labels) {
+      if (pair.second != -1) {
+        pruning_set_thresholds[pair.second] = query_graph_->getVertexCardinalityByLabel(pair.first);
+      }
+    }
+  }
+  filter->setPruningSetThresholds(std::move(pruning_set_thresholds));
   auto ret = new EnumerateKeyExpandToSetOperator(parents, target_vertex, input_query_vertex_indices,
-                                                 query_vertex_indices_, keys_to_enumerate, cover_table_);
+                                                 query_vertex_indices_, keys_to_enumerate, cover_table_,
+                                                 same_label_indices, std::move(enumerated_key_pruning_indices), filter);
   target_vertex_to_ops_[target_vertex] = ret;
   operators_.push_back(ret);
   return ret;

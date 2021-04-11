@@ -17,10 +17,11 @@
 #include <algorithm>
 #include <cinttypes>
 #include <memory>
+#include <numeric>
+#include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
-
-#include "glog/logging.h"
 
 #include "graph/types.h"
 #include "utils/hashmap.h"
@@ -43,6 +44,11 @@ class CompressedSubgraphs {
 
  public:
   /**
+   * {{key indices},{set indices}}, set indices must not be empty.
+   */
+  using PruningIndexGroups = std::vector<std::pair<std::vector<uint32_t>, std::vector<uint32_t>>>;
+
+  /**
    * @param key_size The number of key vertices.
    * @param n_vertices The number of vertices in each compressed subgraph.
    */
@@ -61,17 +67,17 @@ class CompressedSubgraphs {
   /**
    * @param subgraphs The compressed subgraphs that can extend to this CompressedSubraphs. They are one vertex smaller.
    * @param key The new vertex expanded in this CompressedSubgraphs, which is a key.
-   * TODO(tatiana): list of indices of sets to check
+   * @param pruning_set_indices The indices of the existing sets to prune.
+   * @param set_pruning_threshold The existing sets are only pruned if their sizes are smaller than the threshold.
    */
-  CompressedSubgraphs(const CompressedSubgraphs& subgraphs, VertexID key)
+  CompressedSubgraphs(const CompressedSubgraphs& subgraphs, VertexID key,
+                      const std::vector<uint32_t>& pruning_set_indices, uint64_t set_pruning_threshold,
+                      bool recursive_prune = true)
       : keys_(subgraphs.getNumKeys() + 1), sets_(subgraphs.getNumSets()) {
-    unordered_set<uint32_t> set_indices;
-    for (uint32_t i = 0; i < subgraphs.getNumSets(); ++i) {
-      set_indices.insert(i);
-    }
+    unordered_set<uint32_t> set_indices(pruning_set_indices.begin(), pruning_set_indices.end());
     sets_ = subgraphs.sets_;
     // isomorphism check for pruning sets that are completely conflicting with keys
-    if (pruneExistingSets(key, set_indices)) {
+    if (pruneExistingSets(key, set_indices, set_pruning_threshold, recursive_prune)) {
       keys_.clear();
       return;
     }
@@ -82,17 +88,16 @@ class CompressedSubgraphs {
   /**
    * @param subgraphs The compressed subgraphs that can extend to this CompressedSubraphs. They are one vertex smaller.
    * @param new_set The set of new vertices expanded in this CompressedSubgraphs, which is not in key.
-   * TODO(tatiana): list of indices of sets to check
+   * @param pruning_set_indices The indices of the existing sets to prune.
+   * @param set_pruning_threshold The existing sets are only pruned if their sizes are smaller than the threshold.
    */
-  CompressedSubgraphs(const CompressedSubgraphs& subgraphs, std::vector<VertexID>&& new_set)
+  CompressedSubgraphs(const CompressedSubgraphs& subgraphs, std::vector<VertexID>&& new_set,
+                      const std::vector<uint32_t>& pruning_set_indices, uint64_t set_pruning_threshold)
       : keys_(subgraphs.getNumKeys()), sets_(subgraphs.getNumSets() + 1) {
     std::copy(subgraphs.sets_.begin(), subgraphs.sets_.end(), sets_.begin());
     if (new_set.size() == 1) {
-      unordered_set<uint32_t> set_indices;
-      for (uint32_t i = 0; i < subgraphs.getNumSets(); ++i) {
-        set_indices.insert(i);
-      }
-      if (pruneExistingSets(new_set.front(), set_indices)) {
+      unordered_set<uint32_t> set_indices(pruning_set_indices.begin(), pruning_set_indices.end());
+      if (pruneExistingSets(new_set.front(), set_indices, set_pruning_threshold)) {
         keys_.clear();
         sets_.clear();
         return;
@@ -109,27 +114,67 @@ class CompressedSubgraphs {
    * @param replacing_set_index The index of the set to be replaced in `subgraphs`.
    * @param new_set The set of new vertices to be put at `replacing_set_index`.
    * @param key The new vertex expanded in this CompressedSubgraphs, which is a key.
-   * @param prune_set whether to actively prune when the set size is 1
-   * TODO(tatiana): list of indices of sets to check
+   * @param pruning_set_indices The indices of the existing sets to prune.
+   * @param set_pruning_threshold The existing sets are only pruned if their sizes are smaller than the threshold.
+   * @param prune_by_set Whether to actively prune when the set size is 1.
    */
   CompressedSubgraphs(const CompressedSubgraphs& subgraphs, uint32_t replacing_set_index, VertexSet&& new_set,
-                      VertexID key, bool prune_set)
+                      VertexID key, const std::vector<uint32_t>& pruning_set_indices, uint64_t set_pruning_threshold,
+                      bool prune_by_set)
       : keys_(subgraphs.getNumKeys() + 1), sets_(subgraphs.getNumSets()) {
-    unordered_set<uint32_t> set_indices;
-    for (uint32_t i = 0; i < subgraphs.getNumSets(); ++i) {
-      // no need to prune the set to be replaced
-      if (i == replacing_set_index) continue;
-      set_indices.insert(i);
-    }
     sets_ = subgraphs.sets_;
-    if (pruneExistingSets(key, set_indices) ||
-        (prune_set && new_set->size() == 1 && pruneExistingSets(key, set_indices))) {
+    unordered_set<uint32_t> set_indices(pruning_set_indices.begin(), pruning_set_indices.end());
+    if (pruneExistingSets(key, set_indices, set_pruning_threshold)) {
+      // TODO(tatiana): set label may not be the same as the new key
+      // (prune_by_set && new_set->size() == 1 && pruneExistingSets(new_set->front(), set_indices,
+      // set_pruning_threshold))
       keys_.clear();
       sets_.clear();
       return;
     }
     std::copy(subgraphs.keys_.begin(), subgraphs.keys_.end(), keys_.begin());
     keys_.back() = key;
+    sets_[replacing_set_index] = std::move(new_set);
+  }
+
+  /**
+   * @param subgraphs The compressed subgraphs that can extend to this CompressedSubraphs. They are one vertex smaller.
+   * @param key The new vertex expanded in this CompressedSubgraphs, which is a key.
+   */
+  CompressedSubgraphs(const CompressedSubgraphs& subgraphs, VertexID key)
+      : keys_(subgraphs.getNumKeys() + 1), sets_(subgraphs.getNumSets()) {
+    sets_ = subgraphs.sets_;
+    std::copy(subgraphs.keys_.begin(), subgraphs.keys_.end(), keys_.begin());
+    keys_.back() = key;
+  }
+
+  /**
+   * @param subgraphs The compressed subgraphs that can extend to this CompressedSubraphs. They are one vertex smaller.
+   * @param new_set The set of new vertices expanded in this CompressedSubgraphs, which is not in key.
+   * @param pruning_set_indices The indices of the existing sets to prune.
+   * @param set_pruning_threshold The existing sets are only pruned if their sizes are smaller than the threshold.
+   */
+  CompressedSubgraphs(const CompressedSubgraphs& subgraphs, std::vector<VertexID>&& new_set)
+      : keys_(subgraphs.getNumKeys()), sets_(subgraphs.getNumSets() + 1) {
+    keys_ = subgraphs.keys_;
+    std::copy(subgraphs.sets_.begin(), subgraphs.sets_.end(), sets_.begin());
+    sets_.back() = std::make_shared<std::vector<VertexID>>(std::move(new_set));
+  }
+
+  /** This constructor is used when expanding from a non-key vertex to a new key vertex, and the matches of the parent
+   * query vertex is to be regrouped due to adding the new key.
+   *
+   * @param subgraphs The compressed subgraphs that can extend to this CompressedSubraphs. They are one vertex smaller.
+   * @param replacing_set_index The index of the set to be replaced in `subgraphs`.
+   * @param new_set The set of new vertices to be put at `replacing_set_index`.
+   * @param key The new vertex expanded in this CompressedSubgraphs, which is a key.
+   */
+  CompressedSubgraphs(const CompressedSubgraphs& subgraphs, uint32_t replacing_set_index, VertexSet&& new_set,
+                      VertexID key)
+      : keys_(subgraphs.getNumKeys() + 1), sets_(subgraphs.getNumSets()) {
+    std::copy(subgraphs.keys_.begin(), subgraphs.keys_.end(), keys_.begin());
+    keys_.back() = key;
+    sets_ = subgraphs.sets_;
     sets_[replacing_set_index] = std::move(new_set);
   }
 
@@ -147,45 +192,29 @@ class CompressedSubgraphs {
     return n_subgraphs;
   }
 
-  uint64_t getNumIsomorphicSubgraphs(uint64_t limit = ~0u) const {
+  uint64_t getNumIsomorphicSubgraphs(const PruningIndexGroups& pruning_indices, uint64_t limit = ~0u) const;
+
+  inline uint64_t getNumIsomorphicSubgraphs(uint64_t limit = ~0u) const {
     if (sets_.empty()) {
       return !keys_.empty();
     }
-    auto sets_sorted_by_size = sets_;
-    std::sort(sets_sorted_by_size.begin(), sets_sorted_by_size.end(),
-              [](const auto& set1, const auto& set2) { return set1->size() < set2->size(); });
-    // dfs sets_ chain
-    uint64_t count = 0;
-    std::vector<uint32_t> set_index(sets_.size(), 0);
-    unordered_set<VertexID> existing_vertices;
-    existing_vertices.reserve(getNumVertices());
-    existing_vertices.insert(keys_.begin(), keys_.end());
-    uint32_t last_depth = sets_.size() - 1;
-    uint32_t current_depth = 0;
-    while (true) {
-      while (set_index[current_depth] < (*sets_sorted_by_size[current_depth]).size()) {
-        auto v = (*sets_sorted_by_size[current_depth])[set_index[current_depth]];
-        ++set_index[current_depth];
-        if (existing_vertices.count(v) == 0) {  // v is valid
-          if (current_depth == last_depth) {    // reaching a leave in dfs
-            if (++count == limit) return count;
-          } else {
-            existing_vertices.insert(v);
-            ++current_depth;
-            set_index[current_depth] = 0;  // start from the first vertex in the next set
-          }
-        }
-      }
-      if (current_depth == 0) {
-        break;
-      }
-      --current_depth;
-      existing_vertices.erase((*sets_sorted_by_size[current_depth])[set_index[current_depth] - 1]);
+    std::vector<std::vector<VertexID>*> set_ptrs(sets_.size());
+    for (uint32_t i = 0; i < sets_.size(); ++i) {
+      set_ptrs[i] = sets_[i].get();
     }
-    return count;
+    unordered_set<VertexID> existing_vertices;
+    existing_vertices.reserve(getNumVertices() - 1);
+    existing_vertices.insert(keys_.begin(), keys_.end());
+    return getNumIsomorphicSubgraphs(existing_vertices, set_ptrs, limit);
   }
 
-  bool isExisting(uint32_t key) const {
+  /**
+   * Count isomorphic subgraphs projected on the given sets
+   */
+  static uint64_t getNumIsomorphicSubgraphs(unordered_set<VertexID>& existing_vertices,
+                                            std::vector<std::vector<VertexID>*>& set_ptrs, uint64_t limit = ~0u);
+
+  [[deprecated]] bool isExisting(uint32_t key) const {
     for (uint32_t existing_key : keys_) {
       if (existing_key == key) {
         return true;
@@ -211,6 +240,20 @@ class CompressedSubgraphs {
     return s;
   }
 
+  inline void logString(std::ostream& ss) const {
+    for (auto key : keys_) {
+      ss << key << ',';
+    }
+    for (auto& set : sets_) {
+      ss << '[';
+      for (auto v : *set) {
+        ss << v << ' ';
+      }
+      ss << "],";
+    }
+    ss << std::endl;
+  }
+
   /** Get the value of the key vertex at key_idx. */
   VertexID getKeyVal(uint32_t key_idx) const { return keys_[key_idx]; }
 
@@ -219,29 +262,27 @@ class CompressedSubgraphs {
 
   unordered_set<VertexID> getKeyMap() const { return unordered_set<VertexID>(keys_.begin(), keys_.end()); }
 
-  // exceptions include keys and single-element sets
-  // TODO(tatiana): give same-label key/set indices instead of `not_include_set`
-  void getExceptions(unordered_set<VertexID>& exception, const unordered_set<uint32_t> not_include_set) const {
-    exception.insert(keys_.begin(), keys_.end());
-    for (uint32_t i = 0; i < getNumSets(); ++i) {
-      auto& set = sets_[i];
-      if (set->size() == 1 && not_include_set.count(i) == 0) {
-        exception.insert(set->front());
+  // exceptions include keys and single-element sets with the same label
+  inline void getExceptions(unordered_set<VertexID>& exception, const std::vector<uint32_t>& exception_key_indices,
+                            const std::vector<uint32_t>& exception_set_indices) const {
+    exception.reserve(exception_key_indices.size() + exception_set_indices.size());
+    for (auto idx : exception_key_indices) {
+      exception.insert(keys_[idx]);
+    }
+
+    for (auto idx : exception_set_indices) {
+      auto& set = *sets_[idx];
+      if (set.size() == 1) {
+        exception.insert(set.front());
       }
     }
   }
 
-  // exceptions include keys and single-element sets
-  // TODO(tatiana): give same-label key/set indices instead of `not_include_set`
-  unordered_set<VertexID> getExceptions(uint32_t not_include_set = ~0u) const {
-    unordered_set<VertexID> exception(keys_.begin(), keys_.end());
-    for (uint32_t i = 0; i < getNumSets(); ++i) {
-      auto& set = sets_[i];
-      CHECK(set != nullptr);
-      if (set->size() == 1 && i != not_include_set) {
-        exception.insert(set->front());
-      }
-    }
+  // exceptions include keys and single-element sets with the same label
+  inline unordered_set<VertexID> getExceptions(const std::vector<uint32_t>& exception_key_indices,
+                                               const std::vector<uint32_t>& exception_set_indices) const {
+    unordered_set<VertexID> exception;
+    getExceptions(exception, exception_key_indices, exception_set_indices);
     return exception;
   }
 
@@ -256,53 +297,10 @@ class CompressedSubgraphs {
   /** Add a vertex val to the vertex set at set_idx. */
   void UpdateSet(uint32_t set_idx, VertexID val) { sets_[set_idx]->push_back(val); }
 
-  void logString(std::ostream& ss) const {
-    for (auto key : keys_) {
-      ss << key << ',';
-    }
-    for (auto& set : sets_) {
-      for (auto v : *set) {
-        ss << v << ' ';
-      }
-      ss << ',';
-    }
-    ss << std::endl;
-  }
-
   bool empty() const { return keys_.empty(); }
 
-  bool pruneExistingSets(VertexID v, unordered_set<uint32_t>& set_indices, uint32_t set_size_threshold = ~0u) {
-    unordered_map<VertexID, uint32_t> new_v;  // vertex, set_index
-    for (uint32_t i : set_indices) {
-      auto& set = *sets_[i];
-      if (set.size() <= set_size_threshold) {
-        auto lb = circinus::lower_bound(set.begin(), set.end(), v);
-        if (lb != set.end() && *lb == v) {  // conflict found
-          if (set.size() == 1) {
-            return true;
-          }
-          auto new_set = std::make_shared<std::vector<VertexID>>();
-          new_set->insert(new_set->end(), set.begin(), lb);
-          new_set->insert(new_set->end(), lb + 1, set.end());
-          // recursively prune when set size becomes 1
-          if (new_set->size() == 1 && !new_v.insert({new_set->front(), i}).second) {
-            return true;
-          }
-          sets_[i] = std::move(new_set);
-        }
-      }
-    }
-    if (new_v.empty()) {
-      return false;
-    }
-    for (auto& pair : new_v) {
-      set_indices.erase(pair.second);
-      if (pruneExistingSets(pair.first, set_indices, set_size_threshold)) {
-        return true;
-      }
-    }
-    return false;
-  }
+  bool pruneExistingSets(VertexID v, unordered_set<uint32_t>& set_indices, uint32_t set_size_threshold,
+                         bool recursive_prune = true);
 };
 
 }  // namespace circinus

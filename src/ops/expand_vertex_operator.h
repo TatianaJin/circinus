@@ -25,10 +25,21 @@
 namespace circinus {
 
 class ExpandVertexOperator : public TraverseOperator {
+ protected:
+  std::vector<QueryVertexID> parents_;
+  QueryVertexID target_vertex_;
+  unordered_map<QueryVertexID, uint32_t> query_vertex_indices_;
+
  public:
   ExpandVertexOperator(const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
-                       const unordered_map<QueryVertexID, uint32_t>& query_vertex_indices)
-      : parents_(parents), target_vertex_(target_vertex), query_vertex_indices_(query_vertex_indices) {}
+                       const unordered_map<QueryVertexID, uint32_t>& query_vertex_indices,
+                       const std::vector<uint32_t>& same_label_key_indices,
+                       const std::vector<uint32_t>& same_label_set_indices, uint64_t set_pruning_threshold,
+                       SubgraphFilter* subgraph_filter)
+      : TraverseOperator(same_label_key_indices, same_label_set_indices, set_pruning_threshold, subgraph_filter),
+        parents_(parents),
+        target_vertex_(target_vertex),
+        query_vertex_indices_(query_vertex_indices) {}
 
   virtual ~ExpandVertexOperator() {}
 
@@ -44,10 +55,6 @@ class ExpandVertexOperator : public TraverseOperator {
     ss << " -> " << target_vertex_;
     if (candidates_ != nullptr) ss << " (" << candidates_->size() << ")";
   }
-
-  std::vector<QueryVertexID> parents_;
-  QueryVertexID target_vertex_;
-  unordered_map<QueryVertexID, uint32_t> query_vertex_indices_;
 };
 
 }  // namespace circinus

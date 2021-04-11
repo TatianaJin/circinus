@@ -17,12 +17,19 @@
 #include <vector>
 
 #include "graph/types.h"
+#include "ops/filters/subgraph_filter.h"
 #include "ops/traverse_operator.h"
 #include "utils/hashmap.h"
 
 namespace circinus {
 
 class ExpandEdgeOperator : public TraverseOperator {
+ protected:
+  uint32_t parent_index_;  // index of parent query vertex in the compressed subgraphs
+  uint32_t target_index_;  // index of target query vertex in the compressed subgraphs
+  QueryVertexID parent_id_;
+  QueryVertexID target_id_;
+
  public:
   /**
    * Create a new TraverseOperator, which needs to be deleted manually, according to whether the parent and target
@@ -30,12 +37,42 @@ class ExpandEdgeOperator : public TraverseOperator {
    *
    * @param indices The map from the id of a query vertex to its index in the CompressedSubgraphs
    */
-  static TraverseOperator* newExpandEdgeOperator(QueryVertexID parent_vertex, QueryVertexID target_vertex,
-                                                 const std::vector<int>& cover_table,
-                                                 const unordered_map<QueryVertexID, uint32_t>& indices);
+  static TraverseOperator* newExpandEdgeKeyToKeyOperator(QueryVertexID parent_vertex, QueryVertexID target_vertex,
+                                                         const unordered_map<QueryVertexID, uint32_t>& indices,
+                                                         const std::vector<uint32_t>& same_label_key_indices,
+                                                         const std::vector<uint32_t>& same_label_set_indices,
+                                                         uint64_t set_pruning_threshold, SubgraphFilter* filter);
 
-  ExpandEdgeOperator(uint32_t parent_index, uint32_t target_index, QueryVertexID parent, QueryVertexID target)
-      : parent_index_(parent_index), target_index_(target_index), parent_id_(parent), target_id_(target) {}
+  static TraverseOperator* newExpandEdgeKeyToSetOperator(QueryVertexID parent_vertex, QueryVertexID target_vertex,
+                                                         const unordered_map<QueryVertexID, uint32_t>& indices,
+                                                         const std::vector<uint32_t>& same_label_key_indices,
+                                                         const std::vector<uint32_t>& same_label_set_indices,
+                                                         uint64_t set_pruning_threshold, SubgraphFilter* filter);
+
+  static TraverseOperator* newExpandEdgeSetToKeyOperator(QueryVertexID parent_vertex, QueryVertexID target_vertex,
+                                                         const unordered_map<QueryVertexID, uint32_t>& indices,
+                                                         const std::vector<uint32_t>& same_label_key_indices,
+                                                         const std::vector<uint32_t>& same_label_set_indices,
+                                                         uint64_t set_pruning_threshold, SubgraphFilter* filter);
+
+  ExpandEdgeOperator(uint32_t parent_index, uint32_t target_index, QueryVertexID parent, QueryVertexID target,
+                     const std::vector<uint32_t>& same_label_key_indices,
+                     const std::vector<uint32_t>& same_label_set_indices, uint64_t set_pruning_threshold,
+                     SubgraphFilter* filter)
+      : TraverseOperator(same_label_key_indices, same_label_set_indices, set_pruning_threshold, filter),
+        parent_index_(parent_index),
+        target_index_(target_index),
+        parent_id_(parent),
+        target_id_(target) {
+    std::stringstream ss;
+    for (auto& v : same_label_key_indices_) {
+      ss << ' ' << v;
+    }
+    for (auto& v : same_label_set_indices_) {
+      ss << ' ' << v;
+    }
+    LOG(INFO) << toString() << " same-label vertices to prune" << ss.str();
+  }
 
   virtual ~ExpandEdgeOperator() {}
 
@@ -45,11 +82,6 @@ class ExpandEdgeOperator : public TraverseOperator {
     ss << ' ' << parent_id_ << " -> " << target_id_;
     if (candidates_ != nullptr) ss << " (" << candidates_->size() << ")";
   }
-
-  uint32_t parent_index_;  // index of parent query vertex in the compressed subgraphs
-  uint32_t target_index_;  // index of target query vertex in the compressed subgraphs
-  QueryVertexID parent_id_;
-  QueryVertexID target_id_;
 };
 
 }  // namespace circinus

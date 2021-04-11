@@ -29,8 +29,12 @@ class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
 
  public:
   ExpandKeyToKeyVertexOperator(const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
-                               const unordered_map<QueryVertexID, uint32_t>& query_vertex_indices)
-      : ExpandVertexOperator(parents, target_vertex, query_vertex_indices) {}
+                               const unordered_map<QueryVertexID, uint32_t>& query_vertex_indices,
+                               const std::vector<uint32_t>& same_label_key_indices,
+                               const std::vector<uint32_t>& same_label_set_indices, uint64_t set_pruning_threshold,
+                               SubgraphFilter* filter = nullptr)
+      : ExpandVertexOperator(parents, target_vertex, query_vertex_indices, same_label_key_indices,
+                             same_label_set_indices, set_pruning_threshold, filter) {}
 
   uint32_t expand(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size) override {
     return expandInner<QueryType::Execute>(outputs, batch_size);
@@ -49,10 +53,7 @@ class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
 
   Operator* clone() const override {
     // TODO(tatiana): for now next_ is not handled because it is only used for printing plan
-    auto ret = new ExpandKeyToKeyVertexOperator(parents_, target_vertex_, query_vertex_indices_);
-    DCHECK(candidates_ != nullptr);
-    ret->candidates_ = candidates_;
-    return ret;
+    return new ExpandKeyToKeyVertexOperator(*this);
   }
 
  protected:
@@ -64,9 +65,10 @@ class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
     while (input_index_ < current_inputs_->size()) {
       std::vector<VertexID> new_keys;
       const auto& input = (*current_inputs_)[input_index_];
-      auto exceptions = input.getExceptions();
+      auto exceptions = input.getExceptions(same_label_key_indices_, same_label_set_indices_);
       for (uint32_t i = 0; i < parents_.size(); ++i) {
         uint32_t key = query_vertex_indices_[parents_[i]];
+        DCHECK_LT(key, input.getNumKeys());
         uint32_t key_vid = input.getKeyVal(key);
         if (i == 0) {
           intersect(*candidates_, current_data_graph_->getOutNeighbors(key_vid), &new_keys, exceptions);
@@ -101,11 +103,13 @@ class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
         }
       if (new_keys.size() != 0) {
         for (VertexID new_key : new_keys) {
-          // FIXME(tatiana): remove this check
-          CHECK(!input.isExisting(new_key));
-          // TODO(tatiana): same-label set indices
-          CompressedSubgraphs output(input, new_key);
+#ifdef USE_FILTER
+          CompressedSubgraphs output(input, new_key, same_label_set_indices_, set_pruning_threshold_, false);
+          if (output.empty() || filter(output)) continue;
+#else
+          CompressedSubgraphs output(input, new_key, same_label_set_indices_, set_pruning_threshold_);
           if (output.empty()) continue;
+#endif
           outputs->emplace_back(std::move(output));
           ++output_num;
         }

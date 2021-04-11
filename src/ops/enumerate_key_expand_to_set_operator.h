@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <array>
 #include <string>
 #include <utility>
 #include <vector>
@@ -27,11 +28,16 @@ namespace circinus {
 
 class EnumerateKeyExpandToSetOperator : public ExpandVertexOperator {
   const std::vector<QueryVertexID> keys_to_enumerate_;
-  std::vector<QueryVertexID> existing_key_parents_;
-  unordered_map<QueryVertexID, uint32_t> enumerate_key_old_indices_;
+  std::vector<uint32_t> existing_key_parent_indices_;
   std::vector<int> cover_table_;
+  unordered_map<QueryVertexID, uint32_t> enumerate_key_old_indices_;
   std::vector<std::pair<uint32_t, int>> set_old_to_new_pos_;
-  unordered_set<uint32_t> enumerate_key_pos_;
+
+#ifndef USE_FILTER
+  // for set pruning, the indices of the sets with the same label as the target in the output
+  unordered_set<uint32_t> set_indices_;
+#endif
+  std::vector<int> enumerated_key_pruning_indices_;
 
   /* transient */
   std::vector<uint32_t> enumerate_key_idx_;                     // size = keys_to_enumerate_.size();
@@ -50,7 +56,9 @@ class EnumerateKeyExpandToSetOperator : public ExpandVertexOperator {
                                   const unordered_map<QueryVertexID, uint32_t>& input_query_vertex_indices,
                                   const unordered_map<QueryVertexID, uint32_t>& output_query_vertex_indices,
                                   const std::vector<QueryVertexID>& keys_to_enumerate,
-                                  const std::vector<int>& cover_table);
+                                  const std::vector<int>& cover_table,
+                                  const std::array<std::vector<uint32_t>, 2>& same_label_indices,
+                                  std::vector<int>&& enumerated_key_pruning_indices, SubgraphFilter* filter);
 
   uint32_t expand(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size) override {
     return expandInner<QueryType::Execute>(outputs, batch_size);
