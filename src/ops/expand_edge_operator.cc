@@ -91,7 +91,7 @@ class ExpandEdgeKeyToSetOperator : public ExpandEdgeOperator {
   inline bool expandInner(std::vector<CompressedSubgraphs>* outputs, const CompressedSubgraphs& input) {
     std::vector<VertexID> targets;
     auto parent_match = input.getKeyVal(parent_index_);
-    intersectOrNot(candidate_set_, current_data_graph_->getOutNeighbors(parent_match), &targets,
+    intersect(candidate_set_, current_data_graph_->getOutNeighbors(parent_match), &targets,
               input.getExceptions(same_label_key_indices_, same_label_set_indices_));
     if
       constexpr(isProfileMode(profile)) {
