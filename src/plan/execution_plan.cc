@@ -123,6 +123,7 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
           current = newExpandSetVertexOperator(key_parents, target_vertex, same_label_v_indices);
         }
       }
+      // careful with this key-first-set-later order
       for(auto& qv:key_parents)
       {
         addBipartiteGraphToOperator(qv,target_vertex,current,pair_to_bipartite_graph);

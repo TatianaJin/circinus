@@ -259,7 +259,7 @@ class CurrentResultsByCandidate : public CurrentResults {
       if (exceptions.count(candidate)) {
         continue;
       }
-      intersect(*parent_set, data_graph_->getOutNeighbors(candidate), &parents);  // No need for exceptions
+      owner->intersectOrNot(*parent_set, data_graph_->getOutNeighbors(candidate), &parents);  // No need for exceptions
       if
         constexpr(isProfileMode(profile)) {
           owner_->updateIntersectInfo(parent_set->size() + data_graph_->getVertexOutDegree(candidate), parents.size());
@@ -299,7 +299,7 @@ class CurrentResultsByParent : public CurrentResults {
       auto parent_match = parent_set[i];
       if (exceptions_.count(parent_match)) continue;
       std::vector<VertexID> targets;
-      intersect(*candidates_, data_graph_->getOutNeighbors(parent_match), &targets, exceptions_);
+      owner->intersectOrNot(*candidates_, data_graph_->getOutNeighbors(parent_match), &targets, exceptions_);
       if
         constexpr(isProfileMode(profile)) {
           owner_->updateIntersectInfo(candidates_->size() + data_graph_->getVertexOutDegree(parent_match),
@@ -348,7 +348,7 @@ class CurrentResultsByExtension : public CurrentResults {
         auto candidate = extensions_.front();
         extensions_.pop();
         std::vector<VertexID> parents;  // valid parents for current candidate
-        intersect(parent_set, data_graph_->getOutNeighbors(candidate), &parents);  // no need for exceptions
+        owner->intersectOrNot(parent_set, data_graph_->getOutNeighbors(candidate), &parents);  // no need for exceptions
         if
           constexpr(isProfileMode(profile)) {
             owner_->updateIntersectInfo(parent_set.size() + data_graph_->getVertexOutDegree(candidate), parents.size());
@@ -515,6 +515,7 @@ class ExpandEdgeSetToKeyOperator : public ExpandEdgeOperator {
 
   template <QueryType profile>
   void expandInner(const CompressedSubgraphs& input, uint32_t cap) {
+    if(use_bipartite_graph_flag)current_data_graph_=bg_pointers_.front();// must only use validate things in BipartiteGraph then
     auto& parent_set = input.getSet(parent_index_);
     DCHECK(current_results_ == nullptr);
     ExecutionMode mode = getExecutionMode(parent_set.get(), cap);

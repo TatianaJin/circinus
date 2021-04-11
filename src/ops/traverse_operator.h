@@ -217,6 +217,12 @@ class TraverseOperator : public Operator {
     }
   }
 
+  void intersectOrNot(const std::vector<VertexID>& set1, const std::pair<const VertexID*, uint32_t>& set2,
+                      std::vector<VertexID>* intersection, const unordered_set<VertexID>& except = {}) {
+    if(use_bipartite_graph_flag)removeExceptions(set2, intersection,except);
+    else intersect(set1, set2, intersection,except);
+  }
+
  protected:
   virtual uint32_t expandAndProfileInner(std::vector<CompressedSubgraphs>* outputs, uint32_t cap) = 0;
   inline uint32_t getTotalInputSize() const { return total_input_size_ - (current_inputs_size_ - input_index_); }
