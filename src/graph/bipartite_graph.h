@@ -26,20 +26,19 @@ namespace circinus {
 class BipartiteGraph : public Graph {  // only use variable:vlist_,elist_  function:getVertexOutDegree,getOutNeighbors
  private:
   unordered_map<VertexID, uint32_t> offset_by_vertex_;
-  bool populated=0;
-  VertexID sourceId,destinationId;
+  bool populated = 0;
+  VertexID sourceId, destinationId;
 
  public:
-  BipartiteGraph(VertexID id1,VertexID id2):Graph(),sourceId(id1),destinationId(id2) {}
+  BipartiteGraph(VertexID id1, VertexID id2) : Graph(), sourceId(id1), destinationId(id2) {}
 
-  void populateGraph(const Graph* g, std::vector<std::vector<VertexID>> candidate_sets)
-  {
-    populateGraph(g,candidate_sets[sourceId],candidate_sets[destinationId]);
+  void populateGraph(const Graph* g, std::vector<std::vector<VertexID>> candidate_sets) {
+    populateGraph(g, candidate_sets[sourceId], candidate_sets[destinationId]);
   }
 
   void populateGraph(const Graph* g, std::vector<VertexID> candidate_set1, std::vector<VertexID> candidate_set2) {
-    if(populated)return;
-    populated=1;
+    if (populated) return;
+    populated = 1;
     unordered_set<VertexID> vset(candidate_set2.begin(), candidate_set2.end());
     vlist_.emplace_back(0);
     for (size_t i = 0; i < candidate_set1.size(); ++i) {
@@ -52,11 +51,13 @@ class BipartiteGraph : public Graph {  // only use variable:vlist_,elist_  funct
     }
   }
 
-  inline std::pair<const VertexID*, uint32_t> getOutNeighbors(VertexID id) const { // populated must be 1 now, but dont add if-else here for performance
+  inline std::pair<const VertexID*, uint32_t> getOutNeighbors(
+      VertexID id) const {  // populated must be 1 now, but dont add if-else here for performance
     const uint32_t offset = offset_by_vertex_.at(id);
     return std::make_pair(&elist_[vlist_[offset]], vlist_[offset + 1] - vlist_[offset]);
   }
-  inline VertexID getVertexOutDegree(VertexID id) const { // populated must be 1 now, but dont add if-else here for performance
+  inline VertexID getVertexOutDegree(
+      VertexID id) const {  // populated must be 1 now, but dont add if-else here for performance
     const uint32_t offset = offset_by_vertex_.at(id);
     return vlist_[offset + 1] - vlist_[offset];
   }

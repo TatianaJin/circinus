@@ -205,13 +205,16 @@ class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
     current_targets_.clear();
     current_target_index_ = 0;
     auto parent_match = input.getKeyVal(parent_index_);
-    if(use_bipartite_graph_flag)current_data_graph_=bg_pointers_.front();// must only use validate things in BipartiteGraph then
+    if (use_bipartite_graph_flag)
+      current_data_graph_ = bg_pointers_.front();  // must only use validate things in BipartiteGraph then
     // intersect(candidate_set_, current_data_graph_->getOutNeighbors(parent_match), &current_targets_,
     // input.getKeyMap());
-    if(use_bipartite_graph_flag)removeExceptions(current_data_graph_->getOutNeighbors(parent_match), &current_targets_,
-              input.getExceptions(same_label_key_indices_, same_label_set_indices_));
-    else intersect(candidate_set_, current_data_graph_->getOutNeighbors(parent_match), &current_targets_,
-              input.getExceptions(same_label_key_indices_, same_label_set_indices_));
+    if (use_bipartite_graph_flag)
+      removeExceptions(current_data_graph_->getOutNeighbors(parent_match), &current_targets_,
+                       input.getExceptions(same_label_key_indices_, same_label_set_indices_));
+    else
+      intersect(candidate_set_, current_data_graph_->getOutNeighbors(parent_match), &current_targets_,
+                input.getExceptions(same_label_key_indices_, same_label_set_indices_));
     if
       constexpr(isProfileMode(profile)) {
         distinct_intersection_count_ += parent_set_.insert(parent_match).second;

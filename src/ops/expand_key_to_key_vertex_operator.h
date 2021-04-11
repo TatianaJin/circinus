@@ -70,10 +70,13 @@ class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
         uint32_t key = query_vertex_indices_[parents_[i]];
         DCHECK_LT(key, input.getNumKeys());
         uint32_t key_vid = input.getKeyVal(key);
-        if(use_bipartite_graph_flag)current_data_graph_=bg_pointers_[i];// must only use validate things in BipartiteGraph then
+        if (use_bipartite_graph_flag)
+          current_data_graph_ = bg_pointers_[i];  // must only use validate things in BipartiteGraph then
         if (i == 0) {
-          if(use_bipartite_graph_flag)removeExceptions(current_data_graph_->getOutNeighbors(key_vid), &new_keys, exceptions);
-          else intersect(*candidates_, current_data_graph_->getOutNeighbors(key_vid), &new_keys, exceptions);
+          if (use_bipartite_graph_flag)
+            removeExceptions(current_data_graph_->getOutNeighbors(key_vid), &new_keys, exceptions);
+          else
+            intersect(*candidates_, current_data_graph_->getOutNeighbors(key_vid), &new_keys, exceptions);
           if
             constexpr(isProfileMode(profile)) {
               updateIntersectInfo(candidates_->size() + current_data_graph_->getVertexOutDegree(key_vid),

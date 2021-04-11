@@ -20,9 +20,9 @@
 #include <utility>
 #include <vector>
 
+#include "graph/bipartite_graph.h"
 #include "graph/compressed_subgraphs.h"
 #include "graph/graph.h"
-#include "graph/bipartite_graph.h"
 #include "graph/types.h"
 #include "ops/filters/subgraph_filter.h"
 #include "ops/operator.h"
@@ -33,13 +33,11 @@ namespace circinus {
 
 inline void removeExceptions(const std::pair<const VertexID*, uint32_t>& setPair, std::vector<VertexID>* res,
                              const unordered_set<VertexID>& except = {}) {
-  for(uint32_t i = 0; i < setPair.second; ++i)
-  {
+  for (uint32_t i = 0; i < setPair.second; ++i) {
     auto vid = setPair.first[i];
-    if(except.count(vid) == 0) res->emplace_back(vid);
+    if (except.count(vid) == 0) res->emplace_back(vid);
   }
 }
-
 
 /** set1 and set2 must be sorted in ascending order */
 inline void intersect(const std::pair<const VertexID*, uint32_t>& set1,
@@ -116,7 +114,7 @@ class TraverseOperator : public Operator {
   uint64_t distinct_intersection_count_ =
       0;  // the minimal number of intersection needed if all intersection function call results can be cached
   std::vector<BipartiteGraph*> bg_pointers_;
-  bool use_bipartite_graph_flag=false;
+  bool use_bipartite_graph_flag = false;
 
  public:
   TraverseOperator() {}
@@ -203,20 +201,14 @@ class TraverseOperator : public Operator {
     return ss.str();
   }
 
-  void addBipartiteGraph(BipartiteGraph* bg)
-  {
-    bg_pointers_.emplace_back(bg);
-  }
+  void addBipartiteGraph(BipartiteGraph* bg) { bg_pointers_.emplace_back(bg); }
 
-  void useBipartiteGraph(std::vector<std::vector<VertexID>> candidate_sets) // must used after input() called
-  {
-    use_bipartite_graph_flag=1;
-    for(auto p:bg_pointers_)
-    {
-      p->populateGraph(current_data_graph_,candidate_sets);
+  void useBipartiteGraph(std::vector<std::vector<VertexID>> candidate_sets) {  // must used after input() called
+    use_bipartite_graph_flag = 1;
+    for (auto p : bg_pointers_) {
+      p->populateGraph(current_data_graph_, candidate_sets);
     }
   }
-
 
  protected:
   virtual uint32_t expandAndProfileInner(std::vector<CompressedSubgraphs>* outputs, uint32_t cap) = 0;
