@@ -206,6 +206,11 @@ class TestExpandEdgeCosts : public testing::Test {
     start = std::chrono::high_resolution_clock::now();
     op_expand_edge->setCandidateSets(&candidates[target]);
     op_expand_edge->input(seeds, &g);
+    if (cover[parent] == 1 && cover[target] == 1) {
+      BipartiteGraph* bg = new BipartiteGraph(parent, target);
+      op_expand_edge->addBipartiteGraph(bg);
+      op_expand_edge->useBipartiteGraph(candidates);
+    }
     while (op_expand_edge->expand(&outputs, BATCH_SIZE) > 0) {
     }
     end = std::chrono::high_resolution_clock::now();
