@@ -37,7 +37,6 @@ inline void removeExceptions(const std::pair<const VertexID*, uint32_t>& setPair
     auto vid = setPair.first[i];
     if (except.count(vid) == 0) res->emplace_back(vid);
   }
-  LOG(INFO) << "USED BipartiteGraph removeE";
 }
 
 /** set1 and set2 must be sorted in ascending order */
@@ -203,7 +202,6 @@ class TraverseOperator : public Operator {
   }
 
   void addBipartiteGraph(BipartiteGraph* bg) { 
-    LOG(INFO) << "USED BipartiteGraph";
     bg_pointers_.emplace_back(bg); 
     }
 
