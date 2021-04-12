@@ -201,16 +201,14 @@ class TraverseOperator : public Operator {
     return ss.str();
   }
 
-  void addBipartiteGraph(BipartiteGraph* bg) { 
-    bg_pointers_.emplace_back(bg); 
-    }
+  void addBipartiteGraph(BipartiteGraph* bg) { bg_pointers_.emplace_back(bg); }
 
   void useBipartiteGraph(std::vector<std::vector<VertexID>> candidate_sets) {  // must used after input() called
     use_bipartite_graph_flag = 1;
     for (auto p : bg_pointers_) {
       p->populateGraph(current_data_graph_, candidate_sets);
     }
-    LOG(INFO) << "USED BipartiteGraph whose size is:"<<bg_pointers_.size();
+    LOG(INFO) << "USED BipartiteGraph whose size is:" << bg_pointers_.size();
   }
   inline uint64_t getIntersectionCount() const { return intersection_count_; }
 
