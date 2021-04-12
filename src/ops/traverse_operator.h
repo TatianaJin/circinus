@@ -170,7 +170,7 @@ class TraverseOperator : public Operator {
       auto offset = outputs->size() - n;
       for (uint32_t i = 0; i < n; ++i) {
         if ((*outputs)[offset + i].getNumIsomorphicSubgraphs(1) == 0) {
-          CHECK(false) << toString() << "\n\t" << (*outputs)[offset + i].toString();
+          // CHECK(false) << toString() << "\n\t" << (*outputs)[offset + i].toString();
           continue;
         }
         if (size != i) {
@@ -201,6 +201,7 @@ class TraverseOperator : public Operator {
     return ss.str();
   }
 
+<<<<<<< HEAD
   void addBipartiteGraph(BipartiteGraph* bg) { bg_pointers_.emplace_back(bg); }
 
   void useBipartiteGraph(std::vector<std::vector<VertexID>> candidate_sets) {  // must used after input() called
@@ -209,6 +210,15 @@ class TraverseOperator : public Operator {
       p->populateGraph(current_data_graph_, candidate_sets);
     }
   }
+=======
+  inline uint64_t getIntersectionCount() const { return intersection_count_; }
+
+  inline uint64_t getTotalIntersectionInputSize() const { return total_intersection_input_size_; }
+
+  inline uint64_t getTotalIntersectionOutputSize() const { return total_intersection_output_size_; }
+
+  inline uint64_t getDistinctIntersectionCount() const { return distinct_intersection_count_; }
+>>>>>>> master
 
  protected:
   virtual uint32_t expandAndProfileInner(std::vector<CompressedSubgraphs>* outputs, uint32_t cap) = 0;
