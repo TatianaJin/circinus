@@ -44,6 +44,7 @@ using circinus::NLFFilter;
 using circinus::QueryGraph;
 using circinus::QueryVertexID;
 using circinus::VertexID;
+using circinus::BipartiteGraph;
 
 #define BATCH_SIZE FLAGS_batch_size
 
