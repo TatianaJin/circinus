@@ -24,6 +24,7 @@
 #include "graph/compressed_subgraphs.h"
 #include "graph/graph.h"
 #include "graph/query_graph.h"
+#include "graph/bipartite_graph.h"
 #include "ops/expand_edge_operator.h"
 #include "ops/filters.h"
 #include "ops/operators.h"
@@ -171,6 +172,8 @@ class TestExpandEdgeCosts : public testing::Test {
     if (cover[parent] == 1 && cover[target] == 1) {  // key to key
       op = new ExpandKeyToKeyVertexOperator(std::vector<QueryVertexID>{parent}, target, indices, same_label_indices[1],
                                             same_label_indices[0], ~0u, filter);
+      BipartiteGraph* bg = new BipartiteGraph(parent, target);
+      op->addBipartiteGraph(bg);
     } else if (cover[parent] == 1) {  // key to set
       op = new ExpandKeyToSetVertexOperator(std::vector<QueryVertexID>{parent}, target, indices, same_label_indices[1],
                                             same_label_indices[0], ~0u, filter);
@@ -181,6 +184,9 @@ class TestExpandEdgeCosts : public testing::Test {
     auto start = std::chrono::high_resolution_clock::now();
     op->setCandidateSets(&candidates[target]);
     op->input(seeds, &g);
+    if (cover[parent] == 1 && cover[target] == 1) {
+      op->useBipartiteGraph(candidates);
+    }
     std::vector<CompressedSubgraphs> outputs;
     while (op->expand(&outputs, BATCH_SIZE) > 0) {
     }
