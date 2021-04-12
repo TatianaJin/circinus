@@ -115,7 +115,7 @@ class TraverseOperator : public Operator {
       0;  // the minimal number of intersection needed if all intersection function call results can be cached
   std::vector<BipartiteGraph*> bg_pointers_;
   bool use_bipartite_graph_flag = false;
-  std::vector<std::vector<VertexID>> *candidate_sets_pointer_;
+  const std::vector<std::vector<VertexID>> *candidate_sets_pointer_;
 
  public:
   TraverseOperator() {}
@@ -204,7 +204,7 @@ class TraverseOperator : public Operator {
 
   void addBipartiteGraph(BipartiteGraph* bg) { bg_pointers_.emplace_back(bg); }
 
-  void setCandidateSetsPointer(std::vector<std::vector<VertexID>> *candidate_sets)
+  void setCandidateSetsPointer(const std::vector<std::vector<VertexID>> *candidate_sets)
   {
     candidate_sets_pointer_=candidate_sets;
   }
