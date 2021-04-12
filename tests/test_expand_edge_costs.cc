@@ -186,7 +186,7 @@ class TestExpandEdgeCosts : public testing::Test {
     op->setCandidateSets(&candidates[target]);
     op->input(seeds, &g);
     if (cover[parent] == 1 && cover[target] == 1) {
-      op->useBipartiteGraph(candidates);
+      op->useBipartiteGraph(&candidates);
     }
     std::vector<CompressedSubgraphs> outputs;
     while (op->expand(&outputs, BATCH_SIZE) > 0) {
@@ -209,7 +209,7 @@ class TestExpandEdgeCosts : public testing::Test {
     if (cover[parent] == 1 && cover[target] == 1) {
       BipartiteGraph* bg = new BipartiteGraph(parent, target);
       op_expand_edge->addBipartiteGraph(bg);
-      op_expand_edge->useBipartiteGraph(candidates);
+      op_expand_edge->useBipartiteGraph(&candidates);
     }
     while (op_expand_edge->expand(&outputs, BATCH_SIZE) > 0) {
     }

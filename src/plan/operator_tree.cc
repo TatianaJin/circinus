@@ -71,6 +71,7 @@ bool OperatorTree::execute(const Graph* g, const std::vector<CompressedSubgraphs
   auto traverse_op = dynamic_cast<TraverseOperator*>(op);
   uint32_t last_input_index = 0;
   traverse_op->input(inputs, g);
+  traverse_op->useBipartiteGraph();
   while (true) {
     outputs.clear();
     auto start_time = clock();

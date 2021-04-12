@@ -138,9 +138,9 @@ class ExecutionPlan {
     DCHECK_LT(id, candidate_sets_.size());
     return candidate_sets_[id];
   }
-  
-  inline const std::vector<std::vector<VertexID>>& getCandidateSets() const {
-    return candidate_sets_;
+
+  inline const std::vector<std::vector<VertexID>>* getCandidateSets() const {
+    return &candidate_sets_;
   }
 
 
