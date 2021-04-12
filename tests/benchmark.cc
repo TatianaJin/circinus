@@ -169,7 +169,7 @@ class Benchmark {
     for(size_t i=0;i<len;++i)
     {
       auto op=opTree->getOperator(i);
-      auto traverse_op = dynamic_cast<TraverseOperator*>op;
+      auto traverse_op = dynamic_cast<TraverseOperator*>(op);
       traverse_op->useBipartiteGraph(plan->getCandidateSets());
     }
   }
