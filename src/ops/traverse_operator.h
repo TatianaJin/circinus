@@ -202,7 +202,10 @@ class TraverseOperator : public Operator {
     return ss.str();
   }
 
-  void addBipartiteGraph(BipartiteGraph* bg) { bg_pointers_.emplace_back(bg); }
+  void addBipartiteGraph(BipartiteGraph* bg) { 
+    LOG(INFO) << "USED BipartiteGraph";
+    bg_pointers_.emplace_back(bg); 
+    }
 
   void useBipartiteGraph(std::vector<std::vector<VertexID>> candidate_sets) {  // must used after input() called
     use_bipartite_graph_flag = 1;
