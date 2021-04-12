@@ -209,7 +209,7 @@ class TraverseOperator : public Operator {
     candidate_sets_pointer_=candidate_sets;
   }
 
-  void useBipartiteGraph(std::vector<std::vector<VertexID>> *candidate_sets=NULL) {  // must used after input() called
+  void useBipartiteGraph(const std::vector<std::vector<VertexID>> *candidate_sets=NULL) {  // must used after input() called
     if(candidate_sets==NULL)candidate_sets=candidate_sets_pointer_;
     use_bipartite_graph_flag = 1;
     for(auto v:(*candidate_sets))LOG(INFO) <<v.size();

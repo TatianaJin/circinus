@@ -32,11 +32,11 @@ class BipartiteGraph : public Graph {  // only use variable:vlist_,elist_  funct
  public:
   BipartiteGraph(VertexID id1, VertexID id2) : Graph(), sourceId(id1), destinationId(id2) {}
 
-  void populateGraph(const Graph* g, std::vector<std::vector<VertexID>>* candidate_sets) {
+  void populateGraph(const Graph* g,const std::vector<std::vector<VertexID>>* candidate_sets) {
     populateGraph(g, (*candidate_sets)[sourceId], (*candidate_sets)[destinationId]);
   }
 
-  void populateGraph(const Graph* g, std::vector<VertexID>& candidate_set1, std::vector<VertexID>& candidate_set2) {
+  void populateGraph(const Graph* g,const std::vector<VertexID>& candidate_set1,const std::vector<VertexID>& candidate_set2) {
     if (populated) return;
     populated = 1;
     unordered_set<VertexID> vset(candidate_set2.begin(), candidate_set2.end());
