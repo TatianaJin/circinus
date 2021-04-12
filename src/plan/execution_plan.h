@@ -115,6 +115,7 @@ class ExecutionPlan {
 
   inline const OperatorTree& getOperators() const { return operators_; }
   inline OperatorTree& getOperators() { return operators_; }
+  inline OperatorTree* getOperatorsPointer() { return &operators_; }
 
   inline void setCandidateSets(std::vector<std::vector<VertexID>>& cs) {
     candidate_sets_ = cs;
