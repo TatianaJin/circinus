@@ -162,8 +162,20 @@ class Benchmark {
     threads.start();
   }
 
+  void useOperatorsBipartiteGraph(const Graph* g, ExecutionPlan* plan) {
+    auto opTree=plan->getOperators();
+    size_t len = opTree->getOperatorSize();
+    for(size_t i=0;i<len;++i)
+    {
+      auto op=opTree->getOperator(i);
+      auto traverse_op = dynamic_cast<TraverseOperator*>op;
+      traverse_op->useBipartiteGraph(plan->getCandidateSets());
+    }
+  }
+
   void batchDFSExecuteST(const Graph* g, ExecutionPlan* plan) {
     auto seeds = plan->getCandidateSet(plan->getRootQueryVertexID());
+    useOperatorsBipartiteGraph(g,plan);
     if (plan->isInCover(plan->getRootQueryVertexID()) &&
         (FLAGS_vertex_cover == "static" || FLAGS_vertex_cover == "all" ||
          plan->getToKeyLevel(plan->getRootQueryVertexID()) == 0)) {
@@ -177,6 +189,7 @@ class Benchmark {
 
   void batchDFSProfileST(const Graph* g, ExecutionPlan* plan) {
     auto seeds = plan->getCandidateSet(plan->getRootQueryVertexID());
+    useOperatorsBipartiteGraph(g,plan);
     if (plan->isInCover(plan->getRootQueryVertexID()) &&
         (FLAGS_vertex_cover == "static" || FLAGS_vertex_cover == "all" ||
          plan->getToKeyLevel(plan->getRootQueryVertexID()) == 0)) {

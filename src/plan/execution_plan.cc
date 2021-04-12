@@ -39,6 +39,7 @@ void addBipartiteGraphToOperator(
   }
 }
 
+// BipartiteGraph used in this function but not the other function with the same name
 void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<QueryVertexID>& matching_order,
                                          const std::vector<int>& cover_table, Profiler* profiler) {
   query_graph_ = g;

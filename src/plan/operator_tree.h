@@ -48,6 +48,7 @@ class OperatorTree {
   inline void reserve(uint32_t size) { operators_.reserve(size); }
   inline void setProfiler(Profiler* profiler) { profiler_ = profiler; }
   inline Operator* getOperator(uint32_t idx) const { return operators_[idx]; }
+  inline size_t getOperatorSize() const {return operators_.size(); }
 
   inline OperatorTree clone() const {
     OperatorTree ret;
