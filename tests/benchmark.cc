@@ -58,6 +58,7 @@ using circinus::DPISOFilter;
 using circinus::OrderBase;
 using circinus::CoverNode;
 using circinus::QueryType;
+using circinus::TraverseOperator;
 
 #define BATCH_SIZE FLAGS_batch_size
 #define toSeconds(start, end) \
