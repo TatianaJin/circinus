@@ -165,7 +165,7 @@ class Benchmark {
 
   void setOperatorsCandidateSetsPointer(const Graph* g, ExecutionPlan* plan) {
     auto opTree=plan->getOperators();
-    size_t len = opTree.getOperatorSize();
+    size_t len = opTree.getOperatorSize()-1;
     for(size_t i=0;i<len;++i)
     {
       auto op=opTree.getOperator(i);
