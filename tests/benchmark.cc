@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <pthread.h>
 #include <chrono>
 #include <cmath>
 #include <fstream>
@@ -542,6 +543,8 @@ void run_benchmark(const std::string& query_file, std::ostream* out) {
     }
     std::thread timer;
     std::thread runner([&]() {
+      int type;
+      pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, &type);
       FLAGS_match_order = config.match_order;
       if (FLAGS_vertex_cover == "static") {
         benchmark.run<Static>(load_time, data_graph, config.dataset, config.query_size, config.query_mode,
@@ -562,11 +565,17 @@ void run_benchmark(const std::string& query_file, std::ostream* out) {
       pthread_cancel(timer.native_handle());
     });
     timer = std::thread([&runner]() {  // 5 min timeout for each query
+      int type;
+      pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, &type);
       std::this_thread::sleep_for(std::chrono::seconds(300));
-      pthread_cancel(runner.native_handle());
+      int ret = 0;
+      if ((ret = pthread_cancel(runner.native_handle())) != 0) {
+        LOG(WARNING) << "pthread_cancel errno " << ret << "?" << ESRCH;
+      }
     });
-    runner.join();
     timer.join();
+    LOG(INFO) << "timer stopped";
+    runner.join();
     (*out) << std::endl;
   }
 }
