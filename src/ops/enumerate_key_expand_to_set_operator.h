@@ -32,7 +32,7 @@ class EnumerateKeyExpandToSetOperator : public ExpandVertexOperator {
   std::vector<int> cover_table_;
   unordered_map<QueryVertexID, uint32_t> enumerate_key_old_indices_;
   std::vector<std::pair<uint32_t, int>> set_old_to_new_pos_;
-
+  bool need_new_input_ = true;
 #ifndef USE_FILTER
   // for set pruning, the indices of the sets with the same label as the target in the output
   unordered_set<uint32_t> set_indices_;

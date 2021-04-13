@@ -31,10 +31,36 @@
 
 namespace circinus {
 
+// binary search is more expensive when the two sets are similar
+inline void intersect_bs(const std::pair<const VertexID*, uint32_t>& set1,
+                         const std::pair<const VertexID*, uint32_t>& set2, std::vector<VertexID>* intersection,
+                         const unordered_set<VertexID>& except = {}) {
+  if (set1.second <= set2.second) {
+    intersection->reserve(set1.second);
+    auto lower_bound = set2.first;
+    for (uint32_t i = 0; i < set1.second; ++i) {
+      auto vid = set1.first[i];
+      lower_bound = std::lower_bound(lower_bound, set2.first + set2.second, vid);
+      uint32_t index = lower_bound - set2.first;
+      // if lower_bound is out of range, all elements in the rest of set2 are smaller than the rest of set1
+      if (index >= set2.second) {
+        break;
+      }
+      if (*lower_bound == vid && except.count(vid) == 0) intersection->emplace_back(vid);
+    }
+  } else {
+    intersect_bs(set2, set1, intersection, except);
+  }
+}
+
 /** set1 and set2 must be sorted in ascending order */
 inline void intersect(const std::pair<const VertexID*, uint32_t>& set1,
                       const std::pair<const VertexID*, uint32_t>& set2, std::vector<VertexID>* intersection,
                       const unordered_set<VertexID>& except = {}) {
+  if (std::max(set1.second, set2.second) >= 32) {
+    intersect_bs(set1, set2, intersection, except);
+    return;
+  }
   if (set1.second <= set2.second) {
     intersection->reserve(set1.second);
     uint32_t set2_index = 0;
@@ -105,6 +131,9 @@ class TraverseOperator : public Operator {
   uint64_t total_intersection_output_size_ = 0;
   uint64_t distinct_intersection_count_ =
       0;  // the minimal number of intersection needed if all intersection function call results can be cached
+  double first_time = 0;
+  double second_time = 0;
+  double third_time = 0;
 
   std::vector<std::pair<bool, uint32_t>> matching_order_indices_;
 
@@ -200,7 +229,7 @@ class TraverseOperator : public Operator {
     ss << toString() << ',' << total_time_in_milliseconds_ << ',' << getTotalInputSize() << ',' << total_output_size_
        << ',' << total_num_input_subgraphs_ << ',' << total_num_output_subgraphs_ << ',' << intersection_count_ << ','
        << total_intersection_input_size_ << ',' << total_intersection_output_size_ << ','
-       << distinct_intersection_count_;
+       << distinct_intersection_count_ << ',' << first_time << ',' << second_time << ',' << third_time;
     return ss.str();
   }
 

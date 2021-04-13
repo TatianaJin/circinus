@@ -447,17 +447,11 @@ ExecutionPlan* NaivePlanner::generatePlanWithDynamicCover(Profiler* profiler) {
     best_path.emplace_back(best_idx);
     last--;
   }
-  s = "[";
-  for (auto vid : covers_[last][best_idx].cover) {
-    s += std::to_string(vid) + " ";
-  }
-  s += "]";
-  DLOG(INFO) << s << " " << covers_[last][best_idx].cover_bits;
-  std::reverse(best_path.begin(), best_path.end());
 
+  std::reverse(best_path.begin(), best_path.end());
   for (uint32_t i = 0; i < matching_order_.size(); ++i) {
     for (auto vid : covers_[i][best_path[i]].cover) {
-      if (vid != matching_order_[i] && i > 0 && !(covers_[i - 1][best_path[i - 1]].cover_bits >> vid & 1)) {
+      if (vid != matching_order_[i] && !(covers_[i - 1][best_path[i - 1]].cover_bits >> vid & 1)) {
         // if the first vertex becomes key in the next subquery, make it as key initially
         level_become_key.insert({vid, (i == 1) ? 0 : i});
         DLOG(INFO) << vid << " " << i;
@@ -576,13 +570,9 @@ ExecutionPlan* NaivePlanner::generatePlanWithSampleExecution(const std::vector<s
   for (uint32_t i = 0; i < matching_order_.size(); ++i) {
     for (auto vid : covers_[i][best_path[i]].cover) {
       if (vid != matching_order_[i] && !(covers_[i - 1][best_path[i - 1]].cover_bits >> vid & 1)) {
-        if (i == 1) {
-          level_become_key.insert({vid, i - 1});
-          DLOG(INFO) << vid << " " << i - 1;
-        } else {
-          level_become_key.insert({vid, i});
-          DLOG(INFO) << vid << " " << i;
-        }
+        // if the first vertex becomes key in the next subquery, make it as key initially
+        level_become_key.insert({vid, (i == 1) ? 0 : i});
+        DLOG(INFO) << vid << " " << i;
       }
       if (vid == matching_order_[i]) {
         level_become_key.insert({vid, i});
