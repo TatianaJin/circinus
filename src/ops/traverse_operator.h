@@ -229,7 +229,6 @@ class TraverseOperator : public Operator {
     for (auto p : bg_pointers_) {
       p->populateGraph(current_data_graph_, candidate_sets);
     }
-    LOG(INFO) << "USED BipartiteGraph whose size is:" << bg_pointers_.size();
   }
   inline uint64_t getIntersectionCount() const { return intersection_count_; }
 
