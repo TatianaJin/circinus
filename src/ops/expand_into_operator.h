@@ -157,8 +157,9 @@ class ExpandIntoOperator : public TraverseOperator {
         }
 #else
         if (new_set.size() == 1) {  // actively prune existing sets
-          set_indices.erase(id);
-          if (input.pruneExistingSets(new_set.front(), set_indices, set_pruning_threshold_)) {
+          auto pruning_set_indices = set_indices;
+          pruning_set_indices.erase(id);
+          if (input.pruneExistingSets(new_set.front(), pruning_set_indices, set_pruning_threshold_)) {
             add = false;
             break;
           }

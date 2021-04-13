@@ -50,6 +50,8 @@ class ExecutionPlan {
    * For non-key vertices, the index n_sets-th key following the matching order */
   unordered_map<QueryVertexID, uint32_t> query_vertex_indices_;
 
+  std::vector<QueryVertexID> matching_order_;
+
   void addKeys(const std::vector<QueryVertexID>& keys_to_add, std::vector<QueryVertexID>& set_vertices,
                uint32_t& n_keys) {
     for (auto v : keys_to_add) {
@@ -151,6 +153,15 @@ class ExecutionPlan {
 
   inline const Outputs& getOutputs() const { return outputs_; }
   inline Outputs& getOutputs() { return outputs_; }
+
+  inline void setMatchingOrderIndices(QueryVertexID target_vertex, TraverseOperator* op) {
+    std::vector<std::pair<bool, uint32_t>> matching_order_indices;
+    for (auto& v : matching_order_) {
+      matching_order_indices.emplace_back(cover_table_[v] == 1, query_vertex_indices_[v]);
+      if (v == target_vertex) break;
+    }
+    op->setMatchingOrderIndices(std::move(matching_order_indices));
+  }
 
  protected:
   inline SubgraphFilter* createFilter(std::vector<std::vector<uint32_t>>&& pruning_set_indices) {

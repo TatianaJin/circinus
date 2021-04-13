@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <fstream>
 #include <string>
 #include <utility>
 #include <vector>
@@ -105,6 +106,8 @@ class TraverseOperator : public Operator {
   uint64_t distinct_intersection_count_ =
       0;  // the minimal number of intersection needed if all intersection function call results can be cached
 
+  std::vector<std::pair<bool, uint32_t>> matching_order_indices_;
+
  public:
   TraverseOperator() {}
   explicit TraverseOperator(SubgraphFilter* filter) : subgraph_filter_(filter) {}
@@ -123,6 +126,11 @@ class TraverseOperator : public Operator {
   inline const auto& getSameLabelKeyIndices() const { return same_label_key_indices_; }
   inline const auto& getSameLabelSetIndices() const { return same_label_set_indices_; }
   inline auto getSetPruningThreshold() const { return set_pruning_threshold_; }
+
+  inline const auto& getMatchingOrderIndices() const { return matching_order_indices_; }
+  inline void setMatchingOrderIndices(std::vector<std::pair<bool, uint32_t>>&& matching_order_indices) {
+    matching_order_indices_ = std::move(matching_order_indices);
+  }
 
   inline bool filter(const CompressedSubgraphs& subgraphs) {
     DCHECK(subgraph_filter_ != nullptr);
@@ -169,6 +177,12 @@ class TraverseOperator : public Operator {
       }
       outputs->erase(outputs->begin() + (offset + size), outputs->end());
       n = size;
+    }
+    if (false) {
+      std::ofstream ss("output_" + std::to_string(outputs->front().getNumVertices()), std::ofstream::app);
+      for (auto& output : *outputs) {
+        output.logEnumerated(ss, matching_order_indices_);
+      }
     }
     total_num_output_subgraphs_ += getNumSubgraphs(*outputs, outputs->size() - n, outputs->size());
     total_output_size_ += n;

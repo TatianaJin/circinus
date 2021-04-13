@@ -238,14 +238,15 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
             }
 #ifdef USE_FILTER
             new_output.UpdateSets(id, std::make_shared<std::vector<VertexID>>(std::move(new_set)));
-            if (filter(input)) {
+            if (filter(new_output)) {
               add = false;
               break;
             }
 #else
             if (new_set.size() == 1) {  // actively prune existing sets
-              set_indices.erase(id);
-              if (new_output.pruneExistingSets(new_set.front(), set_indices, ~0u)) {
+              auto pruning_set_indices = set_indices;
+              pruning_set_indices.erase(id);
+              if (new_output.pruneExistingSets(new_set.front(), pruning_set_indices, ~0u)) {
                 add = false;
                 break;
               }
