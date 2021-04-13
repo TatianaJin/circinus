@@ -203,11 +203,13 @@ class Benchmark {
     if (plan->isInCover(plan->getRootQueryVertexID()) &&
         (FLAGS_vertex_cover == "static" || FLAGS_vertex_cover == "all" ||
          plan->getToKeyLevel(plan->getRootQueryVertexID()) == 0)) {
-      plan->getOperators().execute(g, std::vector<CompressedSubgraphs>(seeds.begin(), seeds.end()));
+      if(FLAGS_bipartite_graph == 1)plan->getOperators().execute(g, std::vector<CompressedSubgraphs>(seeds.begin(), seeds.end()),true);
+      else plan->getOperators().execute(g, std::vector<CompressedSubgraphs>(seeds.begin(), seeds.end()));
     } else {
       std::vector<CompressedSubgraphs> input;
       input.emplace_back(std::make_shared<std::vector<VertexID>>(std::move(seeds)));
-      plan->getOperators().execute(g, input);
+      if(FLAGS_bipartite_graph == 1)plan->getOperators().execute(g, input,true);
+      else plan->getOperators().execute(g, input);
     }
   }
 
@@ -217,11 +219,13 @@ class Benchmark {
     if (plan->isInCover(plan->getRootQueryVertexID()) &&
         (FLAGS_vertex_cover == "static" || FLAGS_vertex_cover == "all" ||
          plan->getToKeyLevel(plan->getRootQueryVertexID()) == 0)) {
-      plan->getOperators().profile(g, std::vector<CompressedSubgraphs>(seeds.begin(), seeds.end()));
+      if(FLAGS_bipartite_graph == 1)plan->getOperators().profile(g, std::vector<CompressedSubgraphs>(seeds.begin(), seeds.end()),true);
+      else plan->getOperators().profile(g, std::vector<CompressedSubgraphs>(seeds.begin(), seeds.end()));
     } else {
       std::vector<CompressedSubgraphs> input;
       input.emplace_back(std::make_shared<std::vector<VertexID>>(std::move(seeds)));
-      plan->getOperators().profile(g, input);
+      if(FLAGS_bipartite_graph == 1)plan->getOperators().profile(g, input, true);
+      else plan->getOperators().profile(g, input);
     }
   }
 
