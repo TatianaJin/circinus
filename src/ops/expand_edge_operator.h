@@ -63,16 +63,7 @@ class ExpandEdgeOperator : public TraverseOperator {
         parent_index_(parent_index),
         target_index_(target_index),
         parent_id_(parent),
-        target_id_(target) {
-    std::stringstream ss;
-    for (auto& v : same_label_key_indices_) {
-      ss << ' ' << v;
-    }
-    for (auto& v : same_label_set_indices_) {
-      ss << ' ' << v;
-    }
-    LOG(INFO) << toString() << " same-label vertices to prune" << ss.str();
-  }
+        target_id_(target) {}
 
   virtual ~ExpandEdgeOperator() {}
 

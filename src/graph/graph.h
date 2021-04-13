@@ -50,6 +50,7 @@ class Graph {
    */
   explicit Graph(const std::string& path);
   Graph() {}
+
   /// graph metadata
   inline VertexID getNumVertices() const { return n_vertices_; }
   inline EdgeID getNumEdges() const { return n_edges_; }
