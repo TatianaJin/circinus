@@ -146,7 +146,7 @@ uint32_t EnumerateKeyExpandToSetOperator::expandInner(std::vector<CompressedSubg
           ++enumerate_key_idx_[enumerate_key_depth];
           continue;
         }
-        DCHECK(target_sets_[enumerate_key_depth + 1].empty());
+        DCHECK(target_sets_[enumerate_key_depth + 1].empty()) << enumerate_key_depth;
         intersect(target_sets_[enumerate_key_depth], current_data_graph_->getOutNeighbors(key_vid),
                   &target_sets_[enumerate_key_depth + 1], existing_vertices_);
         if
@@ -188,6 +188,7 @@ uint32_t EnumerateKeyExpandToSetOperator::expandInner(std::vector<CompressedSubg
             }
           }
           if (skip) {
+            target_set.clear();
             ++enumerate_key_idx_[enumerate_key_depth];
             continue;
           }
@@ -266,8 +267,8 @@ bool EnumerateKeyExpandToSetOperator::expandInner() {  // handles a new input an
       return true;
     }
   }
-  existing_vertices_.clear();
-  input.getExceptions(existing_vertices_, same_label_key_indices_, same_label_set_indices_);
+  existing_vertices_ = input.getKeyMap();
+  input.getExceptions(existing_vertices_, {}, same_label_set_indices_);
   n_exceptions_ = existing_vertices_.size();
   target_set.erase(std::remove_if(target_set.begin(), target_set.end(),
                                   [this](VertexID set_vertex) { return existing_vertices_.count(set_vertex); }),

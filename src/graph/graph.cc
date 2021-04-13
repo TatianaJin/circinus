@@ -104,4 +104,89 @@ void Graph::DumpToFile(const std::string& path) const {
   output.close();
 }
 
+void Graph::loadCompressed(std::istream& input) {
+  clear();
+  input.read(reinterpret_cast<char*>(&n_vertices_), sizeof(n_vertices_));
+  input.read(reinterpret_cast<char*>(&n_edges_), sizeof(n_edges_));
+  input.read(reinterpret_cast<char*>(&max_degree_), sizeof(max_degree_));
+  // vlist
+  size_t vlist_size;
+  input.read(reinterpret_cast<char*>(&vlist_size), sizeof(vlist_size));
+  CHECK_EQ(vlist_size, n_vertices_ + 1);
+  vlist_.resize(vlist_size);
+  for (size_t i = 0; i < vlist_size; ++i) {
+    input.read(reinterpret_cast<char*>(&vlist_[i]), sizeof(vlist_[i]));
+  }
+  // elist
+  size_t elist_size;
+  input.read(reinterpret_cast<char*>(&elist_size), sizeof(elist_size));
+  CHECK_EQ(elist_size, 2 * n_edges_);
+  elist_.resize(elist_size);
+  for (size_t i = 0; i < elist_size; ++i) {
+    input.read(reinterpret_cast<char*>(&elist_[i]), sizeof(elist_[i]));
+  }
+  // labels
+  size_t labels_size;
+  input.read(reinterpret_cast<char*>(&labels_size), sizeof(labels_size));
+  CHECK_EQ(labels_size, n_vertices_);
+  labels_.resize(labels_size);
+  for (size_t i = 0; i < labels_size; ++i) {
+    input.read(reinterpret_cast<char*>(&labels_[i]), sizeof(labels_[i]));
+  }
+  // vertex_cardinality_by_label
+  size_t map_size;
+  input.read(reinterpret_cast<char*>(&map_size), sizeof(map_size));
+  for (size_t i = 0; i < map_size; ++i) {
+    LabelID l;
+    uint32_t count;
+    input.read(reinterpret_cast<char*>(&l), sizeof(l));
+    input.read(reinterpret_cast<char*>(&count), sizeof(count));
+    vertex_cardinality_by_label_[l] = count;
+  }
+  // build vertex by label index
+  for (auto& pair : vertex_cardinality_by_label_) {
+    vertex_ids_by_label_[pair.first].reserve(pair.second);
+  }
+  for (VertexID i = 0; i < n_vertices_; ++i) {
+    vertex_ids_by_label_[labels_[i]].push_back(i);
+  }
+}
+
+void Graph::saveAsBinary(const std::string& path) const {
+  std::ofstream output(path, std::ios::out | std::ios::binary);
+  output.write(reinterpret_cast<const char*>(&n_vertices_), sizeof(n_vertices_));
+  output.write(reinterpret_cast<const char*>(&n_edges_), sizeof(n_edges_));
+  output.write(reinterpret_cast<const char*>(&max_degree_), sizeof(max_degree_));
+  {
+    size_t vlist_size = vlist_.size();
+    output.write(reinterpret_cast<const char*>(&vlist_size), sizeof(vlist_size));
+    for (auto v : vlist_) {
+      output.write(reinterpret_cast<const char*>(&v), sizeof(v));
+    }
+  }
+  {
+    size_t elist_size = elist_.size();
+    output.write(reinterpret_cast<const char*>(&elist_size), sizeof(elist_size));
+    for (auto v : elist_) {
+      output.write(reinterpret_cast<const char*>(&v), sizeof(v));
+    }
+  }
+  {
+    auto labels_size = labels_.size();
+    output.write(reinterpret_cast<const char*>(&labels_size), sizeof(labels_size));
+    for (auto l : labels_) {
+      output.write(reinterpret_cast<const char*>(&l), sizeof(l));
+    }
+  }
+  {
+    auto size = vertex_cardinality_by_label_.size();
+    output.write(reinterpret_cast<const char*>(&size), sizeof(size));
+    for (auto& pair : vertex_cardinality_by_label_) {
+      output.write(reinterpret_cast<const char*>(&pair.first), sizeof(pair.first));
+      output.write(reinterpret_cast<const char*>(&pair.second), sizeof(pair.second));
+    }
+  }
+  output.close();
+}
+
 }  // namespace circinus

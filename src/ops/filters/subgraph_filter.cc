@@ -60,6 +60,7 @@ class SetPrunningSubgraphFilter : public SubgraphFilter {
       // get pruning set pointers sorted by size in ascending order
       std::vector<std::vector<VertexID>*> pruning_sets_sorted_by_size;
       uint32_t n_sets = pruning_sets.size();
+      if (n_sets == 1) continue;
       pruning_sets_sorted_by_size.reserve(n_sets);
       for (auto index : pruning_sets) {
         auto ptr = subgraphs.getSet(index).get();
