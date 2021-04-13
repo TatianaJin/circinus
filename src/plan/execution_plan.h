@@ -233,11 +233,9 @@ class ExecutionPlan {
               indices.push_back(query_vertex_indices_.at(v));
             }
           }
-          if (indices.size() > 1) {
-            vertex_pruning_set_indices[i] = pruning_set_indices.size();
-            inserted.first->second = pruning_set_indices.size();
-            pruning_set_indices.push_back(std::move(indices));
-          }
+          vertex_pruning_set_indices[i] = pruning_set_indices.size();
+          inserted.first->second = pruning_set_indices.size();
+          pruning_set_indices.push_back(std::move(indices));
         }
       } else {
         vertex_pruning_set_indices[i] = inserted.first->second;

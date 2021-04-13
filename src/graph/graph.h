@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <iostream>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -50,6 +51,8 @@ class Graph {
    */
   explicit Graph(const std::string& path);
   Graph() {}
+
+  void loadCompressed(std::istream& input);
 
   /// graph metadata
   inline VertexID getNumVertices() const { return n_vertices_; }
@@ -98,6 +101,18 @@ class Graph {
 
   /// persistence
   void DumpToFile(const std::string& path) const;
+  void saveAsBinary(const std::string& path) const;
+
+  inline void clear() {
+    vlist_.clear();
+    elist_.clear();
+    labels_.clear();
+    vertex_cardinality_by_label_.clear();
+    vertex_ids_by_label_.clear();
+    n_vertices_ = 0;
+    n_edges_ = 0;
+    max_degree_ = 0;
+  }
 };
 
 }  // namespace circinus
