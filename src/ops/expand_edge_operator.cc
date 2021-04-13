@@ -209,10 +209,10 @@ class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
       current_data_graph_ = bg_pointers_.front();  // must only use validate things in BipartiteGraph then
     // intersect(candidate_set_, current_data_graph_->getOutNeighbors(parent_match), &current_targets_,
     // input.getKeyMap());
-    if (use_bipartite_graph_flag)
+    if (use_bipartite_graph_flag){
       removeExceptions(current_data_graph_->getOutNeighbors(parent_match), &current_targets_,
                        input.getExceptions(same_label_key_indices_, same_label_set_indices_));
-    else
+    }else {
       intersect(candidate_set_, current_data_graph_->getOutNeighbors(parent_match), &current_targets_,
                 input.getExceptions(same_label_key_indices_, same_label_set_indices_));
     if
@@ -221,6 +221,7 @@ class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
         total_intersection_input_size_ += candidate_set_.size() + current_data_graph_->getVertexOutDegree(parent_match);
         total_intersection_output_size_ += current_targets_.size();
       }
+    }
     // intersect(*candidates_, current_data_graph_->getOutNeighbors(parent_match), &current_targets_,
     // input.getKeyMap());
   }
