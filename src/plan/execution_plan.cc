@@ -96,7 +96,7 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
       } else {
         prev = newExpandEdgeSetToKeyOperator(parent, target_vertex, same_label_v_indices, std::vector<uint32_t>{});
       }
-      addBipartiteGraphToOperator(parent, target_vertex, (TraverseOperator*)prev, pair_to_bipartite_graph);
+      addBipartiteGraphToOperator(parent, target_vertex, dynamic_cast<TraverseOperator*>(prev), pair_to_bipartite_graph);
     } else {
       // find parent vertices
       auto neighbors = g->getOutNeighbors(target_vertex);
@@ -139,10 +139,10 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
       }
       // careful with this key-first-set-later order
       for (auto& qv : key_parents) {
-        addBipartiteGraphToOperator(qv, target_vertex, (TraverseOperator*)current, pair_to_bipartite_graph);
+        addBipartiteGraphToOperator(qv, target_vertex, dynamic_cast<TraverseOperator*>(current), pair_to_bipartite_graph);
       }
       for (auto& qv : set_parents) {
-        addBipartiteGraphToOperator(qv, target_vertex, (TraverseOperator*)current, pair_to_bipartite_graph);
+        addBipartiteGraphToOperator(qv, target_vertex, dynamic_cast<TraverseOperator*>(current), pair_to_bipartite_graph);
       }
       prev->setNext(current);
       prev = current;
