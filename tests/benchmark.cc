@@ -584,7 +584,7 @@ int main(int argc, char** argv) {
   std::ostream* out;
   std::ofstream fstream;
   if (FLAGS_output_file != "") {
-    fstream.open(FLAGS_output_file);
+    fstream.open(FLAGS_output_file, std::ios::app);
     CHECK(fstream.is_open());
     out = &fstream;
   } else {
