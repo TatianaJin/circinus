@@ -188,11 +188,10 @@ class Benchmark {
   }
 
   void setOperatorsCandidateSetsPointer(const Graph* g, ExecutionPlan* plan) {
-    auto& opTree=plan->getOperators();
-    size_t len = opTree.getOperatorSize()-1;
-    for(size_t i=0;i<len;++i)
-    {
-      auto op=opTree.getOperator(i);
+    auto& opTree = plan->getOperators();
+    size_t len = opTree.getOperatorSize() - 1;
+    for (size_t i = 0; i < len; ++i) {
+      auto op = opTree.getOperator(i);
       auto traverse_op = dynamic_cast<TraverseOperator*>(op);
       traverse_op->setCandidateSetsPointer(plan->getCandidateSets());
     }
@@ -200,7 +199,7 @@ class Benchmark {
 
   void batchDFSExecuteST(const Graph* g, ExecutionPlan* plan) {
     auto seeds = plan->getCandidateSet(plan->getRootQueryVertexID());
-    setOperatorsCandidateSetsPointer(g,plan);
+    setOperatorsCandidateSetsPointer(g, plan);
     if (plan->isInCover(plan->getRootQueryVertexID()) &&
         (FLAGS_vertex_cover == "static" || FLAGS_vertex_cover == "all" ||
          plan->getToKeyLevel(plan->getRootQueryVertexID()) == 0)) {
@@ -214,7 +213,7 @@ class Benchmark {
 
   void batchDFSProfileST(const Graph* g, ExecutionPlan* plan) {
     auto seeds = plan->getCandidateSet(plan->getRootQueryVertexID());
-    setOperatorsCandidateSetsPointer(g,plan);
+    setOperatorsCandidateSetsPointer(g, plan);
     if (plan->isInCover(plan->getRootQueryVertexID()) &&
         (FLAGS_vertex_cover == "static" || FLAGS_vertex_cover == "all" ||
          plan->getToKeyLevel(plan->getRootQueryVertexID()) == 0)) {

@@ -116,7 +116,7 @@ class TraverseOperator : public Operator {
       0;  // the minimal number of intersection needed if all intersection function call results can be cached
   std::vector<BipartiteGraph*> bg_pointers_;
   bool use_bipartite_graph_flag = false;
-  const std::vector<std::vector<VertexID>> *candidate_sets_pointer_;
+  const std::vector<std::vector<VertexID>>* candidate_sets_pointer_;
 
   std::vector<std::pair<bool, uint32_t>> matching_order_indices_;
 
@@ -218,15 +218,14 @@ class TraverseOperator : public Operator {
 
   void addBipartiteGraph(BipartiteGraph* bg) { bg_pointers_.emplace_back(bg); }
 
-  void setCandidateSetsPointer(const std::vector<std::vector<VertexID>> *candidate_sets)
-  {
-    candidate_sets_pointer_=candidate_sets;
+  void setCandidateSetsPointer(const std::vector<std::vector<VertexID>>* candidate_sets) {
+    candidate_sets_pointer_ = candidate_sets;
   }
 
-  void useBipartiteGraph(const std::vector<std::vector<VertexID>> *candidate_sets=NULL) {  // must used after input() called
-    if(candidate_sets==NULL)candidate_sets=candidate_sets_pointer_;
+  void useBipartiteGraph(
+      const std::vector<std::vector<VertexID>>* candidate_sets = NULL) {  // must used after input() called
+    if (candidate_sets == NULL) candidate_sets = candidate_sets_pointer_;
     use_bipartite_graph_flag = 1;
-    for(auto v:(*candidate_sets))LOG(INFO) <<v.size();
     for (auto p : bg_pointers_) {
       p->populateGraph(current_data_graph_, candidate_sets);
     }
