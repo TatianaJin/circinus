@@ -71,7 +71,7 @@ bool OperatorTree::execute(const Graph* g, const std::vector<CompressedSubgraphs
   auto traverse_op = dynamic_cast<TraverseOperator*>(op);
   uint32_t last_input_index = 0;
   traverse_op->input(inputs, g);
-  if(useBG)traverse_op->useBipartiteGraph();
+  if (useBG) traverse_op->useBipartiteGraph();
   while (true) {
     outputs.clear();
     auto start_time = clock();
@@ -79,7 +79,7 @@ bool OperatorTree::execute(const Graph* g, const std::vector<CompressedSubgraphs
     if (size == 0) {
       break;
     }
-    if (execute(g, outputs, level + 1,useBG)) {
+    if (execute(g, outputs, level + 1, useBG)) {
       return true;
     }
   }
@@ -96,7 +96,7 @@ bool OperatorTree::profile(const Graph* g, const std::vector<CompressedSubgraphs
   auto traverse_op = dynamic_cast<TraverseOperator*>(op);
   uint32_t last_input_index = 0;
   traverse_op->inputAndProfile(inputs, g);
-  if(useBG)traverse_op->useBipartiteGraph();
+  if (useBG) traverse_op->useBipartiteGraph();
   while (true) {
     outputs.clear();
     auto start_time = clock();

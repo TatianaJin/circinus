@@ -78,7 +78,7 @@ DEFINE_string(filter, "nlf", "filter");
 DEFINE_string(profile_file, "", "profile file");
 DEFINE_string(vertex_cover, "static", "Vertex cover strategy: static, eager, all");
 DEFINE_string(batch_file, "", "Batch query file");
-DEFINE_uint64(bipartite_graph,0,"use bipartite graph or not");
+DEFINE_uint64(bipartite_graph, 0, "use bipartite graph or not");
 
 enum VertexCoverStrategy : uint32_t { Static = 0, Eager, Sample, Dynamic, All };
 
@@ -204,13 +204,17 @@ class Benchmark {
     if (plan->isInCover(plan->getRootQueryVertexID()) &&
         (FLAGS_vertex_cover == "static" || FLAGS_vertex_cover == "all" ||
          plan->getToKeyLevel(plan->getRootQueryVertexID()) == 0)) {
-      if(FLAGS_bipartite_graph == 1)plan->getOperators().execute(g, std::vector<CompressedSubgraphs>(seeds.begin(), seeds.end()),0,true);
-      else plan->getOperators().execute(g, std::vector<CompressedSubgraphs>(seeds.begin(), seeds.end()),0,false);
+      if (FLAGS_bipartite_graph == 1)
+        plan->getOperators().execute(g, std::vector<CompressedSubgraphs>(seeds.begin(), seeds.end()), 0, true);
+      else
+        plan->getOperators().execute(g, std::vector<CompressedSubgraphs>(seeds.begin(), seeds.end()), 0, false);
     } else {
       std::vector<CompressedSubgraphs> input;
       input.emplace_back(std::make_shared<std::vector<VertexID>>(std::move(seeds)));
-      if(FLAGS_bipartite_graph == 1)plan->getOperators().execute(g, input,0,true);
-      else plan->getOperators().execute(g, input,0,false);
+      if (FLAGS_bipartite_graph == 1)
+        plan->getOperators().execute(g, input, 0, true);
+      else
+        plan->getOperators().execute(g, input, 0, false);
     }
   }
 
@@ -220,13 +224,17 @@ class Benchmark {
     if (plan->isInCover(plan->getRootQueryVertexID()) &&
         (FLAGS_vertex_cover == "static" || FLAGS_vertex_cover == "all" ||
          plan->getToKeyLevel(plan->getRootQueryVertexID()) == 0)) {
-      if(FLAGS_bipartite_graph == 1)plan->getOperators().profile(g, std::vector<CompressedSubgraphs>(seeds.begin(), seeds.end()),0,true);
-      else plan->getOperators().profile(g, std::vector<CompressedSubgraphs>(seeds.begin(), seeds.end()),0,false);
+      if (FLAGS_bipartite_graph == 1)
+        plan->getOperators().profile(g, std::vector<CompressedSubgraphs>(seeds.begin(), seeds.end()), 0, true);
+      else
+        plan->getOperators().profile(g, std::vector<CompressedSubgraphs>(seeds.begin(), seeds.end()), 0, false);
     } else {
       std::vector<CompressedSubgraphs> input;
       input.emplace_back(std::make_shared<std::vector<VertexID>>(std::move(seeds)));
-      if(FLAGS_bipartite_graph == 1)plan->getOperators().profile(g, input,0, true);
-      else plan->getOperators().profile(g, input,0,false);
+      if (FLAGS_bipartite_graph == 1)
+        plan->getOperators().profile(g, input, 0, true);
+      else
+        plan->getOperators().profile(g, input, 0, false);
     }
   }
 
