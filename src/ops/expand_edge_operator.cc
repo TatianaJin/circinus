@@ -183,7 +183,7 @@ class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
   uint32_t expandAndProfileInner(std::vector<CompressedSubgraphs>* outputs, uint32_t cap) override {
     auto old_input_index = input_index_;
     auto n = expandInner<QueryType::Profile>(outputs, cap);
-    intersection_count_ += input_index_ - old_input_index;
+    if (!use_bipartite_graph_flag)intersection_count_ += input_index_ - old_input_index;
     return n;
   }
 
