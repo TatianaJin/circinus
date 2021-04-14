@@ -134,73 +134,73 @@ class Benchmark {
 
  protected:
   std::vector<std::vector<VertexID>> getCandidateSets(const Graph& g, const QueryGraph& q) {
-  std::vector<std::vector<VertexID>> candidates(q.getNumVertices());
-  std::vector<uint32_t> candidate_size(q.getNumVertices());
-  for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
-    candidates[v].reserve(g.getVertexCardinalityByLabel(q.getVertexLabel(v)));
-    LDFScan scan(&q, v, &g);
-    NLFFilter filter(&q, v);
-    std::vector<VertexID> buffer;
-    buffer.reserve(BATCH_SIZE);
-    while (scan.Scan(&buffer, BATCH_SIZE) > 0) {
-      if (FLAGS_filter=="dpiso") {
-        candidates[v].insert(candidates[v].end(), buffer.begin(), buffer.end());
-      } else {
-        filter.Filter(g, buffer, &candidates[v]);
+    std::vector<std::vector<VertexID>> candidates(q.getNumVertices());
+    std::vector<uint32_t> candidate_size(q.getNumVertices());
+    for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
+      candidates[v].reserve(g.getVertexCardinalityByLabel(q.getVertexLabel(v)));
+      LDFScan scan(&q, v, &g);
+      NLFFilter filter(&q, v);
+      std::vector<VertexID> buffer;
+      buffer.reserve(BATCH_SIZE);
+      while (scan.Scan(&buffer, BATCH_SIZE) > 0) {
+        if (FLAGS_filter == "dpiso") {
+          candidates[v].insert(candidates[v].end(), buffer.begin(), buffer.end());
+        } else {
+          filter.Filter(g, buffer, &candidates[v]);
+        }
+        buffer.clear();
       }
-      buffer.clear();
+      candidate_size[v] = candidates[v].size();
     }
-    candidate_size[v] = candidates[v].size();
-  }
-  if (FLAGS_filter=="cfl") {
-    CFLOrder cfl_order;
-    QueryVertexID start_vertex = cfl_order.getStartVertex(&g, &q, candidate_size);
-    // LOG(INFO) << "cfl order get start vertex " << start_vertex;
-    CFLFilter cfl_filter(&q, &g, start_vertex);
-    cfl_filter.Filter(candidates);
-  } else if (FLAGS_filter=="dpiso") {
-    OrderBase dpiso_order;
-    QueryVertexID start_vertex = dpiso_order.getStartVertex(&g, &q, candidate_size);
-    // LOG(INFO) << "dpiso order get start vertex " << start_vertex;
-    DPISOFilter dpiso_filter(&q, &g, start_vertex);
-    dpiso_filter.Filter(candidates);
-  } else if (FLAGS_filter=="tso") {
-    TSOOrder tso_order;
-    QueryVertexID start_vertex = tso_order.getStartVertex(&g, &q, candidate_size);
-    // LOG(INFO) << "tso order get start vertex " << start_vertex;
-    TSOFilter tso_filter(&q, &g, start_vertex);
-    tso_filter.Filter(candidates);
-  } else if (FLAGS_filter=="gql") {
-    std::vector<std::vector<VertexID>> gql_candidates;
-    unordered_map<QueryVertexID, unordered_set<VertexID>> gql_map;
-    for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
-      unordered_set<VertexID> gql_set;
-      for (auto i : candidates[v]) {
-        gql_set.insert(i);
+    if (FLAGS_filter == "cfl") {
+      CFLOrder cfl_order;
+      QueryVertexID start_vertex = cfl_order.getStartVertex(&g, &q, candidate_size);
+      // LOG(INFO) << "cfl order get start vertex " << start_vertex;
+      CFLFilter cfl_filter(&q, &g, start_vertex);
+      cfl_filter.Filter(candidates);
+    } else if (FLAGS_filter == "dpiso") {
+      OrderBase dpiso_order;
+      QueryVertexID start_vertex = dpiso_order.getStartVertex(&g, &q, candidate_size);
+      // LOG(INFO) << "dpiso order get start vertex " << start_vertex;
+      DPISOFilter dpiso_filter(&q, &g, start_vertex);
+      dpiso_filter.Filter(candidates);
+    } else if (FLAGS_filter == "tso") {
+      TSOOrder tso_order;
+      QueryVertexID start_vertex = tso_order.getStartVertex(&g, &q, candidate_size);
+      // LOG(INFO) << "tso order get start vertex " << start_vertex;
+      TSOFilter tso_filter(&q, &g, start_vertex);
+      tso_filter.Filter(candidates);
+    } else if (FLAGS_filter == "gql") {
+      std::vector<std::vector<VertexID>> gql_candidates;
+      unordered_map<QueryVertexID, unordered_set<VertexID>> gql_map;
+      for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
+        unordered_set<VertexID> gql_set;
+        for (auto i : candidates[v]) {
+          gql_set.insert(i);
+        }
+        gql_map[v] = std::move(gql_set);
       }
-      gql_map[v] = std::move(gql_set);
+      for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
+        GQLFilter gql_filter(&q, v, &gql_map);
+        gql_filter.preFilter(g, candidates[v]);
+      }
+      for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
+        GQLFilter gql_filter(&q, v, &gql_map);
+        std::vector<VertexID> tempvec;
+        gql_filter.Filter(g, candidates[v], &tempvec);
+        gql_candidates.push_back(std::move(tempvec));
+      }
+      //   for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
+      //     LOG(INFO) << "vertex " << v << " " << candidate_size[v] << "/" << gql_candidates[v].size();
+      //}
+      return gql_candidates;
     }
-    for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
-      GQLFilter gql_filter(&q, v, &gql_map);
-      gql_filter.preFilter(g, candidates[v]);
-    }
-    for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
-      GQLFilter gql_filter(&q, v, &gql_map);
-      std::vector<VertexID> tempvec;
-      gql_filter.Filter(g, candidates[v], &tempvec);
-      gql_candidates.push_back(std::move(tempvec));
-    }
-    //   for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
-    //     LOG(INFO) << "vertex " << v << " " << candidate_size[v] << "/" << gql_candidates[v].size();
-    //}
-    return gql_candidates;
-  }
 
-  //  for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
-  //   LOG(INFO) << "vertex " << v << " " << candidate_size[v] << "/" << candidates[v].size();
-  //}
-  return candidates;
-}
+    //  for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
+    //   LOG(INFO) << "vertex " << v << " " << candidate_size[v] << "/" << candidates[v].size();
+    //}
+    return candidates;
+  }
 
   uint64_t getNumIsomorphicSubgraphs(const std::vector<CompressedSubgraphs>& subgraphs) {
     uint64_t count = 0;
