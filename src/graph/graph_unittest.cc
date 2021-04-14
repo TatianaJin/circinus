@@ -59,7 +59,7 @@ TEST_F(TestGraph, BipartiteGraph) {
   bg.populateGraph(&g, candidate_set1, candidate_set2);
   std::unordered_set<VertexID> vset(candidate_set2.begin(), candidate_set2.end());
   std::multiset<VertexID> resultSet, expectedSet;
-  for (auto &v1Id : candidate_set1) {
+  for (auto& v1Id : candidate_set1) {
     auto[dest_nodes, cnt] = g.getOutNeighbors(v1Id);
     expectedSet.clear();
     for (uint32_t j = 0; j < cnt; ++j)

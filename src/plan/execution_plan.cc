@@ -26,8 +26,7 @@
 
 namespace circinus {
 
-void addBipartiteGraphToOperator(
-    QueryVertexID qv1, QueryVertexID qv2, TraverseOperator* op) {
+void addBipartiteGraphToOperator(QueryVertexID qv1, QueryVertexID qv2, TraverseOperator* op) {
   op->addBipartiteGraph(new BipartiteGraph(qv1, qv2));
 }
 
