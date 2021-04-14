@@ -183,7 +183,7 @@ class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
   uint32_t expandAndProfileInner(std::vector<CompressedSubgraphs>* outputs, uint32_t cap) override {
     auto old_input_index = input_index_;
     auto n = expandInner<QueryType::Profile>(outputs, cap);
-    if (!use_bipartite_graph_flag)intersection_count_ += input_index_ - old_input_index;
+    if (!use_bipartite_graph_flag) intersection_count_ += input_index_ - old_input_index;
     return n;
   }
 
@@ -209,18 +209,19 @@ class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
       current_data_graph_ = bg_pointers_.front();  // must only use validate things in BipartiteGraph then
     // intersect(candidate_set_, current_data_graph_->getOutNeighbors(parent_match), &current_targets_,
     // input.getKeyMap());
-    if (use_bipartite_graph_flag){
+    if (use_bipartite_graph_flag) {
       removeExceptions(current_data_graph_->getOutNeighbors(parent_match), &current_targets_,
                        input.getExceptions(same_label_key_indices_, same_label_set_indices_));
-    }else {
+    } else {
       intersect(candidate_set_, current_data_graph_->getOutNeighbors(parent_match), &current_targets_,
                 input.getExceptions(same_label_key_indices_, same_label_set_indices_));
-    if
-      constexpr(isProfileMode(profile)) {
-        distinct_intersection_count_ += parent_set_.insert(parent_match).second;
-        total_intersection_input_size_ += candidate_set_.size() + current_data_graph_->getVertexOutDegree(parent_match);
-        total_intersection_output_size_ += current_targets_.size();
-      }
+      if
+        constexpr(isProfileMode(profile)) {
+          distinct_intersection_count_ += parent_set_.insert(parent_match).second;
+          total_intersection_input_size_ +=
+              candidate_set_.size() + current_data_graph_->getVertexOutDegree(parent_match);
+          total_intersection_output_size_ += current_targets_.size();
+        }
     }
     // intersect(*candidates_, current_data_graph_->getOutNeighbors(parent_match), &current_targets_,
     // input.getKeyMap());

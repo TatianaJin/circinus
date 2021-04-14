@@ -81,9 +81,9 @@ class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
               constexpr(isProfileMode(profile)) {
                 updateIntersectInfo(candidates_->size() + current_data_graph_->getVertexOutDegree(key_vid),
                                     new_keys.size());
-            }
+              }
           }
-          
+
         } else {
           auto new_keys_size = new_keys.size();
           intersectInplace(new_keys, current_data_graph_->getOutNeighbors(key_vid), &new_keys);
