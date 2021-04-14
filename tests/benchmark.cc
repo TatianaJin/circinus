@@ -91,18 +91,16 @@ class Benchmark {
   template <VertexCoverStrategy vcs>
   void run(const std::string& dataset, uint32_t query_size, const std::string& query_mode, uint32_t index,
            std::ostream* out) {
-    auto graph_path = dataset + "/data_graph/" + dataset + ".graph";
     auto query_path = dataset + "/query_graph/query_" + query_mode + "_" + std::to_string(query_size) + "_" +
                       std::to_string(index) + ".graph";
 
     (*out) << dataset << ',' << query_size << ',' << query_mode << ',' << index << ',';
-    run<vcs>(graph_path, query_path, out);
+    run<vcs>(dataset, query_path, out);
   }
 
   template <VertexCoverStrategy vcs>
   void run(double load_time, const Graph& data_graph, const std::string& dataset, uint32_t query_size,
            const std::string& query_mode, uint32_t index, std::ostream* out) {
-    auto graph_path = dataset + "/data_graph/" + dataset + ".graph";
     auto query_path = dataset + "/query_graph/query_" + query_mode + "_" + std::to_string(query_size) + "_" +
                       std::to_string(index) + ".graph";
 
@@ -112,12 +110,23 @@ class Benchmark {
 
   void loadDataset(Graph& data_graph, const std::string& dataset, double& load_time) {
     auto graph_path = dataset + "/data_graph/" + dataset + ".graph";
+    std::ifstream input(FLAGS_data_dir + "/" + graph_path + ".bin", std::ios::binary);
+    if (input.is_open()) {
+      auto start_loading = std::chrono::steady_clock::now();
+      data_graph.loadCompressed(input);
+      auto end_loading = std::chrono::steady_clock::now();
+      LOG(INFO) << "========================";
+      load_time = toSeconds(start_loading, end_loading);
+      LOG(INFO) << "graph " << graph_path << ".bin load time " << load_time;
+      return;
+    }
     auto start_loading = std::chrono::steady_clock::now();
     data_graph = Graph(FLAGS_data_dir + "/" + graph_path);
     auto end_loading = std::chrono::steady_clock::now();
+    data_graph.saveAsBinary(FLAGS_data_dir + "/" + graph_path + ".bin");
     LOG(INFO) << "========================";
-    LOG(INFO) << "graph " << graph_path;
     load_time = toSeconds(start_loading, end_loading);
+    LOG(INFO) << "graph " << graph_path << " load time " << load_time;
   }
 
  protected:
@@ -382,13 +391,11 @@ class Benchmark {
   }
 
   template <VertexCoverStrategy vcs>
-  void run(const std::string& graph_path, const std::string& query_path, std::ostream* out) {
-    auto start_loading = std::chrono::steady_clock::now();
-    Graph g(FLAGS_data_dir + "/" + graph_path);  // load data graph
-    auto end_loading = std::chrono::steady_clock::now();
-    LOG(INFO) << "========================";
-    LOG(INFO) << "graph " << graph_path << " query " << query_path;
-    auto load_time = toSeconds(start_loading, end_loading);
+  void run(const std::string& dataset, const std::string& query_path, std::ostream* out) {
+    Graph g;
+    double load_time;
+    loadDataset(g, dataset, load_time);
+    LOG(INFO) << "query " << query_path;
     run<vcs>(load_time, g, query_path, out);
   }
 
@@ -567,41 +574,23 @@ void run_benchmark(const std::string& query_file, std::ostream* out) {
       dataset = config.dataset;
       benchmark.loadDataset(data_graph, dataset, load_time);
     }
-    std::thread timer;
-    std::thread runner([&]() {
-      int type;
-      pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, &type);
-      FLAGS_match_order = config.match_order;
-      if (FLAGS_vertex_cover == "static") {
-        benchmark.run<Static>(load_time, data_graph, config.dataset, config.query_size, config.query_mode,
-                              config.query_index, out);
-      } else if (FLAGS_vertex_cover == "all") {
-        benchmark.run<All>(load_time, data_graph, config.dataset, config.query_size, config.query_mode,
+    FLAGS_match_order = config.match_order;
+    if (FLAGS_vertex_cover == "static") {
+      benchmark.run<Static>(load_time, data_graph, config.dataset, config.query_size, config.query_mode,
+                            config.query_index, out);
+    } else if (FLAGS_vertex_cover == "all") {
+      benchmark.run<All>(load_time, data_graph, config.dataset, config.query_size, config.query_mode,
+                         config.query_index, out);
+    } else if (FLAGS_vertex_cover == "eager") {
+      benchmark.run<Eager>(load_time, data_graph, config.dataset, config.query_size, config.query_mode,
                            config.query_index, out);
-      } else if (FLAGS_vertex_cover == "eager") {
-        benchmark.run<Eager>(load_time, data_graph, config.dataset, config.query_size, config.query_mode,
+    } else if (FLAGS_vertex_cover == "dynamic") {
+      benchmark.run<Dynamic>(load_time, data_graph, config.dataset, config.query_size, config.query_mode,
                              config.query_index, out);
-      } else if (FLAGS_vertex_cover == "dynamic") {
-        benchmark.run<Dynamic>(load_time, data_graph, config.dataset, config.query_size, config.query_mode,
-                               config.query_index, out);
-      } else {
-        benchmark.run<Sample>(load_time, data_graph, config.dataset, config.query_size, config.query_mode,
-                              config.query_index, out);
-      }
-      pthread_cancel(timer.native_handle());
-    });
-    timer = std::thread([&runner]() {  // 5 min timeout for each query
-      int type;
-      pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, &type);
-      std::this_thread::sleep_for(std::chrono::seconds(300));
-      int ret = 0;
-      if ((ret = pthread_cancel(runner.native_handle())) != 0) {
-        LOG(WARNING) << "pthread_cancel errno " << ret << "?" << ESRCH;
-      }
-    });
-    timer.join();
-    LOG(INFO) << "timer stopped";
-    runner.join();
+    } else {
+      benchmark.run<Sample>(load_time, data_graph, config.dataset, config.query_size, config.query_mode,
+                            config.query_index, out);
+    }
     (*out) << std::endl;
   }
 }
@@ -621,7 +610,7 @@ int main(int argc, char** argv) {
   std::ostream* out;
   std::ofstream fstream;
   if (FLAGS_output_file != "") {
-    fstream.open(FLAGS_output_file);
+    fstream.open(FLAGS_output_file, std::ios::app);
     CHECK(fstream.is_open());
     out = &fstream;
   } else {

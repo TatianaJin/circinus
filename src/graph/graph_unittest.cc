@@ -77,3 +77,48 @@ TEST_F(TestGraph, BipartiteGraph) {
     }
   }
 }
+
+TEST_F(TestGraph, BinarySerDe) {
+  std::string graph_path = "resources/human.graph";
+
+  Graph g(graph_path);
+  g.saveAsBinary(graph_path + ".bin");
+  Graph b;
+  std::ifstream input(graph_path + ".bin", std::ios::binary);
+  b.loadCompressed(input);
+
+  ASSERT_EQ(g.getNumVertices(), b.getNumVertices());
+  ASSERT_EQ(g.getNumEdges(), b.getNumEdges());
+  ASSERT_EQ(g.getGraphMaxDegree(), b.getGraphMaxDegree());
+
+  auto g_labels = g.getLabels();
+  auto b_labels = b.getLabels();
+  ASSERT_EQ(g_labels.size(), b_labels.size());
+  std::sort(g_labels.begin(), g_labels.end());
+  std::sort(b_labels.begin(), b_labels.end());
+  for (uint32_t i = 0; i < b_labels.size(); ++i) {
+    ASSERT_EQ(g_labels[i], b_labels[i]);
+  }
+
+  for (VertexID i = 0; i < g.getNumVertices(); ++i) {
+    ASSERT_EQ(g.getVertexOutDegree(i), b.getVertexOutDegree(i));
+    ASSERT_EQ(g.getVertexLabel(i), b.getVertexLabel(i));
+    auto g_nbs = g.getOutNeighbors(i);
+    auto b_nbs = b.getOutNeighbors(i);
+    EXPECT_EQ(g_nbs.second, b_nbs.second);
+    for (uint32_t j = 0; j < g_nbs.second; ++j) {
+      ASSERT_EQ(g_nbs.first[j], b_nbs.first[j]);
+    }
+  }
+
+  for (auto label : g.getLabels()) {
+    ASSERT_EQ(g.getVertexCardinalityByLabel(label), b.getVertexCardinalityByLabel(label));
+    auto* gv = g.getVerticesByLabel(label);
+    auto* bv = g.getVerticesByLabel(label);
+    ASSERT_EQ(gv->size(), bv->size());
+    ASSERT_EQ(g.getNumVerticesByLabel(label), b.getNumVerticesByLabel(label));
+    for (uint32_t i = 0; i < gv->size(); ++i) {
+      ASSERT_EQ((*gv)[i], (*bv)[i]) << "label " << label << " idx " << i;
+    }
+  }
+}
