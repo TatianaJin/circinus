@@ -216,6 +216,19 @@ class TraverseOperator : public Operator {
     return ss.str();
   }
 
+  std::string getBipartiteGraphsProfileString() {
+    uint64_t input_size_sum=0,output_size_sum=0;
+    for (auto p : bg_pointers_) {
+      auto [input_size,output_size]=p->getProfilePair();
+      input_size_sum+=input_size;
+      output_size_sum+=output_size;
+    }
+    std::stringstream ss;
+    ss<<bg_pointers_.size()<<','<<input_size_sum<<','<<output_size_sum;
+    return ss.str();
+  }
+  std::vector<BipartiteGraph*> getBipartiteGraphs() {return bg_pointers_;}
+
   void addBipartiteGraph(BipartiteGraph* bg) { bg_pointers_.emplace_back(bg); }
 
   void setCandidateSetsPointer(const std::vector<std::vector<VertexID>>* candidate_sets) {
@@ -224,6 +237,7 @@ class TraverseOperator : public Operator {
 
   void useBipartiteGraph(
       const std::vector<std::vector<VertexID>>* candidate_sets = NULL) {  // must used after input() called
+    if(use_bipartite_graph_flag)return;
     if (candidate_sets == NULL) candidate_sets = candidate_sets_pointer_;
     use_bipartite_graph_flag = 1;
     for (auto p : bg_pointers_) {

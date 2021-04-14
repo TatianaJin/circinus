@@ -28,6 +28,8 @@ class BipartiteGraph : public Graph {  // only use variable:vlist_,elist_  funct
   unordered_map<VertexID, uint32_t> offset_by_vertex_;
   bool populated = 0;
   VertexID sourceId, destinationId;
+  uint64_t bipartite_graph_intersection_input_size_=0;
+  uint64_t bipartite_graph_intersection_output_size_=0;
 
  public:
   BipartiteGraph(VertexID id1, VertexID id2) : Graph(), sourceId(id1), destinationId(id2) {}
@@ -50,6 +52,12 @@ class BipartiteGraph : public Graph {  // only use variable:vlist_,elist_  funct
         if (vset.find(dest_nodes[j]) != vset.end()) elist_.emplace_back(dest_nodes[j]);
       vlist_.emplace_back(elist_.size());
     }
+    bipartite_graph_intersection_input_size_+=candidate_set1.size()+candidate_set2.size();
+    bipartite_graph_intersection_output_size_+=elist_.size();
+  }
+
+  std::pair<uint64_t,uint64_t> getProfilePair() {
+    return {bipartite_graph_intersection_input_size_,bipartite_graph_intersection_output_size_};
   }
 
   inline std::pair<const VertexID*, uint32_t> getOutNeighbors(
