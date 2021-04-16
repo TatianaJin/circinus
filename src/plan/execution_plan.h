@@ -225,7 +225,8 @@ class ExecutionPlan {
       auto inserted = pruning_labels.insert({label, -1});
       if (inserted.second) {
         auto pos = label_existing_vertices_map.find(label);
-        if (pos != label_existing_vertices_map.end() && pos->second.size() > 1) {
+        CHECK(pos != label_existing_vertices_map.end());
+        if (pos->second.size() > 1) {
           std::vector<uint32_t> indices;
           for (auto v : pos->second) {
             // note that here cover_table_ reflect the cover in the target-expanded output
@@ -239,6 +240,7 @@ class ExecutionPlan {
         }
       } else {
         vertex_pruning_set_indices[i] = inserted.first->second;
+        std::to_string(inserted.first->second) + "\n";
       }
     }
     return vertex_pruning_set_indices;

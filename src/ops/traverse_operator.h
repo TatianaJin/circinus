@@ -26,6 +26,7 @@
 #include "graph/types.h"
 #include "ops/filters/subgraph_filter.h"
 #include "ops/operator.h"
+#include "ops/types.h"
 #include "utils/hashmap.h"
 #include "utils/utils.h"
 
@@ -131,9 +132,6 @@ class TraverseOperator : public Operator {
   uint64_t total_intersection_output_size_ = 0;
   uint64_t distinct_intersection_count_ =
       0;  // the minimal number of intersection needed if all intersection function call results can be cached
-  double first_time = 0;
-  double second_time = 0;
-  double third_time = 0;
 
   std::vector<std::pair<bool, uint32_t>> matching_order_indices_;
 
@@ -166,7 +164,7 @@ class TraverseOperator : public Operator {
     return subgraph_filter_->filter(subgraphs);
   }
 
-  inline bool filter(std::vector<CompressedSubgraphs>& subgraphs, uint32_t start, uint32_t end) {
+  inline uint32_t filter(std::vector<CompressedSubgraphs>& subgraphs, uint32_t start, uint32_t end) {
     DCHECK(subgraph_filter_ != nullptr);
     return subgraph_filter_->filter(subgraphs, start, end);
   }
@@ -185,9 +183,9 @@ class TraverseOperator : public Operator {
     total_input_size_ += inputs.size();
   }
 
-  uint32_t expandAndProfile(std::vector<CompressedSubgraphs>* outputs, uint32_t cap) {
+  uint32_t expandAndProfile(std::vector<CompressedSubgraphs>* outputs, uint32_t cap, uint32_t query_type) {
     auto start = std::chrono::high_resolution_clock::now();
-    auto n = expandAndProfileInner(outputs, cap);
+    auto n = expandAndProfileInner(outputs, cap, query_type);
     auto stop = std::chrono::high_resolution_clock::now();
     total_time_in_milliseconds_ +=
         (std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start).count() / 1000000.0);
@@ -229,7 +227,7 @@ class TraverseOperator : public Operator {
     ss << toString() << ',' << total_time_in_milliseconds_ << ',' << getTotalInputSize() << ',' << total_output_size_
        << ',' << total_num_input_subgraphs_ << ',' << total_num_output_subgraphs_ << ',' << intersection_count_ << ','
        << total_intersection_input_size_ << ',' << total_intersection_output_size_ << ','
-       << distinct_intersection_count_ << ',' << first_time << ',' << second_time << ',' << third_time;
+       << distinct_intersection_count_;
     return ss.str();
   }
 
@@ -242,7 +240,8 @@ class TraverseOperator : public Operator {
   inline uint64_t getDistinctIntersectionCount() const { return distinct_intersection_count_; }
 
  protected:
-  virtual uint32_t expandAndProfileInner(std::vector<CompressedSubgraphs>* outputs, uint32_t cap) = 0;
+  virtual uint32_t expandAndProfileInner(std::vector<CompressedSubgraphs>* outputs, uint32_t cap,
+                                         uint32_t query_type) = 0;
   inline uint32_t getTotalInputSize() const { return total_input_size_ - (current_inputs_size_ - input_index_); }
 };
 

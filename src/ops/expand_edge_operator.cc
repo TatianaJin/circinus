@@ -62,11 +62,16 @@ class ExpandEdgeKeyToSetOperator : public ExpandEdgeOperator {
     return n;
   }
 
-  uint32_t expandAndProfileInner(std::vector<CompressedSubgraphs>* outputs, uint32_t cap) override {
+  uint32_t expandAndProfileInner(std::vector<CompressedSubgraphs>* outputs, uint32_t cap,
+                                 uint32_t query_type) override {
     uint32_t old_input_index = input_index_;
     uint32_t n = 0;
     for (; n < cap && input_index_ < current_inputs_->size(); ++input_index_) {
-      n += expandInner<QueryType::Profile>(outputs, (*current_inputs_)[input_index_]);
+      if (query_type == 1) {
+        n += expandInner<QueryType::Profile>(outputs, (*current_inputs_)[input_index_]);
+      } else if (query_type == 2) {
+        n += expandInner<QueryType::ProfileWithMiniIntersection>(outputs, (*current_inputs_)[input_index_]);
+      }
       total_num_input_subgraphs_ += (*current_inputs_)[input_index_].getNumSubgraphs();
     }
     intersection_count_ += input_index_ - old_input_index;
@@ -94,8 +99,11 @@ class ExpandEdgeKeyToSetOperator : public ExpandEdgeOperator {
     intersect(candidate_set_, current_data_graph_->getOutNeighbors(parent_match), &targets,
               input.getExceptions(same_label_key_indices_, same_label_set_indices_));
     if
-      constexpr(isProfileMode(profile)) {
-        distinct_intersection_count_ += parent_set_.insert(parent_match).second;
+      constexpr(isProfileMode(profile) || isProfileWithMiniIntersectionMode(profile)) {
+        if
+          constexpr(isProfileWithMiniIntersectionMode(profile)) {
+            distinct_intersection_count_ += parent_set_.insert(parent_match).second;
+          }
         total_intersection_input_size_ += candidate_set_.size() + current_data_graph_->getVertexOutDegree(parent_match);
         total_intersection_output_size_ += targets.size();
       }
@@ -180,9 +188,15 @@ class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
     return expandInner<QueryType::Execute>(outputs, cap);
   }
 
-  uint32_t expandAndProfileInner(std::vector<CompressedSubgraphs>* outputs, uint32_t cap) override {
+  uint32_t expandAndProfileInner(std::vector<CompressedSubgraphs>* outputs, uint32_t cap,
+                                 uint32_t query_type) override {
     auto old_input_index = input_index_;
-    auto n = expandInner<QueryType::Profile>(outputs, cap);
+    uint32_t n = 0;
+    if (query_type == 1) {
+      n = expandInner<QueryType::Profile>(outputs, cap);
+    } else if (query_type == 2) {
+      n = expandInner<QueryType::ProfileWithMiniIntersection>(outputs, cap);
+    }
     intersection_count_ += input_index_ - old_input_index;
     return n;
   }
@@ -210,8 +224,11 @@ class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
     intersect(candidate_set_, current_data_graph_->getOutNeighbors(parent_match), &current_targets_,
               input.getExceptions(same_label_key_indices_, same_label_set_indices_));
     if
-      constexpr(isProfileMode(profile)) {
-        distinct_intersection_count_ += parent_set_.insert(parent_match).second;
+      constexpr(isProfileMode(profile) || isProfileWithMiniIntersectionMode(profile)) {
+        if
+          constexpr(isProfileWithMiniIntersectionMode(profile)) {
+            distinct_intersection_count_ += parent_set_.insert(parent_match).second;
+          }
         total_intersection_input_size_ += candidate_set_.size() + current_data_graph_->getVertexOutDegree(parent_match);
         total_intersection_output_size_ += current_targets_.size();
       }
@@ -261,7 +278,7 @@ class CurrentResultsByCandidate : public CurrentResults {
       }
       intersect(*parent_set, data_graph_->getOutNeighbors(candidate), &parents);  // No need for exceptions
       if
-        constexpr(isProfileMode(profile)) {
+        constexpr(isProfileMode(profile) || isProfileWithMiniIntersectionMode(profile)) {
           owner_->updateIntersectInfo(parent_set->size() + data_graph_->getVertexOutDegree(candidate), parents.size());
         }
       if (parents.empty()) {
@@ -301,7 +318,7 @@ class CurrentResultsByParent : public CurrentResults {
       std::vector<VertexID> targets;
       intersect(*candidates_, data_graph_->getOutNeighbors(parent_match), &targets, exceptions_);
       if
-        constexpr(isProfileMode(profile)) {
+        constexpr(isProfileMode(profile) || isProfileWithMiniIntersectionMode(profile)) {
           owner_->updateIntersectInfo(candidates_->size() + data_graph_->getVertexOutDegree(parent_match),
                                       targets.size());
         }
@@ -350,7 +367,7 @@ class CurrentResultsByExtension : public CurrentResults {
         std::vector<VertexID> parents;  // valid parents for current candidate
         intersect(parent_set, data_graph_->getOutNeighbors(candidate), &parents);  // no need for exceptions
         if
-          constexpr(isProfileMode(profile)) {
+          constexpr(isProfileMode(profile) || isProfileWithMiniIntersectionMode(profile)) {
             owner_->updateIntersectInfo(parent_set.size() + data_graph_->getVertexOutDegree(candidate), parents.size());
           }
         CompressedSubgraphs output(*input_, parent_index_, std::make_shared<std::vector<VertexID>>(std::move(parents)),
@@ -382,7 +399,7 @@ class CurrentResultsByExtension : public CurrentResults {
     std::vector<VertexID> current_extensions;
     intersect(*candidates_, data_graph_->getOutNeighbors(parent_match), &current_extensions, current_exceptions_);
     if
-      constexpr(isProfileMode(profile)) {
+      constexpr(isProfileMode(profile) || isProfileWithMiniIntersectionMode(profile)) {
         owner_->updateIntersectInfo(candidates_->size() + data_graph_->getVertexOutDegree(parent_match),
                                     current_extensions.size());
       }
@@ -428,8 +445,13 @@ class ExpandEdgeSetToKeyOperator : public ExpandEdgeOperator {
     return expandInner<QueryType::Execute>(outputs, cap);
   }
 
-  uint32_t expandAndProfileInner(std::vector<CompressedSubgraphs>* outputs, uint32_t cap) override {
-    return expandInner<QueryType::Profile>(outputs, cap);
+  uint32_t expandAndProfileInner(std::vector<CompressedSubgraphs>* outputs, uint32_t cap,
+                                 uint32_t query_type) override {
+    if (query_type == 1) {
+      return expandInner<QueryType::Profile>(outputs, cap);
+    } else if (query_type == 2) {
+      return expandInner<QueryType::ProfileWithMiniIntersection>(outputs, cap);
+    }
   }
 
   std::string toString() const override {
@@ -491,7 +513,7 @@ class ExpandEdgeSetToKeyOperator : public ExpandEdgeOperator {
         }
 
         if
-          constexpr(isProfileMode(profile)) {
+          constexpr(isProfileWithMiniIntersectionMode(profile)) {
             auto& parent_set = *(*current_inputs_)[input_index_ - 1].getSet(parent_index_);
             for (auto parent_match : parent_set) {
               distinct_intersection_count_ += parent_set_.insert(parent_match).second;
@@ -505,7 +527,7 @@ class ExpandEdgeSetToKeyOperator : public ExpandEdgeOperator {
       }
       expandInner<profile>((*current_inputs_)[input_index_], needed);
       if
-        constexpr(isProfileMode(profile)) {
+        constexpr(isProfileMode(profile) || isProfileWithMiniIntersectionMode(profile)) {
           total_num_input_subgraphs_ += (*current_inputs_)[input_index_].getNumSubgraphs();
         }
       ++input_index_;
