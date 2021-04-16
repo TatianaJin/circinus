@@ -216,15 +216,6 @@ class TraverseOperator : public Operator {
     return ss.str();
   }
 
-  std::string toProfileStringUsingBipartiteGraphs() const {
-    std::stringstream ss;
-    ss << toProfileString()<<'\n'
-       << toString() << "(bipartite-graph-profile)," << 0 << ',' << 0 << ',' << 0
-       << ',' << 0 << ',' << 0 << ',' << this->getBipartiteGraphsProfileString() << ','
-       << 0;
-    return ss.str();
-  }
-
   std::string getBipartiteGraphsProfileString() {
     uint64_t input_size_sum = 0, output_size_sum = 0;
     for (auto p : bg_pointers_) {
@@ -236,6 +227,16 @@ class TraverseOperator : public Operator {
     ss << bg_pointers_.size() << ',' << input_size_sum << ',' << output_size_sum;
     return ss.str();
   }
+
+  std::string toProfileStringUsingBipartiteGraphs() const {
+    std::stringstream ss;
+    ss << toProfileString()<<'\n'
+       << toString() << "(bipartite-graph-profile)," << 0 << ',' << 0 << ',' << 0
+       << ',' << 0 << ',' << 0 << ',' << getBipartiteGraphsProfileString() << ','
+       << 0;
+    return ss.str();
+  }
+
   std::vector<BipartiteGraph*> getBipartiteGraphs() { return bg_pointers_; }
 
   void addBipartiteGraph(BipartiteGraph* bg) { bg_pointers_.emplace_back(bg); }
