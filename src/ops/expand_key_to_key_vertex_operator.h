@@ -51,6 +51,11 @@ class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
     return ss.str();
   }
 
+  std::string toProfileString() const override {
+    if(!use_bipartite_graph_flag)return TraverseOperator::toProfileString();
+    return toProfileStringUsingBipartiteGraphs();
+  }
+
   Operator* clone() const override {
     // TODO(tatiana): for now next_ is not handled because it is only used for printing plan
     return new ExpandKeyToKeyVertexOperator(*this);

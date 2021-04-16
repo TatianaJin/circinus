@@ -245,18 +245,6 @@ class Benchmark {
       else
         plan->getOperators().profile(g, input, 0, false);
     }
-    if (FLAGS_bipartite_graph == 1) {
-      std::stringstream ss;
-      ss << FLAGS_profile_file << "_bipartite_graph_intersection";
-      std::ofstream profile_stream(ss.str());
-      auto& opTree = plan->getOperators();
-      size_t len = opTree.getOperatorSize() - 1;
-      for (size_t i = 0; i < len; ++i) {
-        auto op = opTree.getOperator(i);
-        auto traverse_op = dynamic_cast<TraverseOperator*>(op);
-        profile_stream << traverse_op->getBipartiteGraphsProfileString() << '\n';
-      }
-    }
   }
 
   void bfsExecute(const Graph* g, const ExecutionPlan* plan) {

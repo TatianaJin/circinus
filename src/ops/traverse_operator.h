@@ -216,6 +216,15 @@ class TraverseOperator : public Operator {
     return ss.str();
   }
 
+  std::string toProfileStringUsingBipartiteGraphs() const {
+    std::stringstream ss;
+    ss << toProfileString()<<'\n'
+       << toString() << '(bipartite-graph-profile),' << 0 << ',' << 0 << ',' << 0
+       << ',' << 0 << ',' << 0 << ',' << getBipartiteGraphsProfileString() << ','
+       << 0;
+    return ss.str();
+  }
+
   std::string getBipartiteGraphsProfileString() {
     uint64_t input_size_sum = 0, output_size_sum = 0;
     for (auto p : bg_pointers_) {
