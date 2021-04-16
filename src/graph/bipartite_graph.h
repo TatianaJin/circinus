@@ -56,7 +56,7 @@ class BipartiteGraph : public Graph {  // only use variable:vlist_,elist_  funct
     bipartite_graph_intersection_output_size_ += elist_.size();
   }
 
-  std::pair<uint64_t, uint64_t> getProfilePair() {
+  std::pair<uint64_t, uint64_t> getProfilePair() const {
     return {bipartite_graph_intersection_input_size_, bipartite_graph_intersection_output_size_};
   }
 

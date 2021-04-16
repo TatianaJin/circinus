@@ -216,7 +216,7 @@ class TraverseOperator : public Operator {
     return ss.str();
   }
 
-  std::string getBipartiteGraphsProfileString() {
+  std::string getBipartiteGraphsProfileString() const {
     uint64_t input_size_sum = 0, output_size_sum = 0;
     for (auto p : bg_pointers_) {
       auto[input_size, output_size] = p->getProfilePair();
@@ -232,7 +232,7 @@ class TraverseOperator : public Operator {
     std::stringstream ss;
     ss << toProfileString()<<'\n'
        << toString() << "(bipartite-graph-profile)," << 0 << ',' << 0 << ',' << 0
-       << ',' << 0 << ',' << 0 << ',' << this->getBipartiteGraphsProfileString() << ','
+       << ',' << 0 << ',' << 0 << ',' << getBipartiteGraphsProfileString() << ','
        << 0;
     return ss.str();
   }
