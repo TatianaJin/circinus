@@ -64,8 +64,13 @@ class EnumerateKeyExpandToSetOperator : public ExpandVertexOperator {
     return expandInner<QueryType::Execute>(outputs, batch_size);
   }
 
-  uint32_t expandAndProfileInner(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size) override {
-    return expandInner<QueryType::Profile>(outputs, batch_size);
+  uint32_t expandAndProfileInner(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size,
+                                 uint32_t query_type) override {
+    if (query_type == 1) {
+      return expandInner<QueryType::Profile>(outputs, batch_size);
+    } else if (query_type == 2) {
+      return expandInner<QueryType::ProfileWithMiniIntersection>(outputs, batch_size);
+    }
   }
 
   std::string toString() const override;

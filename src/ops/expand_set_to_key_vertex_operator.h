@@ -41,8 +41,13 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
     return expandInner<QueryType::Execute>(outputs, batch_size);
   }
 
-  uint32_t expandAndProfileInner(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size) override {
-    return expandInner<QueryType::Profile>(outputs, batch_size);
+  uint32_t expandAndProfileInner(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size,
+                                 uint32_t query_type) override {
+    if (query_type == 1) {
+      return expandInner<QueryType::Profile>(outputs, batch_size);
+    } else if (query_type == 2) {
+      return expandInner<QueryType::ProfileWithMiniIntersection>(outputs, batch_size);
+    }
   }
 
   std::string toString() const override {
@@ -60,7 +65,6 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
  protected:
   uint32_t profile() {
     auto& input = (*current_inputs_)[input_index_];
-    LOG(INFO) << "---------------------";
     for (auto par : parents_) {
       uint32_t loop_num = 0;
       const auto& parent_match = input.getSet(query_vertex_indices_[par]);
@@ -70,9 +74,9 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
           loop_num++;
         }
       }
-      LOG(INFO) << "set out_neighbors num " << loop_num;
+      DLOG(INFO) << "set out_neighbors num " << loop_num;
     }
-    LOG(INFO) << "candidates num " << candidates_->size();
+    DLOG(INFO) << "candidates num " << candidates_->size();
     return 0;
   }
 
@@ -85,7 +89,11 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
     uint32_t parent = 0, size = 0xFFFFFFFF;
     auto& input = (*current_inputs_)[input_index_];
     for (auto par : parents_) {
-      auto current_size = input.getSet(query_vertex_indices_[par])->size();
+      auto current_set = input.getSet(query_vertex_indices_[par]);
+      uint32_t current_size = 0;
+      for (auto set_vertex_id : *current_set) {
+        current_size += current_data_graph_->getVertexOutDegree(set_vertex_id);
+      }
       if (current_size < size) {
         size = current_size;
         parent = par;
@@ -102,13 +110,13 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
   template <QueryType profile>
   inline uint32_t expandInner(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size) {
     if
-      constexpr(isProfileMode(profile)) { parent_tuple_sets_.resize(parents_.size()); }
+      constexpr(isProfileWithMiniIntersectionMode(profile)) { parent_tuple_sets_.resize(parents_.size()); }
     uint32_t output_num = 0;
     while (input_index_ < current_inputs_->size()) {
       auto min_parent_set = getMinimumParent();
       if
-        constexpr(isProfileMode(profile)) { updateDistinctSICount(); }
-      if (min_parent_set.first * 20 < candidates_->size()) {
+        constexpr(isProfileWithMiniIntersectionMode(profile)) { updateDistinctSICount(); }
+      if (min_parent_set.first < candidates_->size()) {
         DLOG(INFO) << "fromSetNeighborStrategy";
         output_num += fromSetNeighborStrategy<profile>(outputs, min_parent_set.second);
       } else {
@@ -116,7 +124,7 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
         output_num += fromCandidateStrategy<profile>(outputs);
       }
       if
-        constexpr(isProfileMode(profile)) {
+        constexpr(isProfileMode(profile) || isProfileWithMiniIntersectionMode(profile)) {
           total_num_input_subgraphs_ += (*current_inputs_)[input_index_].getNumSubgraphs();
         }
       input_index_++;
@@ -156,7 +164,7 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
         uint32_t id = query_vertex_indices_[set_vid];
         intersect(*input.getSet(id), key_out_neighbors, &new_set);  // No need for exceptions
         if
-          constexpr(isProfileMode(profile)) {
+          constexpr(isProfileMode(profile) || isProfileWithMiniIntersectionMode(profile)) {
             updateIntersectInfo(input.getSet(id)->size() + key_out_neighbors.second, new_set.size());
           }
         if (new_set.empty()) {
@@ -229,7 +237,7 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
             uint32_t id = query_vertex_indices_[set_vid];
             intersect(*input.getSet(id), key_out_neighbors, &new_set);
             if
-              constexpr(isProfileMode(profile)) {
+              constexpr(isProfileMode(profile) || isProfileWithMiniIntersectionMode(profile)) {
                 updateIntersectInfo(input.getSet(id)->size() + key_out_neighbors.second, new_set.size());
               }
             if (new_set.empty()) {

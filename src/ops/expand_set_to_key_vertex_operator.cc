@@ -35,8 +35,8 @@ void ExpandSetToKeyVertexOperator::updateDistinctSICount() {
         continue;
       }
       parent_tuple[depth] = parent_vid;
-      distinct_intersection_count_ +=
-          parent_tuple_sets_[depth].emplace((char*)parent_tuple.data(), (depth + 1) * sizeof(VertexID)).second;
+      // distinct_intersection_count_ +=
+      //     parent_tuple_sets_[depth].emplace((char*)parent_tuple.data(), (depth + 1) * sizeof(VertexID)).second;
       if (depth == last_depth) {
         ++set_index[depth];
       } else {

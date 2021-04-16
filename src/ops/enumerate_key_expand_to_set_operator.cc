@@ -96,7 +96,7 @@ template <QueryType profile>
 uint32_t EnumerateKeyExpandToSetOperator::expandInner(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size) {
   uint32_t n_outputs = 0;
   if
-    constexpr(isProfileMode(profile)) {
+    constexpr(isProfileWithMiniIntersectionMode(profile)) {
       parent_tuple_sets_.resize(parents_.size());
       parent_tuple_.resize(parents_.size());
     }
@@ -146,25 +146,29 @@ uint32_t EnumerateKeyExpandToSetOperator::expandInner(std::vector<CompressedSubg
           ++enumerate_key_idx_[enumerate_key_depth];
           continue;
         }
-        DCHECK(target_sets_[enumerate_key_depth + 1].empty());
+        CHECK(target_sets_[enumerate_key_depth + 1].empty());
         if (target_sets_[enumerate_key_depth].empty()) {
+          CHECK_EQ(enumerate_key_depth, 0);
           intersect(*candidates_, current_data_graph_->getOutNeighbors(key_vid), &target_sets_[enumerate_key_depth + 1],
                     existing_vertices_);
         } else {
           intersect(target_sets_[enumerate_key_depth], current_data_graph_->getOutNeighbors(key_vid),
                     &target_sets_[enumerate_key_depth + 1], existing_vertices_);
         }
-        
+
         if
-          constexpr(isProfileMode(profile)) {
+          constexpr(isProfileMode(profile) || isProfileWithMiniIntersectionMode(profile)) {
             updateIntersectInfo((target_sets_[enumerate_key_depth].empty() ? candidates_->size()
                                                                            : target_sets_[enumerate_key_depth].size()) +
                                     current_data_graph_->getVertexOutDegree(key_vid),
                                 target_sets_[enumerate_key_depth + 1].size());
-            auto pidx = enumerate_key_depth + existing_key_parent_indices_.size();  // parent index
-            parent_tuple_[pidx] = key_vid;
-            // distinct_intersection_count_ +=
-            //     parent_tuple_sets_[pidx].emplace((char*)parent_tuple_.data(), (pidx + 1) * sizeof(VertexID)).second;
+            if
+              constexpr(isProfileWithMiniIntersectionMode(profile)) {
+                auto pidx = enumerate_key_depth + existing_key_parent_indices_.size();  // parent index
+                parent_tuple_[pidx] = key_vid;
+                distinct_intersection_count_ +=
+                    parent_tuple_sets_[pidx].emplace((char*)parent_tuple_.data(), (pidx + 1) * sizeof(VertexID)).second;
+              }
           }
         if (target_sets_[enumerate_key_depth + 1].empty()) {
           ++enumerate_key_idx_[enumerate_key_depth];
@@ -217,6 +221,7 @@ uint32_t EnumerateKeyExpandToSetOperator::expandInner(std::vector<CompressedSubg
           }
           output.UpdateSets(output.getNumSets() - 1, std::make_shared<std::vector<VertexID>>(std::move(target_set)));
 #endif
+
           outputs->push_back(std::move(output));
           ++enumerate_key_idx_[enumerate_key_depth];
           if (++n_outputs == batch_size) {
@@ -259,28 +264,32 @@ template <QueryType profile>
 bool EnumerateKeyExpandToSetOperator::expandInner() {  // handles a new input and init the transient states
   auto& input = (*current_inputs_)[input_index_];
   auto& target_set = target_sets_.front();
+  existing_vertices_ = input.getKeyMap();
+  input.getExceptions(existing_vertices_, {}, same_label_set_indices_);
+  n_exceptions_ = existing_vertices_.size();
+
   for (uint32_t i = 0; i < existing_key_parent_indices_.size(); ++i) {
     uint32_t key_vid = input.getKeyVal(existing_key_parent_indices_[i]);
     auto target_set_size = target_set.size();
     if (i == 0) {
-      intersect(*candidates_, current_data_graph_->getOutNeighbors(key_vid), &target_set);
+      intersect(*candidates_, current_data_graph_->getOutNeighbors(key_vid), &target_set, existing_vertices_);
     } else {
       intersectInplace(target_set, current_data_graph_->getOutNeighbors(key_vid), &target_set);
     }
     if
-      constexpr(isProfileMode(profile)) {
+      constexpr(isProfileMode(profile) || isProfileWithMiniIntersectionMode(profile)) {
         updateIntersectInfo(target_set_size + current_data_graph_->getVertexOutDegree(key_vid), target_set.size());
-        parent_tuple_[i] = key_vid;
-        // distinct_intersection_count_ +=
-        //     parent_tuple_sets_[i].emplace((char*)parent_tuple_.data(), (i + 1) * sizeof(VertexID)).second;
+        if
+          constexpr(isProfileWithMiniIntersectionMode(profile)) {
+            parent_tuple_[i] = key_vid;
+            distinct_intersection_count_ +=
+                parent_tuple_sets_[i].emplace((char*)parent_tuple_.data(), (i + 1) * sizeof(VertexID)).second;
+          }
       }
     if (target_set.empty()) {
       return true;
     }
   }
-  existing_vertices_ = input.getKeyMap();
-  input.getExceptions(existing_vertices_, {}, same_label_set_indices_);
-  n_exceptions_ = existing_vertices_.size();
 
   return candidates_->empty() || (target_set.empty() && existing_key_parent_indices_.size() > 0);
 }
