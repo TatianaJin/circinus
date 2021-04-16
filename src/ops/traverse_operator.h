@@ -232,7 +232,7 @@ class TraverseOperator : public Operator {
     std::stringstream ss;
     ss << toProfileString()<<'\n'
        << toString() << "(bipartite-graph-profile)," << 0 << ',' << 0 << ',' << 0
-       << ',' << 0 << ',' << 0 << ',' << getBipartiteGraphsProfileString() << ','
+       << ',' << 0 << ',' << 0 << ',' << this->getBipartiteGraphsProfileString() << ','
        << 0;
     return ss.str();
   }
