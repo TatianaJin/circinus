@@ -310,7 +310,7 @@ class CurrentResultsByParent : public CurrentResults {
 
   uint32_t getResults(std::vector<CompressedSubgraphs>* outputs, uint32_t cap) override {
     auto& parent_set = *input_->getSet(parent_index_);
-    unordered_map<VertexID, uint32_t> group_index;
+    unordered_map<VertexID, int> group_index;
     uint32_t n = 0;
     for (uint32_t i = 0; i < parent_set.size(); ++i) {
       auto parent_match = parent_set[i];
@@ -324,10 +324,14 @@ class CurrentResultsByParent : public CurrentResults {
         }
       for (auto target : targets) {
         auto pos = group_index.find(target);
-        if (pos == group_index.end()) {
+        if (pos == group_index.end() || group_index[target] == -1) {
           group_index[target] = outputs->size();
           outputs->emplace_back(*input_, parent_index_, makeVertexSet(parent_match), target,
                                 owner_->getSameLabelSetIndices(), owner_->getSetPruningThreshold(), false);
+          if (outputs->back().empty()) {
+            outputs->pop_back();
+            group_index[target] = -1;
+          }
           ++n;
         } else {
           (*outputs)[pos->second].UpdateSet(parent_index_, parent_match);
