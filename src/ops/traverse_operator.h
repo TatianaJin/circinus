@@ -230,7 +230,7 @@ class TraverseOperator : public Operator {
 
   std::string toProfileStringUsingBipartiteGraphs() const {
     std::stringstream ss;
-    ss << toProfileString()<<'\n'
+    ss << TraverseOperator::toProfileString()<<'\n'
        << toString() << "(bipartite-graph-profile)," << 0 << ',' << 0 << ',' << 0
        << ',' << 0 << ',' << 0 << ',' << getBipartiteGraphsProfileString() << ','
        << 0;
