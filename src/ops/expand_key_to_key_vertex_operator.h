@@ -52,7 +52,7 @@ class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
   }
 
   std::string toProfileString() const override {
-    if(!use_bipartite_graph_flag)return TraverseOperator::toProfileString();
+    if (!use_bipartite_graph_flag) return TraverseOperator::toProfileString();
     return toProfileStringUsingBipartiteGraphs();
   }
 
