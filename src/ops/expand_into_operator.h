@@ -47,8 +47,13 @@ class ExpandIntoOperator : public TraverseOperator {
     return expandInner<QueryType::Execute>(outputs, batch_size);
   }
 
-  uint32_t expandAndProfileInner(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size) override {
-    return expandInner<QueryType::Profile>(outputs, batch_size);
+  uint32_t expandAndProfileInner(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size,
+                                 uint32_t query_type) override {
+    if (query_type == 1) {
+      return expandInner<QueryType::Profile>(outputs, batch_size);
+    } else if (query_type == 2) {
+      return expandInner<QueryType::ProfileWithMiniIntersection>(outputs, batch_size);
+    }
   }
 
   std::string toString() const override {
@@ -77,7 +82,7 @@ class ExpandIntoOperator : public TraverseOperator {
     // compression
     std::vector<VertexID> parent_tuple;
     if
-      constexpr(isProfileMode(profile)) {
+      constexpr(isProfileMode(profile) || isProfileWithMiniIntersectionMode(profile)) {
         parent_tuple.resize(key_parents_.size() + parents_.size());
         parent_tuple_sets_.resize(parents_.size());
       }
@@ -87,7 +92,7 @@ class ExpandIntoOperator : public TraverseOperator {
       auto key_out_neighbors = current_data_graph_->getOutNeighbors(key_vertex_id);
       bool add = true;
       if
-        constexpr(isProfileMode(profile)) {
+        constexpr(isProfileMode(profile) || isProfileWithMiniIntersectionMode(profile)) {
           total_num_input_subgraphs_ += (*current_inputs_)[input_index_].getNumSubgraphs();
           unordered_set<VertexID> prefix_set;
           for (uint32_t i = 0; i < key_parents_.size(); ++i) {
@@ -110,8 +115,13 @@ class ExpandIntoOperator : public TraverseOperator {
               }
               auto pidx = depth + key_parents_.size();
               parent_tuple[pidx] = parent_vid;
-              distinct_intersection_count_ +=
-                  parent_tuple_sets_[depth].emplace((char*)parent_tuple.data(), (pidx + 1) * sizeof(VertexID)).second;
+              if
+                constexpr(isProfileWithMiniIntersectionMode(profile)) {
+                  distinct_intersection_count_ +=
+                      parent_tuple_sets_[depth]
+                          .emplace((char*)parent_tuple.data(), (pidx + 1) * sizeof(VertexID))
+                          .second;
+                }
               if (depth == last_depth) {
                 ++set_index[depth];
               } else {
@@ -142,7 +152,7 @@ class ExpandIntoOperator : public TraverseOperator {
         uint32_t id = query_vertex_indices_[vid];
         intersect(*(input.getSet(id)), key_out_neighbors, &new_set);
         if
-          constexpr(isProfileMode(profile)) {
+          constexpr(isProfileMode(profile) || isProfileWithMiniIntersectionMode(profile)) {
             updateIntersectInfo(input.getSet(id)->size() + key_out_neighbors.second, new_set.size());
           }
         if (new_set.size() == 0) {

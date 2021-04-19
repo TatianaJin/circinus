@@ -49,7 +49,7 @@ class SetPrunningSubgraphFilter : public SubgraphFilter {
   uint32_t filter(std::vector<CompressedSubgraphs>& subgraphs, uint32_t start, uint32_t end) override {
     auto end_iter = subgraphs.begin() + end;
     auto start_iter = subgraphs.begin() + start;
-    auto old_size = subgraphs.size();
+    uint32_t old_size = subgraphs.size();
     subgraphs.erase(std::remove_if(start_iter, end_iter, [this](auto& group) { return filter(group); }), end_iter);
     return old_size - subgraphs.size();
   }

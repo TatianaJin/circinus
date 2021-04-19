@@ -18,5 +18,5 @@
 
 DECLARE_int32(batch_size);
 DECLARE_int32(num_cores);
-DECLARE_bool(profile);
+DECLARE_int32(profile);
 DECLARE_uint64(set_pruning_threshold);

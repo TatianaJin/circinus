@@ -27,6 +27,7 @@
 #include "graph/types.h"
 #include "ops/filters/subgraph_filter.h"
 #include "ops/operator.h"
+#include "ops/types.h"
 #include "utils/hashmap.h"
 #include "utils/utils.h"
 
@@ -39,11 +40,36 @@ inline void removeExceptions(const std::pair<const VertexID*, uint32_t>& setPair
     if (except.count(vid) == 0) res->emplace_back(vid);
   }
 }
+// binary search is more expensive when the two sets are similar
+inline void intersect_bs(const std::pair<const VertexID*, uint32_t>& set1,
+                         const std::pair<const VertexID*, uint32_t>& set2, std::vector<VertexID>* intersection,
+                         const unordered_set<VertexID>& except = {}) {
+  if (set1.second <= set2.second) {
+    intersection->reserve(set1.second);
+    auto lower_bound = set2.first;
+    for (uint32_t i = 0; i < set1.second; ++i) {
+      auto vid = set1.first[i];
+      lower_bound = std::lower_bound(lower_bound, set2.first + set2.second, vid);
+      uint32_t index = lower_bound - set2.first;
+      // if lower_bound is out of range, all elements in the rest of set2 are smaller than the rest of set1
+      if (index >= set2.second) {
+        break;
+      }
+      if (*lower_bound == vid && except.count(vid) == 0) intersection->emplace_back(vid);
+    }
+  } else {
+    intersect_bs(set2, set1, intersection, except);
+  }
+}
 
 /** set1 and set2 must be sorted in ascending order */
 inline void intersect(const std::pair<const VertexID*, uint32_t>& set1,
                       const std::pair<const VertexID*, uint32_t>& set2, std::vector<VertexID>* intersection,
                       const unordered_set<VertexID>& except = {}) {
+  if (std::max(set1.second, set2.second) >= 32) {
+    intersect_bs(set1, set2, intersection, except);
+    return;
+  }
   if (set1.second <= set2.second) {
     intersection->reserve(set1.second);
     uint32_t set2_index = 0;
@@ -149,7 +175,7 @@ class TraverseOperator : public Operator {
     return subgraph_filter_->filter(subgraphs);
   }
 
-  inline bool filter(std::vector<CompressedSubgraphs>& subgraphs, uint32_t start, uint32_t end) {
+  inline uint32_t filter(std::vector<CompressedSubgraphs>& subgraphs, uint32_t start, uint32_t end) {
     DCHECK(subgraph_filter_ != nullptr);
     return subgraph_filter_->filter(subgraphs, start, end);
   }
@@ -168,9 +194,9 @@ class TraverseOperator : public Operator {
     total_input_size_ += inputs.size();
   }
 
-  uint32_t expandAndProfile(std::vector<CompressedSubgraphs>* outputs, uint32_t cap) {
+  uint32_t expandAndProfile(std::vector<CompressedSubgraphs>* outputs, uint32_t cap, uint32_t query_type) {
     auto start = std::chrono::high_resolution_clock::now();
-    auto n = expandAndProfileInner(outputs, cap);
+    auto n = expandAndProfileInner(outputs, cap, query_type);
     auto stop = std::chrono::high_resolution_clock::now();
     total_time_in_milliseconds_ +=
         (std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start).count() / 1000000.0);
@@ -262,7 +288,8 @@ class TraverseOperator : public Operator {
   inline uint64_t getDistinctIntersectionCount() const { return distinct_intersection_count_; }
 
  protected:
-  virtual uint32_t expandAndProfileInner(std::vector<CompressedSubgraphs>* outputs, uint32_t cap) = 0;
+  virtual uint32_t expandAndProfileInner(std::vector<CompressedSubgraphs>* outputs, uint32_t cap,
+                                         uint32_t query_type) = 0;
   inline uint32_t getTotalInputSize() const { return total_input_size_ - (current_inputs_size_ - input_index_); }
 };
 

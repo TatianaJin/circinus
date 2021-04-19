@@ -36,6 +36,7 @@
 #include "ops/operators.h"
 #include "ops/order.h"
 #include "ops/scans.h"
+#include "ops/types.h"
 #include "plan/execution_plan.h"
 #include "plan/naive_planner.h"
 #include "utils/flags.h"
@@ -50,6 +51,11 @@ using circinus::NaivePlanner;
 using circinus::NLFFilter;
 using circinus::CFLFilter;
 using circinus::CFLOrder;
+using circinus::DPISOFilter;
+using circinus::OrderBase;
+using circinus::TSOOrder;
+using circinus::TSOFilter;
+using circinus::GQLFilter;
 using circinus::QueryGraph;
 using circinus::QueryVertexID;
 using circinus::Task;
@@ -140,7 +146,11 @@ class Benchmark {
       std::vector<VertexID> buffer;
       buffer.reserve(BATCH_SIZE);
       while (scan.Scan(&buffer, BATCH_SIZE) > 0) {
-        filter.Filter(g, buffer, &candidates[v]);
+        if (FLAGS_filter == "dpiso" || FLAGS_filter == "ldf") {
+          candidates[v].insert(candidates[v].end(), buffer.begin(), buffer.end());
+        } else {
+          filter.Filter(g, buffer, &candidates[v]);
+        }
         buffer.clear();
       }
       candidate_size[v] = candidates[v].size();
@@ -157,7 +167,38 @@ class Benchmark {
       LOG(INFO) << "dpiso order get start vertex " << start_vertex;
       DPISOFilter dpiso_filter(&q, &g, start_vertex);
       dpiso_filter.Filter(candidates);
+    } else if (FLAGS_filter == "tso") {
+      TSOOrder tso_order;
+      QueryVertexID start_vertex = tso_order.getStartVertex(&g, &q, candidate_size);
+      LOG(INFO) << "tso order get start vertex " << start_vertex;
+      TSOFilter tso_filter(&q, &g, start_vertex);
+      tso_filter.Filter(candidates);
+    } else if (FLAGS_filter == "gql") {
+      std::vector<std::vector<VertexID>> gql_candidates;
+      circinus::unordered_map<QueryVertexID, circinus::unordered_set<VertexID>> gql_map;
+      for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
+        circinus::unordered_set<VertexID> gql_set;
+        for (auto i : candidates[v]) {
+          gql_set.insert(i);
+        }
+        gql_map[v] = std::move(gql_set);
+      }
+      for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
+        GQLFilter gql_filter(&q, v, &gql_map);
+        gql_filter.preFilter(g, candidates[v]);
+      }
+      for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
+        GQLFilter gql_filter(&q, v, &gql_map);
+        std::vector<VertexID> tempvec;
+        gql_filter.Filter(g, candidates[v], &tempvec);
+        gql_candidates.push_back(std::move(tempvec));
+      }
+      for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
+        LOG(INFO) << "vertex " << v << " " << candidate_size[v] << "/" << gql_candidates[v].size();
+      }
+      return gql_candidates;
     }
+
     for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
       LOG(INFO) << "vertex " << v << " " << candidate_size[v] << "/" << candidates[v].size();
     }
@@ -233,17 +274,11 @@ class Benchmark {
     if (plan->isInCover(plan->getRootQueryVertexID()) &&
         (FLAGS_vertex_cover == "static" || FLAGS_vertex_cover == "all" ||
          plan->getToKeyLevel(plan->getRootQueryVertexID()) == 0)) {
-      if (FLAGS_bipartite_graph == 1)
-        plan->getOperators().profile(g, std::vector<CompressedSubgraphs>(seeds.begin(), seeds.end()), 0, true);
-      else
-        plan->getOperators().profile(g, std::vector<CompressedSubgraphs>(seeds.begin(), seeds.end()), 0, false);
+      plan->getOperators().profile(g, std::vector<CompressedSubgraphs>(seeds.begin(), seeds.end()), FLAGS_profile, 0, FLAGS_bipartite_graph);
     } else {
       std::vector<CompressedSubgraphs> input;
       input.emplace_back(std::make_shared<std::vector<VertexID>>(std::move(seeds)));
-      if (FLAGS_bipartite_graph == 1)
-        plan->getOperators().profile(g, input, 0, true);
-      else
-        plan->getOperators().profile(g, input, 0, false);
+      plan->getOperators().profile(g, input, FLAGS_profile, 0, FLAGS_bipartite_graph);
     }
   }
 
@@ -297,7 +332,7 @@ class Benchmark {
     while (op != nullptr) {
       auto start = std::chrono::steady_clock::now();
       op->input(input, g);
-      while (op->expandAndProfile(&outputs, FLAGS_batch_size) > 0) {
+      while (op->expandAndProfile(&outputs, FLAGS_batch_size, 1) > 0) {
       }
       auto end = std::chrono::steady_clock::now();
       double time = toSeconds(start, end);
@@ -448,7 +483,7 @@ class Benchmark {
     auto start_execution = std::chrono::steady_clock::now();
     // ProfilerStart("benchmark.prof");
     if (FLAGS_num_cores == 1) {
-      if (FLAGS_profile) {
+      if (FLAGS_profile > 0) {
         batchDFSProfileST(&g, plan);
       } else {
         LOG(INFO) << "batchDFSExecuteST";
@@ -565,11 +600,16 @@ void run_benchmark(const std::string& query_file, std::ostream* out) {
   std::string dataset = "";
   Graph data_graph;
   double load_time = 0;
+  std::string profile_prefix = "/data/share/users/byli/circinus/evaluation/profile/";
   while (query_f >> config) {
     if (config.skipConfig()) continue;
     config.toString(LOG(INFO) << ">>>>>>>>>>>>>>>>> query config -vertex_cover " << FLAGS_vertex_cover << " -filter "
                               << FLAGS_filter << " -match_limit " << FLAGS_match_limit << ' ');
     // load graph if not cached
+    FLAGS_profile_file = profile_prefix + config.dataset + '_' + config.query_mode + '_' +
+                         std::to_string(config.query_size) + '_' + std::to_string(config.query_index) + '_' +
+                         FLAGS_filter;
+    LOG(INFO) << "-------------" << FLAGS_profile_file;
     if (config.dataset != dataset) {
       dataset = config.dataset;
       benchmark.loadDataset(data_graph, dataset, load_time);
@@ -619,7 +659,7 @@ int main(int argc, char** argv) {
   if (FLAGS_match_limit == 0) {
     FLAGS_match_limit = ~0u;
   }
-  FLAGS_profile = (FLAGS_profile_file != "");
+  // FLAGS_profile = (FLAGS_profile_file != "");
 
   if (FLAGS_batch_file != "") {
     run_benchmark(FLAGS_batch_file, out);
