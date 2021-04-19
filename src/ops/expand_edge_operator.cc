@@ -240,7 +240,8 @@ class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
             constexpr(isProfileWithMiniIntersectionMode(profile)) {
               distinct_intersection_count_ += parent_set_.insert(parent_match).second;
             }
-          total_intersection_input_size_ += candidate_set_.size() + current_data_graph_->getVertexOutDegree(parent_match);
+          total_intersection_input_size_ +=
+              candidate_set_.size() + current_data_graph_->getVertexOutDegree(parent_match);
           total_intersection_output_size_ += current_targets_.size();
         }
     }

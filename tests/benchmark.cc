@@ -274,7 +274,8 @@ class Benchmark {
     if (plan->isInCover(plan->getRootQueryVertexID()) &&
         (FLAGS_vertex_cover == "static" || FLAGS_vertex_cover == "all" ||
          plan->getToKeyLevel(plan->getRootQueryVertexID()) == 0)) {
-      plan->getOperators().profile(g, std::vector<CompressedSubgraphs>(seeds.begin(), seeds.end()), FLAGS_profile, 0, FLAGS_bipartite_graph);
+      plan->getOperators().profile(g, std::vector<CompressedSubgraphs>(seeds.begin(), seeds.end()), FLAGS_profile, 0,
+                                   FLAGS_bipartite_graph);
     } else {
       std::vector<CompressedSubgraphs> input;
       input.emplace_back(std::make_shared<std::vector<VertexID>>(std::move(seeds)));

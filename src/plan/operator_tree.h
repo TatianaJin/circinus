@@ -63,8 +63,8 @@ class OperatorTree {
   bool handleTask(Task* task, TaskQueue* queue, uint32_t thread_id);
 
   bool execute(const Graph* g, const std::vector<CompressedSubgraphs>& inputs, uint32_t level = 0, bool useBG = false);
-  bool profile(const Graph* g, const std::vector<CompressedSubgraphs>& inputs, uint32_t query_type, uint32_t level = 0, bool useBG = false);
-  
+  bool profile(const Graph* g, const std::vector<CompressedSubgraphs>& inputs, uint32_t query_type, uint32_t level = 0,
+               bool useBG = false);
 };
 
 }  // namespace circinus
