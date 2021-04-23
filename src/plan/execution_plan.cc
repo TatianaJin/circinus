@@ -20,11 +20,17 @@
 #include <utility>
 #include <vector>
 
+#include "graph/bipartite_graph.h"
 #include "ops/operators.h"
 #include "utils/hashmap.h"
 
 namespace circinus {
 
+void addBipartiteGraphToOperator(QueryVertexID qv1, QueryVertexID qv2, TraverseOperator* op) {
+  op->addBipartiteGraph(new BipartiteGraph(qv1, qv2));
+}
+
+// BipartiteGraph used in this function but not the other function with the same name
 void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<QueryVertexID>& matching_order,
                                          const std::vector<int>& cover_table, Profiler* profiler) {
   matching_order_ = matching_order;
@@ -81,6 +87,7 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
       } else {
         prev = newExpandEdgeSetToKeyOperator(parent, target_vertex, same_label_v_indices, std::vector<uint32_t>{});
       }
+      addBipartiteGraphToOperator(parent, target_vertex, dynamic_cast<TraverseOperator*>(prev));
     } else {
       // find parent vertices
       auto neighbors = g->getOutNeighbors(target_vertex);
@@ -120,6 +127,13 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
         } else {
           current = newExpandSetVertexOperator(key_parents, target_vertex, same_label_v_indices);
         }
+      }
+      // careful with this key-first-set-later order
+      for (auto& qv : key_parents) {
+        addBipartiteGraphToOperator(qv, target_vertex, dynamic_cast<TraverseOperator*>(current));
+      }
+      for (auto& qv : set_parents) {
+        addBipartiteGraphToOperator(qv, target_vertex, dynamic_cast<TraverseOperator*>(current));
       }
       prev->setNext(current);
       prev = current;

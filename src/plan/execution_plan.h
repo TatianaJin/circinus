@@ -141,6 +141,8 @@ class ExecutionPlan {
     return candidate_sets_[id];
   }
 
+  inline const std::vector<std::vector<VertexID>>* getCandidateSets() const { return &candidate_sets_; }
+
   inline const bool isToKey(QueryVertexID id) const { return dynamic_cover_key_level_.count(id) != 0; }
 
   inline const uint32_t getToKeyLevel(QueryVertexID id) const { return dynamic_cover_key_level_.find(id)->second; }

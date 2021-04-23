@@ -48,6 +48,7 @@ class OperatorTree {
   inline void reserve(uint32_t size) { operators_.reserve(size); }
   inline void setProfiler(Profiler* profiler) { profiler_ = profiler; }
   inline Operator* getOperator(uint32_t idx) const { return operators_[idx]; }
+  inline size_t getOperatorSize() const { return operators_.size(); }
 
   inline OperatorTree clone() const {
     OperatorTree ret;
@@ -61,8 +62,9 @@ class OperatorTree {
 
   bool handleTask(Task* task, TaskQueue* queue, uint32_t thread_id);
 
-  bool execute(const Graph* g, const std::vector<CompressedSubgraphs>& inputs, uint32_t level = 0);
-  bool profile(const Graph* g, const std::vector<CompressedSubgraphs>& inputs, uint32_t query_type, uint32_t level = 0);
+  bool execute(const Graph* g, const std::vector<CompressedSubgraphs>& inputs, uint32_t level = 0, bool useBG = false);
+  bool profile(const Graph* g, const std::vector<CompressedSubgraphs>& inputs, uint32_t query_type, uint32_t level = 0,
+               bool useBG = false);
 };
 
 }  // namespace circinus

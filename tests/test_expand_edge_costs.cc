@@ -21,6 +21,7 @@
 #include "glog/logging.h"
 #include "gtest/gtest.h"
 
+#include "graph/bipartite_graph.h"
 #include "graph/compressed_subgraphs.h"
 #include "graph/graph.h"
 #include "graph/query_graph.h"
@@ -43,6 +44,7 @@ using circinus::NLFFilter;
 using circinus::QueryGraph;
 using circinus::QueryVertexID;
 using circinus::VertexID;
+using circinus::BipartiteGraph;
 
 #define BATCH_SIZE FLAGS_batch_size
 
@@ -171,6 +173,8 @@ class TestExpandEdgeCosts : public testing::Test {
     if (cover[parent] == 1 && cover[target] == 1) {  // key to key
       op = new ExpandKeyToKeyVertexOperator(std::vector<QueryVertexID>{parent}, target, indices, same_label_indices[1],
                                             same_label_indices[0], ~0u, filter);
+      BipartiteGraph* bg = new BipartiteGraph(parent, target);
+      op->addBipartiteGraph(bg);
     } else if (cover[parent] == 1) {  // key to set
       op = new ExpandKeyToSetVertexOperator(std::vector<QueryVertexID>{parent}, target, indices, same_label_indices[1],
                                             same_label_indices[0], ~0u, filter);
@@ -181,6 +185,9 @@ class TestExpandEdgeCosts : public testing::Test {
     auto start = std::chrono::high_resolution_clock::now();
     op->setCandidateSets(&candidates[target]);
     op->input(seeds, &g);
+    if (cover[parent] == 1 && cover[target] == 1) {
+      op->useBipartiteGraph(&candidates);
+    }
     std::vector<CompressedSubgraphs> outputs;
     while (op->expand(&outputs, BATCH_SIZE) > 0) {
     }
@@ -199,6 +206,11 @@ class TestExpandEdgeCosts : public testing::Test {
     start = std::chrono::high_resolution_clock::now();
     op_expand_edge->setCandidateSets(&candidates[target]);
     op_expand_edge->input(seeds, &g);
+    if (cover[parent] == 1 && cover[target] == 1) {
+      BipartiteGraph* bg = new BipartiteGraph(parent, target);
+      op_expand_edge->addBipartiteGraph(bg);
+      op_expand_edge->useBipartiteGraph(&candidates);
+    }
     while (op_expand_edge->expand(&outputs, BATCH_SIZE) > 0) {
     }
     end = std::chrono::high_resolution_clock::now();

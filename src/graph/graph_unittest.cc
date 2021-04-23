@@ -17,13 +17,14 @@
 
 #include "gflags/gflags.h"
 #include "glog/logging.h"
-#include "gtest/gtest.h"
-
+#include "graph/bipartite_graph.h"
 #include "graph/query_graph.h"
+#include "gtest/gtest.h"
 #include "ops/filters.h"
 
 using circinus::VertexID;
 using circinus::Graph;
+using circinus::BipartiteGraph;
 
 class TestGraph : public testing::Test {};
 
@@ -46,6 +47,34 @@ TEST_F(TestGraph, GetVerticesByLabel) {
   auto labels = g.getLabels();
   for (auto l : labels) {
     EXPECT_EQ(g.getVerticesByLabel(l)->size(), g.getVertexCardinalityByLabel(l));
+  }
+}
+
+TEST_F(TestGraph, BipartiteGraph) {
+  Graph g("resources/human.graph");
+  std::vector<VertexID> candidate_set1, candidate_set2;
+  for (int i = 0; i < 10; ++i) candidate_set1.emplace_back(i);
+  for (int i = 5; i < 15; ++i) candidate_set2.emplace_back(i);
+  BipartiteGraph bg(0, 0);  // will not use these IDs here
+  bg.populateGraph(&g, candidate_set1, candidate_set2);
+  std::unordered_set<VertexID> vset(candidate_set2.begin(), candidate_set2.end());
+  std::multiset<VertexID> resultSet, expectedSet;
+  for (auto& v1Id : candidate_set1) {
+    auto[dest_nodes, cnt] = g.getOutNeighbors(v1Id);
+    expectedSet.clear();
+    for (uint32_t j = 0; j < cnt; ++j)
+      if (vset.find(dest_nodes[j]) != vset.end()) expectedSet.insert(dest_nodes[j]);
+    auto[bg_dest_nodes, bg_cnt] = bg.getOutNeighbors(v1Id);
+    EXPECT_EQ(bg_cnt, expectedSet.size());
+    resultSet.clear();
+    for (uint32_t j = 0; j < bg_cnt; ++j) resultSet.insert(bg_dest_nodes[j]);
+    auto iter1 = expectedSet.begin(), iter2 = resultSet.begin();
+    EXPECT_EQ(bg_cnt, resultSet.size());
+    for (uint32_t j = 0; j < bg_cnt; ++j) {
+      EXPECT_EQ(*iter1, *iter2);
+      iter1 = std::next(iter1);
+      iter2 = std::next(iter2);
+    }
   }
 }
 

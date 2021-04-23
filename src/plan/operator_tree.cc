@@ -61,7 +61,7 @@ bool OperatorTree::handleTask(Task* task, TaskQueue* queue, uint32_t thread_id) 
   return false;
 }
 
-bool OperatorTree::execute(const Graph* g, const std::vector<CompressedSubgraphs>& inputs, uint32_t level) {
+bool OperatorTree::execute(const Graph* g, const std::vector<CompressedSubgraphs>& inputs, uint32_t level, bool useBG) {
   std::vector<CompressedSubgraphs> outputs;
   auto op = operators_[level];
   if (level == operators_.size() - 1) {
@@ -71,6 +71,7 @@ bool OperatorTree::execute(const Graph* g, const std::vector<CompressedSubgraphs
   auto traverse_op = dynamic_cast<TraverseOperator*>(op);
   uint32_t last_input_index = 0;
   traverse_op->input(inputs, g);
+  if (useBG) traverse_op->useBipartiteGraph();
   while (true) {
     outputs.clear();
     auto start_time = clock();
@@ -78,7 +79,7 @@ bool OperatorTree::execute(const Graph* g, const std::vector<CompressedSubgraphs
     if (size == 0) {
       break;
     }
-    if (execute(g, outputs, level + 1)) {
+    if (execute(g, outputs, level + 1, useBG)) {
       return true;
     }
   }
@@ -86,7 +87,7 @@ bool OperatorTree::execute(const Graph* g, const std::vector<CompressedSubgraphs
 }
 
 bool OperatorTree::profile(const Graph* g, const std::vector<CompressedSubgraphs>& inputs, uint32_t query_type,
-                           uint32_t level) {
+                           uint32_t level, bool useBG) {
   std::vector<CompressedSubgraphs> outputs;
   auto op = operators_[level];
   if (level == operators_.size() - 1) {
@@ -96,6 +97,7 @@ bool OperatorTree::profile(const Graph* g, const std::vector<CompressedSubgraphs
   auto traverse_op = dynamic_cast<TraverseOperator*>(op);
   uint32_t last_input_index = 0;
   traverse_op->inputAndProfile(inputs, g);
+  if (useBG) traverse_op->useBipartiteGraph();
   while (true) {
     outputs.clear();
     auto start_time = clock();
@@ -103,7 +105,7 @@ bool OperatorTree::profile(const Graph* g, const std::vector<CompressedSubgraphs
     if (size == 0) {
       break;
     }
-    if (profile(g, outputs, query_type, level + 1)) {
+    if (profile(g, outputs, query_type, level + 1, useBG)) {
       return true;
     }
   }

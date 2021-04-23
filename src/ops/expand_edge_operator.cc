@@ -197,7 +197,7 @@ class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
     } else if (query_type == 2) {
       n = expandInner<QueryType::ProfileWithMiniIntersection>(outputs, cap);
     }
-    intersection_count_ += input_index_ - old_input_index;
+    if (!use_bipartite_graph_flag) intersection_count_ += input_index_ - old_input_index;
     return n;
   }
 
@@ -206,6 +206,11 @@ class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
     ss << "ExpandEdgeKeyToKeyOperator";
     toStringInner(ss);
     return ss.str();
+  }
+
+  std::string toProfileString() const override {
+    if (!use_bipartite_graph_flag) return TraverseOperator::toProfileString();
+    return toProfileStringUsingBipartiteGraphs();
   }
 
   Operator* clone() const override {
@@ -219,19 +224,27 @@ class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
     current_targets_.clear();
     current_target_index_ = 0;
     auto parent_match = input.getKeyVal(parent_index_);
+    if (use_bipartite_graph_flag)
+      current_data_graph_ = bg_pointers_.front();  // must only use validate things in BipartiteGraph then
     // intersect(candidate_set_, current_data_graph_->getOutNeighbors(parent_match), &current_targets_,
     // input.getKeyMap());
-    intersect(candidate_set_, current_data_graph_->getOutNeighbors(parent_match), &current_targets_,
-              input.getExceptions(same_label_key_indices_, same_label_set_indices_));
-    if
-      constexpr(isProfileMode(profile) || isProfileWithMiniIntersectionMode(profile)) {
-        if
-          constexpr(isProfileWithMiniIntersectionMode(profile)) {
-            distinct_intersection_count_ += parent_set_.insert(parent_match).second;
-          }
-        total_intersection_input_size_ += candidate_set_.size() + current_data_graph_->getVertexOutDegree(parent_match);
-        total_intersection_output_size_ += current_targets_.size();
-      }
+    if (use_bipartite_graph_flag) {
+      removeExceptions(current_data_graph_->getOutNeighbors(parent_match), &current_targets_,
+                       input.getExceptions(same_label_key_indices_, same_label_set_indices_));
+    } else {
+      intersect(candidate_set_, current_data_graph_->getOutNeighbors(parent_match), &current_targets_,
+                input.getExceptions(same_label_key_indices_, same_label_set_indices_));
+      if
+        constexpr(isProfileMode(profile) || isProfileWithMiniIntersectionMode(profile)) {
+          if
+            constexpr(isProfileWithMiniIntersectionMode(profile)) {
+              distinct_intersection_count_ += parent_set_.insert(parent_match).second;
+            }
+          total_intersection_input_size_ +=
+              candidate_set_.size() + current_data_graph_->getVertexOutDegree(parent_match);
+          total_intersection_output_size_ += current_targets_.size();
+        }
+    }
     // intersect(*candidates_, current_data_graph_->getOutNeighbors(parent_match), &current_targets_,
     // input.getKeyMap());
   }
