@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <pthread.h>
 #include <chrono>
 #include <cmath>
 #include <fstream>
@@ -689,7 +688,7 @@ int main(int argc, char** argv) {
     out = &std::cout;
   }
   if (FLAGS_match_limit == 0) {
-    FLAGS_match_limit = ~0u;
+    FLAGS_match_limit = ~0ull;
   }
   // FLAGS_profile = (FLAGS_profile_file != "");
 
