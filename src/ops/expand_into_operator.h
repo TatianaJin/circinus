@@ -94,49 +94,49 @@ class ExpandIntoOperator : public TraverseOperator {
       if
         constexpr(isProfileMode(profile) || isProfileWithMiniIntersectionMode(profile)) {
           total_num_input_subgraphs_ += (*current_inputs_)[input_index_].getNumSubgraphs();
-          unordered_set<VertexID> prefix_set;
-          for (uint32_t i = 0; i < key_parents_.size(); ++i) {
-            parent_tuple[i] = input.getKeyVal(query_vertex_indices_[key_parents_[i]]);
-            prefix_set.insert(parent_tuple[i]);
-          }
-          std::vector<std::vector<VertexID>*> parent_set_ptrs;
-          parent_set_ptrs.reserve(parents_.size());
-          for (auto parent : parents_) {
-            parent_set_ptrs.push_back(input.getSet(query_vertex_indices_[parent]).get());
-          }
-          uint32_t depth = 0, last_depth = parents_.size() - 1;
-          std::vector<uint32_t> set_index(parents_.size(), 0);
-          while (true) {
-            while (set_index[depth] < parent_set_ptrs[depth]->size()) {
-              auto parent_vid = (*parent_set_ptrs[depth])[set_index[depth]];
-              if (prefix_set.count(parent_vid)) {
-                ++set_index[depth];
-                continue;
+          if
+            constexpr(isProfileWithMiniIntersectionMode(profile)) {
+              unordered_set<VertexID> prefix_set;
+              for (uint32_t i = 0; i < key_parents_.size(); ++i) {
+                parent_tuple[i] = input.getKeyVal(query_vertex_indices_[key_parents_[i]]);
+                prefix_set.insert(parent_tuple[i]);
               }
-              auto pidx = depth + key_parents_.size();
-              parent_tuple[pidx] = parent_vid;
-              if
-                constexpr(isProfileWithMiniIntersectionMode(profile)) {
+              std::vector<std::vector<VertexID>*> parent_set_ptrs;
+              parent_set_ptrs.reserve(parents_.size());
+              for (auto parent : parents_) {
+                parent_set_ptrs.push_back(input.getSet(query_vertex_indices_[parent]).get());
+              }
+              uint32_t depth = 0, last_depth = parents_.size() - 1;
+              std::vector<uint32_t> set_index(parents_.size(), 0);
+              while (true) {
+                while (set_index[depth] < parent_set_ptrs[depth]->size()) {
+                  auto parent_vid = (*parent_set_ptrs[depth])[set_index[depth]];
+                  if (prefix_set.count(parent_vid)) {
+                    ++set_index[depth];
+                    continue;
+                  }
+                  auto pidx = depth + key_parents_.size();
+                  parent_tuple[pidx] = parent_vid;
                   distinct_intersection_count_ +=
                       parent_tuple_sets_[depth]
                           .emplace((char*)parent_tuple.data(), (pidx + 1) * sizeof(VertexID))
                           .second;
+                  if (depth == last_depth) {
+                    ++set_index[depth];
+                  } else {
+                    prefix_set.insert(parent_vid);
+                    ++depth;
+                    set_index[depth] = 0;
+                  }
                 }
-              if (depth == last_depth) {
+                if (depth == 0) {
+                  break;
+                }
+                --depth;
+                prefix_set.erase((*parent_set_ptrs[depth])[set_index[depth]]);
                 ++set_index[depth];
-              } else {
-                prefix_set.insert(parent_vid);
-                ++depth;
-                set_index[depth] = 0;
               }
             }
-            if (depth == 0) {
-              break;
-            }
-            --depth;
-            prefix_set.erase((*parent_set_ptrs[depth])[set_index[depth]]);
-            ++set_index[depth];
-          }
         }
 #ifndef USE_FILTER
       // TODO(tatiana): `ExpandInto` requires different groups of same-label indices for the parent sets
