@@ -178,6 +178,7 @@ class ExpandIntoOperator : public TraverseOperator {
           break;
         }
 #ifdef USE_FILTER
+        // TODO(tatiana): include same-label keys for checking when sets are updated (ExpandInto and ExpandSettoKey)
         input.UpdateSets(id, std::make_shared<std::vector<VertexID>>(std::move(new_set)));
         if (filter(input)) {
           add = false;
