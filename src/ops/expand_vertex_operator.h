@@ -45,6 +45,17 @@ class ExpandVertexOperator : public TraverseOperator {
 
   const auto& getQueryVertexIndices() const { return query_vertex_indices_; }
 
+  std::vector<BipartiteGraph*> computeBipartiteGraphs(
+      const Graph* g, const std::vector<std::vector<VertexID>>& candidate_sets) override {
+    std::vector<BipartiteGraph*> ret;
+    ret.reserve(parents_.size());
+    for (auto parent_vertex : parents_) {
+      ret.emplace_back(new BipartiteGraph(parent_vertex, target_vertex_));
+      ret.back()->populateGraph(g, &candidate_sets);
+    }
+    return ret;
+  }
+
  protected:
   inline void toStringInner(std::stringstream& ss) const {
     for (auto parent : parents_) {

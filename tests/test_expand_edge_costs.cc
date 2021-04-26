@@ -24,6 +24,7 @@
 #include "graph/bipartite_graph.h"
 #include "graph/compressed_subgraphs.h"
 #include "graph/graph.h"
+#include "graph/graph_view.h"
 #include "graph/query_graph.h"
 #include "ops/expand_edge_operator.h"
 #include "ops/filters.h"
@@ -102,7 +103,7 @@ class TestExpandEdgeCosts : public testing::Test {
 
   std::pair<circinus::TraverseOperator*, circinus::SubgraphFilter*> newExpandEdgeOperator(
       QueryVertexID parent, QueryVertexID target, const std::vector<int>& cover,
-      const circinus::unordered_map<QueryVertexID, uint32_t>& indices, const QueryGraph& q) {
+      const circinus::unordered_map<QueryVertexID, uint32_t>& indices, const QueryGraph& q, bool use_bipartite_graph) {
     std::array<std::vector<uint32_t>, 2> same_label_indices;  // indices in the input
     if (q.getVertexLabel(parent) == q.getVertexLabel(target)) {
       same_label_indices[cover[parent] == 1].push_back(indices.at(parent));
@@ -113,16 +114,19 @@ class TestExpandEdgeCosts : public testing::Test {
 #endif
     if (cover[target] != 1) {
       return {ExpandEdgeOperator::newExpandEdgeKeyToSetOperator(parent, target, indices, same_label_indices[1],
-                                                                same_label_indices[0], ~0u, filter),
+                                                                same_label_indices[0], ~0u, filter,
+                                                                circinus::GraphType::Normal),
               filter};
     }
     if (cover[parent] == 1) {
-      return {ExpandEdgeOperator::newExpandEdgeKeyToKeyOperator(parent, target, indices, same_label_indices[1],
-                                                                same_label_indices[0], ~0u, filter),
-              filter};
+      return {
+          ExpandEdgeOperator::newExpandEdgeKeyToKeyOperator(
+              parent, target, indices, same_label_indices[1], same_label_indices[0], ~0u, filter, !use_bipartite_graph,
+              use_bipartite_graph ? circinus::GraphType::BipartiteGraphView : circinus::GraphType::Normal),
+          filter};
     }
     return {ExpandEdgeOperator::newExpandEdgeSetToKeyOperator(parent, target, indices, same_label_indices[1], {}, ~0u,
-                                                              filter),
+                                                              filter, circinus::GraphType::Normal),
             filter};
   }
 
@@ -132,7 +136,7 @@ class TestExpandEdgeCosts : public testing::Test {
     circinus::unordered_map<QueryVertexID, uint32_t> indices;
     indices[parent] = 0;
     indices[target] = (cover[target] == cover[parent]);
-    auto op_filter = newExpandEdgeOperator(parent, target, cover, indices, q);
+    auto op_filter = newExpandEdgeOperator(parent, target, cover, indices, q, false);
     auto op = op_filter.first;
     auto start = std::chrono::high_resolution_clock::now();
     op->setCandidateSets(&candidates[target]);
@@ -152,12 +156,14 @@ class TestExpandEdgeCosts : public testing::Test {
     return ret;
   }
 
+  template <bool use_bipartite_graph = false>
   uint32_t expandVertex(QueryVertexID parent, QueryVertexID target, const std::vector<int>& cover,
                         const std::vector<std::vector<VertexID>>& candidates,
                         const std::vector<CompressedSubgraphs>& seeds, const Graph& g, const QueryGraph& q) {
     circinus::unordered_map<QueryVertexID, uint32_t> indices;
     indices[parent] = 0;
     indices[target] = (cover[target] == cover[parent]);
+    circinus::GraphView<BipartiteGraph>* bg = nullptr;
 
     std::array<std::vector<uint32_t>, 2> same_label_indices;  // indices in the input
     if (q.getVertexLabel(parent) == q.getVertexLabel(target)) {
@@ -171,23 +177,31 @@ class TestExpandEdgeCosts : public testing::Test {
     // expand vertex operator
     circinus::TraverseOperator* op;
     if (cover[parent] == 1 && cover[target] == 1) {  // key to key
-      op = new ExpandKeyToKeyVertexOperator(std::vector<QueryVertexID>{parent}, target, indices, same_label_indices[1],
-                                            same_label_indices[0], ~0u, filter);
-      BipartiteGraph* bg = new BipartiteGraph(parent, target);
-      op->addBipartiteGraph(bg);
+      if (use_bipartite_graph) {
+        op = new ExpandKeyToKeyVertexOperator<circinus::GraphView<BipartiteGraph>, false>(
+            std::vector<QueryVertexID>{parent}, target, indices, same_label_indices[1], same_label_indices[0], ~0u,
+            filter);
+      } else {
+        op = new ExpandKeyToKeyVertexOperator<Graph, true>(std::vector<QueryVertexID>{parent}, target, indices,
+                                                           same_label_indices[1], same_label_indices[0], ~0u, filter);
+      }
     } else if (cover[parent] == 1) {  // key to set
-      op = new ExpandKeyToSetVertexOperator(std::vector<QueryVertexID>{parent}, target, indices, same_label_indices[1],
-                                            same_label_indices[0], ~0u, filter);
+      op = new ExpandKeyToSetVertexOperator<Graph>(std::vector<QueryVertexID>{parent}, target, indices,
+                                                   same_label_indices[1], same_label_indices[0], ~0u, filter);
     } else {  // set to key
-      op = new ExpandSetToKeyVertexOperator(std::vector<QueryVertexID>{parent}, target, indices, same_label_indices[1],
-                                            same_label_indices[0], ~0u, filter);
+      op = new ExpandSetToKeyVertexOperator<Graph>(std::vector<QueryVertexID>{parent}, target, indices,
+                                                   same_label_indices[1], same_label_indices[0], ~0u, filter);
     }
     auto start = std::chrono::high_resolution_clock::now();
     op->setCandidateSets(&candidates[target]);
     op->input(seeds, &g);
-    if (cover[parent] == 1 && cover[target] == 1) {
-      op->useBipartiteGraph(&candidates);
-    }
+    if
+      constexpr(use_bipartite_graph) {
+        if (cover[parent] == 1 && cover[target] == 1) {
+          bg = new circinus::GraphView<BipartiteGraph>(op->computeBipartiteGraphs(&g, candidates));
+          op->input(seeds, bg);
+        }
+      }
     std::vector<CompressedSubgraphs> outputs;
     while (op->expand(&outputs, BATCH_SIZE) > 0) {
     }
@@ -196,27 +210,37 @@ class TestExpandEdgeCosts : public testing::Test {
     outputs.clear();
     auto expand_vertex_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
     delete op;
+    if (bg != nullptr) {
+      delete bg;
+      bg = nullptr;
+    }
 #ifdef USE_FILTER
     delete filter;
 #endif
 
     // expand edge operator
-    auto op_filter = newExpandEdgeOperator(parent, target, cover, indices, q);
+    auto op_filter = newExpandEdgeOperator(parent, target, cover, indices, q, use_bipartite_graph);
     auto op_expand_edge = op_filter.first;
     start = std::chrono::high_resolution_clock::now();
     op_expand_edge->setCandidateSets(&candidates[target]);
     op_expand_edge->input(seeds, &g);
-    if (cover[parent] == 1 && cover[target] == 1) {
-      BipartiteGraph* bg = new BipartiteGraph(parent, target);
-      op_expand_edge->addBipartiteGraph(bg);
-      op_expand_edge->useBipartiteGraph(&candidates);
-    }
+    if
+      constexpr(use_bipartite_graph) {
+        if (cover[parent] == 1 && cover[target] == 1) {
+          bg = new circinus::GraphView<BipartiteGraph>(op_expand_edge->computeBipartiteGraphs(&g, candidates));
+          op_expand_edge->input(seeds, bg);
+        }
+      }
     while (op_expand_edge->expand(&outputs, BATCH_SIZE) > 0) {
     }
     end = std::chrono::high_resolution_clock::now();
     EXPECT_EQ(ret, getNumSubgraphs(outputs));
     auto expand_edge_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
     delete op_expand_edge;
+    if (bg != nullptr) {
+      delete bg;
+      bg = nullptr;
+    }
 #ifdef USE_FILTER
     delete op_filter.second;
 #endif
@@ -237,7 +261,7 @@ class TestExpandEdgeCosts : public testing::Test {
     return ret;
   }
 
-  template <bool compare_expand_vertex = false>
+  template <bool compare_expand_vertex = false, bool use_bipartite_graph = false>
   void expandEdges(uint32_t i) {
     Graph g(FLAGS_data_dir + "/" + data_graph_paths_[i]);  // load data graph
     for (uint32_t j = 0; j < query_graph_paths_[i].size(); ++j) {
@@ -266,7 +290,7 @@ class TestExpandEdgeCosts : public testing::Test {
             cover[v] = 1;
             cover[target] = 0;
             if (compare_expand_vertex) {
-              n_output = expandVertex(v, target, cover, candidates, seed_keys, g, q);
+              n_output = expandVertex<use_bipartite_graph>(v, target, cover, candidates, seed_keys, g, q);
             } else {
               n_output = getNumMatches(v, target, cover, candidates, seed_keys, g, q);
             }
@@ -275,7 +299,7 @@ class TestExpandEdgeCosts : public testing::Test {
             cover[v] = 1;
             cover[target] = 1;
             if (compare_expand_vertex) {
-              EXPECT_EQ(n_output, expandVertex(v, target, cover, candidates, seed_keys, g, q));
+              EXPECT_EQ(n_output, expandVertex<use_bipartite_graph>(v, target, cover, candidates, seed_keys, g, q));
             } else {
               EXPECT_EQ(n_output, getNumMatches(v, target, cover, candidates, seed_keys, g, q));
             }
@@ -284,7 +308,7 @@ class TestExpandEdgeCosts : public testing::Test {
             cover[v] = 0;
             cover[target] = 1;
             if (compare_expand_vertex) {
-              ASSERT_EQ(n_output, expandVertex(v, target, cover, candidates, seed_sets, g, q));
+              ASSERT_EQ(n_output, expandVertex<use_bipartite_graph>(v, target, cover, candidates, seed_sets, g, q));
             } else {
               ASSERT_EQ(n_output, getNumMatches(v, target, cover, candidates, seed_sets, g, q));
             }
@@ -313,3 +337,12 @@ TEST_F(TestExpandEdgeCosts, ComparePATENTS) { expandEdges<true>(4); }
 TEST_F(TestExpandEdgeCosts, CompareWORDNET) { expandEdges<true>(5); }
 TEST_F(TestExpandEdgeCosts, CompareYEAST) { expandEdges<true>(6); }
 TEST_F(TestExpandEdgeCosts, CompareYOUTUBE) { expandEdges<true>(7); }
+
+TEST_F(TestExpandEdgeCosts, BGCompareDBLP) { expandEdges<true, true>(0); }
+TEST_F(TestExpandEdgeCosts, BGCompareEU2005) { expandEdges<true, true>(1); }
+TEST_F(TestExpandEdgeCosts, BGCompareHPRD) { expandEdges<true, true>(2); }
+TEST_F(TestExpandEdgeCosts, BGCompareHUMAN) { expandEdges<true, true>(3); }
+TEST_F(TestExpandEdgeCosts, BGComparePATENTS) { expandEdges<true, true>(4); }
+TEST_F(TestExpandEdgeCosts, BGCompareWORDNET) { expandEdges<true, true>(5); }
+TEST_F(TestExpandEdgeCosts, BGCompareYEAST) { expandEdges<true, true>(6); }
+TEST_F(TestExpandEdgeCosts, BGCompareYOUTUBE) { expandEdges<true, true>(7); }

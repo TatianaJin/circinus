@@ -25,6 +25,7 @@
 
 namespace circinus {
 
+template <typename G>
 class ExpandKeyToSetVertexOperator : public ExpandVertexOperator {
   std::vector<unordered_set<std::string>> parent_tuple_sets_;
 
@@ -45,9 +46,9 @@ class ExpandKeyToSetVertexOperator : public ExpandVertexOperator {
                                  uint32_t query_type) override {
     if (query_type == 1) {
       return expandInner<QueryType::Profile>(outputs, batch_size);
-    } else if (query_type == 2) {
-      return expandInner<QueryType::ProfileWithMiniIntersection>(outputs, batch_size);
     }
+    CHECK_EQ(query_type, 2) << "unknown query type " << query_type;
+    return expandInner<QueryType::ProfileWithMiniIntersection>(outputs, batch_size);
   }
 
   std::string toString() const override {
@@ -74,18 +75,20 @@ class ExpandKeyToSetVertexOperator : public ExpandVertexOperator {
         uint32_t key = query_vertex_indices_[parents_[i]];
         uint32_t key_vid = input.getKeyVal(key);
         if (i == 0) {
-          intersect(*candidates_, current_data_graph_->getOutNeighbors(key_vid), &new_set, exceptions);
+          intersect(*candidates_, ((G*)current_data_graph_)->getOutNeighbors(key_vid, 0, i), &new_set, exceptions);
           if
-            constexpr(isProfileMode(profile) || isProfileWithMiniIntersectionMode(profile)) {
-              updateIntersectInfo(candidates_->size() + current_data_graph_->getVertexOutDegree(key_vid),
+            constexpr(isProfileMode(profile)) {
+              updateIntersectInfo(candidates_->size() + ((G*)current_data_graph_)->getVertexOutDegree(key_vid, 0, i),
                                   new_set.size());
             }
         } else {
           auto new_set_size = new_set.size();
-          intersectInplace(new_set, current_data_graph_->getOutNeighbors(key_vid), &new_set);
+          (void)new_set_size;
+          intersectInplace(new_set, ((G*)current_data_graph_)->getOutNeighbors(key_vid, 0, i), &new_set);
           if
-            constexpr(isProfileMode(profile) || isProfileWithMiniIntersectionMode(profile)) {
-              updateIntersectInfo(new_set_size + current_data_graph_->getVertexOutDegree(key_vid), new_set.size());
+            constexpr(isProfileMode(profile)) {
+              updateIntersectInfo(new_set_size + ((G*)current_data_graph_)->getVertexOutDegree(key_vid, 0, i),
+                                  new_set.size());
             }
         }
         if (new_set.size() == 0) {
@@ -93,7 +96,7 @@ class ExpandKeyToSetVertexOperator : public ExpandVertexOperator {
         }
       }
       if
-        constexpr(isProfileMode(profile) || isProfileWithMiniIntersectionMode(profile)) {
+        constexpr(isProfileMode(profile)) {
           total_num_input_subgraphs_ += (*current_inputs_)[input_index_].getNumSubgraphs();
           // consider reuse of partial intersection results at each parent
           if (isProfileWithMiniIntersectionMode(profile)) {

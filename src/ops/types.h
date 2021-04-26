@@ -20,7 +20,9 @@ namespace circinus {
 
 enum class QueryType : uint8_t { Execute = 0, Profile, ProfileWithMiniIntersection, SampleExecute };
 
-inline constexpr bool isProfileMode(QueryType profile) { return profile == QueryType::Profile; }
+inline constexpr bool isProfileMode(QueryType profile) {
+  return profile == QueryType::Profile || profile == QueryType::ProfileWithMiniIntersection;
+}
 
 inline constexpr bool isProfileWithMiniIntersectionMode(QueryType profile) {
   return profile == QueryType::ProfileWithMiniIntersection;

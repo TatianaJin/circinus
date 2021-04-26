@@ -24,6 +24,7 @@
 
 namespace circinus {
 
+template <typename G, bool intersect_candidates = true>
 class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
   std::vector<unordered_set<std::string>> parent_tuple_sets_;
 
@@ -44,9 +45,9 @@ class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
                                  uint32_t query_type) override {
     if (query_type == 1) {
       return expandInner<QueryType::Profile>(outputs, batch_size);
-    } else if (query_type == 2) {
-      return expandInner<QueryType::ProfileWithMiniIntersection>(outputs, batch_size);
     }
+    CHECK_EQ(query_type, 2) << "unknown query type " << query_type;
+    return expandInner<QueryType::ProfileWithMiniIntersection>(outputs, batch_size);
   }
 
   std::string toString() const override {
@@ -54,11 +55,6 @@ class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
     ss << "ExpandKeyToKeyVertexOperator";
     toStringInner(ss);
     return ss.str();
-  }
-
-  std::string toProfileString() const override {
-    if (!use_bipartite_graph_flag) return TraverseOperator::toProfileString();
-    return toProfileStringUsingBipartiteGraphs();
   }
 
   Operator* clone() const override {
@@ -71,6 +67,7 @@ class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
   inline uint32_t expandInner(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size) {
     if
       constexpr(isProfileWithMiniIntersectionMode(profile)) { parent_tuple_sets_.resize(parents_.size()); }
+    auto data_graph = (G*)current_data_graph_;
     uint32_t output_num = 0;
     while (input_index_ < current_inputs_->size()) {
       std::vector<VertexID> new_keys;
@@ -80,25 +77,24 @@ class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
         uint32_t key = query_vertex_indices_[parents_[i]];
         DCHECK_LT(key, input.getNumKeys());
         uint32_t key_vid = input.getKeyVal(key);
-        if (use_bipartite_graph_flag)
-          current_data_graph_ = bg_pointers_[i];  // must only use validate things in BipartiteGraph then
         if (i == 0) {
-          if (use_bipartite_graph_flag) {
-            removeExceptions(current_data_graph_->getOutNeighbors(key_vid), &new_keys, exceptions);
+          if (!intersect_candidates) {
+            removeExceptions(data_graph->getOutNeighbors(key_vid, 0, i), &new_keys, exceptions);
           } else {
-            intersect(*candidates_, current_data_graph_->getOutNeighbors(key_vid), &new_keys, exceptions);
+            intersect(*candidates_, data_graph->getOutNeighbors(key_vid, 0, i), &new_keys, exceptions);
             if
-              constexpr(isProfileMode(profile) || isProfileWithMiniIntersectionMode(profile)) {
-                updateIntersectInfo(candidates_->size() + current_data_graph_->getVertexOutDegree(key_vid),
+              constexpr(isProfileMode(profile)) {
+                updateIntersectInfo(candidates_->size() + data_graph->getVertexOutDegree(key_vid, 0, i),
                                     new_keys.size());
               }
           }
         } else {
           auto new_keys_size = new_keys.size();
-          intersectInplace(new_keys, current_data_graph_->getOutNeighbors(key_vid), &new_keys);
+          (void)new_keys_size;
+          intersectInplace(new_keys, data_graph->getOutNeighbors(key_vid, 0, i), &new_keys);
           if
-            constexpr(isProfileMode(profile) || isProfileWithMiniIntersectionMode(profile)) {
-              updateIntersectInfo(new_keys_size + current_data_graph_->getVertexOutDegree(key_vid), new_keys.size());
+            constexpr(isProfileMode(profile)) {
+              updateIntersectInfo(new_keys_size + data_graph->getVertexOutDegree(key_vid, 0, i), new_keys.size());
             }
         }
         if (new_keys.size() == 0) {
@@ -106,19 +102,19 @@ class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
         }
       }
       if
-        constexpr(isProfileMode(profile) || isProfileWithMiniIntersectionMode(profile)) {
+        constexpr(isProfileMode(profile)) {
           total_num_input_subgraphs_ += (*current_inputs_)[input_index_].getNumSubgraphs();
-          // consider reuse of partial intersection results at each parent
-          std::vector<VertexID> parent_tuple(parents_.size());
-          for (uint32_t i = 0; i < parents_.size(); ++i) {
-            uint32_t key_vid = input.getKeyVal(query_vertex_indices_[parents_[i]]);
-            if
-              constexpr(isProfileWithMiniIntersectionMode(profile)) {
+          if
+            constexpr(isProfileWithMiniIntersectionMode(profile)) {
+              // consider reuse of partial intersection results at each parent
+              std::vector<VertexID> parent_tuple(parents_.size());
+              for (uint32_t i = 0; i < parents_.size(); ++i) {
+                uint32_t key_vid = input.getKeyVal(query_vertex_indices_[parents_[i]]);
                 parent_tuple[i] = key_vid;
                 distinct_intersection_count_ +=
                     parent_tuple_sets_[i].emplace((char*)parent_tuple.data(), (i + 1) * sizeof(VertexID)).second;
               }
-          }
+            }
         }
       if (new_keys.size() != 0) {
         for (VertexID new_key : new_keys) {

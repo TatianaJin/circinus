@@ -61,7 +61,7 @@ bool OperatorTree::handleTask(Task* task, TaskQueue* queue, uint32_t thread_id) 
   return false;
 }
 
-bool OperatorTree::execute(const Graph* g, const std::vector<CompressedSubgraphs>& inputs, uint32_t level, bool useBG) {
+bool OperatorTree::execute(const Graph* g, const std::vector<CompressedSubgraphs>& inputs, uint32_t level) {
   std::vector<CompressedSubgraphs> outputs;
   auto op = operators_[level];
   if (level == operators_.size() - 1) {
@@ -69,17 +69,14 @@ bool OperatorTree::execute(const Graph* g, const std::vector<CompressedSubgraphs
     return output_op->validateAndOutput(inputs, 0);
   }
   auto traverse_op = dynamic_cast<TraverseOperator*>(op);
-  uint32_t last_input_index = 0;
   traverse_op->input(inputs, g);
-  if (useBG) traverse_op->useBipartiteGraph();
   while (true) {
     outputs.clear();
-    auto start_time = clock();
     auto size = traverse_op->expand(&outputs, FLAGS_batch_size);
     if (size == 0) {
       break;
     }
-    if (execute(g, outputs, level + 1, useBG)) {
+    if (execute(g, outputs, level + 1)) {
       return true;
     }
   }
@@ -87,7 +84,7 @@ bool OperatorTree::execute(const Graph* g, const std::vector<CompressedSubgraphs
 }
 
 bool OperatorTree::profile(const Graph* g, const std::vector<CompressedSubgraphs>& inputs, uint32_t query_type,
-                           uint32_t level, bool useBG) {
+                           uint32_t level) {
   std::vector<CompressedSubgraphs> outputs;
   auto op = operators_[level];
   if (level == operators_.size() - 1) {
@@ -95,17 +92,14 @@ bool OperatorTree::profile(const Graph* g, const std::vector<CompressedSubgraphs
     return output_op->validateAndOutputAndProfile(inputs, 0);
   }
   auto traverse_op = dynamic_cast<TraverseOperator*>(op);
-  uint32_t last_input_index = 0;
   traverse_op->inputAndProfile(inputs, g);
-  if (useBG) traverse_op->useBipartiteGraph();
   while (true) {
     outputs.clear();
-    auto start_time = clock();
     auto size = traverse_op->expandAndProfile(&outputs, FLAGS_batch_size, query_type);
     if (size == 0) {
       break;
     }
-    if (profile(g, outputs, query_type, level + 1, useBG)) {
+    if (profile(g, outputs, query_type, level + 1)) {
       return true;
     }
   }

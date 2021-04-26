@@ -32,7 +32,7 @@
 namespace circinus {
 
 class ExecutionPlan {
- private:
+ protected:
   const QueryGraph* query_graph_;
 
   std::vector<std::vector<VertexID>> candidate_sets_;
@@ -40,6 +40,8 @@ class ExecutionPlan {
   OperatorTree operators_;
   Outputs outputs_;
   std::vector<SubgraphFilter*> subgraph_filters_;  // owned, need to delete upon destruction
+
+  const GraphType graph_type_;
 
   QueryVertexID root_query_vertex_;
   std::vector<int> cover_table_;
@@ -66,6 +68,8 @@ class ExecutionPlan {
   }
 
  public:
+  explicit ExecutionPlan(GraphType graph_type = GraphType::Normal) : graph_type_(graph_type) {}
+
   ~ExecutionPlan() {
     for (auto filter : subgraph_filters_) {
       delete filter;
@@ -74,7 +78,7 @@ class ExecutionPlan {
   }
 
   void populatePhysicalPlan(const QueryGraph* g, const std::vector<QueryVertexID>& matching_order,
-                            const std::vector<int>& cover_table, Profiler* profiler = nullptr);
+                            const std::vector<int>& cover_table);
 
   void populatePhysicalPlan(const QueryGraph* g, const std::vector<QueryVertexID>& matching_order,
                             const std::vector<int>& cover_table,
@@ -242,7 +246,6 @@ class ExecutionPlan {
         }
       } else {
         vertex_pruning_set_indices[i] = inserted.first->second;
-        std::to_string(inserted.first->second) + "\n";
       }
     }
     return vertex_pruning_set_indices;
@@ -261,25 +264,30 @@ class ExecutionPlan {
     }
   }
 
-  TraverseOperator* newExpandEdgeKeyToKeyOperator(QueryVertexID parent_vertex, QueryVertexID target_vertex,
-                                                  const std::array<std::vector<uint32_t>, 2>& same_label_indices);
-  TraverseOperator* newExpandEdgeKeyToSetOperator(QueryVertexID parent_vertex, QueryVertexID target_vertex,
-                                                  const std::array<std::vector<uint32_t>, 2>& same_label_indices);
-  TraverseOperator* newExpandEdgeSetToKeyOperator(QueryVertexID parent_vertex, QueryVertexID target_vertex,
-                                                  const std::array<std::vector<uint32_t>, 2>& target_same_label_indices,
-                                                  const std::vector<uint32_t>& parent_same_label_indices);
-  TraverseOperator* newExpandKeyKeyVertexOperator(std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
-                                                  const std::array<std::vector<uint32_t>, 2>& same_label_indices);
-  TraverseOperator* newExpandSetVertexOperator(std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
-                                               const std::array<std::vector<uint32_t>, 2>& same_label_indices);
-  TraverseOperator* newExpandSetToKeyVertexOperator(const std::vector<QueryVertexID>& parents,
-                                                    QueryVertexID target_vertex,
-                                                    const std::array<std::vector<uint32_t>, 2>& same_label_indices,
-                                                    std::vector<std::vector<uint32_t>>&& pruning_set_indices);
-  TraverseOperator* newExpandIntoOperator(const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
-                                          const std::vector<QueryVertexID>& prev_key_parents,
-                                          std::vector<std::vector<uint32_t>>&& pruning_set_indices);
-  TraverseOperator* newEnumerateKeyExpandToSetOperator(
+  virtual TraverseOperator* newExpandEdgeKeyToKeyOperator(
+      QueryVertexID parent_vertex, QueryVertexID target_vertex,
+      const std::array<std::vector<uint32_t>, 2>& same_label_indices);
+  virtual TraverseOperator* newExpandEdgeKeyToSetOperator(
+      QueryVertexID parent_vertex, QueryVertexID target_vertex,
+      const std::array<std::vector<uint32_t>, 2>& same_label_indices);
+  virtual TraverseOperator* newExpandEdgeSetToKeyOperator(
+      QueryVertexID parent_vertex, QueryVertexID target_vertex,
+      const std::array<std::vector<uint32_t>, 2>& target_same_label_indices,
+      const std::vector<uint32_t>& parent_same_label_indices);
+  virtual TraverseOperator* newExpandKeyKeyVertexOperator(
+      std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
+      const std::array<std::vector<uint32_t>, 2>& same_label_indices);
+  virtual TraverseOperator* newExpandSetVertexOperator(std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
+                                                       const std::array<std::vector<uint32_t>, 2>& same_label_indices);
+  virtual TraverseOperator* newExpandSetToKeyVertexOperator(
+      const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
+      const std::array<std::vector<uint32_t>, 2>& same_label_indices,
+      std::vector<std::vector<uint32_t>>&& pruning_set_indices);
+  virtual TraverseOperator* newExpandIntoOperator(const std::vector<QueryVertexID>& parents,
+                                                  QueryVertexID target_vertex,
+                                                  const std::vector<QueryVertexID>& prev_key_parents,
+                                                  std::vector<std::vector<uint32_t>>&& pruning_set_indices);
+  virtual TraverseOperator* newEnumerateKeyExpandToSetOperator(
       const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
       const std::vector<QueryVertexID>& keys_to_enumerate,
       unordered_map<QueryVertexID, uint32_t> input_query_vertex_indices,

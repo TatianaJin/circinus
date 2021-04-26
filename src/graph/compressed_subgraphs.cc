@@ -60,10 +60,10 @@ uint64_t CompressedSubgraphs::getNumIsomorphicSubgraphs(unordered_set<VertexID>&
   std::sort(set_ptrs.begin(), set_ptrs.end(),
             [](const auto& set1, const auto& set2) { return set1->size() < set2->size(); });
   // dfs sets_ chain
+  uint64_t count = 0;
   std::vector<uint32_t> set_index(set_ptrs.size(), 0);
   uint32_t last_depth = set_ptrs.size() - 1;
   uint32_t current_depth = 0;
-  uint32_t count = 0;
   while (true) {
     while (set_index[current_depth] < (*set_ptrs[current_depth]).size()) {
       auto v = (*set_ptrs[current_depth])[set_index[current_depth]];

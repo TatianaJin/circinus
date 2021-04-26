@@ -125,7 +125,7 @@ class TraverseOperator : public Operator {
   /* transient variables for recording the current inputs */
   uint32_t input_index_ = 0;
   const std::vector<CompressedSubgraphs>* current_inputs_ = nullptr;
-  const Graph* current_data_graph_ = nullptr;
+  const void* current_data_graph_ = nullptr;
 
   uint32_t current_inputs_size_ = 0;
   /* for profiling */
@@ -140,9 +140,6 @@ class TraverseOperator : public Operator {
   uint64_t total_intersection_output_size_ = 0;
   uint64_t distinct_intersection_count_ =
       0;  // the minimal number of intersection needed if all intersection function call results can be cached
-  std::vector<BipartiteGraph*> bg_pointers_;
-  bool use_bipartite_graph_flag = false;
-  const std::vector<std::vector<VertexID>>* candidate_sets_pointer_;
 
   std::vector<std::pair<bool, uint32_t>> matching_order_indices_;
 
@@ -159,11 +156,12 @@ class TraverseOperator : public Operator {
   virtual ~TraverseOperator() {}
 
   inline virtual void setCandidateSets(const std::vector<VertexID>* candidates) { candidates_ = candidates; }
-  inline const std::vector<VertexID>* getCandidateSets() const { return candidates_; }
+  inline const std::vector<VertexID>* getCandidateSet() const { return candidates_; }
   inline const uint32_t getInputIndex() const { return input_index_; }
   inline const auto& getSameLabelKeyIndices() const { return same_label_key_indices_; }
   inline const auto& getSameLabelSetIndices() const { return same_label_set_indices_; }
   inline auto getSetPruningThreshold() const { return set_pruning_threshold_; }
+  inline auto getCurrentDataGraph() const { return current_data_graph_; }
 
   inline const auto& getMatchingOrderIndices() const { return matching_order_indices_; }
   inline void setMatchingOrderIndices(std::vector<std::pair<bool, uint32_t>>&& matching_order_indices) {
@@ -180,7 +178,10 @@ class TraverseOperator : public Operator {
     return subgraph_filter_->filter(subgraphs, start, end);
   }
 
-  virtual void input(const std::vector<CompressedSubgraphs>& inputs, const Graph* data_graph) {
+  virtual std::vector<BipartiteGraph*> computeBipartiteGraphs(
+      const Graph* g, const std::vector<std::vector<VertexID>>& candidate_sets) = 0;
+
+  virtual void input(const std::vector<CompressedSubgraphs>& inputs, const void* data_graph) {
     current_inputs_ = &inputs;
     input_index_ = 0;
     current_data_graph_ = data_graph;
@@ -188,7 +189,7 @@ class TraverseOperator : public Operator {
 
   virtual uint32_t expand(std::vector<CompressedSubgraphs>* outputs, uint32_t cap) = 0;
 
-  virtual void inputAndProfile(const std::vector<CompressedSubgraphs>& inputs, const Graph* data_graph) {
+  virtual void inputAndProfile(const std::vector<CompressedSubgraphs>& inputs, const void* data_graph) {
     input(inputs, data_graph);
     current_inputs_size_ = inputs.size();
     total_input_size_ += inputs.size();
@@ -242,43 +243,6 @@ class TraverseOperator : public Operator {
     return ss.str();
   }
 
-  std::string getBipartiteGraphsProfileString() const {
-    uint64_t input_size_sum = 0, output_size_sum = 0;
-    for (auto p : bg_pointers_) {
-      auto[input_size, output_size] = p->getProfilePair();
-      input_size_sum += input_size;
-      output_size_sum += output_size;
-    }
-    std::stringstream ss;
-    ss << bg_pointers_.size() << ',' << input_size_sum << ',' << output_size_sum;
-    return ss.str();
-  }
-
-  std::string toProfileStringUsingBipartiteGraphs() const {
-    std::stringstream ss;
-    ss << TraverseOperator::toProfileString() << '\n'
-       << toString() << "(bipartite-graph-profile)," << 0 << ',' << 0 << ',' << 0 << ',' << 0 << ',' << 0 << ','
-       << getBipartiteGraphsProfileString() << ',' << 0;
-    return ss.str();
-  }
-
-  std::vector<BipartiteGraph*> getBipartiteGraphs() { return bg_pointers_; }
-
-  void addBipartiteGraph(BipartiteGraph* bg) { bg_pointers_.emplace_back(bg); }
-
-  void setCandidateSetsPointer(const std::vector<std::vector<VertexID>>* candidate_sets) {
-    candidate_sets_pointer_ = candidate_sets;
-  }
-
-  void useBipartiteGraph(
-      const std::vector<std::vector<VertexID>>* candidate_sets = NULL) {  // must used after input() called
-    if (use_bipartite_graph_flag) return;
-    if (candidate_sets == NULL) candidate_sets = candidate_sets_pointer_;
-    use_bipartite_graph_flag = 1;
-    for (auto p : bg_pointers_) {
-      p->populateGraph(current_data_graph_, candidate_sets);
-    }
-  }
   inline uint64_t getIntersectionCount() const { return intersection_count_; }
 
   inline uint64_t getTotalIntersectionInputSize() const { return total_intersection_input_size_; }

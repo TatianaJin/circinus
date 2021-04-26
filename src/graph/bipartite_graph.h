@@ -17,31 +17,35 @@
 #include <utility>
 #include <vector>
 
+#include "glog/logging.h"
+
 #include "graph/graph.h"
 #include "graph/types.h"
 #include "utils/hashmap.h"
 
 namespace circinus {
 
+/** The projection of the data graph on two sets of vertices */
 class BipartiteGraph : public Graph {  // only use variable:vlist_,elist_  function:getVertexOutDegree,getOutNeighbors
  private:
   unordered_map<VertexID, uint32_t> offset_by_vertex_;
-  bool populated = 0;
-  VertexID sourceId, destinationId;
+  bool populated_ = 0;
+  QueryVertexID source_id_, destination_id_;
   uint64_t bipartite_graph_intersection_input_size_ = 0;
   uint64_t bipartite_graph_intersection_output_size_ = 0;
 
  public:
-  BipartiteGraph(VertexID id1, VertexID id2) : Graph(), sourceId(id1), destinationId(id2) {}
+  BipartiteGraph(VertexID id1, VertexID id2) : Graph(), source_id_(id1), destination_id_(id2) {}
 
   void populateGraph(const Graph* g, const std::vector<std::vector<VertexID>>* candidate_sets) {
-    populateGraph(g, (*candidate_sets)[sourceId], (*candidate_sets)[destinationId]);
+    populateGraph(g, (*candidate_sets)[source_id_], (*candidate_sets)[destination_id_]);
   }
 
+  /** Only populates the edges from vertices in candidate_set1 to vertices in candidate_set2 */
   void populateGraph(const Graph* g, const std::vector<VertexID>& candidate_set1,
                      const std::vector<VertexID>& candidate_set2) {
-    if (populated) return;
-    populated = 1;
+    if (populated_) return;
+    populated_ = 1;
     unordered_set<VertexID> vset(candidate_set2.begin(), candidate_set2.end());
     vlist_.emplace_back(0);
     for (size_t i = 0; i < candidate_set1.size(); ++i) {
@@ -60,15 +64,19 @@ class BipartiteGraph : public Graph {  // only use variable:vlist_,elist_  funct
     return {bipartite_graph_intersection_input_size_, bipartite_graph_intersection_output_size_};
   }
 
-  inline std::pair<const VertexID*, uint32_t> getOutNeighbors(
-      VertexID id) const {  // populated must be 1 now, but dont add if-else here for performance
+  /**
+   * @returns The original ids of neighbor vertices of the given vertex
+   */
+  inline std::pair<const VertexID*, uint32_t> getOutNeighbors(VertexID id, LabelID dummy = 0) const {
+    DCHECK_EQ(offset_by_vertex_.count(id), 1);
     const uint32_t offset = offset_by_vertex_.at(id);
-    return std::make_pair(&elist_[vlist_[offset]], vlist_[offset + 1] - vlist_[offset]);
+    return Graph::getOutNeighbors(offset);
   }
-  inline VertexID getVertexOutDegree(
-      VertexID id) const {  // populated must be 1 now, but dont add if-else here for performance
+
+  inline VertexID getVertexOutDegree(VertexID id, LabelID dummy = 0) const {
+    DCHECK_EQ(offset_by_vertex_.count(id), 1);
     const uint32_t offset = offset_by_vertex_.at(id);
-    return vlist_[offset + 1] - vlist_[offset];
+    return Graph::getVertexOutDegree(offset);
   }
 };
 

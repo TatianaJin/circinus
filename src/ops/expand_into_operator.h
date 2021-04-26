@@ -25,6 +25,7 @@
 
 namespace circinus {
 
+template <typename G>
 class ExpandIntoOperator : public TraverseOperator {
   std::vector<QueryVertexID> parents_;
   QueryVertexID target_vertex_;
@@ -51,9 +52,21 @@ class ExpandIntoOperator : public TraverseOperator {
                                  uint32_t query_type) override {
     if (query_type == 1) {
       return expandInner<QueryType::Profile>(outputs, batch_size);
-    } else if (query_type == 2) {
+    } else {
+      CHECK_EQ(query_type, 2) << "unknown query type " << query_type;
       return expandInner<QueryType::ProfileWithMiniIntersection>(outputs, batch_size);
     }
+  }
+
+  std::vector<BipartiteGraph*> computeBipartiteGraphs(
+      const Graph* g, const std::vector<std::vector<VertexID>>& candidate_sets) override {
+    std::vector<BipartiteGraph*> ret;
+    ret.reserve(parents_.size());
+    for (auto parent_vertex : parents_) {
+      ret.emplace_back(new BipartiteGraph(parent_vertex, target_vertex_));
+      ret.back()->populateGraph(g, &candidate_sets);
+    }
+    return ret;
   }
 
   std::string toString() const override {
@@ -82,17 +95,17 @@ class ExpandIntoOperator : public TraverseOperator {
     // compression
     std::vector<VertexID> parent_tuple;
     if
-      constexpr(isProfileMode(profile) || isProfileWithMiniIntersectionMode(profile)) {
+      constexpr(isProfileMode(profile)) {
         parent_tuple.resize(key_parents_.size() + parents_.size());
         parent_tuple_sets_.resize(parents_.size());
       }
     while (input_index_ < current_inputs_->size()) {
       auto input = (*current_inputs_)[input_index_];
       auto key_vertex_id = input.getKeyVal(query_vertex_indices_[target_vertex_]);
-      auto key_out_neighbors = current_data_graph_->getOutNeighbors(key_vertex_id);
+      auto key_out_neighbors = ((G*)current_data_graph_)->getOutNeighbors(key_vertex_id, 0, 0);
       bool add = true;
       if
-        constexpr(isProfileMode(profile) || isProfileWithMiniIntersectionMode(profile)) {
+        constexpr(isProfileMode(profile)) {
           total_num_input_subgraphs_ += (*current_inputs_)[input_index_].getNumSubgraphs();
           if
             constexpr(isProfileWithMiniIntersectionMode(profile)) {
@@ -147,12 +160,17 @@ class ExpandIntoOperator : public TraverseOperator {
       }  // <<< for active pruning, should use same-label set indices
 #endif
       // TODO(tatiana): consider sorting of parents in ascending order of set size, for better pruning?
+      uint32_t parent_idx = 0;
       for (QueryVertexID vid : parents_) {
         std::vector<VertexID> new_set;
         uint32_t id = query_vertex_indices_[vid];
+        if
+          constexpr(!std::is_same<G, Graph>::value) {
+            key_out_neighbors = ((G*)current_data_graph_)->getOutNeighbors(key_vertex_id, 0, parent_idx);
+          }
         intersect(*(input.getSet(id)), key_out_neighbors, &new_set);
         if
-          constexpr(isProfileMode(profile) || isProfileWithMiniIntersectionMode(profile)) {
+          constexpr(isProfileMode(profile)) {
             updateIntersectInfo(input.getSet(id)->size() + key_out_neighbors.second, new_set.size());
           }
         if (new_set.size() == 0) {
@@ -176,6 +194,7 @@ class ExpandIntoOperator : public TraverseOperator {
         }
         input.UpdateSets(id, std::make_shared<std::vector<VertexID>>(std::move(new_set)));
 #endif
+        ++parent_idx;
       }
 
       if (add) {
