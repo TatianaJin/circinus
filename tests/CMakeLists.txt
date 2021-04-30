@@ -61,6 +61,9 @@ if(GTEST_FOUND)
   add_executable(DynamicCoverPreliminary dynamic_cover_preliminary.cc)
   target_link_libraries(DynamicCoverPreliminary circinus ${GTEST_LIBRARY} ${EXTERNAL_LIBRARY})
 
+  add_executable(TestMetis test_metis.cc)
+  target_link_libraries(TestMetis circinus ${GTEST_LIBRARY} ${EXTERNAL_LIBRARY})
+
   file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/resources DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
 
   add_custom_target(tests COMMAND "${CMAKE_CTEST_COMMAND}" COMMENT "Running tests..." DEPENDS ${PROJECT_NAME}_unit_tests)
