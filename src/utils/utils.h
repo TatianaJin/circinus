@@ -38,8 +38,8 @@ static void dfs(QueryVertexID cur_vertex, const std::vector<TreeNode>& dfs_tree,
   }
 }
 
-static void bfs(const QueryGraph* query_graph, QueryVertexID start_vertex, std::vector<TreeNode>& bfs_tree,
-                std::vector<QueryVertexID>& bfs_order) {
+inline static void bfs(const QueryGraph* query_graph, QueryVertexID start_vertex, std::vector<TreeNode>& bfs_tree,
+                       std::vector<QueryVertexID>& bfs_order) {
   QueryVertexID vertex_num = query_graph->getNumVertices();
   bfs_tree.resize(vertex_num);
   bfs_order.resize(vertex_num);
@@ -71,15 +71,15 @@ static void bfs(const QueryGraph* query_graph, QueryVertexID start_vertex, std::
   }
 }
 
-static bool semiperfectBipartiteMatching(uint32_t* col_ptrs, const std::vector<uint32_t>& col_ids, uint32_t n,
-                                         uint32_t m) {
+inline static bool semiperfectBipartiteMatching(uint32_t* col_ptrs, const std::vector<uint32_t>& col_ids, uint32_t n,
+                                                uint32_t m) {
   std::vector<int> match(n, -1);
   std::vector<int> row_match(m, -1);
   std::vector<int> visited(m, -1);
   std::vector<int> previous(m, 0);
   std::queue<uint32_t> q;
 
-  for (int i = 0; i < n; i++) {
+  for (uint32_t i = 0; i < n; ++i) {
     if (match[i] == -1 && col_ptrs[i] != col_ptrs[i + 1]) {
       // clear queue
       while (!q.empty()) q.pop();
@@ -92,7 +92,7 @@ static bool semiperfectBipartiteMatching(uint32_t* col_ptrs, const std::vector<u
         q.pop();
         for (uint32_t ptr = col_ptrs[u]; ptr < col_ptrs[u + 1] && !flag; ptr++) {
           uint32_t v = col_ids[ptr];
-          if (visited[v] == -1 || visited[v] != i) {
+          if (visited[v] == -1 || ((uint32_t)visited[v]) != i) {
             visited[v] = i;
             if (row_match[v] >= 0) {
               q.push(row_match[v]);

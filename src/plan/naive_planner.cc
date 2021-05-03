@@ -44,26 +44,26 @@ bool NaivePlanner::hasValidCandidate() {
   return true;
 }
 
-ExecutionPlan* NaivePlanner::generatePlan(const std::vector<QueryVertexID>& use_order, Profiler* profiler) {
+ExecutionPlan* NaivePlanner::generatePlan(const std::vector<QueryVertexID>& use_order) {
   // if any of the candidate cardinality is zero, there is no matching
   if (!hasValidCandidate()) {
     return nullptr;
   }
-  if (use_order.empty()) {
-    auto log_cardinality = logCardinality();
-    WeightedBnB vertex_cover_solver(query_graph_, log_cardinality);
-    vertex_cover_solver.computeVertexCover();
-    auto& covers = vertex_cover_solver.getBestCovers();
-    CHECK_GT(covers.size(), 0);  // at least one cover should be obtained
-    auto select_cover = covers[BnB::getSmallestCover(covers).first.front()];
-    std::stringstream ss;
-    std::string s = "";
-    for (QueryVertexID i = 0; i < select_cover.size(); ++i) {
-      ss << ' ' << i << ':' << (select_cover[i] == 1 ? "key" : "set");
-      s += (select_cover[i] == 1) ? "1," : "0,";
-    }
-    LOG(INFO) << "cover" << ss.str();
+  auto log_cardinality = logCardinality();
+  WeightedBnB vertex_cover_solver(query_graph_, log_cardinality);
+  vertex_cover_solver.computeVertexCover();
+  auto& covers = vertex_cover_solver.getBestCovers();
+  CHECK_GT(covers.size(), 0);  // at least one cover should be obtained
+  auto select_cover = covers[BnB::getSmallestCover(covers).first.front()];
+  std::stringstream ss;
+  std::string s = "";
+  for (QueryVertexID i = 0; i < select_cover.size(); ++i) {
+    ss << ' ' << i << ':' << (select_cover[i] == 1 ? "key" : "set");
+    s += (select_cover[i] == 1) ? "1," : "0,";
+  }
+  LOG(INFO) << "cover" << ss.str();
 
+  if (use_order.empty()) {
     double res = 1;
     for (uint32_t i = 0; i < select_cover.size(); ++i) {
       if (select_cover[i] == 1) {
@@ -90,12 +90,11 @@ ExecutionPlan* NaivePlanner::generatePlan(const std::vector<QueryVertexID>& use_
   } else {
     matching_order_ = use_order;
   }
-  plan_.populatePhysicalPlan(query_graph_, matching_order_, getCoverByOrder(), profiler);
+  plan_.populatePhysicalPlan(query_graph_, matching_order_, select_cover);
   return &plan_;
 }
 
-ExecutionPlan* NaivePlanner::generatePlanWithoutCompression(const std::vector<QueryVertexID>& use_order,
-                                                            Profiler* profiler) {
+ExecutionPlan* NaivePlanner::generatePlanWithoutCompression(const std::vector<QueryVertexID>& use_order) {
   // if any of the candidate cardinality is zero, there is no matching
   if (!hasValidCandidate()) {
     return nullptr;
@@ -116,7 +115,7 @@ ExecutionPlan* NaivePlanner::generatePlanWithoutCompression(const std::vector<Qu
     matching_order_ = use_order;
   }
 
-  plan_.populatePhysicalPlan(query_graph_, matching_order_, select_cover, profiler);
+  plan_.populatePhysicalPlan(query_graph_, matching_order_, select_cover);
   return &plan_;
 }
 
@@ -312,8 +311,7 @@ std::pair<uint32_t, uint32_t> NaivePlanner::analyzeDynamicCoreCoverEager(const s
   return analyzeDynamicCoreCoverEagerInner(select_cover);
 }
 
-ExecutionPlan* NaivePlanner::generatePlanWithEagerDynamicCover(const std::vector<QueryVertexID>& use_order,
-                                                               Profiler* profiler) {
+ExecutionPlan* NaivePlanner::generatePlanWithEagerDynamicCover(const std::vector<QueryVertexID>& use_order) {
   // if any of the candidate cardinality is zero, there is no matching
   if (!hasValidCandidate()) {
     return nullptr;
@@ -358,11 +356,10 @@ ExecutionPlan* NaivePlanner::generatePlanWithEagerDynamicCover(const std::vector
 
   plan_.populatePhysicalPlan(query_graph_, matching_order_, covers[select_cover_index],
                              getDynamicCoreCoverEager(covers[select_cover_index]));
-  plan_.setProfiler(profiler);
   return &plan_;
 }
 
-ExecutionPlan* NaivePlanner::generatePlanWithDynamicCover(Profiler* profiler) {
+ExecutionPlan* NaivePlanner::generatePlanWithDynamicCover() {
   std::vector<std::vector<double>> costs_car(covers_.size());
   std::vector<std::vector<uint32_t>> pre(covers_.size());
   std::vector<std::vector<double>> car(covers_.size());
@@ -447,17 +444,11 @@ ExecutionPlan* NaivePlanner::generatePlanWithDynamicCover(Profiler* profiler) {
     best_path.emplace_back(best_idx);
     last--;
   }
-  s = "[";
-  for (auto vid : covers_[last][best_idx].cover) {
-    s += std::to_string(vid) + " ";
-  }
-  s += "]";
-  DLOG(INFO) << s << " " << covers_[last][best_idx].cover_bits;
-  std::reverse(best_path.begin(), best_path.end());
 
+  std::reverse(best_path.begin(), best_path.end());
   for (uint32_t i = 0; i < matching_order_.size(); ++i) {
     for (auto vid : covers_[i][best_path[i]].cover) {
-      if (vid != matching_order_[i] && i > 0 && !(covers_[i - 1][best_path[i - 1]].cover_bits >> vid & 1)) {
+      if (vid != matching_order_[i] && !(covers_[i - 1][best_path[i - 1]].cover_bits >> vid & 1)) {
         // if the first vertex becomes key in the next subquery, make it as key initially
         level_become_key.insert({vid, (i == 1) ? 0 : i});
         DLOG(INFO) << vid << " " << i;
@@ -469,14 +460,11 @@ ExecutionPlan* NaivePlanner::generatePlanWithDynamicCover(Profiler* profiler) {
     }
   }
   plan_.populatePhysicalPlan(query_graph_, matching_order_, select_cover, level_become_key);
-  plan_.setProfiler(profiler);
-
   return &plan_;
 }
 
 ExecutionPlan* NaivePlanner::generatePlanWithSampleExecution(const std::vector<std::vector<double>>& cardinality,
-                                                             const std::vector<double>& level_cost,
-                                                             Profiler* profiler) {
+                                                             const std::vector<double>& level_cost) {
   std::vector<std::vector<double>> costs_car_sample_cost;
   std::vector<std::vector<double>> costs_car;
   std::vector<std::vector<uint32_t>> pre;
@@ -543,7 +531,7 @@ ExecutionPlan* NaivePlanner::generatePlanWithSampleExecution(const std::vector<s
     }
   }
   CHECK(best_idx != -1) << "ERROR: can not get best plan index.";
-  // best_idx = 2;
+  // best_idx = 0;
   LOG(INFO) << "best last level cover idx " << best_idx << "  " << car[last][best_idx];
   std::vector<int> select_cover(matching_order_.size(), 0);
   for (uint32_t i = 0; i < matching_order_.size(); ++i) {
@@ -576,13 +564,9 @@ ExecutionPlan* NaivePlanner::generatePlanWithSampleExecution(const std::vector<s
   for (uint32_t i = 0; i < matching_order_.size(); ++i) {
     for (auto vid : covers_[i][best_path[i]].cover) {
       if (vid != matching_order_[i] && !(covers_[i - 1][best_path[i - 1]].cover_bits >> vid & 1)) {
-        if (i == 1) {
-          level_become_key.insert({vid, i - 1});
-          DLOG(INFO) << vid << " " << i - 1;
-        } else {
-          level_become_key.insert({vid, i});
-          DLOG(INFO) << vid << " " << i;
-        }
+        // if the first vertex becomes key in the next subquery, make it as key initially
+        level_become_key.insert({vid, (i == 1) ? 0 : i});
+        DLOG(INFO) << vid << " " << i;
       }
       if (vid == matching_order_[i]) {
         level_become_key.insert({vid, i});
@@ -591,7 +575,6 @@ ExecutionPlan* NaivePlanner::generatePlanWithSampleExecution(const std::vector<s
     }
   }
   plan_.populatePhysicalPlan(query_graph_, matching_order_, select_cover, level_become_key);
-  plan_.setProfiler(profiler);
 
   return &plan_;
 }
@@ -704,7 +687,9 @@ void NaivePlanner::generateCoverNode(const std::vector<std::vector<double>>& car
   }
 
   std::vector<std::vector<double>> candidate_cardinality_by_match_order(matching_order_.size());
+  std::vector<uint32_t> order_index(matching_order_.size(), 0);  // query vertex to matching order index
   for (uint32_t i = 0; i < matching_order_.size(); ++i) {
+    order_index[matching_order_[i]] = i;
     candidate_cardinality_by_match_order[i].resize(i + 1);
     for (uint32_t j = 0; j < i + 1; ++j) {
       candidate_cardinality_by_match_order[i][j] = log2(cardinality[i][matching_order_[j]]);
@@ -714,13 +699,39 @@ void NaivePlanner::generateCoverNode(const std::vector<std::vector<double>>& car
   for (uint32_t i = matching_order_.size() - 1; i > 0; --i) {
     subquery_vertices.resize(i + 1);
     // compute a vertex cover of subquery i
+    // make parent query vertices as keys, virtually removing them from subquery
     auto subquery = query_graph_->getInducedSubgraph(subquery_vertices);
     WeightedBnB vc_solver(&subquery, candidate_cardinality_by_match_order[i]);
-    vc_solver.computeVertexCover();
+    std::vector<QueryVertexID> pre_set_to_keys;
+    if (i + 1 != matching_order_.size()) {
+      // pre set to intersect vertices to key
+      for (QueryVertexID to_intersect_vertex : to_intersect_vertices[i + 1]) {
+        pre_set_to_keys.push_back(order_index[to_intersect_vertex]);
+      }
+    }
+    vc_solver.computeVertexCover(&pre_set_to_keys);
     auto& covers = vc_solver.getBestCovers();
-    CHECK_GT(covers.size(), 0);  // at least one cover should be obtained
+    CHECK_GT(covers.size(), 0) << "level " << i << " doesn't have any cover.";  // at least one cover should be obtained
     auto choice = BnB::getSmallestCover(covers);
     auto select_cover = covers[choice.first.front()];
+
+    if (i + 1 != matching_order_.size()) {
+      // set to_intersect_key to set if they can be set
+      for (QueryVertexID to_intersect_vertex : to_intersect_vertices[i + 1]) {
+        auto nbrs = query_graph_->getOutNeighbors(to_intersect_vertex);
+        bool can_be_set = 1;
+        for (uint32_t j = 0; j < nbrs.second; ++j) {
+          QueryVertexID nbr = nbrs.first[j];
+          if (existing_vertices[i + 1].find(nbr) != existing_vertices[i + 1].end()) {
+            can_be_set &= select_cover[order_index[nbr]] == 1;
+          }
+        }
+        if (can_be_set) {
+          select_cover[order_index[to_intersect_vertex]] = 0;
+        }
+      }
+    }
+
     CoverNode new_cover_node;
     new_cover_node.cover_bits = 0;
     for (uint32_t j = 0; j < select_cover.size(); ++j) {
@@ -799,6 +810,7 @@ void NaivePlanner::generateCoverNode(const std::vector<std::vector<double>>& car
             }
           }
           if (all_key) {
+            CHECK_GE(last_cover_node.cover_bits, (1ULL << existing_v)) << i << " " << existing_v;
             last_cover_node.cover_bits -= 1ULL << existing_v;
             for (uint32_t it = 0; it < last_cover_node.cover.size(); ++it) {
               if (last_cover_node.cover[it] == existing_v) {
@@ -809,6 +821,7 @@ void NaivePlanner::generateCoverNode(const std::vector<std::vector<double>>& car
           }
         }
       } else {
+        CHECK_GE(last_cover_node.cover_bits, (1ULL << delete_v));
         last_cover_node.cover_bits -= 1ULL << delete_v;
         for (uint32_t it = 0; it < last_cover_node.cover.size(); ++it) {
           if (last_cover_node.cover[it] == delete_v) {
@@ -855,7 +868,6 @@ void NaivePlanner::generateCoverNode(const std::vector<std::vector<double>>& car
 
   // populate cover nodes' parents
   for (uint32_t i = 1; i < matching_order_.size(); ++i) {
-    uint32_t v = 0;
     for (auto& cover_node : covers_[i]) {
       for (uint32_t j = 0; j < covers_[i - 1].size(); ++j) {
         const auto& last_level_cover_node = covers_[i - 1][j];

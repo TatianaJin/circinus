@@ -36,6 +36,7 @@
 #include "ops/operators.h"
 #include "ops/order.h"
 #include "ops/scans.h"
+#include "ops/types.h"
 #include "plan/execution_plan.h"
 #include "plan/naive_planner.h"
 #include "utils/flags.h"
@@ -45,11 +46,17 @@
 using circinus::CompressedSubgraphs;
 using circinus::ExecutionPlan;
 using circinus::Graph;
+using circinus::GraphType;
 using circinus::LDFScan;
 using circinus::NaivePlanner;
 using circinus::NLFFilter;
 using circinus::CFLFilter;
 using circinus::CFLOrder;
+using circinus::DPISOFilter;
+using circinus::OrderBase;
+using circinus::TSOOrder;
+using circinus::TSOFilter;
+using circinus::GQLFilter;
 using circinus::QueryGraph;
 using circinus::QueryVertexID;
 using circinus::Task;
@@ -63,8 +70,7 @@ using circinus::GQLFilter;
 using circinus::OrderBase;
 using circinus::CoverNode;
 using circinus::QueryType;
-using circinus::unordered_map;
-using circinus::unordered_set;
+using circinus::TraverseOperator;
 
 #define BATCH_SIZE FLAGS_batch_size
 #define toSeconds(start, end) \
@@ -82,6 +88,7 @@ DEFINE_string(filter, "nlf", "filter");
 DEFINE_string(profile_file, "", "profile file");
 DEFINE_string(vertex_cover, "static", "Vertex cover strategy: static, eager, all");
 DEFINE_string(batch_file, "", "Batch query file");
+DEFINE_bool(bipartite_graph, false, "use bipartite graph or not");
 
 enum VertexCoverStrategy : uint32_t { Static = 0, Eager, Sample, Dynamic, All };
 
@@ -143,7 +150,7 @@ class Benchmark {
       std::vector<VertexID> buffer;
       buffer.reserve(BATCH_SIZE);
       while (scan.Scan(&buffer, BATCH_SIZE) > 0) {
-        if (FLAGS_filter == "dpiso") {
+        if (FLAGS_filter == "dpiso" || FLAGS_filter == "ldf") {
           candidates[v].insert(candidates[v].end(), buffer.begin(), buffer.end());
         } else {
           filter.Filter(g, buffer, &candidates[v]);
@@ -172,9 +179,9 @@ class Benchmark {
       tso_filter.Filter(candidates);
     } else if (FLAGS_filter == "gql") {
       std::vector<std::vector<VertexID>> gql_candidates;
-      unordered_map<QueryVertexID, unordered_set<VertexID>> gql_map;
+      circinus::unordered_map<QueryVertexID, circinus::unordered_set<VertexID>> gql_map;
       for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
-        unordered_set<VertexID> gql_set;
+        circinus::unordered_set<VertexID> gql_set;
         for (auto i : candidates[v]) {
           gql_set.insert(i);
         }
@@ -190,9 +197,6 @@ class Benchmark {
         gql_filter.Filter(g, candidates[v], &tempvec);
         gql_candidates.push_back(std::move(tempvec));
       }
-      //   for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
-      //     LOG(INFO) << "vertex " << v << " " << candidate_size[v] << "/" << gql_candidates[v].size();
-      //}
       return gql_candidates;
     }
 
@@ -218,10 +222,11 @@ class Benchmark {
     return count;
   }
 
-  void batchDFSExecute(const Graph* g, ExecutionPlan* plan) {
+  void batchDFSExecute(const Graph* g, ExecutionPlan* plan, Profiler* profiler) {
     LOG(INFO) << FLAGS_num_cores << " threads";
     ThreadPool threads(FLAGS_num_cores, plan);
     auto& seeds = plan->getCandidateSet(plan->getRootQueryVertexID());
+    plan->setProfiler(profiler);
     if (plan->isInCover(plan->getRootQueryVertexID())) {
       for (size_t i = 0; i < seeds.size(); i += BATCH_SIZE) {
         size_t end = std::min(i + BATCH_SIZE, seeds.size());
@@ -235,29 +240,76 @@ class Benchmark {
     threads.start();
   }
 
+  std::vector<circinus::GraphView<circinus::BipartiteGraph>*> setupBipartiteGraphs(const Graph* g,
+                                                                                   ExecutionPlan* plan) {
+    std::vector<circinus::GraphView<circinus::BipartiteGraph>*> data_graphs_for_operators;
+    auto& opTree = plan->getOperators();
+    auto candidate_sets = plan->getCandidateSets();
+    size_t len = opTree.getOperatorSize() - 1;
+    data_graphs_for_operators.reserve(len);
+    for (size_t i = 0; i < len; ++i) {
+      auto op = opTree.getOperator(i);
+      auto traverse_op = dynamic_cast<TraverseOperator*>(op);
+      data_graphs_for_operators.emplace_back(
+          new circinus::GraphView<circinus::BipartiteGraph>(traverse_op->computeBipartiteGraphs(g, *candidate_sets)));
+    }
+    return data_graphs_for_operators;
+  }
+
   void batchDFSExecuteST(const Graph* g, ExecutionPlan* plan) {
     auto seeds = plan->getCandidateSet(plan->getRootQueryVertexID());
+    if (FLAGS_bipartite_graph) {
+      auto data_graphs_for_operators = setupBipartiteGraphs(g, plan);
+      if (plan->isInCover(plan->getRootQueryVertexID()) &&
+          (FLAGS_vertex_cover == "static" || FLAGS_vertex_cover == "all" ||
+           plan->getToKeyLevel(plan->getRootQueryVertexID()) == 0)) {
+        plan->getOperators().execute(data_graphs_for_operators,
+                                     std::vector<CompressedSubgraphs>(seeds.begin(), seeds.end()), 0);
+      } else {
+        std::vector<CompressedSubgraphs> input;
+        input.emplace_back(std::make_shared<std::vector<VertexID>>(std::move(seeds)));
+        plan->getOperators().execute(data_graphs_for_operators, input, 0);
+      }
+      for (auto& dg : data_graphs_for_operators) {
+        delete dg;
+      }
+      return;
+    }
     if (plan->isInCover(plan->getRootQueryVertexID()) &&
         (FLAGS_vertex_cover == "static" || FLAGS_vertex_cover == "all" ||
          plan->getToKeyLevel(plan->getRootQueryVertexID()) == 0)) {
-      plan->getOperators().execute(g, std::vector<CompressedSubgraphs>(seeds.begin(), seeds.end()));
+      plan->getOperators().execute(g, std::vector<CompressedSubgraphs>(seeds.begin(), seeds.end()), 0);
     } else {
       std::vector<CompressedSubgraphs> input;
       input.emplace_back(std::make_shared<std::vector<VertexID>>(std::move(seeds)));
-      plan->getOperators().execute(g, input);
+      plan->getOperators().execute(g, input, 0);
     }
   }
 
   void batchDFSProfileST(const Graph* g, ExecutionPlan* plan) {
     auto seeds = plan->getCandidateSet(plan->getRootQueryVertexID());
+    if (FLAGS_bipartite_graph) {
+      auto data_graphs_for_operators = setupBipartiteGraphs(g, plan);
+      if (plan->isInCover(plan->getRootQueryVertexID()) &&
+          (FLAGS_vertex_cover == "static" || FLAGS_vertex_cover == "all" ||
+           plan->getToKeyLevel(plan->getRootQueryVertexID()) == 0)) {
+        plan->getOperators().profile(data_graphs_for_operators,
+                                     std::vector<CompressedSubgraphs>(seeds.begin(), seeds.end()), 0);
+      } else {
+        std::vector<CompressedSubgraphs> input;
+        input.emplace_back(std::make_shared<std::vector<VertexID>>(std::move(seeds)));
+        plan->getOperators().profile(data_graphs_for_operators, input, 0);
+      }
+      return;
+    }
     if (plan->isInCover(plan->getRootQueryVertexID()) &&
         (FLAGS_vertex_cover == "static" || FLAGS_vertex_cover == "all" ||
          plan->getToKeyLevel(plan->getRootQueryVertexID()) == 0)) {
-      plan->getOperators().profile(g, std::vector<CompressedSubgraphs>(seeds.begin(), seeds.end()));
+      plan->getOperators().profile(g, std::vector<CompressedSubgraphs>(seeds.begin(), seeds.end()), FLAGS_profile, 0);
     } else {
       std::vector<CompressedSubgraphs> input;
       input.emplace_back(std::make_shared<std::vector<VertexID>>(std::move(seeds)));
-      plan->getOperators().profile(g, input);
+      plan->getOperators().profile(g, input, FLAGS_profile, 0);
     }
   }
 
@@ -311,7 +363,7 @@ class Benchmark {
     while (op != nullptr) {
       auto start = std::chrono::steady_clock::now();
       op->input(input, g);
-      while (op->expandAndProfile(&outputs, FLAGS_batch_size) > 0) {
+      while (op->expandAndProfile(&outputs, FLAGS_batch_size, 1) > 0) {
       }
       auto end = std::chrono::steady_clock::now();
       double time = toSeconds(start, end);
@@ -426,15 +478,16 @@ class Benchmark {
       double size = set.size();
       candidate_cardinality.push_back(size);
     }
-    Profiler profiler;
-    NaivePlanner planner(&q, &candidate_cardinality);
+    Profiler profiler;  // TODO(tatiana): deprecate
+    NaivePlanner planner(&q, &candidate_cardinality,
+                         FLAGS_bipartite_graph ? GraphType::BipartiteGraphView : GraphType::Normal);
     ExecutionPlan* plan;
     if (vcs == Static) {
-      plan = planner.generatePlan(use_order, &profiler);
+      plan = planner.generatePlan(use_order);
     } else if (vcs == Eager) {
-      plan = planner.generatePlanWithEagerDynamicCover(use_order, &profiler);
+      plan = planner.generatePlanWithEagerDynamicCover(use_order);
     } else if (vcs == All) {
-      plan = planner.generatePlanWithoutCompression(use_order, &profiler);
+      plan = planner.generatePlanWithoutCompression(use_order);
     } else if (vcs == Sample) {
       planner.generateOrder(use_order);
       const auto& match_order = planner.getMatchingOrder();
@@ -443,12 +496,12 @@ class Benchmark {
       run_sample(g, q, candidates, match_order, cardinality, level_cost);
       planner.setCandidateCardinality(&cardinality.back());
       planner.generateCoverNode(cardinality);
-      plan = planner.generatePlanWithSampleExecution(cardinality, level_cost, &profiler);
+      plan = planner.generatePlanWithSampleExecution(cardinality, level_cost);
     } else if (vcs == Dynamic) {
       planner.generateOrder(use_order);
       std::vector<std::vector<double>> cardinality(candidate_cardinality.size(), candidate_cardinality);
       planner.generateCoverNode(cardinality);
-      plan = planner.generatePlanWithDynamicCover(&profiler);
+      plan = planner.generatePlanWithDynamicCover();
     } else {
       LOG(ERROR) << "Unknown vertex cover strategy " << FLAGS_vertex_cover;
       return;
@@ -462,7 +515,7 @@ class Benchmark {
     auto start_execution = std::chrono::steady_clock::now();
     // ProfilerStart("benchmark.prof");
     if (FLAGS_num_cores == 1) {
-      if (FLAGS_profile) {
+      if (FLAGS_profile > 0) {
         batchDFSProfileST(&g, plan);
       } else {
         LOG(INFO) << "batchDFSExecuteST";
@@ -470,7 +523,7 @@ class Benchmark {
       }
       // bfsExecute(&g, plan);
     } else {
-      batchDFSExecute(&g, plan);
+      batchDFSExecute(&g, plan, &profiler);
     }
     // ProfilerStop();
     auto n_matches = plan->getOutputs().getCount();
@@ -579,11 +632,16 @@ void run_benchmark(const std::string& query_file, std::ostream* out) {
   std::string dataset = "";
   Graph data_graph;
   double load_time = 0;
+  std::string profile_prefix = "/data/share/users/byli/circinus/evaluation/profile/";
   while (query_f >> config) {
     if (config.skipConfig()) continue;
     config.toString(LOG(INFO) << ">>>>>>>>>>>>>>>>> query config -vertex_cover " << FLAGS_vertex_cover << " -filter "
                               << FLAGS_filter << " -match_limit " << FLAGS_match_limit << ' ');
     // load graph if not cached
+    FLAGS_profile_file = profile_prefix + config.dataset + '_' + config.query_mode + '_' +
+                         std::to_string(config.query_size) + '_' + std::to_string(config.query_index) + '_' +
+                         FLAGS_filter;
+    LOG(INFO) << "-------------" << FLAGS_profile_file;
     if (config.dataset != dataset) {
       dataset = config.dataset;
       benchmark.loadDataset(data_graph, dataset, load_time);
@@ -633,7 +691,7 @@ int main(int argc, char** argv) {
   if (FLAGS_match_limit == 0) {
     FLAGS_match_limit = ~0u;
   }
-  FLAGS_profile = (FLAGS_profile_file != "");
+  // FLAGS_profile = (FLAGS_profile_file != "");
 
   if (FLAGS_batch_file != "") {
     run_benchmark(FLAGS_batch_file, out);

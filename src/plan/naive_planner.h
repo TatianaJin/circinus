@@ -23,7 +23,6 @@
 #include "algorithms/minimum_weight_vertex_cover.h"
 #include "graph/query_graph.h"
 #include "plan/execution_plan.h"
-#include "utils/profiler.h"
 
 namespace circinus {
 
@@ -53,7 +52,10 @@ class NaivePlanner {
 
  public:
   NaivePlanner(QueryGraph* query_graph, std::vector<double>* candidate_cardinality)
-      : query_graph_(query_graph), candidate_cardinality_(candidate_cardinality) {}
+      : query_graph_(query_graph), candidate_cardinality_(candidate_cardinality), plan_(GraphType::Normal) {}
+
+  NaivePlanner(QueryGraph* query_graph, std::vector<double>* candidate_cardinality, GraphType type)
+      : query_graph_(query_graph), candidate_cardinality_(candidate_cardinality), plan_(type) {}
 
   bool hasValidCandidate();
 
@@ -61,15 +63,13 @@ class NaivePlanner {
   const auto& getMatchingOrder() const { return matching_order_; }
   const auto& getCovers() const { return covers_; }
 
-  ExecutionPlan* generatePlan(const std::vector<QueryVertexID>& use_order = {}, Profiler* profiler = nullptr);
-  ExecutionPlan* generatePlanWithEagerDynamicCover(const std::vector<QueryVertexID>& use_order = {},
-                                                   Profiler* profiler = nullptr);
-  ExecutionPlan* generatePlanWithoutCompression(const std::vector<QueryVertexID>& use_order = {},
-                                                Profiler* profiler = nullptr);
-  ExecutionPlan* generatePlanWithDynamicCover(Profiler* profiler = nullptr);
+  ExecutionPlan* generatePlan(const std::vector<QueryVertexID>& use_order = {});
+  ExecutionPlan* generatePlanWithEagerDynamicCover(const std::vector<QueryVertexID>& use_order = {});
+  ExecutionPlan* generatePlanWithoutCompression(const std::vector<QueryVertexID>& use_order = {});
+  ExecutionPlan* generatePlanWithDynamicCover();
 
   ExecutionPlan* generatePlanWithSampleExecution(const std::vector<std::vector<double>>& cardinality,
-                                                 const std::vector<double>& level_cost, Profiler* profiler);
+                                                 const std::vector<double>& level_cost);
   void generateCoverNode(const std::vector<std::vector<double>>& cardinality);
   void generateOrder(const std::vector<QueryVertexID>& use_order);
 

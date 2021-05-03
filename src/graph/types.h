@@ -27,4 +27,6 @@ using VertexID = uint64_t;
 
 using VertexSet = std::shared_ptr<std::vector<VertexID>>;
 
+enum class GraphType : uint32_t { Normal, GraphView, BipartiteGraphView };
+
 }  // namespace circinus
