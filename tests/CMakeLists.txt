@@ -62,7 +62,7 @@ if(GTEST_FOUND)
   target_link_libraries(DynamicCoverPreliminary circinus ${GTEST_LIBRARY} ${EXTERNAL_LIBRARY})
 
   add_executable(TestMetis test_metis.cc)
-  target_link_libraries(TestMetis circinus ${GTEST_LIBRARY} ${EXTERNAL_LIBRARY} ${PROJECT_SOURCE_DIR}/third_party/lib/libGKlib.a ${PROJECT_SOURCE_DIR}/third_party/lib/libmetis.so -lGKlib)
+  target_link_libraries(TestMetis circinus ${GTEST_LIBRARY} ${EXTERNAL_LIBRARY} ${PROJECT_SOURCE_DIR}/third_party/lib/libmetis.so ${PROJECT_SOURCE_DIR}/third_party/lib/libGKlib.a )
 
   file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/resources DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
 
