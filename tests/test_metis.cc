@@ -63,6 +63,6 @@ TEST(TestMetis, dblp) {
     for(auto nparts:nparts_list)
         metisTest("dblp",nparts); 
 }
-TEST(TestMetis, eu2005) { metisTest("eu2005"); }
-TEST(TestMetis, hprd) { metisTest("hprd"); }
-TEST(TestMetis, human) { metisTest("human"); }
+// TEST(TestMetis, eu2005) { metisTest("eu2005"); }
+// TEST(TestMetis, hprd) { metisTest("hprd"); }
+// TEST(TestMetis, human) { metisTest("human"); }
