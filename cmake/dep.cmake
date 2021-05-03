@@ -90,7 +90,7 @@ ExternalProject_Add(metis_ep
   CMAKE_ARGS "-DCMAKE_INSTALL_PREFIX=${THIRDPARTY_DIR}"
 	GIT_REPOSITORY  https://github.com/b3ng1998/METIS.git
 	BUILD_IN_SOURCE 1
-	CONFIGURE_COMMAND make config shared=1 prefix=${THIRDPARTY_DIR} gklib_path=${THIRDPARTY_DIR}
+	CONFIGURE_COMMAND make config shared=1 i64=1 prefix=${THIRDPARTY_DIR} gklib_path=${THIRDPARTY_DIR}
 	BUILD_COMMAND make
 	INSTALL_COMMAND make install
 )

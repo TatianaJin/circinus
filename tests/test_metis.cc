@@ -49,8 +49,8 @@ void metisTest(std::string dataset, idx_t nparts) {
   auto graph_path = dataset + "/data_graph/" + dataset + ".graph";
   auto data_dir_str = std::string(data_dir);
   Graph g(data_dir_str + "/" + graph_path);
-  idx_t *xadj=g.getVList();
-  idx_t *adjncy=g.getEList();
+  idx_t *xadj=(idx_t *)g.getVList();
+  idx_t *adjncy=(idx_t *)g.getEList();
   idx_t nvtxs=g.getNumVertices();
   idx_t ncon=1;
   idx_t objval;
