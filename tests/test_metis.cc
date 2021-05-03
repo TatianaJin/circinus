@@ -16,7 +16,10 @@
 #include "gtest/gtest.h"
 
 #include "metis.h"
+#include "graph/graph.h"
 #include <stdio.h>
+
+using circinus::Graph;
 /*
  0--1--2
  |  |  |
@@ -39,3 +42,27 @@ TEST(TestMetis, SimpleGraph)
     for(int i=0;i<9;++i)printf("%d ",part[i]);
     printf("\n");
 }
+
+const char data_dir[] = "/data/share/project/haxe/data/subgraph_matching_datasets";
+const idx_t nparts_list[]={5,10,20,50};
+void metisTest(std::string dataset, idx_t nparts) {
+  auto graph_path = dataset + "/data_graph/" + dataset + ".graph";
+  auto data_dir_str = std::string(data_dir);
+  Graph g(data_dir_str + "/" + graph_path);
+  idx_t *xadj=g.getVList();
+  idx_t *adjncy=g.getEList();
+  idx_t nvtxs=g.getNumVertices();
+  idx_t ncon=1;
+  idx_t objval;
+  idx_t part[nvtxs];
+  auto res=METIS_PartGraphKway(&nvtxs,&ncon,xadj,adjncy,NULL,NULL,NULL,&nparts,NULL,NULL,NULL,&objval,part);
+  printf("nparts=%d, cut-edge count=%d\n",nparts,objval);
+//   for(int i=0;i<nvtxs;++i)printf("%d ",part[i]);
+}
+TEST(TestMetis, dblp) { 
+    for(auto nparts:nparts_list)
+        metisTest("dblp",nparts); 
+}
+TEST(TestMetis, eu2005) { metisTest("eu2005"); }
+TEST(TestMetis, hprd) { metisTest("hprd"); }
+TEST(TestMetis, human) { metisTest("human"); }

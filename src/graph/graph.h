@@ -99,6 +99,14 @@ class Graph {
     return std::make_pair(&elist_[vlist_[id]], vlist_[id + 1] - vlist_[id]);
   }
 
+  inline EdgeID* getVList() { // only for test
+    return &vlist_[0];
+  }
+
+  inline VertexID* getEList() { // only for test
+    return &elist_[0];
+  }
+
   /// persistence
   void DumpToFile(const std::string& path) const;
   void saveAsBinary(const std::string& path) const;
