@@ -55,14 +55,25 @@ void metisTest(std::string dataset, idx_t nparts) {
   idx_t ncon=1;
   idx_t objval;
   idx_t part[nvtxs];
+  // please refer to https://github.com/b3ng1998/METIS/blob/master/manual/manual.pdf
   auto res=METIS_PartGraphKway(&nvtxs,&ncon,xadj,adjncy,NULL,NULL,NULL,&nparts,NULL,NULL,NULL,&objval,part);
+  EXPECT_EQ(METIS_OK,res);
   printf("nparts=%d, cut-edge count=%d\n",nparts,objval);
 //   for(int i=0;i<nvtxs;++i)printf("%d ",part[i]);
 }
-TEST(TestMetis, dblp) { 
-    for(auto nparts:nparts_list)
-        metisTest("dblp",nparts); 
+void metisTestInList(std::string dataset) {
+  for(auto nparts:nparts_list)
+    metisTest(dataset,nparts);
 }
-// TEST(TestMetis, eu2005) { metisTest("eu2005"); }
-// TEST(TestMetis, hprd) { metisTest("hprd"); }
-// TEST(TestMetis, human) { metisTest("human"); }
+TEST(TestMetis, dblp) { 
+  metisTestInList("dblp");
+}
+TEST(TestMetis, eu2005) { 
+  metisTestInList("eu2005");
+}
+TEST(TestMetis, hprd) {
+  metisTestInList("hprd");
+  }
+TEST(TestMetis, human) {
+  metisTestInList("human");
+  }
