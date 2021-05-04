@@ -25,7 +25,6 @@ using circinus::Graph;
  |  |  |
  6--7--8
 */
-// int main()
 TEST(TestMetis, SimpleGraph) {
   idx_t xadj[] = {0, 2, 5, 7, 10, 14, 17, 19, 22, 24};
   idx_t adjncy[] = {1, 3, 0, 2, 4, 1, 5, 0, 4, 6, 1, 3, 5, 7, 2, 4, 8, 3, 7, 4, 6, 8, 5, 7};
@@ -58,7 +57,6 @@ void metisTest(std::string dataset, idx_t nparts) {
       METIS_PartGraphKway(&nvtxs, &ncon, xadj, adjncy, NULL, NULL, NULL, &nparts, NULL, NULL, NULL, &objval, part);
   EXPECT_EQ(METIS_OK, res);
   printf("nparts=%d, cut-edge count=%d\n", nparts, objval);
-  //   for(int i=0;i<nvtxs;++i)printf("%d ",part[i]);
 }
 void metisTestInList(std::string dataset) {
   for (auto nparts : nparts_list) metisTest(dataset, nparts);
