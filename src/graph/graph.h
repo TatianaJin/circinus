@@ -105,17 +105,17 @@ class Graph {
     DCHECK_LT(id, vlist_.size() - 1);
     return std::make_pair(&elist_[vlist_[id]], vlist_[id + 1] - vlist_[id]);
   }
-  
+
   inline std::pair<const VertexID*, uint32_t> getOutNeighbors(VertexID id, LabelID nbr_label,
                                                               uint32_t graph_idx = 0) const {
     return getOutNeighbors(id);
   }
-  
-  inline EdgeID* getVList() { // only for test_metis
+
+  inline EdgeID* getVList() {  // only for test_metis
     return &vlist_[0];
   }
 
-  inline VertexID* getEList() { // only for test_metis
+  inline VertexID* getEList() {  // only for test_metis
     return &elist_[0];
   }
 
