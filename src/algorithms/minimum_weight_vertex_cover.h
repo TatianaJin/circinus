@@ -56,10 +56,22 @@ class WeightedBnB {
   }
 
   /** Compute minimum vertex cover(s) within cutoff_time_ */
-  inline void computeVertexCover() {
+  inline void computeVertexCover(const std::vector<QueryVertexID>* pre_assigned_keys = nullptr) {
     if (!best_covers_.empty()) return;
     start_time_ = clock();
-    dfs(std::vector<int>(graph_->getNumVertices(), -1), getEdgeList(*graph_), 0);
+    std::vector<int> assignment(graph_->getNumVertices(), -1);
+    std::deque<QueryEdge> uncovered_edges = getEdgeList(*graph_);
+    if (pre_assigned_keys != nullptr) {
+      for (QueryVertexID qid : *pre_assigned_keys) {
+        assignment[qid] = 1;
+        for (int i = uncovered_edges.size() - 1; i >= 0; --i) {
+          if (uncovered_edges[i].hasEndVertex(qid)) {
+            uncovered_edges.erase(uncovered_edges.begin() + i);
+          }
+        }
+      }
+    }
+    dfs(assignment, uncovered_edges, 0);
     elapsed_time_ = ((double)(clock() - start_time_)) / CLOCKS_PER_SEC;
   }
 

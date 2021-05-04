@@ -18,7 +18,10 @@
 
 #include "graph/compressed_subgraphs.h"
 #include "graph/graph.h"
+#include "graph/graph_view.h"
 #include "ops/operator.h"
+#include "ops/operators.h"
+#include "utils/flags.h"
 #include "utils/profiler.h"
 
 namespace circinus {
@@ -48,6 +51,7 @@ class OperatorTree {
   inline void reserve(uint32_t size) { operators_.reserve(size); }
   inline void setProfiler(Profiler* profiler) { profiler_ = profiler; }
   inline Operator* getOperator(uint32_t idx) const { return operators_[idx]; }
+  inline size_t getOperatorSize() const { return operators_.size(); }
 
   inline OperatorTree clone() const {
     OperatorTree ret;
@@ -62,7 +66,55 @@ class OperatorTree {
   bool handleTask(Task* task, TaskQueue* queue, uint32_t thread_id);
 
   bool execute(const Graph* g, const std::vector<CompressedSubgraphs>& inputs, uint32_t level = 0);
-  bool profile(const Graph* g, const std::vector<CompressedSubgraphs>& inputs, uint32_t level = 0);
+  bool profile(const Graph* g, const std::vector<CompressedSubgraphs>& inputs, uint32_t query_type, uint32_t level = 0);
+
+  template <typename G>
+  bool execute(const std::vector<GraphView<G>*>& data_graphs_for_operators,
+               const std::vector<CompressedSubgraphs>& inputs, uint32_t level = 0) {
+    std::vector<CompressedSubgraphs> outputs;
+    auto op = operators_[level];
+    if (level == operators_.size() - 1) {
+      auto output_op = dynamic_cast<OutputOperator*>(op);
+      return output_op->validateAndOutput(inputs, 0);
+    }
+    auto traverse_op = dynamic_cast<TraverseOperator*>(op);
+    traverse_op->input(inputs, data_graphs_for_operators[level]);
+    while (true) {
+      outputs.clear();
+      auto size = traverse_op->expand(&outputs, FLAGS_batch_size);
+      if (size == 0) {
+        break;
+      }
+      if (execute<G>(data_graphs_for_operators, outputs, level + 1)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  template <typename G>
+  bool profile(const std::vector<GraphView<G>*>& data_graphs_for_operators,
+               const std::vector<CompressedSubgraphs>& inputs, uint32_t query_type, uint32_t level = 0) {
+    std::vector<CompressedSubgraphs> outputs;
+    auto op = operators_[level];
+    if (level == operators_.size() - 1) {
+      auto output_op = dynamic_cast<OutputOperator*>(op);
+      return output_op->validateAndOutputAndProfile(inputs, 0);
+    }
+    auto traverse_op = dynamic_cast<TraverseOperator*>(op);
+    traverse_op->inputAndProfile(inputs, data_graphs_for_operators[level]);
+    while (true) {
+      outputs.clear();
+      auto size = traverse_op->expandAndProfile(&outputs, FLAGS_batch_size, query_type);
+      if (size == 0) {
+        break;
+      }
+      if (profile<G>(data_graphs_for_operators, outputs, query_type, level + 1)) {
+        return true;
+      }
+    }
+    return false;
+  }
 };
 
 }  // namespace circinus

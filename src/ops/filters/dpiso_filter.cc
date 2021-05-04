@@ -43,8 +43,6 @@ DPISOFilter::DPISOFilter(const QueryGraph* query_graph, const Graph* data_graph,
 }
 
 void DPISOFilter::Filter(std::vector<std::vector<VertexID>>& candidates) {
-  uint32_t query_vertices_num = query_graph_->getNumVertices();
-
   for (uint32_t refine_time = 0; refine_time < 3; ++refine_time) {
     if (refine_time % 2 == 0) {
       for (QueryVertexID query_vertex : bfs_order_) {

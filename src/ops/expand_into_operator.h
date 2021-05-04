@@ -25,6 +25,7 @@
 
 namespace circinus {
 
+template <typename G>
 class ExpandIntoOperator : public TraverseOperator {
   std::vector<QueryVertexID> parents_;
   QueryVertexID target_vertex_;
@@ -47,8 +48,25 @@ class ExpandIntoOperator : public TraverseOperator {
     return expandInner<QueryType::Execute>(outputs, batch_size);
   }
 
-  uint32_t expandAndProfileInner(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size) override {
-    return expandInner<QueryType::Profile>(outputs, batch_size);
+  uint32_t expandAndProfileInner(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size,
+                                 uint32_t query_type) override {
+    if (query_type == 1) {
+      return expandInner<QueryType::Profile>(outputs, batch_size);
+    } else {
+      CHECK_EQ(query_type, 2) << "unknown query type " << query_type;
+      return expandInner<QueryType::ProfileWithMiniIntersection>(outputs, batch_size);
+    }
+  }
+
+  std::vector<BipartiteGraph*> computeBipartiteGraphs(
+      const Graph* g, const std::vector<std::vector<VertexID>>& candidate_sets) override {
+    std::vector<BipartiteGraph*> ret;
+    ret.reserve(parents_.size());
+    for (auto parent_vertex : parents_) {
+      ret.emplace_back(new BipartiteGraph(parent_vertex, target_vertex_));
+      ret.back()->populateGraph(g, &candidate_sets);
+    }
+    return ret;
   }
 
   std::string toString() const override {
@@ -84,49 +102,54 @@ class ExpandIntoOperator : public TraverseOperator {
     while (input_index_ < current_inputs_->size()) {
       auto input = (*current_inputs_)[input_index_];
       auto key_vertex_id = input.getKeyVal(query_vertex_indices_[target_vertex_]);
-      auto key_out_neighbors = current_data_graph_->getOutNeighbors(key_vertex_id);
+      auto key_out_neighbors = ((G*)current_data_graph_)->getOutNeighbors(key_vertex_id, 0, 0);
       bool add = true;
       if
         constexpr(isProfileMode(profile)) {
           total_num_input_subgraphs_ += (*current_inputs_)[input_index_].getNumSubgraphs();
-          unordered_set<VertexID> prefix_set;
-          for (uint32_t i = 0; i < key_parents_.size(); ++i) {
-            parent_tuple[i] = input.getKeyVal(query_vertex_indices_[key_parents_[i]]);
-            prefix_set.insert(parent_tuple[i]);
-          }
-          std::vector<std::vector<VertexID>*> parent_set_ptrs;
-          parent_set_ptrs.reserve(parents_.size());
-          for (auto parent : parents_) {
-            parent_set_ptrs.push_back(input.getSet(query_vertex_indices_[parent]).get());
-          }
-          uint32_t depth = 0, last_depth = parents_.size() - 1;
-          std::vector<uint32_t> set_index(parents_.size(), 0);
-          while (true) {
-            while (set_index[depth] < parent_set_ptrs[depth]->size()) {
-              auto parent_vid = (*parent_set_ptrs[depth])[set_index[depth]];
-              if (prefix_set.count(parent_vid)) {
-                ++set_index[depth];
-                continue;
+          if
+            constexpr(isProfileWithMiniIntersectionMode(profile)) {
+              unordered_set<VertexID> prefix_set;
+              for (uint32_t i = 0; i < key_parents_.size(); ++i) {
+                parent_tuple[i] = input.getKeyVal(query_vertex_indices_[key_parents_[i]]);
+                prefix_set.insert(parent_tuple[i]);
               }
-              auto pidx = depth + key_parents_.size();
-              parent_tuple[pidx] = parent_vid;
-              distinct_intersection_count_ +=
-                  parent_tuple_sets_[depth].emplace((char*)parent_tuple.data(), (pidx + 1) * sizeof(VertexID)).second;
-              if (depth == last_depth) {
+              std::vector<std::vector<VertexID>*> parent_set_ptrs;
+              parent_set_ptrs.reserve(parents_.size());
+              for (auto parent : parents_) {
+                parent_set_ptrs.push_back(input.getSet(query_vertex_indices_[parent]).get());
+              }
+              uint32_t depth = 0, last_depth = parents_.size() - 1;
+              std::vector<uint32_t> set_index(parents_.size(), 0);
+              while (true) {
+                while (set_index[depth] < parent_set_ptrs[depth]->size()) {
+                  auto parent_vid = (*parent_set_ptrs[depth])[set_index[depth]];
+                  if (prefix_set.count(parent_vid)) {
+                    ++set_index[depth];
+                    continue;
+                  }
+                  auto pidx = depth + key_parents_.size();
+                  parent_tuple[pidx] = parent_vid;
+                  distinct_intersection_count_ +=
+                      parent_tuple_sets_[depth]
+                          .emplace((char*)parent_tuple.data(), (pidx + 1) * sizeof(VertexID))
+                          .second;
+                  if (depth == last_depth) {
+                    ++set_index[depth];
+                  } else {
+                    prefix_set.insert(parent_vid);
+                    ++depth;
+                    set_index[depth] = 0;
+                  }
+                }
+                if (depth == 0) {
+                  break;
+                }
+                --depth;
+                prefix_set.erase((*parent_set_ptrs[depth])[set_index[depth]]);
                 ++set_index[depth];
-              } else {
-                prefix_set.insert(parent_vid);
-                ++depth;
-                set_index[depth] = 0;
               }
             }
-            if (depth == 0) {
-              break;
-            }
-            --depth;
-            prefix_set.erase((*parent_set_ptrs[depth])[set_index[depth]]);
-            ++set_index[depth];
-          }
         }
 #ifndef USE_FILTER
       // TODO(tatiana): `ExpandInto` requires different groups of same-label indices for the parent sets
@@ -137,9 +160,14 @@ class ExpandIntoOperator : public TraverseOperator {
       }  // <<< for active pruning, should use same-label set indices
 #endif
       // TODO(tatiana): consider sorting of parents in ascending order of set size, for better pruning?
+      uint32_t parent_idx = 0;
       for (QueryVertexID vid : parents_) {
         std::vector<VertexID> new_set;
         uint32_t id = query_vertex_indices_[vid];
+        if
+          constexpr(!std::is_same<G, Graph>::value) {
+            key_out_neighbors = ((G*)current_data_graph_)->getOutNeighbors(key_vertex_id, 0, parent_idx);
+          }
         intersect(*(input.getSet(id)), key_out_neighbors, &new_set);
         if
           constexpr(isProfileMode(profile)) {
@@ -166,6 +194,7 @@ class ExpandIntoOperator : public TraverseOperator {
         }
         input.UpdateSets(id, std::make_shared<std::vector<VertexID>>(std::move(new_set)));
 #endif
+        ++parent_idx;
       }
 
       if (add) {

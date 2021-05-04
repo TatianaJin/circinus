@@ -14,7 +14,6 @@
 
 #pragma once
 
-#include <iostream>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -27,7 +26,7 @@
 namespace circinus {
 
 class Graph {
- private:
+ protected:
   VertexID n_vertices_ = 0;
   EdgeID n_edges_ = 0;
   VertexID max_degree_ = 0;
@@ -77,6 +76,14 @@ class Graph {
 
   /// vertex accessers
   inline VertexID getVertexOutDegree(VertexID id) const { return vlist_[id + 1] - vlist_[id]; }
+
+  /**
+   * nbr_label Unused, added for the sake of GraphView-like interface.
+   */
+  inline VertexID getVertexOutDegree(VertexID id, LabelID nbr_label, uint32_t graph_idx = 0) const {
+    return getVertexOutDegree(id);
+  }
+
   inline LabelID getVertexLabel(VertexID id) const { return labels_[id]; }
 
   inline const std::vector<VertexID>* getVerticesByLabel(LabelID lid) const {
@@ -98,12 +105,17 @@ class Graph {
     DCHECK_LT(id, vlist_.size() - 1);
     return std::make_pair(&elist_[vlist_[id]], vlist_[id + 1] - vlist_[id]);
   }
-
-  inline EdgeID* getVList() { // only for test
+  
+  inline std::pair<const VertexID*, uint32_t> getOutNeighbors(VertexID id, LabelID nbr_label,
+                                                              uint32_t graph_idx = 0) const {
+    return getOutNeighbors(id);
+  }
+  
+  inline EdgeID* getVList() { // only for test_metis
     return &vlist_[0];
   }
 
-  inline VertexID* getEList() { // only for test
+  inline VertexID* getEList() { // only for test_metis
     return &elist_[0];
   }
 

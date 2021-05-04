@@ -14,44 +14,4 @@
 
 #include "ops/expand_set_to_key_vertex_operator.h"
 
-namespace circinus {
-
-void ExpandSetToKeyVertexOperator::updateDistinctSICount() {
-  auto& input = (*current_inputs_)[input_index_];
-  std::vector<std::vector<VertexID>*> parent_set_ptrs;
-  parent_set_ptrs.reserve(parents_.size());
-  for (auto parent : parents_) {
-    parent_set_ptrs.push_back(input.getSet(query_vertex_indices_[parent]).get());
-  }
-  uint32_t depth = 0, last_depth = parents_.size() - 1;
-  std::vector<uint32_t> set_index(parents_.size(), 0);
-  std::vector<VertexID> parent_tuple(parents_.size());
-  unordered_set<VertexID> prefix_set;
-  while (true) {
-    while (set_index[depth] < parent_set_ptrs[depth]->size()) {
-      auto parent_vid = (*parent_set_ptrs[depth])[set_index[depth]];
-      if (prefix_set.count(parent_vid)) {  // the parent tuples with current prefix will be pruned
-        ++set_index[depth];
-        continue;
-      }
-      parent_tuple[depth] = parent_vid;
-      distinct_intersection_count_ +=
-          parent_tuple_sets_[depth].emplace((char*)parent_tuple.data(), (depth + 1) * sizeof(VertexID)).second;
-      if (depth == last_depth) {
-        ++set_index[depth];
-      } else {
-        prefix_set.insert(parent_vid);
-        ++depth;
-        set_index[depth] = 0;
-      }
-    }
-    if (depth == 0) {
-      break;
-    }
-    --depth;
-    prefix_set.erase((*parent_set_ptrs[depth])[set_index[depth]]);
-    ++set_index[depth];
-  }
-}
-
-}  // namespace circinus
+namespace circinus {}  // namespace circinus
