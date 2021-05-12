@@ -21,8 +21,8 @@
 
 #include "glog/logging.h"
 
-#include "graph/types.h"
 #include "./metis.h"
+#include "graph/types.h"
 
 namespace circinus {
 
@@ -123,12 +123,12 @@ class Graph {
 
   idx_t getMetisParts(idx_t nparts) {
     parts_.resize(n_vertices_);
-    idx_t *xadj = (idx_t *)getVList();
-    idx_t *adjncy = (idx_t *)getEList();
+    idx_t* xadj = (idx_t*)getVList();
+    idx_t* adjncy = (idx_t*)getEList();
     idx_t nvtxs = getNumVertices();
     idx_t ncon = 1;
     idx_t objval;
-    idx_t *part = &parts_[0];
+    idx_t* part = &parts_[0];
     METIS_PartGraphKway(&nvtxs, &ncon, xadj, adjncy, NULL, NULL, NULL, &nparts, NULL, NULL, NULL, &objval, part);
     return objval;
   }
