@@ -56,6 +56,8 @@ void metisTest(std::string dataset, idx_t nparts) {
   auto res =
       METIS_PartGraphKway(&nvtxs, &ncon, xadj, adjncy, NULL, NULL, NULL, &nparts, NULL, NULL, NULL, &objval, part);
   EXPECT_EQ(METIS_OK, res);
+  auto objval1 = g.getMetisParts(nparts);
+  EXPECT_EQ(objval1, objval);
   printf("nparts=%d, cut-edge count=%d\n", nparts, objval);
 }
 void metisTestInList(std::string dataset) {
