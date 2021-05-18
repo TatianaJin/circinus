@@ -14,12 +14,10 @@
 
 #pragma once
 
-#include "gflags/gflags.h"
+namespace circinus {
 
-DECLARE_int32(batch_size);
-DECLARE_int32(num_cores);
-DECLARE_int32(profile);
-DECLARE_uint64(set_pruning_threshold);
+/** Get a free port on IPV4. */
+int GetAvailablePort();
 
-DECLARE_bool(standalone);
-DECLARE_string(data_dir);
+}  // namespace circinus
+

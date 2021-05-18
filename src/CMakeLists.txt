@@ -19,6 +19,10 @@ set(circinus_algo_sources
   ${PROJECT_SOURCE_DIR}/src/algorithms/minimum_weight_vertex_cover.cc
   ${PROJECT_SOURCE_DIR}/src/algorithms/k_core.cc
 )
+set(circinus_exec_sources
+  ${PROJECT_SOURCE_DIR}/src/exec/circinus_server.cc
+  ${PROJECT_SOURCE_DIR}/src/exec/executor_manager.cc
+)
 set(circinus_graph_sources
   ${PROJECT_SOURCE_DIR}/src/graph/compressed_subgraphs.cc
   ${PROJECT_SOURCE_DIR}/src/graph/graph.cc
@@ -43,15 +47,18 @@ set(circinus_plan_sources
   ${PROJECT_SOURCE_DIR}/src/plan/execution_plan.cc
   ${PROJECT_SOURCE_DIR}/src/plan/naive_planner.cc
   ${PROJECT_SOURCE_DIR}/src/plan/operator_tree.cc
+  ${PROJECT_SOURCE_DIR}/src/plan/planner.cc
 )
 set(circinus_utils_sources
   ${PROJECT_SOURCE_DIR}/src/utils/flags.cc
+  ${PROJECT_SOURCE_DIR}/src/utils/network_utils.cc
 )
 
 
 if (BUILD_SHARED)
   set(circinus_sources
     ${circinus_algo_sources}
+    ${circinus_exec_sources}
     ${circinus_graph_sources}
     ${circinus_ops_sources}
     ${circinus_plan_sources}
@@ -59,12 +66,14 @@ if (BUILD_SHARED)
     PARENT_SCOPE)
 else()
   add_library(circinus_algo_obj OBJECT ${circinus_algo_sources})
+  add_library(circinus_exec_obj OBJECT ${circinus_exec_sources})
   add_library(circinus_graph_obj OBJECT ${circinus_graph_sources})
   add_library(circinus_ops_obj OBJECT ${circinus_ops_sources})
   add_library(circinus_plan_obj OBJECT ${circinus_plan_sources})
   add_library(circinus_utils_obj OBJECT ${circinus_utils_sources})
   set (circinus_objs
     $<TARGET_OBJECTS:circinus_algo_obj>
+    $<TARGET_OBJECTS:circinus_exec_obj>
     $<TARGET_OBJECTS:circinus_graph_obj>
     $<TARGET_OBJECTS:circinus_ops_obj>
     $<TARGET_OBJECTS:circinus_plan_obj>

@@ -22,3 +22,9 @@ DEFINE_int32(profile, 0, "True means profiling the execution");
 DEFINE_uint64(set_pruning_threshold, 0,
               "The threshold to prune by non-repeated-vertex check the same-label sets whose sizes are below the "
               "threshold. If 0, use the label frequency of the pruning query vertex. Default is 0.");
+
+DEFINE_bool(standalone, false,
+            "In standalone mode, a Circinus server is launched together with a simple command line driver.");
+
+DEFINE_string(data_dir, "/data/share/project/haxe/data/subgraph_matching_datasets",
+              "The default directory of datasets");
