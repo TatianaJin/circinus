@@ -82,6 +82,19 @@ ExternalProject_Add(phmap_ep
   GIT_TAG 1.32
 )
 
+### zmq
+find_path(ZMQ_INCLUDE_DIR NAMES zmq.hpp zmq_addon.hpp)
+find_library(ZMQ_LIBRARY NAMES zmq)
+if(ZMQ_INCLUDE_DIR AND ZMQ_LIBRARY)
+  message(STATUS "Found ZeroMQ:")
+  message(STATUS "  (Headers)       ${ZMQ_INCLUDE_DIR}")
+  message(STATUS "  (Library)       ${ZMQ_LIBRARY}")
+  list(APPEND EXTERNAL_INCLUDES ${ZMQ_INCLUDE_DIR})
+  list(APPEND EXTERNAL_LIBRARY ${ZMQ_LIBRARY})
+else()
+  message(FATAL_ERROR "ZeroMQ not found")
+endif()
+
 
 add_definitions(${EXTERNAL_DEFINITION})
 include_directories(${EXTERNAL_INCLUDES})

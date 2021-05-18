@@ -12,14 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
+#include "exec/executor_manager.h"
 
-#include "gflags/gflags.h"
+namespace circinus {
 
-DECLARE_int32(batch_size);
-DECLARE_int32(num_cores);
-DECLARE_int32(profile);
-DECLARE_uint64(set_pruning_threshold);
+void ExecutorManager::computeCandidates(uint32_t query_handler, CandidatePruningPlan* plan) {
+  // FIXME
+}
+void ExecutorManager::executeQuery(uint32_t query_handler, ExecutionPlan* plan) {
+  // FIXME
+}
 
-DECLARE_bool(standalone);
-DECLARE_string(data_dir);
+}  // namespace circinus

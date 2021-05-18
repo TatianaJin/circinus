@@ -75,7 +75,6 @@ using circinus::TraverseOperator;
 #define toSeconds(start, end) \
   (((double)std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count()) / 1e9)
 
-DEFINE_string(data_dir, "/data/share/project/haxe/data/subgraph_matching_datasets", "The directory of datasets");
 DEFINE_string(output_file, "", "The output file path");
 DEFINE_string(dataset, "dblp", "The dataset to use");
 DEFINE_string(query_mode, "dense", "Dense or sparse query");
