@@ -18,23 +18,21 @@
 
 #include "graph/graph.h"
 #include "graph/query_graph.h"
-#include "ops/filters/filter_base.h"
+#include "ops/filters/logical_filter.h"
 
 namespace circinus {
 
-class CFLFilter : public FilterBase {
- private:
-  QueryVertexID start_vertex_;
-  std::vector<TreeNode> bfs_tree_;
-  std::vector<QueryVertexID> bfs_order_;
-  std::vector<QueryVertexID> level_offset_;
-  uint32_t level_num_;
-
+class LogicalTSOFilter : public LogicalFilter {
  public:
-  CFLFilter(const QueryGraph* query_graph, const Graph* data_graph, QueryVertexID start_vertex);
+  LogicalTSOFilter(const QueryGraph* query_graph, const Graph* data_graph, const QueryVertexID query_vertex,
+                   const QueryVertexID& pivot_vertex) {
+    LogicalFilter(query_graph, data_graph, query_vertex, {pivot_vertex});
+  }
 
-  /** The records that passed the filter will remain in candidates */
-  void Filter(std::vector<std::vector<VertexID>>& candidates);
+  LogicalTSOFilter(const QueryGraph* query_graph, const Graph* data_graph, const QueryVertexID query_vertex,
+                   const std::vector<QueryVertexID>& pivot_vertices) {
+    LogicalFilter(query_graph, data_graph, query_vertex, pivot_vertices);
+  }
 };
 
 }  // namespace circinus

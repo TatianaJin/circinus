@@ -17,22 +17,22 @@
 #include <vector>
 
 #include "graph/graph.h"
-#include "graph/graph_metadata.h"
 #include "graph/query_graph.h"
-#include "ops/order/order_base.h"
+#include "ops/filters/logical_filter.h"
 
 namespace circinus {
 
-class CFLOrder : public OrderBase {
+class LogicalCFLFilter : public LogicalFilter {
  public:
-  QueryVertexID getStartVertex(const GraphMetadata& metadata, const QueryGraph* query_graph,
-                               const std::vector<VertexID>& candidate_size) override;
+  LogicalCFLFilter(const QueryGraph* query_graph, const Graph* data_graph, const QueryVertexID query_vertex,
+                   const QueryVertexID& pivot_vertex) {
+    LogicalFilter(query_graph, data_graph, query_vertex, {pivot_vertex});
+  }
 
-  std::vector<QueryVertexID> getTopThree(const GraphMetadata& metadata, const QueryGraph* q);
-
-  QueryVertexID getStartVertex(const std::vector<QueryVertexID>& query_vertices,
-                               const std::vector<VertexID>& cardinality, const QueryGraph& q,
-                               const GraphMetadata& metadata);
+  LogicalCFLFilter(const QueryGraph* query_graph, const Graph* data_graph, const QueryVertexID query_vertex,
+                   const std::vector<QueryVertexID>& pivot_vertices) {
+    LogicalFilter(query_graph, data_graph, query_vertex, pivot_vertices);
+  }
 };
 
 }  // namespace circinus

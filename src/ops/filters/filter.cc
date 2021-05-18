@@ -12,22 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
-
-#include <unordered_map>
+#include <algorithm>
 #include <vector>
 
-#include "graph/graph.h"
-#include "graph/graph_metadata.h"
-#include "graph/query_graph.h"
-#include "ops/order/order_base.h"
+#include "ops/filters/filter.h"
 
-namespace circinus {
-
-class TSOOrder : public OrderBase {
- public:
-  QueryVertexID getStartVertex(const GraphMetadata& metadata, const QueryGraph* query_graph_,
-                               const std::vector<VertexID>& candidate_size) override;
-};
-
-}  // namespace circinus
+namespace circinus {}  // namespace circinus

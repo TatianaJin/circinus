@@ -15,28 +15,23 @@
 #pragma once
 
 #include <unordered_map>
-#include <unordered_set>
 #include <vector>
 
-#include "graph/graph.h"
-#include "graph/query_graph.h"
-#include "ops/filters/filter.h"
-#include "utils/hashmap.h"
-#include "utils/utils.h"
+#include "ops/filters/logical_filter.h"
 
 namespace circinus {
 
-class GQLFilter : public NeighborhoodFilter {
- private:
-  bool verify(const Graph* data_graph, const VertexID data_vertex,
-              std::vector<std::vector<VertexID>>* candidates) const;
-
+class LogicalDPISOFilter : public LogicalFilter {
  public:
-  GQLFilter(ExecutionConfig& conf, const QueryGraph* query_graph, QueryVertexID query_vertex)
-      : NeighborhoodFilter(conf, query_graph, query_vertex) {}
+  LogicalDPISOFilter(const QueryGraph* query_graph, const Graph* data_graph, const QueryVertexID query_vertex,
+                     const QueryVertexID& pivot_vertex) {
+    LogicalFilter(query_graph, data_graph, query_vertex, {pivot_vertex});
+  }
 
-  void filter(const Graph* data_graph, std::vector<std::vector<VertexID>>* candidates,
-              FilterContext* ctx) const override;
+  LogicalDPISOFilter(const QueryGraph* query_graph, const Graph* data_graph, const QueryVertexID query_vertex,
+                     const std::vector<QueryVertexID>& pivot_vertices) {
+    LogicalFilter(query_graph, data_graph, query_vertex, pivot_vertices);
+  }
 };
 
 }  // namespace circinus

@@ -20,8 +20,12 @@
 
 #include "graph/query_graph.h"
 #include "graph/types.h"
+#include "ops/logical/filter/cfl_filter.h"
+#include "ops/logical/filter/dpiso_filter.h"
 #include "ops/logical/filter/filter.h"
+#include "ops/logical/filter/gql_filter.h"
 #include "ops/logical/filter/nlf_filter.h"
+#include "ops/logical/filter/tso_filter.h"
 #include "ops/logical/scan/ldf_scan.h"
 
 namespace circinus {
@@ -66,6 +70,32 @@ class CandidatePruningPlan {
 
   const auto& getScanQueryVertices() const { return scan_.getQueryVertices(); }
 
+  void newCFLFilter(const QueryGraph* q, const GraphMetadata& metadata, const std::vector<VertexID>& candidate_size) {
+    neighbor_filters_.push_back(std::make_unique<LogicalCFLFilter>(metadata, q, candidate_size));
+  }
+
+  void newDPISOFilter(const QueryGraph* q, const GraphMetadata& metadata, const std::vector<VertexID>& candidate_size) {
+    neighbor_filters_.push_back(std::make_unique<LogicalDPISOFilter>(metadata, q, candidate_size));
+  }
+
+  void newTSOFilter(const QueryGraph* q, const GraphMetadata& metadata, const std::vector<VertexID>& candidate_size) {
+    neighbor_filters_.push_back(std::make_unique<LogicalTSOFilter>(metadata, q, candidate_size));
+  }
+
+  void newGQLFilter(const QueryGraph* q) { neighbor_filters_.push_back(std::make_unique<LogicalGQLFilter>(q)); }
+
+  std::vector<std::unique_ptr<NeighborhoodFilter>> getFilterOperators(GraphMetadata& metadata,
+                                                                      ExecutionConfig& exec_conf) {
+    std::vector<std::unique_ptr<NeighborhoodFilter>> ret;
+    for (auto& filter : neighbor_filters_) {
+      auto filters = filter->toPhysicalOperators(metadata, exec_conf);
+      for (auto& physical_filter : filters) {
+        ret.push_back(std::move(physical_filter));
+      }
+    }
+    return ret;
+  }
+
  private:
   uint32_t phase_ = 1;
   bool finished_ = false;
@@ -73,6 +103,7 @@ class CandidatePruningPlan {
   // LogicalExpandOperator expand_;                             // phase 2 expand operator
   std::vector<std::unique_ptr<LogicalLocalFilter>> local_filters_;  // for phase 1 and 2
   // phase 3 operators
+  std::vector<std::unique_ptr<LogicalNeighborhoodFilter>> neighbor_filters_;
 };
 
 }  // namespace circinus

@@ -14,8 +14,14 @@
 
 #pragma once
 
-#include "ops/filters/cfl_filter.h"
-#include "ops/filters/dpiso_filter.h"
+#include "ops/filters/filter.h"
 #include "ops/filters/gql_filter.h"
-#include "ops/filters/nlf_filter.h"
-#include "ops/filters/tso_filter.h"
+
+#include "ops/logical/filter/cfl_filter.h"
+#include "ops/logical/filter/dpiso_filter.h"
+#include "ops/logical/filter/filter.h"
+#include "ops/logical/filter/gql_filter.h"
+#include "ops/logical/filter/nlf_filter.h"
+#include "ops/logical/filter/tso_filter.h"
+
+namespace circinus {}  // namespace circinus

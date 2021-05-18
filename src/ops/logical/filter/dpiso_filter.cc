@@ -12,15 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "ops/filters/dpiso_filter.h"
+#include "ops/logical/filter/dpiso_filter.h"
+
+#include "exec/execution_config.h"
+#include "ops/filters/filter.h"
+#include "ops/order/dpiso_order.h"
 #include "utils/utils.h"
 
 namespace circinus {
 
-DPISOFilter::DPISOFilter(const QueryGraph* query_graph, const Graph* data_graph, QueryVertexID start_vertex)
-    : FilterBase(query_graph, data_graph), start_vertex_(start_vertex) {
+LogicalDPISOFilter::LogicalDPISOFilter(const GraphMetadata& metadata, const QueryGraph* query_graph,
+                                       const std::vector<VertexID>& candidate_size)
+    : LogicalNeighborhoodFilter(query_graph) {
+  OrderBase dpiso_order;
+  start_vertex_ = dpiso_order.getStartVertex(metadata, query_graph, candidate_size);
   uint32_t query_vertices_num = query_graph->getNumVertices();
-  bfs(query_graph, start_vertex, tree_, bfs_order_);
+  bfs(query_graph, start_vertex_, tree_, bfs_order_);
   std::vector<uint32_t> order_index(query_vertices_num);
   for (uint32_t i = 0; i < query_vertices_num; ++i) {
     QueryVertexID query_vertex = bfs_order_[i];
@@ -42,24 +49,29 @@ DPISOFilter::DPISOFilter(const QueryGraph* query_graph, const Graph* data_graph,
   }
 }
 
-void DPISOFilter::Filter(std::vector<std::vector<VertexID>>& candidates) {
+std::vector<std::unique_ptr<NeighborhoodFilter>> LogicalDPISOFilter::toPhysicalOperators(const GraphMetadata& metadata,
+                                                                                         ExecutionConfig& exec) {
+  std::vector<std::unique_ptr<NeighborhoodFilter>> ret;
   for (uint32_t refine_time = 0; refine_time < 3; ++refine_time) {
     if (refine_time % 2 == 0) {
       for (QueryVertexID query_vertex : bfs_order_) {
         TreeNode& node = tree_[query_vertex];
         if (node.bn_.size() > 0) {
-          pruneByPivotVertices(query_vertex, node.bn_, candidates);
+          ret.emplace_back(std::make_unique<NeighborhoodFilter>(exec, query_graph_, query_vertex, node.bn_));
+          // merge output operator
         }
       }
     } else {
       for (auto it = bfs_order_.rbegin(); it != bfs_order_.rend(); ++it) {
         TreeNode& node = tree_[*it];
         if (node.fn_.size() > 0) {
-          pruneByPivotVertices(*it, node.fn_, candidates);
+          ret.emplace_back(std::make_unique<NeighborhoodFilter>(exec, query_graph_, *it, node.fn_));
+          // merge output operator
         }
       }
     }
   }
+  return ret;
 }
 
 }  // namespace circinus

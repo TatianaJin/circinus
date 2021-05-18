@@ -20,6 +20,7 @@
 #include "exec/task.h"
 #include "graph/types.h"
 #include "utils/query_utils.h"
+#include "utils/utils.h"
 
 namespace circinus {
 
@@ -34,11 +35,18 @@ class Result {
 class CandidateResult : public Result {
  private:
   std::vector<std::vector<std::vector<VertexID>>> candidates_;  // {query vertex, {shard, candidates}}
+  std::vector<std::vector<VertexID>> merged_candidates_;
 
  public:
   explicit CandidateResult(TaskId n_tasks) : candidates_(n_tasks) {}
 
   void collect(TaskBase* task) override;
+
+  void merge();
+
+  void remove_invalid(QueryVertexID query_vertex);
+
+  std::vector<std::vector<VertexID>>* getMergedCandidates() { return &merged_candidates_; }
 
   const std::vector<std::vector<std::vector<VertexID>>>& getCandidates() const { return candidates_; }
   std::vector<std::vector<std::vector<VertexID>>>& getCandidates() { return candidates_; }

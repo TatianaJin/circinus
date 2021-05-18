@@ -14,25 +14,31 @@
 
 #pragma once
 
+#include <unordered_map>
 #include <vector>
 
+#include "exec/execution_config.h"
 #include "graph/graph.h"
 #include "graph/graph_metadata.h"
 #include "graph/query_graph.h"
-#include "ops/order/order_base.h"
+#include "ops/logical/filter/filter.h"
 
 namespace circinus {
 
-class CFLOrder : public OrderBase {
+class NeighborhoodFilter;  // forward declaration
+
+class LogicalTSOFilter : public LogicalNeighborhoodFilter {
+ private:
+  QueryVertexID start_vertex_;
+  std::vector<TreeNode> tree_;
+  std::vector<QueryVertexID> dfs_order_;
+
  public:
-  QueryVertexID getStartVertex(const GraphMetadata& metadata, const QueryGraph* query_graph,
-                               const std::vector<VertexID>& candidate_size) override;
+  LogicalTSOFilter(const GraphMetadata& metadata, const QueryGraph* query_graph,
+                   const std::vector<VertexID>& candidate_size);
 
-  std::vector<QueryVertexID> getTopThree(const GraphMetadata& metadata, const QueryGraph* q);
-
-  QueryVertexID getStartVertex(const std::vector<QueryVertexID>& query_vertices,
-                               const std::vector<VertexID>& cardinality, const QueryGraph& q,
-                               const GraphMetadata& metadata);
+  std::vector<std::unique_ptr<NeighborhoodFilter>> toPhysicalOperators(const GraphMetadata& metadata,
+                                                                       ExecutionConfig& exec) override;
 };
 
 }  // namespace circinus

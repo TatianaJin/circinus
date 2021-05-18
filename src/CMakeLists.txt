@@ -34,13 +34,14 @@ set(circinus_graph_sources
 set(circinus_ops_sources
   ${PROJECT_SOURCE_DIR}/src/ops/expand_set_to_key_vertex_operator.cc
   ${PROJECT_SOURCE_DIR}/src/ops/expand_edge_operator.cc
-  ${PROJECT_SOURCE_DIR}/src/ops/filters/cfl_filter.cc
   ${PROJECT_SOURCE_DIR}/src/ops/filters/nlf_filter.cc
-  ${PROJECT_SOURCE_DIR}/src/ops/filters/tso_filter.cc
-  ${PROJECT_SOURCE_DIR}/src/ops/filters/dpiso_filter.cc
   ${PROJECT_SOURCE_DIR}/src/ops/filters/gql_filter.cc
   ${PROJECT_SOURCE_DIR}/src/ops/filters/subgraph_filter.cc
   ${PROJECT_SOURCE_DIR}/src/ops/logical/filter/nlf_filter.cc
+  ${PROJECT_SOURCE_DIR}/src/ops/logical/filter/cfl_filter.cc
+  ${PROJECT_SOURCE_DIR}/src/ops/logical/filter/tso_filter.cc
+  ${PROJECT_SOURCE_DIR}/src/ops/logical/filter/dpiso_filter.cc
+  ${PROJECT_SOURCE_DIR}/src/ops/logical/filter/gql_filter.cc
   ${PROJECT_SOURCE_DIR}/src/ops/logical/scan/ldf_scan.cc
   ${PROJECT_SOURCE_DIR}/src/ops/order/cfl_order.cc
   ${PROJECT_SOURCE_DIR}/src/ops/order/tso_order.cc

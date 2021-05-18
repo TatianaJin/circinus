@@ -17,6 +17,7 @@
 #include <memory>
 #include <vector>
 
+#include "exec/filter_task.h"
 #include "exec/plan_driver.h"
 #include "exec/result.h"
 #include "exec/scan_task.h"
@@ -45,22 +46,47 @@ void CandidatePruningPlanDriver::init(QueryId qid, QueryContext* query_ctx, Exec
       DLOG(INFO) << "Query " << qid << " Task " << task_id << " " << scan->getParallelism() << " shard(s)";
       operators_.push_back(std::move(scan));
     }
-  } else if (plan_->getPhase() == 2) {
-    // TODO(tatiana): inline local filters
-  } else {
-    // TODO(tatiana):
+  } else if (plan_->getPhase() == 3) {
+    auto filters = plan_->getFilterOperators(*query_ctx->graph_metadata, ctx.first);
+    task_counters_.resize(filters.size());
+    tasks_.resize(filters.size());
+    for (uint32_t task_id = 0; task_id < filters.size(); ++task_id) {
+      auto& filter = filters[task_id];
+      task_counters_[task_id] = filter->getParallelism();
+      tasks_[task_id].reserve(filter->getParallelism());
+      for (uint32_t i = 0; i < filter->getParallelism(); ++i) {
+        tasks_[task_id].emplace_back(std::make_unique<NeighborhoodFilterTask>(
+            qid, task_id, i, filter.get(), query_ctx->data_graph, result_->getMergedCandidates()));
+      }
+    }
+    for (uint32_t i = 0; i < tasks_[n_finished_tasks_].size(); ++i) {
+      task_queue.putTask(tasks_[n_finished_tasks_][i].get());
+    }
   }
 }
 
 void CandidatePruningPlanDriver::taskFinish(TaskBase* task, ThreadsafeTaskQueue* task_queue,
                                             ThreadsafeQueue<ServerEvent>* reply_queue) {
-  if (--task_counters_[task->getTaskId()] == 0 && ++n_finished_tasks_ == task_counters_.size()) {
-    if (plan_->getPhase() == 1 || plan_->getPhase() == 2) {
-      candidate_cardinality_ = result_->getCandidateCardinality();
-      reply_queue->push(std::move(*finish_event_));
-      reset();
-    } else {
-      // TODO(tatiana): more tasks for iterative pruning until finish
+  if (--task_counters_[task->getTaskId()] == 0) {
+    if (++n_finished_tasks_ == task_counters_.size()) {
+      if (plan_->getPhase() == 1 || plan_->getPhase() == 2) {
+        candidate_cardinality_ = result_->getCandidateCardinality();
+        result_->merge();
+        reply_queue->push(std::move(*finish_event_));
+        reset();
+      } else {
+        result_->remove_invalid(tasks_[n_finished_tasks_ - 1][0]->getFilter()->getQueryVertex());
+        reply_queue->push(std::move(*finish_event_));
+        reset();
+      }
+      return;
+    }
+
+    if (plan_->getPhase() == 3) {
+      result_->remove_invalid(tasks_[n_finished_tasks_ - 1][0]->getFilter()->getQueryVertex());
+      for (uint32_t i = 0; i < tasks_[n_finished_tasks_].size(); ++i) {
+        task_queue->putTask(tasks_[n_finished_tasks_][i].get());
+      }
     }
   }
 }
