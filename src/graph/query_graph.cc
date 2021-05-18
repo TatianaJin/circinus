@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstring>
 #include <fstream>
 #include <string>
 #include <vector>
@@ -27,7 +28,11 @@ namespace circinus {
 
 QueryGraph::QueryGraph(const std::string& path) {
   std::ifstream infile(path);
-  CHECK(infile.is_open()) << "Cannot open file " << path;
+  if (!infile.is_open()) {
+    std::stringstream ss;
+    ss << std::strerror(errno) << ": " << path;
+    throw std::runtime_error(ss.str());
+  }
 
   char line_type;
   // process line: t n_vertices n_edges
