@@ -14,24 +14,25 @@
 
 #pragma once
 
-#include <unordered_map>
 #include <vector>
 
-#include "ops/filters/filter_base.h"
+#include "graph/graph.h"
+#include "graph/query_graph.h"
+#include "ops/filters/logical_filter.h"
 
 namespace circinus {
 
-class TSOFilter : public FilterBase {
- private:
-  QueryVertexID start_vertex_;
-  std::vector<TreeNode> tree_;
-  std::vector<QueryVertexID> dfs_order_;
-
+class LogicalTSOFilter : public LogicalFilter {
  public:
-  TSOFilter(const QueryGraph* query_graph, const Graph* data_graph, QueryVertexID start_vertex);
+  LogicalTSOFilter(const QueryGraph* query_graph, const Graph* data_graph, const QueryVertexID query_vertex,
+                   const QueryVertexID& pivot_vertex) {
+    LogicalFilter(query_graph, data_graph, query_vertex, {pivot_vertex});
+  }
 
-  /** @returns The number of records that passed the filter and are added to output */
-  void Filter(std::vector<std::vector<VertexID>>& candidates);
+  LogicalTSOFilter(const QueryGraph* query_graph, const Graph* data_graph, const QueryVertexID query_vertex,
+                   const std::vector<QueryVertexID>& pivot_vertices) {
+    LogicalFilter(query_graph, data_graph, query_vertex, pivot_vertices);
+  }
 };
 
 }  // namespace circinus

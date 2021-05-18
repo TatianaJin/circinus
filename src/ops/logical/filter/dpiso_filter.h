@@ -15,25 +15,26 @@
 #pragma once
 
 #include <unordered_map>
-#include <unordered_set>
 #include <vector>
 
+#include "exec/execution_config.h"
 #include "graph/graph.h"
 #include "graph/query_graph.h"
-#include "ops/filters/filter.h"
-#include "utils/hashmap.h"
-#include "utils/utils.h"
+#include "ops/logical/filter/filter.h"
 
 namespace circinus {
 
-class GQLFilter : public Filter {
+class LogicalDPISOFilter : public LogicalFilter {
  private:
-  bool verify(const Graph& data_graph, VertexID data_vertex);
+  QueryVertexID start_vertex_;
+  std::vector<TreeNode> tree_;
+  std::vector<QueryVertexID> bfs_order_;
 
  public:
-  GQLFilter(const QueryGraph* query_graph, const Graph* data_graph, QueryVertexID query_vertex);
+  LogicalDPISOFilter(const QueryGraph* query_graph, const Graph* data_graph);
 
-  void filter(const Graph& data_graph, std::vector<VertexID>& candidates);
+  std::vector<std::unique_ptr<Filter>> toPhysicalOperators(const GrapMetadata& metadata,
+                                                           ExecutionConfig& exec) override;
 };
 
 }  // namespace circinus

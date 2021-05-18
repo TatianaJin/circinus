@@ -14,26 +14,31 @@
 
 #pragma once
 
-#include <unordered_map>
-#include <unordered_set>
+#include <algorithm>
 #include <vector>
 
 #include "graph/graph.h"
 #include "graph/query_graph.h"
-#include "ops/filters/filter.h"
+#include "graph/tree_node.h"
 #include "utils/hashmap.h"
-#include "utils/utils.h"
 
 namespace circinus {
 
-class GQLFilter : public Filter {
- private:
-  bool verify(const Graph& data_graph, VertexID data_vertex);
+class Filter;
+
+class LogicalFilter {
+ protected:
+  const QueryGraph* query_graph_;
+  const Graph* data_graph_;
 
  public:
-  GQLFilter(const QueryGraph* query_graph, const Graph* data_graph, QueryVertexID query_vertex);
+  LogicalFilter(const QueryGraph* query_graph, const Graph* data_graph)
+      : query_graph_(query_graph), data_graph_(data_graph) {}
 
-  void filter(const Graph& data_graph, std::vector<VertexID>& candidates);
+  virtual ~LogicalFilter() {}
+
+  virtual std::vector<std::unique_ptr<Filter>> toPhysicalOperators(const GrapMetadata& metadata,
+                                                                   ExecutionConfig& exec) = 0;
 };
 
 }  // namespace circinus

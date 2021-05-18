@@ -19,3 +19,11 @@
 #include "ops/filters/gql_filter.h"
 #include "ops/filters/nlf_filter.h"
 #include "ops/filters/tso_filter.h"
+
+#include "ops/filters/cfl_filter_base.h"
+#include "ops/filters/dpiso_filter_base.h"
+#include "ops/filters/gql_filter_base.h"
+#include "ops/filters/nlf_filter_base.h"
+#include "ops/filters/tso_filter_base.h"
+
+namespace circinus {}  // namespace circinus

@@ -19,6 +19,7 @@
 
 #include "graph/query_graph.h"
 #include "graph/types.h"
+#include "ops/filters/filters.h"
 
 namespace circinus {
 
@@ -45,6 +46,12 @@ class CandidatePruningPlan {
   void newNLFFilter(const QueryGraph& q) {
     // FIXME
   }
+
+  void newCFLFilter(const QueryGraph& q, const Graph* data_graph, const std::vector<uint32_t>& candidate_size) {}
+
+  void newDPSIOFilter(const QueryGraph& q, const Graph* data_graph, const std::vector<uint32_t>& candidate_size) {}
+
+  void newTSOFilter(const QueryGraph& q, const Graph* data_graph, const std::vector<uint32_t>& candidate_size) {}
 
  private:
   LDFScan scan_;                          // phase 1 operator 0

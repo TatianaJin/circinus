@@ -16,44 +16,25 @@
 
 namespace circinus {
 
-GQLFilter::GQLFilter(const QueryGraph* query_graph, QueryVertexID query_vid,
-                     unordered_map<QueryVertexID, unordered_set<VertexID>>* valid_candidates)
-    : FilterBase(query_graph, nullptr), query_vid_(query_vid), valid_candidates_(valid_candidates) {}
+GQLFilter::GQLFilter(const QueryGraph* query_graph, const Graph* data_graph, QueryVertexID query_vertex)
+    : LogicalFilter(query_graph, data_graph, query_vertex) {}
 
-void GQLFilter::preFilter(const Graph& data_graph, std::vector<VertexID>& candidates) {
-  uint32_t num = 0;
-  for (auto& data_vertex : candidates) {
+void GQLFilter::filter(std::vector<std::vector<VertexID>>& candidates, FilterContext* ctx) {
+  for (uint32_t i = ctx->filter_offset; i < ctx->filter_end; ++i) {
+    VertexID& data_vertex = candidates[query_vertex_][i];
     if (data_vertex == INVALID_VERTEX_ID) {
       continue;
     }
 
-    if (!verify(data_graph, data_vertex)) {
-      num++;
-      valid_candidates_->at(query_vid_).erase(data_vertex);
+    if (!verify(data_vertex, candidates)) {
       data_vertex = INVALID_VERTEX_ID;
     }
   }
 }
 
-uint32_t GQLFilter::Filter(const Graph& data_graph, std::vector<VertexID>& candidates, std::vector<VertexID>* output) {
-  for (auto& data_vertex : candidates) {
-    if (data_vertex == INVALID_VERTEX_ID) {
-      continue;
-    }
-
-    if (verify(data_graph, data_vertex)) {
-      output->emplace_back(data_vertex);
-    } else {
-      valid_candidates_->at(query_vid_).erase(data_vertex);
-      data_vertex = INVALID_VERTEX_ID;
-    }
-  }
-  return output->size();
-}
-
-bool GQLFilter::verify(const Graph& data_graph, VertexID data_vertex) {
+bool GQLFilter::verify(const VertexID data_vertex, std::vector<std::vector<VertexID>>& candidates) {
   const auto& query_vertex_neighbors = query_graph_->getOutNeighbors(query_vid_);
-  const auto& data_vertex_neighbors = data_graph.getOutNeighbors(data_vertex);
+  const auto& data_vertex_neighbors = data_graph_.getOutNeighbors(data_vertex);
 
   std::vector<uint32_t> left_to_right_edge;
   uint32_t* left_to_right_offset = new uint32_t[query_vertex_neighbors.second + 1];
@@ -62,11 +43,13 @@ bool GQLFilter::verify(const Graph& data_graph, VertexID data_vertex) {
   for (uint32_t i = 0; i < query_vertex_neighbors.second; ++i) {
     QueryVertexID query_vertex_neighbor = query_vertex_neighbors.first[i];
     left_to_right_offset[i] = edge_count;
-    auto& valid_candidates = valid_candidates_->at(query_vertex_neighbor);
+    const auto& valid_candidates = candidates[query_vertex_neighbor];
     for (uint32_t j = 0; j < data_vertex_neighbors.second; ++j) {
       VertexID data_vertex_neighbor = data_vertex_neighbors.first[j];
 
-      if (valid_candidates.find(data_vertex_neighbor) != valid_candidates.end()) {
+      // binary search to check if the neighbor of data_vertex is in the candidate set of the neighbor of query_vertex
+      if (std::lower_bound(valid_candidates.begin(), valid_candidates.end(), data_vertex_neighbor) !=
+          valid_candidates.end()) {
         left_to_right_edge.emplace_back(j);
         edge_count++;
       }
