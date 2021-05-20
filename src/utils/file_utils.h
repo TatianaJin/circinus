@@ -18,6 +18,8 @@
 #include <filesystem>
 #endif
 
+#include <cstring>
+#include <fstream>
 #include <sstream>
 #include <string>
 
@@ -66,5 +68,15 @@ class Path {
 };
 
 #endif  // HAS_FILESYSTEM
+
+inline std::ifstream openFile(const std::string& path) {
+  std::ifstream infile(path);
+  if (!infile.is_open()) {
+    std::stringstream ss;
+    ss << std::strerror(errno) << ": " << path;
+    throw std::runtime_error(ss.str());
+  }
+  return infile;
+}
 
 }  // namespace circinus
