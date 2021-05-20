@@ -14,9 +14,13 @@
 
 #pragma once
 
+#include <algorithm>
+#include <cstring>
+#include <fstream>
 #include <string>
 #include <utility>
 #include <vector>
+
 #include "glog/logging.h"
 
 #include "graph/types.h"
@@ -33,15 +37,15 @@ struct QueryEdge {
   bool hasEndVertex(QueryVertexID v) const { return src == v || dst == v; }
 };
 
-/**
+/** Undirected query graph.
  * A QueryGraph is stored in the CSR format.
  * QueryGraph must have zero-indexed continuous vertex ids.
  */
 class QueryGraph {
- private:
+ protected:
   QueryVertexID n_vertices_ = 0;
   EdgeID n_edges_ = 0;
-  QueryVertexID max_degree_ = 0;
+  QueryVertexID max_degree_ = 0;  // out degree
 
   std::vector<EdgeID> vlist_;         // size n_vertices_ + 1, { i: the id of the first edge of vertex i }
   std::vector<QueryVertexID> elist_;  // size n_edges_, { i : the destination vertex id of edge i}
@@ -77,8 +81,63 @@ class QueryGraph {
     return std::make_pair(&elist_[vlist_[id]], vlist_[id + 1] - vlist_[id]);
   }
 
-  /** extract induced subgraph on vertices, with the vertex index in vertices as the new vertex id */
-  QueryGraph getInducedSubgraph(const std::vector<QueryVertexID>& vertices) const;
+  /** Extract induced subgraph on vertices
+   * @param vertices The set of vertices from which the subgraph is induced. The i-th vertex in the vector is mapped to
+   * vertex i in the subgraph.
+   */
+  inline QueryGraph getInducedSubgraph(const std::vector<QueryVertexID>& vertices) const {
+    QueryGraph q;
+    getInducedSubgraphInner(&q, vertices);
+    return q;
+  }
+
+ protected:
+  void readHeader(std::ifstream& infile, bool directed = false);
+  void readVertices(std::ifstream& infile);
+  template <bool directed = false>
+  void readEdges(std::ifstream& infile);
+
+  inline void sortEdges() {
+    // sort neighbors by id for each vertex
+    for (QueryVertexID i = 0; i < n_vertices_; ++i) {
+      std::sort(elist_.begin() + vlist_[i], elist_.begin() + vlist_[i + 1]);
+    }
+  }
+
+  void getInducedSubgraphInner(QueryGraph* subgraph, const std::vector<QueryVertexID>& vertices) const;
+};
+
+class DirectedQueryGraph : public QueryGraph {
+ private:
+  QueryVertexID max_in_degree_ = 0;
+  std::vector<EdgeID> in_vlist_;
+  std::vector<QueryVertexID> in_elist_;
+
+ public:
+  DirectedQueryGraph() {}
+  // TODO(tatiana): test
+  explicit DirectedQueryGraph(const std::string& path);
+
+  inline QueryVertexID getGraphMaxInDegree() const { return max_in_degree_; }
+  inline QueryVertexID getVertexInDegree(QueryVertexID id) const { return in_vlist_[id + 1] - in_vlist_[id]; }
+
+  inline std::pair<const QueryVertexID*, uint32_t> getInNeighbors(QueryVertexID id) const {
+    DCHECK_LT(id, in_vlist_.size() - 1);
+    return std::make_pair(&in_elist_[in_vlist_[id]], getVertexInDegree(id));
+  }
+
+  // TODO(tatiana): test
+  // overload function
+  inline DirectedQueryGraph getInducedSubgraph(const std::vector<QueryVertexID>& vertices) const {
+    DirectedQueryGraph ret;
+    getInducedSubgraphInner(&ret, vertices);
+    ret.n_edges_ = ret.elist_.size();
+    ret.constructInEdges();
+    return ret;
+  }
+
+ private:
+  void constructInEdges();
 };
 
 }  // namespace circinus
