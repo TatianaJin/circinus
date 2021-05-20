@@ -16,6 +16,7 @@
 
 #ifdef USE_STL
 
+#include <map>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -26,6 +27,10 @@ using unordered_set = std::unordered_set<T>;
 
 template <typename K, typename V>
 using unordered_map = std::unordered_map<K, V>;
+
+template <typename K, typename V>
+using map = std::map<K, V>;
+
 }  // namespace circinus
 
 #else  // USE_STL
@@ -39,6 +44,9 @@ using unordered_set = phmap::flat_hash_set<T>;
 
 template <typename K, typename V>
 using unordered_map = phmap::flat_hash_map<K, V>;
+
+template <typename K, typename V>
+using map = phmap::btree_map<K, V>;
 
 }  // namespace circinus
 
