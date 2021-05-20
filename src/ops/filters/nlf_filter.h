@@ -14,25 +14,38 @@
 
 #pragma once
 
-#include <unordered_map>
 #include <vector>
 
 #include "graph/graph.h"
 #include "graph/query_graph.h"
+#include "ops/filters/local_filter.h"
+#include "utils/hashmap.h"
 
 namespace circinus {
 
-class NLFFilter {
+class NLFFilter : public LocalFilter {
  private:
-  const QueryGraph* query_graph_;
-  QueryVertexID query_vid_;
-  std::unordered_map<LabelID, uint32_t> neighbor_label_frequency_;
+  unordered_map<LabelID, uint32_t> neighbor_label_frequency_;
 
  public:
   NLFFilter(const QueryGraph* query_graph, QueryVertexID query_vid);
+  explicit NLFFilter(unordered_map<LabelID, uint32_t>&& neighbor_label_frequency)
+      : neighbor_label_frequency_(std::move(neighbor_label_frequency)) {}
 
   /** @returns The number of records that passed the filter and are added to output */
-  uint32_t Filter(const Graph& data_graph, const std::vector<VertexID>& candidates, std::vector<VertexID>* output);
+  uint32_t filter(const Graph& g, const std::vector<VertexID>& candidates, std::vector<VertexID>* output) override;
+};
+
+class QuickNLFFilter : public LocalFilter {
+ private:
+  unordered_map<LabelID, uint32_t> neighbor_label_frequency_;
+
+ public:
+  explicit QuickNLFFilter(unordered_map<LabelID, uint32_t>&& neighbor_label_frequency)
+      : neighbor_label_frequency_(std::move(neighbor_label_frequency)) {}
+
+  /** @returns The number of records that passed the filter and are added to output */
+  uint32_t filter(const Graph& g, const std::vector<VertexID>& candidates, std::vector<VertexID>* output) override;
 };
 
 }  // namespace circinus
