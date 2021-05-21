@@ -95,7 +95,7 @@ ExternalProject_Add(metis_ep
 	INSTALL_COMMAND make install
 )
 
-
+add_dependencies(metis_ep gklib_ep)
 
 ### parallel hashmap
 ExternalProject_Add(phmap_ep
