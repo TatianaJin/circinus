@@ -14,9 +14,25 @@
 
 #pragma once
 
+#include "exec/task.h"
+#include "graph/graph.h"
+#include "ops/scans.h"
+
 namespace circinus {
 
-/** Get a free port on IPV4. */
-int GetAvailablePort();
+class ScanTask : public TaskBase {
+ private:
+  ScanContext scan_context_;
+  const Scan* scan_;  // not owned
+  const Graph* graph_;
+
+ public:
+  ScanTask(QueryId query_id, TaskId task_id, uint32_t shard_id, const Scan* scan, const Graph* graph)
+      : TaskBase(query_id, task_id), scan_context_(scan->initScanContext(shard_id)), scan_(scan), graph_(graph) {}
+
+  ScanContext& getScanContext() { return scan_context_; }
+
+  void run() override { scan_->scan(graph_, &scan_context_); }
+};
 
 }  // namespace circinus

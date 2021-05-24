@@ -31,21 +31,21 @@ class ThreadsafeQueue {
   ThreadsafeQueue(ThreadsafeQueue&&) = delete;
   ThreadsafeQueue& operator=(ThreadsafeQueue&&) = delete;
 
-  void Push(const T& elem_ptr) {
+  void push(const T& elem_ptr) {
     mu_.lock();
     queue_.push(elem_ptr);
     mu_.unlock();
     cond_.notify_all();
   }
 
-  void Push(T&& elem_ptr) {
+  void push(T&& elem_ptr) {
     mu_.lock();
     queue_.push(std::move(elem_ptr));
     mu_.unlock();
     cond_.notify_all();
   }
 
-  T WaitAndPop() {
+  T waitAndPop() {
     std::unique_lock<std::mutex> lk(mu_);
     cond_.wait(lk, [this] { return !queue_.empty(); });
     T elem = std::move(queue_.front());

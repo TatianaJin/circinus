@@ -24,8 +24,46 @@
 
 namespace circinus {
 
+class ThreadsafeTaskQueue {
+ private:
+  struct Comparator {
+    bool operator()(TaskBase* a, TaskBase* b) { return b->isBefore(a); }
+  };
+
+  // not storing unique_ptr because priority_queue does not support non-const top()
+  std::priority_queue<TaskBase*, std::vector<TaskBase*>, Comparator> queue_;  // need to delete the pointers
+  std::mutex mu_;
+  std::condition_variable cv_;
+
+ public:
+  ~ThreadsafeTaskQueue() {
+    while (!queue_.empty()) {
+      delete queue_.top();
+      queue_.pop();
+    }
+  }
+
+  void putTask(TaskBase* task) {
+    {
+      std::lock_guard<std::mutex> lock(mu_);
+      queue_.push(task);
+    }
+    cv_.notify_one();
+  }
+
+  inline void putTask(std::unique_ptr<TaskBase>&& task) { putTask(task.release()); }
+
+  std::unique_ptr<TaskBase> getTask() {
+    std::unique_lock<std::mutex> lock(mu_);
+    cv_.wait(lock, [this]() { return !queue_.empty(); });
+    auto ret = std::unique_ptr<TaskBase>(queue_.top());
+    queue_.pop();
+    return ret;
+  }
+};
+
 /** Concurrent task priority queue prioritizing execution of deep tasks. */
-class TaskQueue {
+class[[deprecated]] TaskQueue {
   struct TaskComparator {
     bool operator()(Task* a, Task* b) { return a->getLevel() < b->getLevel(); }
   };
@@ -39,7 +77,7 @@ class TaskQueue {
   explicit TaskQueue(uint32_t n_subscribers) : n_subscribers_(n_subscribers) {}
 
   /** A task is newed */
-  inline void putTask(uint32_t level, std::vector<CompressedSubgraphs>&& input, const Graph* graph) {
+  inline void putTask(uint32_t level, std::vector<CompressedSubgraphs> && input, const Graph* graph) {
     bool notify = false;
     {
       std::lock_guard<std::mutex> lock(mu_);
@@ -52,7 +90,7 @@ class TaskQueue {
   }
 
   /** A task is newed */
-  inline void putTaskUnSafe(uint32_t level, std::vector<CompressedSubgraphs>&& input, const Graph* graph) {
+  inline void putTaskUnSafe(uint32_t level, std::vector<CompressedSubgraphs> && input, const Graph* graph) {
     task_queue_.push(new Task(level, std::move(input), graph));
   }
 

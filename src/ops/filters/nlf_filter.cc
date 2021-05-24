@@ -30,30 +30,24 @@ NLFFilter::NLFFilter(const QueryGraph* query_graph, QueryVertexID query_vid) {
   }
 }
 
-uint32_t NLFFilter::filter(const Graph& data_graph, const std::vector<VertexID>& candidates,
-                           std::vector<VertexID>* output) {
-  uint32_t count = 0;
-
-  for (auto candidate : candidates) {
-    auto neighbor_label_frequency = neighbor_label_frequency_;
-    auto neighbors = data_graph.getOutNeighbors(candidate);
-    // check if the neighbors of the candidate satisfy the neighbor label frequency of the query vertex
-    for (uint32_t i = 0; i < neighbors.second; ++i) {
-      auto label = data_graph.getVertexLabel(neighbors.first[i]);
-      auto pos = neighbor_label_frequency.find(label);
-      if (pos != neighbor_label_frequency.end()) {
-        if (--pos->second == 0) {  // `label` is satisfied
-          neighbor_label_frequency.erase(pos);
-          if (neighbor_label_frequency.empty()) {  // all labels are satisfied
-            ++count;
-            output->push_back(candidate);
-            break;
-          }
+bool NLFFilter::prune(const Graph& data_graph, VertexID candidate) const {
+  auto neighbor_label_frequency = neighbor_label_frequency_;
+  auto neighbors = data_graph.getOutNeighbors(candidate);
+  // check if the neighbors of the candidate satisfy the neighbor label frequency of the query vertex
+  for (uint32_t i = 0; i < neighbors.second; ++i) {
+    auto label = data_graph.getVertexLabel(neighbors.first[i]);
+    auto pos = neighbor_label_frequency.find(label);
+    if (pos != neighbor_label_frequency.end()) {
+      if (--pos->second == 0) {  // `label` is satisfied
+        neighbor_label_frequency.erase(pos);
+        if (neighbor_label_frequency.empty()) {  // all labels are satisfied
+          return false;
+          break;
         }
       }
     }
   }
-  return count;
+  return true;
 }
 
 /**
@@ -65,42 +59,35 @@ inline const VertexID* upperBound(const Graph& g, const VertexID* first, const V
                             [&g](LabelID label, VertexID v) { return label < g.getVertexLabel(v); });
   }
   // linear scan
-  while (first < last) {
+  for (; first < last; ++first) {
     if (g.getVertexLabel(*first) > label) {
       return first;
     }
-    ++first;
   }
   DCHECK_EQ(g.getVertexLabel(*(first - 1)), label);
   return first;
 }
 
-uint32_t QuickNLFFilter::filter(const Graph& data_graph, const std::vector<VertexID>& candidates,
-                                std::vector<VertexID>* output) {
-  uint32_t count = 0;
-  for (auto candidate : candidates) {
-    auto neighbors = data_graph.getOutNeighbors(candidate);
-    uint32_t n_checked_label = 0;
-    // check if the neighbors of the candidate satisfy the neighbor label frequency of the query vertex
-    for (uint32_t i = 0; i < neighbors.second;) {
-      auto label = data_graph.getVertexLabel(neighbors.first[i]);
-      auto next_pos = upperBound(data_graph, neighbors.first + i + 1, neighbors.first + neighbors.second, label);
-      auto frequency = next_pos - (neighbors.first + i);
-      i += frequency;
-      auto pos = neighbor_label_frequency_.find(label);
-      if (pos != neighbor_label_frequency_.end()) {
-        ++n_checked_label;
-        if (pos->second > frequency) {  // if label frequency is not satisfied, prune this candidate
-          break;
-        } else if (n_checked_label == neighbor_label_frequency_.size()) {  // all labels have been checked
-          ++count;
-          output->push_back(candidate);
-          break;
-        }
+bool QuickNLFFilter::prune(const Graph& data_graph, VertexID candidate) const {
+  auto neighbors = data_graph.getOutNeighbors(candidate);
+  uint32_t n_checked_label = 0;
+  // check if the neighbors of the candidate satisfy the neighbor label frequency of the query vertex
+  for (uint32_t i = 0; i < neighbors.second;) {
+    auto label = data_graph.getVertexLabel(neighbors.first[i]);
+    auto next_pos = upperBound(data_graph, neighbors.first + i + 1, neighbors.first + neighbors.second, label);
+    auto frequency = next_pos - (neighbors.first + i);
+    i += frequency;
+    auto pos = neighbor_label_frequency_.find(label);
+    if (pos != neighbor_label_frequency_.end()) {
+      ++n_checked_label;
+      if (pos->second > frequency) {  // if label frequency is not satisfied, prune this candidate
+        return true;
+      } else if (n_checked_label == neighbor_label_frequency_.size()) {  // all labels have been checked
+        return false;
       }
     }
   }
-  return count;
+  return true;
 }
 
 }  // namespace circinus

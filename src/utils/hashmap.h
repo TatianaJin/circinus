@@ -14,11 +14,11 @@
 
 #pragma once
 
-#ifdef USE_STL
-
 #include <map>
 #include <unordered_map>
 #include <unordered_set>
+
+#ifdef USE_STL
 
 namespace circinus {
 
@@ -29,12 +29,13 @@ template <typename K, typename V>
 using unordered_map = std::unordered_map<K, V>;
 
 template <typename K, typename V>
-using map = std::map<K, V>;
+using ordered_map = std::map<K, V>;
 
 }  // namespace circinus
 
 #else  // USE_STL
 
+#include "parallel_hashmap/btree.h"
 #include "parallel_hashmap/phmap.h"
 
 namespace circinus {
@@ -46,7 +47,7 @@ template <typename K, typename V>
 using unordered_map = phmap::flat_hash_map<K, V>;
 
 template <typename K, typename V>
-using map = phmap::btree_map<K, V>;
+using ordered_map = phmap::btree_map<K, V>;
 
 }  // namespace circinus
 
