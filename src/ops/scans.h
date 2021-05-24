@@ -14,13 +14,17 @@
 
 #pragma once
 
+#include <memory>
 #include <numeric>
+#include <string>
 #include <vector>
 
 #include "exec/execution_config.h"
 #include "graph/graph.h"
 #include "graph/query_graph.h"
 #include "graph/types.h"
+#include "ops/filters.h"
+#include "ops/operator.h"
 
 namespace circinus {
 
@@ -35,34 +39,55 @@ struct ScanContext {
 /**
  * The Scan operator should be functor-like so as to be shared by multiple threads to run parallel tasks.
  */
-class Scan {
- private:
+class Scan : public Operator {
+ protected:
   uint32_t parallelism_ = 1;
   VertexID scan_size_ = 0;
+  std::string name_;
+  std::vector<std::unique_ptr<LocalFilter>> filters_;
 
  public:
   /**
    * @param label_pruning_method The method to filter vertices by label: 2 for finding label range, 1 for building label
    * index, 0 for full scan.
    */
-  static Scan* newLDFScan(LabelID label, VertexID out_d, VertexID in_d, ExecutionConfig& conf,
-                          uint32_t label_pruning_method);
-  static Scan* newDegreeScan(VertexID out_d, VertexID in_d, ExecutionConfig& conf);
+  static std::unique_ptr<Scan> newLDFScan(LabelID label, VertexID out_d, VertexID in_d, ExecutionConfig& conf,
+                                          uint32_t label_pruning_method);
+  static std::unique_ptr<Scan> newDegreeScan(VertexID out_d, VertexID in_d, ExecutionConfig& conf);
 
-  Scan() {}
-  explicit Scan(ExecutionConfig& conf) : parallelism_(conf.getMaxParallelism()), scan_size_(conf.getInputSize()) {}
+  explicit Scan(ExecutionConfig& conf, std::string&& name = "Scan")
+      : parallelism_(conf.getMaxParallelism()), scan_size_(conf.getInputSize()), name_(std::move(name)) {}
 
-  inline ScanContext initScanContext(uint32_t task_idx) {
+  inline void addFilter(std::unique_ptr<LocalFilter>&& filter) { filters_.push_back(std::move(filter)); }
+
+  inline uint32_t getParallelism() const { return parallelism_; }
+  inline ScanContext initScanContext(uint32_t task_idx) const {
     DCHECK_LT(task_idx, parallelism_);
-    auto chunk_size = scan_size_ / task_idx;
-    CHECK_NE(chunk_size, 0);
-    if (task_idx < scan_size_ % task_idx) {
+    auto chunk_size = scan_size_ / parallelism_;
+    CHECK_NE(chunk_size, 0) << "scan_size=" << scan_size_ << ", parallelism=" << parallelism_;
+    if (task_idx < scan_size_ % parallelism_) {
       return ScanContext((chunk_size + 1) * task_idx, chunk_size + 1);
     }
-    return ScanContext(chunk_size * task_idx + (scan_size_ % task_idx), chunk_size);
+    return ScanContext(chunk_size * task_idx + (scan_size_ % parallelism_), chunk_size);
   }
 
-  virtual void scan(const Graph* g, uint32_t batch_size, ScanContext* ctx) const = 0;
+  std::string toString() const override {
+    std::stringstream ss;
+    ss << name_ << " (input=" << scan_size_ << ", shards=" << parallelism_ << ")";
+    return ss.str();
+  }
+
+  virtual void scan(const Graph* g, ScanContext* ctx) const = 0;
+
+ protected:
+  bool validate(const Graph& g, VertexID v) const {
+    for (auto& filter : filters_) {
+      if (filter->prune(g, v)) {
+        return false;
+      }
+    }
+    return true;
+  }
 };
 
 }  // namespace circinus

@@ -32,8 +32,7 @@ class NLFFilter : public LocalFilter {
   explicit NLFFilter(unordered_map<LabelID, uint32_t>&& neighbor_label_frequency)
       : neighbor_label_frequency_(std::move(neighbor_label_frequency)) {}
 
-  /** @returns The number of records that passed the filter and are added to output */
-  uint32_t filter(const Graph& g, const std::vector<VertexID>& candidates, std::vector<VertexID>* output) override;
+  bool prune(const Graph& data_graph, VertexID v) const override;
 };
 
 class QuickNLFFilter : public LocalFilter {
@@ -44,8 +43,7 @@ class QuickNLFFilter : public LocalFilter {
   explicit QuickNLFFilter(unordered_map<LabelID, uint32_t>&& neighbor_label_frequency)
       : neighbor_label_frequency_(std::move(neighbor_label_frequency)) {}
 
-  /** @returns The number of records that passed the filter and are added to output */
-  uint32_t filter(const Graph& g, const std::vector<VertexID>& candidates, std::vector<VertexID>* output) override;
+  bool prune(const Graph& data_graph, VertexID v) const override;
 };
 
 }  // namespace circinus

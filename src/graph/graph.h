@@ -38,6 +38,8 @@ class Graph {
   std::unordered_map<LabelID, uint32_t> vertex_cardinality_by_label_;
   std::unordered_map<LabelID, std::vector<VertexID>> vertex_ids_by_label_;
 
+  VertexID offset_ = 0;
+
  public:
   /**
    * @param path The file to load graph (undirected).
@@ -84,6 +86,10 @@ class Graph {
     return getVertexOutDegree(id);
   }
 
+  /* for partitioned graph */
+  inline VertexID getVertexGlobalId(VertexID id) const { return id + offset_; }
+  inline VertexID getVertexLocalId(VertexID id) const { return id - offset_; }
+
   inline LabelID getVertexLabel(VertexID id) const { return labels_[id]; }
 
   inline const std::vector<VertexID>* getVerticesByLabel(LabelID lid) const {
@@ -124,6 +130,14 @@ class Graph {
     n_vertices_ = 0;
     n_edges_ = 0;
     max_degree_ = 0;
+  }
+};
+
+class DirectedGraph : public Graph {
+ public:
+  VertexID getVertexInDegree(VertexID) const {
+    // TODO(tatiana)
+    return 0;
   }
 };
 

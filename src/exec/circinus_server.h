@@ -19,14 +19,17 @@
 #include <fstream>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include "glog/logging.h"
 #include "zmq.hpp"
 
+#include "exec/candidate_pruning_plan_driver.h"
 #include "exec/executor_manager.h"
 #include "exec/threadsafe_queue.h"
 #include "graph/graph.h"
+#include "graph/graph_metadata.h"
 #include "graph/query_graph.h"
 #include "graph/types.h"
 #include "plan/planner.h"
@@ -41,29 +44,15 @@ struct QueryState {
   Planner* planner = nullptr;
   std::string client_addr;
 
-  QueryState(QueryGraph&& q, QueryConfig&& config, Graph* g) : query_context(std::move(q), std::move(config), g) {}
+  QueryState(QueryGraph&& q, QueryConfig&& config, Graph* g, GraphMetadata* m)
+      : query_context(std::move(q), std::move(config), g, m) {}
 };
 
 class CircinusServer {
  protected:
-  struct Event {
-    enum Type : uint32_t { ShutDown = 0, LoadGraph, NewQuery } type;
-    // TODO(tatiana): add explain and profile commands
-    std::vector<std::string> args;
-    std::string client_addr;
+  using Event = ServerEvent;
 
-    static inline const std::vector<std::string> type_names = {"ShutDown", "LoadGraph", "NewQuery"};
-    static inline const std::string& getTypeName(Type type) { return type_names[type]; }
-
-    explicit Event(Type event_type) : type(event_type) {}
-
-    friend inline std::ostream& operator<<(std::ostream& os, Event& event) {
-      os << getTypeName(event.type);
-      return os;
-    }
-  };
-
-  unordered_map<std::string, Graph> data_graphs_;
+  unordered_map<std::string, std::pair<Graph, GraphMetadata>> data_graphs_;
   std::deque<QueryState> active_queries_;
   std::vector<uint32_t> reusable_indices_;
 
@@ -77,6 +66,7 @@ class CircinusServer {
   std::unordered_map<std::string, zmq::socket_t> sockets_to_clients_;
 
  public:
+  CircinusServer() : executor_manager_(&event_queue_) {}
   ~CircinusServer() {
     LOG(INFO) << "CircinusServer shuts down now.";
     if (client_server_thread_.joinable()) {
@@ -89,7 +79,7 @@ class CircinusServer {
   void Serve(bool listen = true);
   auto& getZMQContext() { return zmq_ctx_; }
 
-  inline void shutDown() { event_queue_.Push(Event(Event::ShutDown)); }
+  inline void shutDown() { event_queue_.push(Event(Event::ShutDown)); }
   bool loadGraph(std::string&& gpath, std::string&& gname, std::string&& config, std::string&& client_addr = "");
   bool query(std::string&& game, std::string&& qpath, std::string&& config, std::string&& client_addr = "");
 
@@ -114,6 +104,8 @@ class CircinusServer {
     // TODO(tatiana): finish up before shutdown
   }
 
+  void handleCandidatePhase(const Event& event);
+
   /* end of event handlers */
 
   /** Load graph from binary file.
@@ -132,9 +124,11 @@ class CircinusServer {
       throw std::runtime_error(ss.str());
     }
     auto start_loading = std::chrono::steady_clock::now();
-    Graph& data_graph = data_graphs_[name];
+    Graph data_graph;
     data_graph.loadCompressed(input);
+    GraphMetadata meta(data_graph);  // TODO(tatiana): more statistics, support partitioned graph
     auto end_loading = std::chrono::steady_clock::now();
+    data_graphs_.insert({name, std::make_pair(data_graph, meta)});
     return ((double)std::chrono::duration_cast<std::chrono::microseconds>(end_loading - start_loading).count()) / 1e6;
   }
 
@@ -144,16 +138,19 @@ class CircinusServer {
    * @param query_config_str The string of the query config.
    * @returns The index of the new query.
    */
-  uint32_t newQuery(const std::string& graph_name, const std::string& query_file, const std::string& query_config_str) {
+  inline uint32_t newQuery(const std::string& graph_name, const std::string& query_file,
+                           const std::string& query_config_str) {
     QueryGraph q(query_file);
     QueryConfig config(query_config_str);
+
+    auto& graph = data_graphs_.at(graph_name);
     if (reusable_indices_.empty()) {
-      active_queries_.emplace_back(std::move(q), std::move(config), &data_graphs_.at(graph_name));
+      active_queries_.emplace_back(std::move(q), std::move(config), &graph.first, &graph.second);
       return active_queries_.size() - 1;
     }
     // reuse deleted index
     auto idx = reusable_indices_.back();
-    active_queries_[idx].query_context = QueryContext(std::move(q), std::move(config), &data_graphs_.at(graph_name));
+    active_queries_[idx].query_context = QueryContext(std::move(q), std::move(config), &graph.first, &graph.second);
     reusable_indices_.pop_back();
     return idx;
   }
@@ -166,21 +163,8 @@ class CircinusServer {
     query_state.planner = new Planner(query_state.query_context);
     // phase 1: preprocessing
     auto plan = query_state.planner->generateCandidatePruningPlan();
-    // asynchronous execution, the callback executeQuery() will be invoked when preprocessing finish
-    executor_manager_.computeCandidates(query_index, plan);
-  }
-
-  /** Invokes Phase 2 planning and execution of a query.
-   * @param query_index The index of the query to run.
-   * @param candidate_sets The candidate sets of query vertices.
-   */
-  void executeQuery(uint32_t query_index, std::vector<std::vector<VertexID>>&& candidate_sets) {
-    auto& query_state = active_queries_[query_index];
-    DCHECK(query_state.planner != nullptr);
-    // phase 2: query execution plan
-    auto plan = query_state.planner->generateExecutionPlan();
-    // asynchronous execution, the callback finishQuery() will be invoked when execution finish
-    executor_manager_.executeQuery(query_index, plan);
+    // asynchronous execution, a CandidatePhase event will be generated when preprocessing finish
+    executor_manager_.run(query_index, &query_state.query_context, std::make_unique<CandidatePruningPlanDriver>(plan));
   }
 
   /** Handles query results.

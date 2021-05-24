@@ -1,0 +1,65 @@
+// Copyright 2021 HDL
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#pragma once
+
+#include <memory>
+#include <vector>
+
+#include "exec/execution_config.h"
+#include "graph/graph_metadata.h"
+#include "graph/query_graph.h"
+#include "graph/types.h"
+#include "ops/logical/filter/filter.h"
+#include "utils/hashmap.h"
+
+namespace circinus {
+
+class LocalFilter;  // forward declaration
+
+class LogicalNLFFilter : public LogicalLocalFilter {
+ private:
+  std::vector<LabelID> labels_;
+  std::vector<unordered_map<LabelID, uint32_t>> out_neighbor_label_frequency_;
+  std::vector<unordered_map<LabelID, uint32_t>> in_neighbor_label_frequency_;
+
+ public:
+  LogicalNLFFilter(const QueryGraph& q, const std::vector<QueryVertexID>& query_vertices)
+      : out_neighbor_label_frequency_(query_vertices.size()), in_neighbor_label_frequency_(query_vertices.size()) {
+    for (uint32_t qi = 0; qi < query_vertices.size(); ++qi) {
+      auto neighbors = q.getOutNeighbors(query_vertices[qi]);
+      for (uint32_t i = 0; i < neighbors.second; ++i) {
+        out_neighbor_label_frequency_[qi][q.getVertexLabel(neighbors.first[i])] += 1;
+      }
+    }
+  }
+
+  LogicalNLFFilter(const DirectedQueryGraph& q, const std::vector<QueryVertexID>& query_vertices) {
+    for (uint32_t qi = 0; qi < query_vertices.size(); ++qi) {
+      auto neighbors = q.getOutNeighbors(query_vertices[qi]);
+      for (uint32_t i = 0; i < neighbors.second; ++i) {
+        out_neighbor_label_frequency_[qi][q.getVertexLabel(neighbors.first[i])] += 1;
+      }
+      auto in_neighbors = q.getInNeighbors(query_vertices[qi]);
+      for (uint32_t i = 0; i < in_neighbors.second; ++i) {
+        in_neighbor_label_frequency_[qi][q.getVertexLabel(in_neighbors.first[i])] += 1;
+      }
+    }
+  }
+
+  std::vector<std::unique_ptr<LocalFilter>> toPhysicalOperators(const GraphMetadata& metadata,
+                                                                ExecutionConfig& exec) override;
+};
+
+}  // namespace circinus

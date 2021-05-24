@@ -43,10 +43,10 @@
 #include "utils/profiler.h"
 
 using circinus::CompressedSubgraphs;
+using circinus::ExecutionConfig;
 using circinus::ExecutionPlan;
 using circinus::Graph;
 using circinus::GraphType;
-using circinus::LDFScan;
 using circinus::NaivePlanner;
 using circinus::NLFFilter;
 using circinus::CFLFilter;
@@ -141,21 +141,18 @@ class Benchmark {
   std::vector<std::vector<VertexID>> getCandidateSets(const Graph& g, const QueryGraph& q) {
     std::vector<std::vector<VertexID>> candidates(q.getNumVertices());
     std::vector<uint32_t> candidate_size(q.getNumVertices());
+    ExecutionConfig config;
     for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
-      candidates[v].reserve(g.getVertexCardinalityByLabel(q.getVertexLabel(v)));
-      LDFScan scan(&q, v, &g);
-      NLFFilter filter(&q, v);
-      std::vector<VertexID> buffer;
-      buffer.reserve(BATCH_SIZE);
-      while (scan.Scan(&buffer, BATCH_SIZE) > 0) {
-        if (FLAGS_filter == "dpiso" || FLAGS_filter == "ldf") {
-          candidates[v].insert(candidates[v].end(), buffer.begin(), buffer.end());
-        } else {
-          filter.Filter(g, buffer, &candidates[v]);
-        }
-        buffer.clear();
+      config.setInputSize(g.getVertexCardinalityByLabel(q.getVertexLabel(v)));
+      auto scan = circinus::Scan::newLDFScan(q.getVertexLabel(v), q.getVertexOutDegree(v), 0, config, 1);
+      if (FLAGS_filter != "ldf" && FLAGS_filter != "dpiso") {
+        scan->addFilter(std::make_unique<NLFFilter>(&q, v));
       }
+      auto scan_ctx = scan->initScanContext(0);
+      scan->scan(&g, &scan_ctx);
+      candidates[v] = std::move(scan_ctx.candidates);
       candidate_size[v] = candidates[v].size();
+      LOG(INFO) << "query vertex " << v << ' ' << scan->toString();
     }
     if (FLAGS_filter == "cfl") {
       CFLOrder cfl_order;

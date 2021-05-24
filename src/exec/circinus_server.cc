@@ -14,11 +14,14 @@
 
 #include "exec/circinus_server.h"
 
-#include <string_view>
+#include <memory>
+#include <string>
+#include <vector>
 
 #include "zmq.hpp"
 #include "zmq_addon.hpp"
 
+#include "exec/execution_plan_driver.h"
 #include "utils/network_utils.h"
 
 namespace circinus {
@@ -59,7 +62,7 @@ void CircinusServer::Serve(bool listen) {
     Listen();
   }
   while (true) {
-    auto event = event_queue_.WaitAndPop();
+    auto event = event_queue_.waitAndPop();
     if (event.type == Event::ShutDown) {
       handleShutDown(event);
       break;
@@ -74,11 +77,19 @@ void CircinusServer::Serve(bool listen) {
         handleLoadGraph(event);
         break;
       }
+      case Event::CandidatePhase: {
+        handleCandidatePhase(event);
+        break;
+      }
       default:
         LOG(FATAL) << "Unknown event type " << event;
       }
     } catch (const std::exception& e) {
-      replyToClient(event.client_addr, std::string(e.what()));
+      if (event.client_addr.empty()) {
+        LOG(WARNING) << e.what();
+      } else {
+        replyToClient(event.client_addr, std::string(e.what()));
+      }
     }
   }
 }
@@ -91,7 +102,7 @@ bool CircinusServer::loadGraph(std::string&& graph_path, std::string&& graph_nam
   event.args.emplace_back(std::move(graph_name));
   event.args.emplace_back(std::move(load_config));
   event.client_addr = std::move(client_addr);
-  event_queue_.Push(std::move(event));
+  event_queue_.push(std::move(event));
   return true;
 }
 
@@ -103,14 +114,14 @@ bool CircinusServer::query(std::string&& graph_name, std::string&& query_path, s
   event.args.emplace_back(std::move(query_path));
   event.args.emplace_back(std::move(query_config));
   event.client_addr = std::move(client_addr);
-  event_queue_.Push(std::move(event));
+  event_queue_.push(std::move(event));
   return true;
 }
 
 void CircinusServer::handleNewQuery(const Event& event) {
   if (data_graphs_.count(event.args[0]) == 0) {
     std::stringstream error;
-    error << "Graph '" << event.args[0] << "'does not exist";
+    error << "Graph '" << event.args[0] << "' does not exist";
     replyToClient(event.client_addr, error.str());
   }
   auto query_idx = newQuery(event.args[0], event.args[1], event.args[2]);
@@ -129,6 +140,20 @@ void CircinusServer::handleLoadGraph(const Event& event) {
   if (!event.client_addr.empty()) {
     replyToClient(event.client_addr, &load_time, sizeof(load_time));
   }
+}
+
+void CircinusServer::handleCandidatePhase(const Event& event) {
+  DCHECK(event.data != nullptr);
+  auto planner = active_queries_[event.query_id].planner;
+  DCHECK(planner != nullptr);
+  auto plan = planner->updateCandidatePruningPlan((const std::vector<VertexID>*)event.data);
+  std::unique_ptr<PlanDriver> plan_driver = nullptr;
+  if (plan->isFinished()) {
+    // backtracking phase
+    LOG(INFO) << "Candidate generation finished. Start backtracking.";
+    plan_driver = std::make_unique<ExecutionPlanDriver>(planner->generateExecutionPlan());
+  }
+  executor_manager_.run(event.query_id, &active_queries_[event.query_id].query_context, std::move(plan_driver));
 }
 
 bool CircinusServer::replyToClient(const std::string& client_addr, const void* data, size_t size, bool success) {
