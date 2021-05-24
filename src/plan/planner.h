@@ -15,6 +15,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 #include "plan/candidate_pruning_plan.h"
 #include "plan/execution_plan.h"
@@ -22,6 +23,10 @@
 
 namespace circinus {
 
+/** Generates logical plans for candidate pruning and subgraph matching.
+ *
+ * The generated plans are to be translated into physical operators for execution.
+ */
 class Planner {
   QueryContext* const query_context_ = nullptr;
   CandidatePruningPlan candidate_pruning_plan_;
@@ -37,6 +42,8 @@ class Planner {
    * <li> Phase 3 prunes generated candidate sets all together.</li>
    */
   CandidatePruningPlan* generateCandidatePruningPlan();
+
+  CandidatePruningPlan* updateCandidatePruningPlan(const std::vector<VertexID>* cardinality);
 
   ExecutionPlan* generateExecutionPlan();
 };

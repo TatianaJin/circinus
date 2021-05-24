@@ -15,6 +15,7 @@
 #include "plan/planner.h"
 
 #include <string>
+#include <vector>
 
 #include "plan/candidate_pruning_plan.h"
 #include "plan/execution_plan.h"
@@ -31,7 +32,14 @@ CandidatePruningPlan* Planner::generateCandidatePruningPlan() {
     return &candidate_pruning_plan_;
   }
   if (strategy == "ldf") {
+    LOG(INFO) << "Prune candidate by LDF";
     candidate_pruning_plan_.newLDFScan(q);
+    return &candidate_pruning_plan_;
+  }
+  if (strategy == "nlf") {
+    LOG(INFO) << "Prune candidate by NLF";
+    candidate_pruning_plan_.newLDFScan(q);
+    candidate_pruning_plan_.newNLFFilter(q);
     return &candidate_pruning_plan_;
   }
   if (strategy == "dpiso") {
@@ -61,8 +69,28 @@ CandidatePruningPlan* Planner::generateCandidatePruningPlan() {
   return &candidate_pruning_plan_;
 }
 
+CandidatePruningPlan* Planner::updateCandidatePruningPlan(const std::vector<VertexID>* cardinality) {
+  auto phase = candidate_pruning_plan_.completePhase();
+  auto& strategy = query_context_->query_config.candidate_pruning_strategy;
+  if (strategy == "ldf" || strategy == "nlf") {
+    for (uint32_t i = 0; i < cardinality->size(); ++i) {
+      DLOG(INFO) << "|C(v" << i << ")|: " << (*cardinality)[i];
+    }
+    candidate_pruning_plan_.setFinished();
+    return &candidate_pruning_plan_;
+  }
+  if (phase == 2) {
+    // TODO(tatiana)
+  } else {
+    DCHECK_EQ(phase, 3) << "Now candidate pruning consists of three phases.";
+    // TODO(tatiana)
+  }
+  return &candidate_pruning_plan_;
+}
+
 ExecutionPlan* Planner::generateExecutionPlan() {
-  // FIXME(tatiana)
+  // TODO(tatiana)
+  return nullptr;
 }
 
 }  // namespace circinus

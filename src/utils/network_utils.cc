@@ -47,4 +47,3 @@ int GetAvailablePort() {
 }
 
 }  // namespace circinus
-

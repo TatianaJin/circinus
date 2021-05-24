@@ -83,7 +83,7 @@ endif()
 
 
 ### Executables
-add_executable(Circinus src/circinus.cc)
+add_executable(Circinus src/circinus_main.cc)
 target_link_libraries(Circinus circinus ${EXTERNAL_LIBRARY})
 
 # Tests
