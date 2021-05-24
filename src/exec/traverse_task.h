@@ -14,31 +14,33 @@
 
 #pragma once
 
-#include <vector>
-
+#include "exec/task.h"
 #include "graph/graph.h"
-#include "graph/types.h"
+#include "ops/traverse_operator.h"
 
 namespace circinus {
 
-class LocalFilter {
+class TraverseTask : public TaskBase {
+ private:
+  // TODO(tatiana): change to const functor?
+  TraverseOperator* traverse_;  // not owned
+  const Graph* graph_;
+
  public:
-  /** @returns The number of records that passed the filter and are added to output */
-  uint32_t filter(const Graph& data_graph, const std::vector<VertexID>& candidates,
-                  std::vector<VertexID>* output) const {
-    uint32_t count = 0;
-    for (auto candidate : candidates) {
-      if (prune(data_graph, candidate)) {
-        continue;
-      }
-      ++count;
-      output->push_back(candidate);
-    }
-    return count;
+  TraverseTask(QueryId query_id, TaskId task_id, uint32_t shard_id, TraverseOperator* traverse, const Graph* graph)
+      : TaskBase(query_id, task_id), traverse_(traverse), graph_(graph) {}
+
+  void run() override {
+    // TODO(tatiana)
+    // traverse_->input();
+    // traverse_->expand();
   }
 
-  /** @returns True if vertex v is not a valid mapping */
-  virtual bool prune(const Graph& data_graph, VertexID v) const = 0;
+  void profile() override {
+    // TODO(tatiana)
+    // traverse_->inputAndProfile();
+    // traverse_->expandAndProfile();
+  }
 };
 
 }  // namespace circinus

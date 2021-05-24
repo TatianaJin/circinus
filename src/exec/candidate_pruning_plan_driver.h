@@ -16,29 +16,24 @@
 
 #include <vector>
 
-#include "graph/graph.h"
-#include "graph/types.h"
+#include "exec/plan_driver.h"
+#include "exec/result.h"
+#include "plan/candidate_pruning_plan.h"
+#include "utils/query_utils.h"
 
 namespace circinus {
 
-class LocalFilter {
- public:
-  /** @returns The number of records that passed the filter and are added to output */
-  uint32_t filter(const Graph& data_graph, const std::vector<VertexID>& candidates,
-                  std::vector<VertexID>* output) const {
-    uint32_t count = 0;
-    for (auto candidate : candidates) {
-      if (prune(data_graph, candidate)) {
-        continue;
-      }
-      ++count;
-      output->push_back(candidate);
-    }
-    return count;
-  }
+class CandidatePruningPlanDriver : public PlanDriver {
+  CandidatePruningPlan* plan_;
+  CandidateResult* result_;  // owned by ExecutorManager
+  std::vector<VertexID> candidate_cardinality_;
 
-  /** @returns True if vertex v is not a valid mapping */
-  virtual bool prune(const Graph& data_graph, VertexID v) const = 0;
+ public:
+  explicit CandidatePruningPlanDriver(CandidatePruningPlan* plan) : plan_(plan) {}
+
+  void init(QueryId qid, QueryContext* query_ctx, ExecutionContext& ctx, ThreadsafeTaskQueue& task_queue) override;
+
+  void taskFinish(TaskBase* task, ThreadsafeTaskQueue* task_queue, ThreadsafeQueue<ServerEvent>* reply_queue) override;
 };
 
 }  // namespace circinus

@@ -19,11 +19,12 @@
 #include <string>
 #include <vector>
 
+#include "utils/file_utils.h"
+
 namespace circinus {
 
 Graph::Graph(const std::string& path) {
-  std::ifstream infile(path);
-  CHECK(infile.is_open()) << "Cannot open file " << path;
+  auto infile = openFile(path);
 
   char line_type;
   // process line: t n_vertices n_edges

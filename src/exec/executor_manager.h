@@ -14,17 +14,71 @@
 
 #pragma once
 
+#include <thread>
+#include <utility>
+#include <vector>
+
+#include "exec/plan_driver.h"
+#include "exec/result.h"
+#include "exec/task.h"
+#include "exec/task_queue.h"
+#include "exec/threadsafe_queue.h"
 #include "plan/candidate_pruning_plan.h"
 #include "plan/execution_plan.h"
+#include "utils/query_utils.h"
 
 namespace circinus {
 
+/** Accepts tasks from the circinus server and supports asynchronous execution of tasks.
+ *
+ * A thread pool is maintained to run tasks in parallel.
+ */
 class ExecutorManager {
- public:
-  ExecutorManager() {}
+ private:
+  using ExecutionContext = std::pair<ExecutionConfig, std::unique_ptr<Result>>;
 
-  void computeCandidates(uint32_t query_handler, CandidatePruningPlan* plan);
-  void executeQuery(uint32_t query_handler, ExecutionPlan* plan);
+  class ExecutorPool {
+   private:
+    std::vector<std::thread> pool_;
+    uint32_t n_threads_;
+    bool running_ = false;
+
+   public:
+    explicit ExecutorPool(uint32_t n_threads = FLAGS_num_cores) : n_threads_(n_threads) {}
+
+    ~ExecutorPool() {
+      for (auto& t : pool_) {
+        t.join();
+      }
+    }
+
+    void start(ThreadsafeTaskQueue* task_queue, ThreadsafeQueue<std::unique_ptr<TaskBase>>* finished_task);
+    inline void shutDown() { running_ = false; }
+  } executors_;
+
+  ThreadsafeQueue<ServerEvent>* reply_queue_;  // to server, not owned
+  ThreadsafeTaskQueue task_queue_;
+  ThreadsafeQueue<std::unique_ptr<TaskBase>> finished_tasks_;
+
+  unordered_map<QueryId, std::pair<ExecutionContext, std::unique_ptr<PlanDriver>>> execution_ctx_;
+  std::mutex execution_ctx_mu_;
+  std::thread finish_task_handler_;
+
+ public:
+  explicit ExecutorManager(ThreadsafeQueue<ServerEvent>* queue);
+
+  /* interface with circinus server, called by the circinus main thread */
+  /**
+   * @param plan_driver If plan_driver is nullptr, use the previous one.
+   */
+  void run(QueryId qid, QueryContext* query_ctx, std::unique_ptr<PlanDriver>&& plan_driver);
+  inline void clearQuery(QueryId qid) {
+    std::lock_guard<std::mutex> lock(execution_ctx_mu_);
+    execution_ctx_.erase(qid);
+  }
+
+ private:
+  ExecutionConfig getExecutionConfig() const;
 };
 
 }  // namespace circinus

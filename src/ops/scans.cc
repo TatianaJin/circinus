@@ -15,6 +15,7 @@
 #include "ops/scans.h"
 
 #include <numeric>
+#include <string>
 #include <vector>
 
 #include "exec/execution_config.h"
@@ -27,28 +28,36 @@ namespace circinus {
 /** Scan the vertices using a label index and filter them by degrees. */
 template <bool directed>
 class LDFScanBase : public Scan {
- private:
+ protected:
   const LabelID label_ = 0;
   const VertexID min_out_degree_ = 0;
   const VertexID min_in_degree_ = 0;
 
  public:
-  LDFScanBase(LabelID label, VertexID out_d, VertexID in_d, ExecutionConfig& conf)
-      : Scan(conf), label_(label), min_out_degree_(out_d), min_in_degree_(in_d) {}
+  LDFScanBase(LabelID label, VertexID out_d, VertexID in_d, ExecutionConfig& conf,
+              std::string&& name = directed ? "DirectedLDFScan" : "LDFScan")
+      : Scan(conf, std::move(name)), label_(label), min_out_degree_(out_d), min_in_degree_(in_d) {}
   LDFScanBase(LabelID label, VertexID out_d, ExecutionConfig& conf) : LDFScanBase(label, out_d, 0, conf) {}
 
-  void scan(const Graph* g, uint32_t batch_size, ScanContext* ctx) const override {
+  void scan(const Graph* g, ScanContext* ctx) const override {
     auto& input = *g->getVerticesByLabel(label_);
     if (ctx->scan_offset >= ctx->scan_end) return;
-    uint32_t count = 0;
-    while (batch_size > count && ctx->scan_offset < ctx->scan_end) {
+    while (ctx->scan_offset < ctx->scan_end) {
       auto v = input[ctx->scan_offset++];
       if (g->getVertexOutDegree(v) >= min_out_degree_ &&
-          (!directed || (static_cast<const DirectedGraph*>(g)->getVertexInDegree(v) >= min_in_degree_))) {
-        ++count;
+          (!directed || (static_cast<const DirectedGraph*>(g)->getVertexInDegree(v) >= min_in_degree_)) &&
+          validate(*g, v)) {
         ctx->candidates.push_back(v);
       }
     }
+  }
+
+  std::string toString() const override {
+    std::stringstream ss;
+    ss << name_ << " (label=" << label_ << ", min_out_degree=" << min_out_degree_
+       << (directed ? ", min_in_degree_=" + std::to_string(min_in_degree_) : "") << ", input=" << scan_size_
+       << ", shards=" << parallelism_ << ", nfilters=" << filters_.size() << ")";
+    return ss.str();
   }
 };
 using DirectedLDFScan = LDFScanBase<true>;
@@ -56,25 +65,19 @@ using LDFScan = LDFScanBase<false>;
 
 /** Scan the whole graph and filter vertices by label and degrees. */
 template <bool directed>
-class LDFFullScanBase : public Scan {
- private:
-  const LabelID label_ = 0;
-  const VertexID min_out_degree_ = 0;
-  const VertexID min_in_degree_ = 0;
-
+class LDFFullScanBase : public LDFScanBase<directed> {
  public:
   LDFFullScanBase(LabelID label, VertexID out_d, VertexID in_d, ExecutionConfig& conf)
-      : Scan(conf), label_(label), min_out_degree_(out_d), min_in_degree_(in_d) {}
+      : LDFScanBase<directed>(label, out_d, in_d, conf, (directed ? "DirectedLDFFullScan" : "LDFFullScan")) {}
   LDFFullScanBase(LabelID label, VertexID out_d, ExecutionConfig& conf) : LDFFullScanBase(label, out_d, 0, conf) {}
 
-  void scan(const Graph* g, uint32_t batch_size, ScanContext* ctx) const override {
+  void scan(const Graph* g, ScanContext* ctx) const override {
     if (ctx->scan_offset >= ctx->scan_end) return;
-    uint32_t count = 0;
-    while (batch_size > count && ctx->scan_offset < ctx->scan_end) {
+    while (ctx->scan_offset < ctx->scan_end) {
       auto v = ctx->scan_offset++;
-      if (g->getVertexLabel(v) == label_ && g->getVertexOutDegree(v) >= min_out_degree_ &&
-          (!directed || (static_cast<const DirectedGraph*>(g)->getVertexInDegree(v) >= min_in_degree_))) {
-        ++count;
+      if (g->getVertexLabel(v) == this->label_ && g->getVertexOutDegree(v) >= this->min_out_degree_ &&
+          (!directed || (static_cast<const DirectedGraph*>(g)->getVertexInDegree(v) >= this->min_in_degree_)) &&
+          this->validate(*g, v)) {
         ctx->candidates.push_back(g->getVertexGlobalId(v));
       }
     }
@@ -94,17 +97,24 @@ class DegreeScanBase : public Scan {
       : Scan(conf), min_out_degree_(out_d), min_in_degree_(in_d) {}
   DegreeScanBase(VertexID out_d, ExecutionConfig& conf) : DegreeScanBase(out_d, 0, conf) {}
 
-  void scan(const Graph* g, uint32_t batch_size, ScanContext* ctx) const override {
+  void scan(const Graph* g, ScanContext* ctx) const override {
     if (ctx->scan_offset >= ctx->scan_end) return;
-    uint32_t count = 0;
-    while (batch_size > count && ctx->scan_offset < ctx->scan_end) {
+    while (ctx->scan_offset < ctx->scan_end) {
       auto v = ctx->scan_offset++;
       if (g->getVertexOutDegree(v) >= min_out_degree_ &&
-          (!directed || (static_cast<const DirectedGraph*>(g)->getVertexInDegree(v) >= min_in_degree_))) {
-        ++count;
+          (!directed || (static_cast<const DirectedGraph*>(g)->getVertexInDegree(v) >= min_in_degree_)) &&
+          validate(*g, v)) {
         ctx->candidates.push_back(g->getVertexGlobalId(v));
       }
     }
+  }
+
+  std::string toString() const override {
+    std::stringstream ss;
+    ss << (directed ? "Directed" : "") << "DegreeScan (min_out_degree=" << min_out_degree_
+       << (directed ? ", min_in_degree_=" + std::to_string(min_in_degree_) : "") << ", input=" << scan_size_
+       << ", shards=" << parallelism_ << ")";
+    return ss.str();
   }
 };
 using DirectedDegreeScan = DegreeScanBase<true>;
@@ -114,27 +124,27 @@ using DegreeScan = DegreeScanBase<false>;
 
 /* factory functions */
 
-Scan* Scan::newLDFScan(LabelID label, VertexID out_d, VertexID in_d, ExecutionConfig& conf,
-                       uint32_t label_pruning_method) {
+std::unique_ptr<Scan> Scan::newLDFScan(LabelID label, VertexID out_d, VertexID in_d, ExecutionConfig& conf,
+                                       uint32_t label_pruning_method) {
   if (in_d == 0) {
     if (label_pruning_method == 1) {
-      return new LDFScan(label, out_d, conf);
+      return std::make_unique<LDFScan>(label, out_d, conf);
     }
-    // TODO(tatiana); handle when label_pruning_method == 2
-    return new LDFFullScan(label, out_d, conf);
+    // TODO(tatiana): handle when label_pruning_method == 2
+    return std::make_unique<LDFFullScan>(label, out_d, conf);
   }
   if (label_pruning_method == 1) {
-    return new DirectedLDFScan(label, out_d, in_d, conf);
+    return std::make_unique<DirectedLDFScan>(label, out_d, in_d, conf);
   }
-  // TODO(tatiana); handle when label_pruning_method == 2
-  return new DirectedLDFFullScan(label, out_d, in_d, conf);
+  // TODO(tatiana): handle when label_pruning_method == 2
+  return std::make_unique<DirectedLDFFullScan>(label, out_d, in_d, conf);
 }
 
-Scan* Scan::newDegreeScan(VertexID out_d, VertexID in_d, ExecutionConfig& conf) {
+std::unique_ptr<Scan> Scan::newDegreeScan(VertexID out_d, VertexID in_d, ExecutionConfig& conf) {
   if (in_d == 0) {
-    return new DegreeScan(out_d, conf);
+    return std::make_unique<DegreeScan>(out_d, conf);
   }
-  return new DirectedDegreeScan(out_d, in_d, conf);
+  return std::make_unique<DirectedDegreeScan>(out_d, in_d, conf);
 }
 
 }  // namespace circinus

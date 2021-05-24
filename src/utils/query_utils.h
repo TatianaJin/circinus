@@ -15,38 +15,120 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 #include "graph/graph.h"
+#include "graph/graph_metadata.h"
 #include "graph/query_graph.h"
 #include "graph/types.h"
+#include "utils/hashmap.h"
 
 namespace circinus {
 
+using QueryId = uint16_t;
+using TaskId = uint16_t;
+
+struct ServerEvent {
+  enum Type : uint32_t {
+    /* User commands */
+    ShutDown = 0,
+    LoadGraph,
+    NewQuery,
+    Explain,
+    Profile,
+    /* Internal phases */
+    CandidatePhase,
+    ExecutionPhase,
+  } type;
+  std::vector<std::string> args;
+  std::string client_addr;
+  void* data;
+  QueryId query_id;
+
+  static inline const std::vector<std::string> type_names = {"ShutDown", "LoadGraph",      "NewQuery",      "Explain",
+                                                             "Profile",  "CandidatePhase", "ExecutionPhase"};
+  static inline const std::string& getTypeName(Type type) { return type_names[type]; }
+
+  explicit ServerEvent(Type event_type) : type(event_type) {}
+
+  friend inline std::ostream& operator<<(std::ostream& os, ServerEvent& event) {
+    os << getTypeName(event.type);
+    return os;
+  }
+};
+
 class QueryConfig {
  public:
-  explicit QueryConfig(const std::string& config_str = "") {
-    // FIXME(tatiana): parse string
-  }
+  static inline const unordered_set<std::string> compression_strategies = {"none", "static", "dynamic"};
+  static inline const unordered_set<std::string> candidate_pruning_strategies = {"none", "adaptive", "ldf", "nlf",
+                                                                                 "cfl",  "daf",      "gql"};
+
   std::string matching_order;
   std::string candidate_pruning_strategy = "cfl";
   std::string compression_strategy = "dynamic";
   bool use_auxiliary_index = false;
   bool use_partitioned_graph = true;
   std::string output = "count";
+
+  explicit QueryConfig(const std::string& config_str = "") {
+    uint32_t tok_start = 0;
+    for (uint32_t i = 0; i < config_str.size();) {
+      while (config_str[i] != '=' && i < config_str.size()) {
+        ++i;
+      }
+      if (i == config_str.size()) {
+        throw std::runtime_error("Query config parse error. Expected = in " + config_str.substr(tok_start) +
+                                 ". Query config format: key=value[,key=value]...");
+      }
+      std::string_view key(config_str.data() + tok_start, i - tok_start);
+      tok_start = i + 1;
+      while (config_str[i] != ',' && i < config_str.size()) {
+        ++i;
+      }
+      std::string_view value(config_str.data() + tok_start, i - tok_start);
+      if (key == "cps" || key == "candidate_pruning_strategy") {
+        candidate_pruning_strategy = value;
+        validateConfig(candidate_pruning_strategy, candidate_pruning_strategies, "candidate pruning strategy");
+      } else if (key == "mo" || key == "matching_order") {
+        matching_order = value;
+        // TODO(tatiana): use strategy name instead of actual matching order
+      } else if (key == "cs" || key == "compression_strategy") {
+        compression_strategy = value;
+        validateConfig(compression_strategy, compression_strategies, "compression strategy");
+      }
+      // TODO(tatiana): parse configs
+    }
+  }
+
+ private:
+  template <typename T>
+  void validateConfig(const T& conf, const unordered_set<T>& options, const std::string& name) {
+    if (options.count(conf) == 0) {
+      std::stringstream ss;
+      ss << "Invalid " << name << ' ' << conf << ". {";
+      for (auto& val : options) {
+        ss << val << ",";
+      }
+      ss << "}";
+      throw std::runtime_error(ss.str());
+    }
+  }
 };
 
 struct QueryContext {
   QueryGraph query_graph;
   QueryConfig query_config;
   Graph* data_graph;
+  GraphMetadata* graph_metadata;
 
-  QueryContext(QueryGraph&& q, QueryConfig&& config, Graph* g)
-      : query_graph(std::move(q)), query_config(std::move(config)), data_graph(g) {}
+  QueryContext(QueryGraph&& q, QueryConfig&& config, Graph* g, GraphMetadata* metadata)
+      : query_graph(std::move(q)), query_config(std::move(config)), data_graph(g), graph_metadata(metadata) {}
 
   void operator=(QueryContext&& context) {
     query_graph = std::move(context.query_graph);
     query_config = std::move(context.query_config);
     data_graph = context.data_graph;
+    graph_metadata = context.graph_metadata;
   }
 };
 

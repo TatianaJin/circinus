@@ -12,8 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <iostream>
 #include <string_view>
+
+#include <iostream>
 
 #include "glog/logging.h"
 #include "zmq.hpp"
@@ -70,6 +71,16 @@ int main(int argc, char** argv) {
           } else {
             server.query(std::move((*args)[1]), std::move((*args)[2]), std::move((*args)[3]), "inproc://client");
           }
+          zmq::multipart_t reply;
+          reply.recv(sock);
+          auto success = reply.poptyp<bool>();
+          if (success) {
+            // TODO(tatiana): time and result
+            std::cout << "Query finished" << std::endl;
+          } else {
+            auto msg = reply.pop();
+            std::cerr << std::string_view((char*)msg.data(), msg.size()) << std::endl;
+          }
         } else {
           LOG(WARNING) << "Unknown command " << args->front();
           LOG(INFO) << "Available commands: exit | load | query";
@@ -82,6 +93,7 @@ int main(int argc, char** argv) {
       while (std::cin >> tok) {
         if (tok.front() == ';') {
           if (args.empty()) {  // empty statement
+            std::cerr << "Circinus> ";
             continue;
           }
           if (handler()) break;
