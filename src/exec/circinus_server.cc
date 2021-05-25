@@ -151,7 +151,8 @@ void CircinusServer::handleCandidatePhase(const Event& event) {
   if (plan->isFinished()) {
     // backtracking phase
     LOG(INFO) << "Candidate generation finished. Start backtracking.";
-    plan_driver = std::make_unique<ExecutionPlanDriver>(planner->generateExecutionPlan());
+    plan_driver =
+        std::make_unique<ExecutionPlanDriver>(planner->generateExecutionPlan((const std::vector<VertexID>*)event.data));
   }
   executor_manager_.run(event.query_id, &active_queries_[event.query_id].query_context, std::move(plan_driver));
 }
