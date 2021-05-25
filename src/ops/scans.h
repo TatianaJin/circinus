@@ -41,7 +41,6 @@ struct ScanContext {
  */
 class Scan : public Operator {
  protected:
-  uint32_t parallelism_ = 1;
   VertexID scan_size_ = 0;
   std::string name_;
   std::vector<std::unique_ptr<LocalFilter>> filters_;
@@ -56,7 +55,7 @@ class Scan : public Operator {
   static std::unique_ptr<Scan> newDegreeScan(VertexID out_d, VertexID in_d, ExecutionConfig& conf);
 
   explicit Scan(ExecutionConfig& conf, std::string&& name = "Scan")
-      : parallelism_(conf.getMaxParallelism()), scan_size_(conf.getInputSize()), name_(std::move(name)) {}
+      : Operator(conf.getParallelism()), scan_size_(conf.getInputSize()), name_(std::move(name)) {}
 
   inline void addFilter(std::unique_ptr<LocalFilter>&& filter) { filters_.push_back(std::move(filter)); }
 

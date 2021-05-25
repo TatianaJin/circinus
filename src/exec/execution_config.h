@@ -37,7 +37,7 @@ class ExecutionConfig {
   VertexID getInputSize() const { return input_size_; }
   uint32_t getBatchSize() const { return FLAGS_batch_size; }
 
-  void setParallelism(uint32_t p) { parallelism_ = p; }
+  void setParallelism(uint32_t p) { parallelism_ = std::min(p, max_parallelism_); }
   void setInputSize(VertexID size) { input_size_ = size; }
 };
 

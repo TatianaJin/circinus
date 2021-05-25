@@ -23,9 +23,10 @@ class Operator {
   Operator* next_ = nullptr;
 
  protected:
-  uint32_t parallelism_ = 1;
+  uint32_t parallelism_;
 
  public:
+  explicit Operator(uint32_t parallelism = 1) : parallelism_(parallelism) {}
   virtual ~Operator() {}
 
   inline void setNext(Operator* next) { next_ = next; }
