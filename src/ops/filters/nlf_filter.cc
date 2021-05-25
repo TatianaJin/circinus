@@ -90,4 +90,20 @@ bool QuickNLFFilter::prune(const Graph& data_graph, VertexID candidate) const {
   return true;
 }
 
+bool MNDNLFFilter::prune(const Graph& data_graph, VertexID candidate) const {
+  auto neighbors = data_graph.getOutNeighbors(candidate);
+  // check if the neighbors of the candidate satisfy the neighbor label frequency of the query vertex
+  bool prune = true;
+  for (uint32_t i = 0; i < neighbors.second; ++i) {
+    if (data_graph.getVertexOutDegree(neighbors.first[i]) >= maximum_neighbor_degree_) {  // pass the mnd filter
+      prune = false;
+      break;
+    }
+  }
+  if (prune) {
+    return true;
+  }
+  return NLFFilter::prune(data_graph, candidate);
+}
+
 }  // namespace circinus

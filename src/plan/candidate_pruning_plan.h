@@ -36,13 +36,9 @@ class CandidatePruningPlan {
     scan_ = LogicalLDFScan(q, vertices_to_scan);
   }
 
-  void newNLFFilter(const QueryGraph& q) {
-    if (phase_ == 1) {
-      phase_1_filters_.push_back(std::make_unique<LogicalNLFFilter>(q, scan_.getQueryVertices()));
-    } else {
-      // TODO(tatiana)
-      // phase_2_filters_.push_back(new LogicalNLFFilter(q, expand_.getQueryVertices()));
-    }
+  void newNLFFilter(const QueryGraph& q, bool maximum_neighbor_degree_filter = false) {
+    local_filters_.push_back(
+        std::make_unique<LogicalNLFFilter>(q, scan_.getQueryVertices(), maximum_neighbor_degree_filter));
   }
 
   /**
@@ -50,7 +46,7 @@ class CandidatePruningPlan {
    */
   std::vector<std::unique_ptr<Scan>> getScanOperators(GraphMetadata& metadata, ExecutionConfig& exec_conf) {
     auto ret = scan_.toPhysicalOperators(metadata, exec_conf);
-    for (auto& logical_filter : phase_1_filters_) {
+    for (auto& logical_filter : local_filters_) {
       auto filters = logical_filter->toPhysicalOperators(metadata, exec_conf);
       DCHECK_EQ(filters.size(), ret.size());
       for (uint32_t i = 0; i < ret.size(); ++i) {
@@ -60,22 +56,22 @@ class CandidatePruningPlan {
     return ret;
   }
 
-  const auto& getPhase1Filters() const { return phase_1_filters_; }
-  const auto& getPhase2Filters() const { return phase_2_filters_; }
-  // const auto& getPhase3Filters() const { return phase_3_filters_; }
-
   uint32_t getPhase() const { return phase_; }
-  uint32_t completePhase() { return ++phase_; }
+  uint32_t completePhase() {
+    local_filters_.clear();
+    return ++phase_;
+  }
   bool isFinished() const { return finished_; }
   void setFinished() { finished_ = true; }
+
+  const auto& getScanQueryVertices() const { return scan_.getQueryVertices(); }
 
  private:
   uint32_t phase_ = 1;
   bool finished_ = false;
-  LogicalLDFScan scan_;                                               // phase 1 scan operator
-  std::vector<std::unique_ptr<LogicalLocalFilter>> phase_1_filters_;  // phase 1 operator 1-n
-  // LogicalExpandOperator expand_;                             // phase 2 operator 0
-  std::vector<std::unique_ptr<LogicalLocalFilter>> phase_2_filters_;  // phase 2 operator 1-n
+  LogicalLDFScan scan_;  // phase 1 scan operator
+  // LogicalExpandOperator expand_;                             // phase 2 expand operator
+  std::vector<std::unique_ptr<LogicalLocalFilter>> local_filters_;  // for phase 1 and 2
   // phase 3 operators
 };
 

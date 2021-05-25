@@ -14,9 +14,11 @@
 
 #include "plan/planner.h"
 
+#include <memory>
 #include <string>
 #include <vector>
 
+#include "ops/order/cfl_order.h"
 #include "plan/candidate_pruning_plan.h"
 #include "plan/execution_plan.h"
 #include "utils/query_utils.h"
@@ -49,32 +51,31 @@ CandidatePruningPlan* Planner::generateCandidatePruningPlan() {
   }
   case CandidatePruningStrategy::DAF: {
     candidate_pruning_plan_.newLDFScan(q);
-    // FIXME(tatiana): add phase 2 filters for dpiso
     return &candidate_pruning_plan_;
   }
   case CandidatePruningStrategy::CFL: {
-    candidate_pruning_plan_.newLDFScan(q);
-    candidate_pruning_plan_.newNLFFilter(q);
-    // FIXME(tatiana): add phase 2 filters for cfl
+    // auto& metadata = *query_context_->graph_metadata;
+    // auto order = std::make_unique<CFLOrder>();
+    // candidate_pruning_plan_.newLDFScan(q, order->getTopThree(metadata, &q));
+    // order_ = std::move(order);
+    candidate_pruning_plan_.newLDFScan(q);  // now we generate the candidates for all query vertices at once
+    candidate_pruning_plan_.newNLFFilter(q, true);
     return &candidate_pruning_plan_;
   }
   case CandidatePruningStrategy::TSO: {
     candidate_pruning_plan_.newLDFScan(q);
     candidate_pruning_plan_.newNLFFilter(q);
-    // FIXME(tatiana): add phase 2 filters for tso
     return &candidate_pruning_plan_;
   }
   case CandidatePruningStrategy::GQL: {
     candidate_pruning_plan_.newLDFScan(q);
     candidate_pruning_plan_.newNLFFilter(q);
-    // FIXME(tatiana): add phase 2 filters for tso
     return &candidate_pruning_plan_;
   }
   }
 }
 
 CandidatePruningPlan* Planner::updateCandidatePruningPlan(const std::vector<VertexID>* cardinality) {
-  auto phase = candidate_pruning_plan_.completePhase();
   auto& strategy = query_context_->query_config.candidate_pruning_strategy;
   if (strategy == CandidatePruningStrategy::LDF || strategy == CandidatePruningStrategy::NLF) {
     for (uint32_t i = 0; i < cardinality->size(); ++i) {
@@ -83,16 +84,36 @@ CandidatePruningPlan* Planner::updateCandidatePruningPlan(const std::vector<Vert
     candidate_pruning_plan_.setFinished();
     return &candidate_pruning_plan_;
   }
+  auto phase = candidate_pruning_plan_.completePhase();
   if (phase == 2) {
-    // TODO(tatiana)
-  } else {
-    DCHECK_EQ(phase, 3) << "Now candidate pruning consists of three phases.";
-    // TODO(tatiana)
+    // TODO(tatiana): now we skip phase 2 as it is not easy to parallelize forward construction due to set union
+    phase = candidate_pruning_plan_.completePhase();
   }
+  if (phase == 3) {
+    // TODO(boyang): generate logical neighbor filter for CFL, DAF, TSO and GQL
+    switch (strategy) {
+    case CandidatePruningStrategy::DAF: {
+      break;
+    }
+    case CandidatePruningStrategy::CFL: {
+      break;
+    }
+    case CandidatePruningStrategy::GQL: {
+      break;
+    }
+    case CandidatePruningStrategy::TSO: {
+      break;
+    }
+    default:
+      candidate_pruning_plan_.setFinished();
+    }
+    return &candidate_pruning_plan_;
+  }
+  candidate_pruning_plan_.setFinished();
   return &candidate_pruning_plan_;
 }
 
-ExecutionPlan* Planner::generateExecutionPlan() {
+ExecutionPlan* Planner::generateExecutionPlan(const std::vector<VertexID>*) {
   // TODO(tatiana)
   return nullptr;
 }
