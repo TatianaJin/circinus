@@ -59,6 +59,7 @@ class Graph {
   inline VertexID getNumVertices() const { return n_vertices_; }
   inline EdgeID getNumEdges() const { return n_edges_; }
   inline VertexID getGraphMaxDegree() const { return max_degree_; }
+  inline LabelID getNumLabels() const { return vertex_ids_by_label_.size(); }
   inline std::vector<LabelID> getLabels() const {
     std::vector<LabelID> labels;
     labels.reserve(vertex_ids_by_label_.size());

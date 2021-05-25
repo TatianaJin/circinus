@@ -14,9 +14,11 @@
 
 #pragma once
 
+#include <memory>
 #include <string>
 #include <vector>
 
+#include "ops/order/order_base.h"
 #include "plan/candidate_pruning_plan.h"
 #include "plan/execution_plan.h"
 #include "utils/query_utils.h"
@@ -30,6 +32,8 @@ namespace circinus {
 class Planner {
   QueryContext* const query_context_ = nullptr;
   CandidatePruningPlan candidate_pruning_plan_;
+
+  std::unique_ptr<OrderBase> order_ = nullptr;
 
  public:
   explicit Planner(QueryContext& query_context) : query_context_(&query_context) {}
@@ -45,7 +49,7 @@ class Planner {
 
   CandidatePruningPlan* updateCandidatePruningPlan(const std::vector<VertexID>* cardinality);
 
-  ExecutionPlan* generateExecutionPlan();
+  ExecutionPlan* generateExecutionPlan(const std::vector<VertexID>*);
 };
 
 }  // namespace circinus
