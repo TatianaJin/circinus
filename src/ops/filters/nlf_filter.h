@@ -37,11 +37,22 @@ class NLFFilter : public LocalFilter {
 
 class QuickNLFFilter : public LocalFilter {
  private:
-  unordered_map<LabelID, uint32_t> neighbor_label_frequency_;
+  const unordered_map<LabelID, uint32_t> neighbor_label_frequency_;
 
  public:
   explicit QuickNLFFilter(unordered_map<LabelID, uint32_t>&& neighbor_label_frequency)
       : neighbor_label_frequency_(std::move(neighbor_label_frequency)) {}
+
+  bool prune(const Graph& data_graph, VertexID v) const override;
+};
+
+class MNDNLFFilter : public NLFFilter {
+ private:
+  const uint32_t maximum_neighbor_degree_;
+
+ public:
+  MNDNLFFilter(unordered_map<LabelID, uint32_t>&& neighbor_label_frequency, uint32_t maximum_neighbor_degree)
+      : NLFFilter(std::move(neighbor_label_frequency)), maximum_neighbor_degree_(maximum_neighbor_degree) {}
 
   bool prune(const Graph& data_graph, VertexID v) const override;
 };

@@ -41,7 +41,7 @@ class GraphMetadata {
   std::vector<GraphMetadata> partitioned_metadata_;
 
  public:
-  explicit GraphMetadata(Graph& g) {
+  explicit GraphMetadata(const Graph& g) {
     collectBasicInfo(g);
     if (has_label_index_) {
       collectLabelFrequency(g);
@@ -92,7 +92,11 @@ class GraphMetadata {
   const GraphMetadata& getPartition(uint32_t idx) const { return partitioned_metadata_[idx]; }
 
   // FIXME(tatiana)
-  void collectBasicInfo(const Graph& graph) { n_vertices_ = graph.getNumVertices(); }
+  void collectBasicInfo(const Graph& graph) {
+    n_vertices_ = graph.getNumVertices();
+    labeled_ = graph.getNumLabels() > 1;
+  }
+
   void collectDegreeFrequency(const Graph& graph) {}
   void collectLabelFrequency(const Graph& g) {
     for (auto label : g.getLabels()) {

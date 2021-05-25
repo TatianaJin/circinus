@@ -36,6 +36,11 @@ std::vector<std::unique_ptr<LocalFilter>> LogicalNLFFilter::toPhysicalOperators(
     for (uint32_t i = 0; i < size; ++i) {
       ret.push_back(std::make_unique<QuickNLFFilter>(std::move(out_neighbor_label_frequency_[i])));
     }
+  } else if (maximum_neighbor_degree_filter_) {
+    for (uint32_t i = 0; i < size; ++i) {
+      ret.push_back(
+          std::make_unique<MNDNLFFilter>(std::move(out_neighbor_label_frequency_[i]), maximum_neighbor_degrees_[i]));
+    }
   } else {
     for (uint32_t i = 0; i < size; ++i) {
       ret.push_back(std::make_unique<NLFFilter>(std::move(out_neighbor_label_frequency_[i])));
