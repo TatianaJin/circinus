@@ -57,15 +57,24 @@ struct ServerEvent {
   }
 };
 
+enum class CandidatePruningStrategy : uint16_t { None = 0, Adaptive, LDF, NLF, CFL, DAF, GQL, TSO };
+enum class CompressionStrategy : uint16_t { None = 0, Static, Dynamic };
+
 class QueryConfig {
  public:
-  static inline const unordered_set<std::string> compression_strategies = {"none", "static", "dynamic"};
-  static inline const unordered_set<std::string> candidate_pruning_strategies = {"none", "adaptive", "ldf", "nlf",
-                                                                                 "cfl",  "daf",      "gql"};
+  static inline const unordered_map<std::string, CompressionStrategy> compression_strategies = {
+      {"none", CompressionStrategy::None},
+      {"static", CompressionStrategy::Static},
+      {"dynamic", CompressionStrategy::Dynamic}};
+  static inline const unordered_map<std::string, CandidatePruningStrategy> candidate_pruning_strategies = {
+      {"none", CandidatePruningStrategy::None}, {"adaptive", CandidatePruningStrategy::Adaptive},
+      {"ldf", CandidatePruningStrategy::LDF},   {"nlf", CandidatePruningStrategy::NLF},
+      {"cfl", CandidatePruningStrategy::CFL},   {"daf", CandidatePruningStrategy::DAF},
+      {"gql", CandidatePruningStrategy::GQL}};
 
   std::string matching_order;
-  std::string candidate_pruning_strategy = "cfl";
-  std::string compression_strategy = "dynamic";
+  CandidatePruningStrategy candidate_pruning_strategy = CandidatePruningStrategy::CFL;
+  CompressionStrategy compression_strategy = CompressionStrategy::Dynamic;
   bool use_auxiliary_index = false;
   bool use_partitioned_graph = true;
   std::string output = "count";
@@ -85,32 +94,33 @@ class QueryConfig {
       while (config_str[i] != ',' && i < config_str.size()) {
         ++i;
       }
-      std::string_view value(config_str.data() + tok_start, i - tok_start);
+      std::string value(config_str.data() + tok_start, i - tok_start);
       if (key == "cps" || key == "candidate_pruning_strategy") {
-        candidate_pruning_strategy = value;
-        validateConfig(candidate_pruning_strategy, candidate_pruning_strategies, "candidate pruning strategy");
+        validateConfig(candidate_pruning_strategy, value, candidate_pruning_strategies, "candidate pruning strategy");
       } else if (key == "mo" || key == "matching_order") {
         matching_order = value;
         // TODO(tatiana): use strategy name instead of actual matching order
       } else if (key == "cs" || key == "compression_strategy") {
-        compression_strategy = value;
-        validateConfig(compression_strategy, compression_strategies, "compression strategy");
+        validateConfig(compression_strategy, value, compression_strategies, "compression strategy");
       }
       // TODO(tatiana): parse configs
     }
   }
 
  private:
-  template <typename T>
-  void validateConfig(const T& conf, const unordered_set<T>& options, const std::string& name) {
-    if (options.count(conf) == 0) {
+  template <typename T, typename Container>
+  void validateConfig(T& conf, const std::string& val_str, const Container& options, const std::string& name) {
+    auto pos = options.find(val_str);
+    if (pos == options.end()) {
       std::stringstream ss;
-      ss << "Invalid " << name << ' ' << conf << ". {";
+      ss << "Invalid " << name << ' ' << val_str << ". {";
       for (auto& val : options) {
-        ss << val << ",";
+        ss << val.first << ",";
       }
       ss << "}";
       throw std::runtime_error(ss.str());
+    } else {
+      conf = pos->second;
     }
   }
 };
