@@ -26,53 +26,57 @@ namespace circinus {
 CandidatePruningPlan* Planner::generateCandidatePruningPlan() {
   auto& q = query_context_->query_graph;
   auto& strategy = query_context_->query_config.candidate_pruning_strategy;
-  if (strategy == "adaptive") {
+  switch (strategy) {
+  case CandidatePruningStrategy::None: {
+    candidate_pruning_plan_.setFinished();
+    return &candidate_pruning_plan_;
+  }
+  case CandidatePruningStrategy::Adaptive: {
     LOG(FATAL) << "Not implemented yet";
     // TODO(tatiana): adapt to data graph distribution
     return &candidate_pruning_plan_;
   }
-  if (strategy == "ldf") {
+  case CandidatePruningStrategy::LDF: {
     LOG(INFO) << "Prune candidate by LDF";
     candidate_pruning_plan_.newLDFScan(q);
     return &candidate_pruning_plan_;
   }
-  if (strategy == "nlf") {
+  case CandidatePruningStrategy::NLF: {
     LOG(INFO) << "Prune candidate by NLF";
     candidate_pruning_plan_.newLDFScan(q);
     candidate_pruning_plan_.newNLFFilter(q);
     return &candidate_pruning_plan_;
   }
-  if (strategy == "dpiso") {
+  case CandidatePruningStrategy::DAF: {
     candidate_pruning_plan_.newLDFScan(q);
     // FIXME(tatiana): add phase 2 filters for dpiso
     return &candidate_pruning_plan_;
   }
-  if (strategy == "cfl") {
+  case CandidatePruningStrategy::CFL: {
     candidate_pruning_plan_.newLDFScan(q);
     candidate_pruning_plan_.newNLFFilter(q);
     // FIXME(tatiana): add phase 2 filters for cfl
     return &candidate_pruning_plan_;
   }
-  if (strategy == "tso") {
+  case CandidatePruningStrategy::TSO: {
     candidate_pruning_plan_.newLDFScan(q);
     candidate_pruning_plan_.newNLFFilter(q);
     // FIXME(tatiana): add phase 2 filters for tso
     return &candidate_pruning_plan_;
   }
-  if (strategy == "gql") {
+  case CandidatePruningStrategy::GQL: {
     candidate_pruning_plan_.newLDFScan(q);
     candidate_pruning_plan_.newNLFFilter(q);
     // FIXME(tatiana): add phase 2 filters for tso
     return &candidate_pruning_plan_;
   }
-  CHECK(false) << "Unknown strategy " << strategy;
-  return &candidate_pruning_plan_;
+  }
 }
 
 CandidatePruningPlan* Planner::updateCandidatePruningPlan(const std::vector<VertexID>* cardinality) {
   auto phase = candidate_pruning_plan_.completePhase();
   auto& strategy = query_context_->query_config.candidate_pruning_strategy;
-  if (strategy == "ldf" || strategy == "nlf") {
+  if (strategy == CandidatePruningStrategy::LDF || strategy == CandidatePruningStrategy::NLF) {
     for (uint32_t i = 0; i < cardinality->size(); ++i) {
       DLOG(INFO) << "|C(v" << i << ")|: " << (*cardinality)[i];
     }
