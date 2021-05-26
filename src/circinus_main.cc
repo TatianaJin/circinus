@@ -21,6 +21,7 @@
 #include "zmq_addon.hpp"
 
 #include "exec/circinus_server.h"
+#include "utils/file_utils.h"
 #include "utils/flags.h"
 
 using circinus::CircinusServer;
@@ -49,41 +50,50 @@ int main(int argc, char** argv) {
           return true;
         }
         if (args->front() == "load") {
-          if (args->size() < 3) {
-            LOG(WARNING) << "Wrong number of arguments for load: load <graph_path> <graph_name>";
-          } else if (args->size() == 3) {
-            server.loadGraph(std::move((*args)[1]), std::move((*args)[2]), "", "inproc://client");
+          if (args->size() < 2) {
+            std::cerr << "Wrong number of arguments for load.\n Usage: load <graph_path> <graph_name> "
+                         "[<load_config>]\n\tload <preset_graph_name>"
+                      << std::endl;
           } else {
-            server.loadGraph(std::move((*args)[1]), std::move((*args)[2]), std::move((*args)[3]), "inproc://client");
-          }
-          zmq::multipart_t reply;
-          reply.recv(sock);
-          auto success = reply.poptyp<bool>();
-          if (success) {
-            std::cout << "Loaded graph in " << reply.poptyp<double>() << " seconds" << std::endl;
-          } else {
-            auto msg = reply.pop();
-            std::cerr << std::string_view((char*)msg.data(), msg.size()) << std::endl;
+            if (args->size() == 2) {
+              std::string graph_path = circinus::Path::join((*args)[1], "data_graph", (*args)[1] + ".graph.bin");
+              LOG(INFO) << "loading from graph_path " << graph_path;
+              server.loadGraph(std::move(graph_path), std::move((*args)[1]), "", "inproc://client");
+            } else if (args->size() == 3) {
+              server.loadGraph(std::move((*args)[1]), std::move((*args)[2]), "", "inproc://client");
+            } else {
+              server.loadGraph(std::move((*args)[1]), std::move((*args)[2]), std::move((*args)[3]), "inproc://client");
+            }
+            zmq::multipart_t reply;
+            reply.recv(sock);
+            auto success = reply.poptyp<bool>();
+            if (success) {
+              std::cout << "Loaded graph in " << reply.poptyp<double>() << " seconds" << std::endl;
+            } else {
+              auto msg = reply.pop();
+              std::cerr << std::string_view((char*)msg.data(), msg.size()) << std::endl;
+            }
           }
         } else if (args->front() == "query") {
           if (args->size() != 4) {
-            LOG(WARNING) << "Wrong number of arguments for query: query <graph_name> <query_path> <query_config>";
+            std::cerr << "Wrong number of arguments for query: query <graph_name> <query_path> <query_config>"
+                      << std::endl;
           } else {
             server.query(std::move((*args)[1]), std::move((*args)[2]), std::move((*args)[3]), "inproc://client");
-          }
-          zmq::multipart_t reply;
-          reply.recv(sock);
-          auto success = reply.poptyp<bool>();
-          if (success) {
-            // TODO(tatiana): time and result
-            std::cout << "Query finished" << std::endl;
-          } else {
-            auto msg = reply.pop();
-            std::cerr << std::string_view((char*)msg.data(), msg.size()) << std::endl;
+            zmq::multipart_t reply;
+            reply.recv(sock);
+            auto success = reply.poptyp<bool>();
+            if (success) {
+              // TODO(tatiana): time and result
+              std::cout << "Query finished. count = " << reply.poptyp<uint64_t>() << std::endl;
+            } else {
+              auto msg = reply.pop();
+              std::cerr << std::string_view((char*)msg.data(), msg.size()) << std::endl;
+            }
           }
         } else {
-          LOG(WARNING) << "Unknown command " << args->front();
-          LOG(INFO) << "Available commands: exit | load | query";
+          std::cerr << "Unknown command " << args->front() << std::endl;
+          std::cerr << "Available commands: exit | load | query" << std::endl;
         }
         args->clear();
         std::cerr << "Circinus> ";
