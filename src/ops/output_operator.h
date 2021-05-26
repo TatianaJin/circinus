@@ -79,6 +79,7 @@ class OutputOperator : public Operator {
  public:
   explicit OutputOperator(Outputs* outputs, SameLabelIndices&& same_label_indices)
       : outputs_(outputs), same_label_indices_(std::move(same_label_indices)) {}
+  virtual ~OutputOperator() {}
 
   /**
    * @param same_label_indices The indices of vertices of the same label {{keys}, {sets}}

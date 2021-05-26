@@ -34,17 +34,17 @@ namespace circinus {
 class Path {
  public:
   template <typename... Args>
-  static inline std::string join(const std::string& dir, Args... args) {
+  static inline std::string join(const std::string& dir, const std::string& base, Args... args) {
     fs::path path(dir);
-    return join(path, args...).string();
+    return join(path, base, args...).string();
   }
 
   static inline bool isRelative(const std::string& path) { return fs::path(path).is_relative(); }
 
  private:
-  static inline fs::path& join(fs::path& path, std::string& append) { return path /= append; }
+  static inline fs::path& join(fs::path& path, const std::string& append) { return path /= append; }
   template <typename... Args>
-  static inline fs::path& join(fs::path& path, std::string& append, Args... args) {
+  static inline fs::path& join(fs::path& path, const std::string& append, Args... args) {
     path /= append;
     return join(path, args...);
   }

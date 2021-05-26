@@ -39,6 +39,8 @@ class LDFScanBase : public Scan {
       : Scan(conf, std::move(name)), label_(label), min_out_degree_(out_d), min_in_degree_(in_d) {}
   LDFScanBase(LabelID label, VertexID out_d, ExecutionConfig& conf) : LDFScanBase(label, out_d, 0, conf) {}
 
+  virtual ~LDFScanBase() {}
+
   void scan(const Graph* g, ScanContext* ctx) const override {
     auto& input = *g->getVerticesByLabel(label_);
     if (ctx->scan_offset >= ctx->scan_end) return;

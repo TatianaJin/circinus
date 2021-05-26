@@ -106,6 +106,11 @@ class CircinusServer {
 
   void handleCandidatePhase(const Event& event);
 
+  inline void handleExecutionPhase(const Event& event) {
+    DCHECK(event.data != nullptr);
+    finishQuery(event.query_id, event.data, "");
+  }
+
   /* end of event handlers */
 
   /** Load graph from binary file.

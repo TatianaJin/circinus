@@ -28,7 +28,6 @@ namespace circinus {
 template <typename G>
 class ExpandIntoOperator : public TraverseOperator {
   std::vector<QueryVertexID> parents_;
-  QueryVertexID target_vertex_;
   unordered_map<QueryVertexID, uint32_t> query_vertex_indices_;
   // for profiling
   std::vector<QueryVertexID> key_parents_;  // the key parents of the previous operator
@@ -38,9 +37,8 @@ class ExpandIntoOperator : public TraverseOperator {
   ExpandIntoOperator(const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
                      const unordered_map<QueryVertexID, uint32_t>& query_vertex_indices,
                      const std::vector<QueryVertexID>& prev_key_parents, SubgraphFilter* subgraph_filter = nullptr)
-      : TraverseOperator(subgraph_filter),
+      : TraverseOperator(target_vertex, subgraph_filter),
         parents_(parents),
-        target_vertex_(target_vertex),
         query_vertex_indices_(query_vertex_indices),
         key_parents_(prev_key_parents) {}
 

@@ -24,6 +24,7 @@
 #include "graph/query_graph.h"
 #include "graph/types.h"
 #include "ops/filters.h"
+#include "ops/filters/local_filter.h"
 #include "ops/operator.h"
 
 namespace circinus {
@@ -56,6 +57,8 @@ class Scan : public Operator {
 
   explicit Scan(ExecutionConfig& conf, std::string&& name = "Scan")
       : Operator(conf.getParallelism()), scan_size_(conf.getInputSize()), name_(std::move(name)) {}
+
+  virtual ~Scan() {}
 
   inline void addFilter(std::unique_ptr<LocalFilter>&& filter) { filters_.push_back(std::move(filter)); }
 
