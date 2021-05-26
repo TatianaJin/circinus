@@ -39,9 +39,10 @@
 #include "utils/hashmap.h"
 
 using circinus::CompressedSubgraphs;
+using circinus::ExecutionConfig;
 using circinus::ExecutionPlan;
 using circinus::Graph;
-using circinus::LDFScan;
+using circinus::Scan;
 using circinus::NaivePlanner;
 using circinus::NLFFilter;
 using circinus::CFLFilter;
@@ -76,20 +77,17 @@ std::vector<std::vector<VertexID>> getCandidateSets(const Graph& g, const QueryG
   const char* filter_cstr = filter_str.c_str();
   std::vector<std::vector<VertexID>> candidates(q.getNumVertices());
   std::vector<uint32_t> candidate_size(q.getNumVertices());
+  ExecutionConfig config;
   for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
-    candidates[v].reserve(g.getVertexCardinalityByLabel(q.getVertexLabel(v)));
-    LDFScan scan(&q, v, &g);
-    NLFFilter filter(&q, v);
-    std::vector<VertexID> buffer;
-    buffer.reserve(BATCH_SIZE);
-    while (scan.Scan(&buffer, BATCH_SIZE) > 0) {
-      if (strcmp(filter_cstr, "dpiso") == 0) {
-        candidates[v].insert(candidates[v].end(), buffer.begin(), buffer.end());
-      } else {
-        filter.Filter(g, buffer, &candidates[v]);
-      }
-      buffer.clear();
+    config.setInputSize(g.getVertexCardinalityByLabel(q.getVertexLabel(v)));
+
+    auto scan = circinus::Scan::newLDFScan(q.getVertexLabel(v), q.getVertexOutDegree(v), 0, config, 1);
+    if (strcmp(filter_cstr, "dpiso") != 0 && strcmp(filter_cstr, "ldf") != 0) {
+      scan->addFilter(std::make_unique<NLFFilter>(&q, v));
     }
+    auto scan_ctx = scan->initScanContext(0);
+    scan->scan(&g, &scan_ctx);
+    candidates[v] = std::move(scan_ctx.candidates);
     candidate_size[v] = candidates[v].size();
   }
   if (strcmp(filter_cstr, "cfl") == 0) {

@@ -25,7 +25,7 @@ namespace circinus {
 
 std::vector<QueryVertexID> CFLOrder::getTopThree(const GraphMetadata& metadata, const QueryGraph* q) {
   auto rank_compare = [](std::pair<QueryVertexID, double> l, std::pair<QueryVertexID, double> r) {
-    return l.second > r.second;
+    return l.second < r.second;
   };
   std::priority_queue<std::pair<QueryVertexID, double>, std::vector<std::pair<QueryVertexID, double>>,
                       decltype(rank_compare)>
@@ -44,6 +44,9 @@ std::vector<QueryVertexID> CFLOrder::getTopThree(const GraphMetadata& metadata, 
   }
   std::vector<QueryVertexID> ret(3);
   // Keep the top-3.
+  while (rank_queue.size() > 3) {
+    rank_queue.pop();
+  }
   for (uint32_t i = 0; i < 3; ++i) {
     ret[i] = rank_queue.top().first;
     rank_queue.pop();
