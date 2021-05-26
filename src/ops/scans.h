@@ -57,6 +57,8 @@ class Scan : public Operator {
   explicit Scan(ExecutionConfig& conf, std::string&& name = "Scan")
       : Operator(conf.getParallelism()), scan_size_(conf.getInputSize()), name_(std::move(name)) {}
 
+  virtual ~Scan() {}
+
   inline void addFilter(std::unique_ptr<LocalFilter>&& filter) { filters_.push_back(std::move(filter)); }
 
   inline uint32_t getParallelism() const { return parallelism_; }

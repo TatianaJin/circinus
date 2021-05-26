@@ -81,6 +81,10 @@ void CircinusServer::Serve(bool listen) {
         handleCandidatePhase(event);
         break;
       }
+      case Event::ExecutionPhase: {
+        handleExecutionPhase(event);
+        break;
+      }
       default:
         LOG(FATAL) << "Unknown event type " << event;
       }
@@ -151,8 +155,12 @@ void CircinusServer::handleCandidatePhase(const Event& event) {
   if (plan->isFinished()) {
     // backtracking phase
     LOG(INFO) << "Candidate generation finished. Start backtracking.";
-    plan_driver =
-        std::make_unique<ExecutionPlanDriver>(planner->generateExecutionPlan((const std::vector<VertexID>*)event.data));
+    auto plan = planner->generateExecutionPlan((const std::vector<VertexID>*)event.data);
+    if (active_queries_[event.query_id].query_context.graph_metadata->numPartitions() == 1) {
+      plan_driver = std::make_unique<MatchingParallelExecutionPlanDriver>(plan);
+    } else {
+      plan_driver = std::make_unique<ExecutionPlanDriver>(plan);
+    }
   }
   executor_manager_.run(event.query_id, &active_queries_[event.query_id].query_context, std::move(plan_driver));
 }

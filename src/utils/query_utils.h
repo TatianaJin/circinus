@@ -78,6 +78,7 @@ class QueryConfig {
   bool use_auxiliary_index = false;
   bool use_partitioned_graph = true;
   std::string output = "count";
+  uint64_t limit = ~0ull;
 
   explicit QueryConfig(const std::string& config_str = "") {
     uint32_t tok_start = 0;
@@ -102,6 +103,8 @@ class QueryConfig {
         // TODO(tatiana): use strategy name instead of actual matching order
       } else if (key == "cs" || key == "compression_strategy") {
         validateConfig(compression_strategy, value, compression_strategies, "compression strategy");
+      } else if (key == "limit") {
+        limit = std::stoull(value);
       }
       // TODO(tatiana): parse configs
     }
@@ -124,6 +127,25 @@ class QueryConfig {
     }
   }
 };
+
+// TODO(tatiana): this is workaround as we do not implement the order now
+inline std::vector<QueryVertexID> getOrder(const std::string& order_str, uint32_t size) {
+  std::vector<QueryVertexID> order;
+  if (order_str.empty()) return order;
+  order.reserve(size);
+  QueryVertexID v = 0;
+  for (auto c : order_str) {
+    if (c == ' ') {
+      order.push_back(v);
+      v = 0;
+    } else {
+      v = v * 10 + (c - '0');
+    }
+  }
+  order.push_back(v);
+  CHECK_EQ(order.size(), size);
+  return order;
+}
 
 struct QueryContext {
   QueryGraph query_graph;

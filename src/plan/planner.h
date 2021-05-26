@@ -19,8 +19,10 @@
 #include <vector>
 
 #include "ops/order/order_base.h"
+#include "plan/backtracking_plan.h"
 #include "plan/candidate_pruning_plan.h"
 #include "plan/execution_plan.h"
+#include "plan/naive_planner.h"
 #include "utils/query_utils.h"
 
 namespace circinus {
@@ -34,6 +36,10 @@ class Planner {
   CandidatePruningPlan candidate_pruning_plan_;
 
   std::unique_ptr<OrderBase> order_ = nullptr;
+
+  // TODO(tatiana): refactor for current framework
+  std::unique_ptr<NaivePlanner> planner_ = nullptr;
+  std::unique_ptr<BacktrackingPlan> backtracking_plan_ = nullptr;
 
  public:
   explicit Planner(QueryContext& query_context) : query_context_(&query_context) {}
@@ -49,7 +55,7 @@ class Planner {
 
   CandidatePruningPlan* updateCandidatePruningPlan(const std::vector<VertexID>* cardinality);
 
-  ExecutionPlan* generateExecutionPlan(const std::vector<VertexID>*);
+  BacktrackingPlan* generateExecutionPlan(const std::vector<VertexID>*, bool multithread = true);
 };
 
 }  // namespace circinus

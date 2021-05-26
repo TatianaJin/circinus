@@ -40,7 +40,8 @@ class CandidateResult : public Result {
 
   void collect(TaskBase* task) override;
 
-  const std::vector<std::vector<std::vector<VertexID>>>& getCandidates() { return candidates_; }
+  const std::vector<std::vector<std::vector<VertexID>>>& getCandidates() const { return candidates_; }
+  std::vector<std::vector<std::vector<VertexID>>>& getCandidates() { return candidates_; }
 
   std::vector<VertexID> getCandidateCardinality() const {
     std::vector<VertexID> ret(candidates_.size(), 0);
@@ -54,12 +55,15 @@ class CandidateResult : public Result {
 };
 
 class ExecutionResult : public Result {
+  uint64_t count_;
+
  public:
   void collect(TaskBase* task) override;
-  void* data() {
-    // TODO(tatiana)
-    return nullptr;
-  }
+
+  void setCount(uint64_t count) { count_ = count; }
+
+  // TODO(tatiana): now we only consider count as output
+  void* data() { return &count_; }
 };
 
 }  // namespace circinus
