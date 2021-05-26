@@ -17,7 +17,7 @@
 #include "exec/plan_driver.h"
 #include "exec/result.h"
 #include "exec/traverse_task.h"
-#include "plan/execution_plan.h"
+#include "plan/backtracking_plan.h"
 #include "utils/query_utils.h"
 
 namespace circinus {
@@ -25,11 +25,11 @@ namespace circinus {
 /** Supports partition-parallel execution.
  */
 class ExecutionPlanDriver : public PlanDriver {
-  ExecutionPlan* plan_;
+  BacktrackingPlan* plan_;
   ExecutionResult* result_;  // owned by ExecutorManager
 
  public:
-  explicit ExecutionPlanDriver(ExecutionPlan* plan) : plan_(plan) {}
+  explicit ExecutionPlanDriver(BacktrackingPlan* plan) : plan_(plan) {}
 
   void init(QueryId qid, QueryContext* query_ctx, ExecutionContext& ctx, ThreadsafeTaskQueue& task_queue) override;
 
@@ -39,11 +39,11 @@ class ExecutionPlanDriver : public PlanDriver {
 /** Alternative to ExecutionPlanDriver, supports matching-parallel execution.
  */
 class MatchingParallelExecutionPlanDriver : public PlanDriver {
-  ExecutionPlan* plan_;
+  BacktrackingPlan* plan_;
   ExecutionResult* result_;  // owned by ExecutorManager
 
  public:
-  explicit MatchingParallelExecutionPlanDriver(ExecutionPlan* plan) : plan_(plan) {}
+  explicit MatchingParallelExecutionPlanDriver(BacktrackingPlan* plan) : plan_(plan) {}
 
   void init(QueryId qid, QueryContext* query_ctx, ExecutionContext& ctx, ThreadsafeTaskQueue& task_queue) override;
 

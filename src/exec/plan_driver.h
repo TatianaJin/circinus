@@ -37,6 +37,14 @@ class PlanDriver {
 
  public:
   using ExecutionContext = std::pair<ExecutionConfig, std::unique_ptr<Result>>;
+
+  virtual ~PlanDriver() {
+    for (auto& op : operators_) {
+      LOG(INFO) << op->toString();
+      google::FlushLogFiles(google::INFO);
+      op.release();
+    }
+  }
   virtual void init(QueryId qid, QueryContext* query_ctx, ExecutionContext& ctx, ThreadsafeTaskQueue& task_queue) = 0;
   virtual void taskFinish(TaskBase* task, ThreadsafeTaskQueue* task_queue,
                           ThreadsafeQueue<ServerEvent>* reply_queue) = 0;
