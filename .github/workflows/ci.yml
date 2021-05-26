@@ -52,7 +52,8 @@ jobs:
         cd cppzmq
         git checkout tags/v4.6.0
         cd ..
-        cp cppzmq/zmq.hpp /usr/local/include
+        sudo cp cppzmq/zmq.hpp /usr/local/include
+        sudo cp cppzmq/zmq_addon.hpp /usr/local/include
 
     - name: Check clang-format
       run: ${{github.workspace}}/scripts/clang-format.py
