@@ -14,8 +14,12 @@
 
 #pragma once
 
-#ifdef HAS_FILESYSTEM
+#if __GNUC__ > 7
 #include <filesystem>
+namespace fs = std::filesystem;
+#else
+#include <experimental/filesystem>
+namespace fs = std::experimental::filesystem;
 #endif
 
 #include <cstring>
@@ -31,16 +35,16 @@ class Path {
  public:
   template <typename... Args>
   static inline std::string join(const std::string& dir, Args... args) {
-    std::filesystem::path path(dir);
+    fs::path path(dir);
     return join(path, args...).string();
   }
 
-  static inline bool isRelative(const std::string& path) { return std::filesystem::path(path).is_relative(); }
+  static inline bool isRelative(const std::string& path) { return fs::path(path).is_relative(); }
 
  private:
-  static inline std::filesystem::path& join(std::filesystem::path& path, std::string& append) { return path /= append; }
+  static inline fs::path& join(fs::path& path, std::string& append) { return path /= append; }
   template <typename... Args>
-  static inline std::filesystem::path& join(std::filesystem::path& path, std::string& append, Args... args) {
+  static inline fs::path& join(fs::path& path, std::string& append, Args... args) {
     path /= append;
     return join(path, args...);
   }

@@ -35,12 +35,13 @@
 #include "utils/print_styles.h"
 
 using circinus::CompressedSubgraphs;
+using circinus::ExecutionConfig;
 using circinus::ExpandEdgeOperator;
 using circinus::ExpandKeyToKeyVertexOperator;
 using circinus::ExpandKeyToSetVertexOperator;
 using circinus::ExpandSetToKeyVertexOperator;
 using circinus::Graph;
-using circinus::LDFScan;
+using circinus::Scan;
 using circinus::NLFFilter;
 using circinus::QueryGraph;
 using circinus::QueryVertexID;
@@ -48,8 +49,6 @@ using circinus::VertexID;
 using circinus::BipartiteGraph;
 
 #define BATCH_SIZE FLAGS_batch_size
-
-DEFINE_string(data_dir, "/data/share/project/haxe/data/subgraph_matching_datasets", "The directory of datasets");
 
 class TestExpandEdgeCosts : public testing::Test {
  protected:
@@ -86,14 +85,14 @@ class TestExpandEdgeCosts : public testing::Test {
 
   std::vector<std::vector<VertexID>> getCandidateSets(const Graph& g, const QueryGraph& q) {
     std::vector<std::vector<VertexID>> candidates(q.getNumVertices());
+    ExecutionConfig config;
     for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
-      LDFScan scan(&q, v, &g);
-      NLFFilter filter(&q, v);
-      std::vector<VertexID> buffer;
-      while (scan.Scan(&buffer, BATCH_SIZE) > 0) {
-        filter.Filter(g, buffer, &candidates[v]);
-        buffer.clear();
-      }
+      config.setInputSize(g.getVertexCardinalityByLabel(q.getVertexLabel(v)));
+      auto scan = circinus::Scan::newLDFScan(q.getVertexLabel(v), q.getVertexOutDegree(v), 0, config, 1);
+      scan->addFilter(std::make_unique<NLFFilter>(&q, v));
+      auto scan_ctx = scan->initScanContext(0);
+      scan->scan(&g, &scan_ctx);
+      candidates[v] = std::move(scan_ctx.candidates);
     }
     for (auto& candidate : candidates) {
       LOG(INFO) << "candidate set size " << candidate.size();

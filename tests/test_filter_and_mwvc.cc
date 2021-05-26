@@ -27,16 +27,13 @@
 #include "ops/filters.h"
 #include "ops/scans.h"
 
+using circinus::ExecutionConfig;
 using circinus::Graph;
-using circinus::LDFScan;
+using circinus::Scan;
 using circinus::NLFFilter;
 using circinus::QueryGraph;
 using circinus::VertexID;
 using circinus::WeightedBnB;
-
-#define BATCH_SIZE 32
-
-DEFINE_string(data_dir, "/data/share/project/haxe/data/subgraph_matching_datasets", "The directory of datasets");
 
 class TestFilterAndMWVC : public testing::Test {
  protected:
@@ -125,18 +122,16 @@ TEST_F(TestFilterAndMWVC, FilterCorrectness) {
 
       // get candidates for each query vertex
       auto start = std::chrono::high_resolution_clock::now();
+      ExecutionConfig config;
       for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
-        size_t ldf_output_size = 0;
+        config.setInputSize(g.getVertexCardinalityByLabel(q.getVertexLabel(v)));
+        auto scan = Scan::newLDFScan(q.getVertexLabel(v), q.getVertexOutDegree(v), 0, config, 1);
+        auto scan_ctx = scan->initScanContext(0);
+        scan->scan(&g, &scan_ctx);
+        size_t ldf_output_size = scan_ctx.candidates.size();
         std::vector<VertexID> candidates;
-        LDFScan scan(&q, v, &g);
         NLFFilter filter(&q, v);
-        std::vector<VertexID> buffer;
-        uint32_t num = 0;
-        while ((num = scan.Scan(&buffer, BATCH_SIZE)) > 0) {
-          ldf_output_size += num;
-          filter.Filter(g, buffer, &candidates);
-          buffer.clear();
-        }
+        filter.filter(g, scan_ctx.candidates, &candidates);
         EXPECT_EQ(candidate_size_fact_[i][j].first[v], ldf_output_size) << q_path;
         EXPECT_EQ(candidate_size_fact_[i][j].second[v], candidates.size()) << q_path;
       }
@@ -169,14 +164,14 @@ TEST_F(TestFilterAndMWVC, MWVC) {
       QueryGraph q(FLAGS_data_dir + "/" + q_path);
       // get candidates for each query vertex
       std::vector<std::vector<VertexID>> candidates(q.getNumVertices());
+      ExecutionConfig config;
       for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
-        LDFScan scan(&q, v, &g);
-        NLFFilter filter(&q, v);
-        std::vector<VertexID> buffer;
-        while (scan.Scan(&buffer, BATCH_SIZE) > 0) {
-          filter.Filter(g, buffer, &candidates[v]);
-          buffer.clear();
-        }
+        config.setInputSize(g.getVertexCardinalityByLabel(q.getVertexLabel(v)));
+        auto scan = Scan::newLDFScan(q.getVertexLabel(v), q.getVertexOutDegree(v), 0, config, 1);
+        scan->addFilter(std::make_unique<NLFFilter>(&q, v));
+        auto scan_ctx = scan->initScanContext(0);
+        scan->scan(&g, &scan_ctx);
+        candidates[v] = std::move(scan_ctx.candidates);
       }
       std::vector<double> vertex_weights;
       vertex_weights.reserve(candidates.size());
