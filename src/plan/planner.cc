@@ -19,8 +19,10 @@
 #include <vector>
 
 #include "ops/order/cfl_order.h"
+#include "plan/backtracking_plan.h"
 #include "plan/candidate_pruning_plan.h"
 #include "plan/execution_plan.h"
+#include "plan/naive_planner.h"
 #include "utils/query_utils.h"
 
 namespace circinus {
@@ -73,6 +75,7 @@ CandidatePruningPlan* Planner::generateCandidatePruningPlan() {
     return &candidate_pruning_plan_;
   }
   }
+  return &candidate_pruning_plan_;
 }
 
 CandidatePruningPlan* Planner::updateCandidatePruningPlan(const std::vector<VertexID>* cardinality) {
@@ -113,9 +116,49 @@ CandidatePruningPlan* Planner::updateCandidatePruningPlan(const std::vector<Vert
   return &candidate_pruning_plan_;
 }
 
-ExecutionPlan* Planner::generateExecutionPlan(const std::vector<VertexID>*) {
-  // TODO(tatiana)
-  return nullptr;
+BacktrackingPlan* Planner::generateExecutionPlan(const std::vector<VertexID>* candidate_cardinality, bool multithread) {
+  std::vector<double> cardinality{candidate_cardinality->begin(), candidate_cardinality->end()};
+
+  /* The data graph representation varies depending on the execution strategy.
+   * For query execution with partitioned graphs, use GraphView. For query on normal graphs, use Normal;
+   * For query using an auxiliary bipartite-graph-based index, use BipartiteGraphView. */
+  GraphType graph_type =
+      query_context_->graph_metadata->numPartitions() > 1
+          ? GraphType::GraphView
+          : (query_context_->query_config.use_auxiliary_index ? GraphType::BipartiteGraphView : GraphType::Normal);
+  planner_ = std::make_unique<NaivePlanner>(&query_context_->query_graph, &cardinality, graph_type);
+
+  // now order is directly configured
+  auto use_order = getOrder(query_context_->query_config.matching_order, query_context_->query_graph.getNumVertices());
+
+  ExecutionPlan* plan = nullptr;
+  bool inputs_are_keys = true;
+  // TODO(tatiana): consider make the first vertex in the matching order to be a key if multithread?
+  switch (query_context_->query_config.compression_strategy) {
+  case CompressionStrategy::Static: {
+    plan = planner_->generatePlan(use_order);
+    inputs_are_keys = plan->isInCover(plan->getRootQueryVertexID());
+    break;
+  }
+  case CompressionStrategy::Dynamic: {
+    planner_->generateOrder(use_order);
+    std::vector<std::vector<double>> cardinality_per_level(cardinality.size(), cardinality);
+    planner_->generateCoverNode(cardinality_per_level);
+    plan = planner_->generatePlanWithDynamicCover();
+    inputs_are_keys =
+        plan->isInCover(plan->getRootQueryVertexID()) && (plan->getToKeyLevel(plan->getRootQueryVertexID()) == 0);
+    break;
+  }
+  case CompressionStrategy::None: {
+    plan = planner_->generatePlanWithoutCompression(use_order);
+    inputs_are_keys = true;
+  }
+  }
+
+  LOG(INFO) << "Generated plan";
+  backtracking_plan_ = std::make_unique<BacktrackingPlan>(
+      plan, inputs_are_keys, plan->getRootQueryVertexID());  // now assume all vertices have candidates
+  return backtracking_plan_.get();
 }
 
 }  // namespace circinus
