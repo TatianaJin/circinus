@@ -21,6 +21,7 @@
 
 #include "glog/logging.h"
 
+#include "./metis.h"
 #include "graph/types.h"
 
 namespace circinus {
@@ -34,6 +35,7 @@ class Graph {
   std::vector<EdgeID> vlist_;    // size n_vertices_ + 1, { i: the id of the first edge of vertex i }
   std::vector<VertexID> elist_;  // size n_edges_, { i : the destination vertex id of edge i}
   std::vector<LabelID> labels_;  // size n_vertices_, { i : the label of vertex i }
+  std::vector<idx_t> parts_;
 
   std::unordered_map<LabelID, uint32_t> vertex_cardinality_by_label_;
   std::unordered_map<LabelID, std::vector<VertexID>> vertex_ids_by_label_;
@@ -109,6 +111,26 @@ class Graph {
   inline std::pair<const VertexID*, uint32_t> getOutNeighbors(VertexID id, LabelID nbr_label,
                                                               uint32_t graph_idx = 0) const {
     return getOutNeighbors(id);
+  }
+
+  inline EdgeID* getVList() {  // only for test_metis
+    return &vlist_[0];
+  }
+
+  inline VertexID* getEList() {  // only for test_metis
+    return &elist_[0];
+  }
+
+  idx_t getMetisParts(idx_t nparts) {
+    parts_.resize(n_vertices_);
+    idx_t* xadj = (idx_t*)getVList();
+    idx_t* adjncy = (idx_t*)getEList();
+    idx_t nvtxs = getNumVertices();
+    idx_t ncon = 1;
+    idx_t objval;
+    idx_t* part = &parts_[0];
+    METIS_PartGraphKway(&nvtxs, &ncon, xadj, adjncy, NULL, NULL, NULL, &nparts, NULL, NULL, NULL, &objval, part);
+    return objval;
   }
 
   /// persistence

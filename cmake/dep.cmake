@@ -75,6 +75,28 @@ else()
 endif()
 
 
+###gklib
+ExternalProject_Add(gklib_ep
+  CMAKE_ARGS "-DCMAKE_INSTALL_PREFIX=${THIRDPARTY_DIR}"
+	GIT_REPOSITORY https://github.com/KarypisLab/GKlib.git
+	GIT_TAG METIS-v5.1.1-DistDGL-0.5
+	BUILD_IN_SOURCE 1
+	CONFIGURE_COMMAND make config prefix=${THIRDPARTY_DIR}
+	BUILD_COMMAND make
+	INSTALL_COMMAND make install
+)
+
+ExternalProject_Add(metis_ep
+  CMAKE_ARGS "-DCMAKE_INSTALL_PREFIX=${THIRDPARTY_DIR}"
+	GIT_REPOSITORY  https://github.com/b3ng1998/METIS.git
+	BUILD_IN_SOURCE 1
+	CONFIGURE_COMMAND make config shared=1 i64=1 prefix=${THIRDPARTY_DIR} gklib_path=${THIRDPARTY_DIR}
+	BUILD_COMMAND make
+	INSTALL_COMMAND make install
+)
+
+add_dependencies(metis_ep gklib_ep)
+
 ### parallel hashmap
 ExternalProject_Add(phmap_ep
   CMAKE_ARGS "-DCMAKE_INSTALL_PREFIX=${THIRDPARTY_DIR}"
