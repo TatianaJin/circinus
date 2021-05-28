@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <vector>
+
 #include "exec/task.h"
 #include "graph/graph.h"
 #include "ops/traverse_operator.h"

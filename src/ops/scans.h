@@ -24,6 +24,7 @@
 #include "graph/query_graph.h"
 #include "graph/types.h"
 #include "ops/filters.h"
+#include "ops/filters/local_filter.h"
 #include "ops/operator.h"
 
 namespace circinus {
