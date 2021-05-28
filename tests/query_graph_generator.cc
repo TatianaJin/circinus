@@ -11,11 +11,13 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-
+#include <iostream>
+#include <vector>
+#include <set>
+#include <random>
 #include "graph/graph.h"
-#include "graph/type.h"
+#include "graph/types.h"
 
-using circinus::Graph;
 
 namespace circinus {
 
@@ -47,10 +49,11 @@ class QueryGraphGenerator{
     eset_.clear();
     uint32_t step_cnt=0;
     VertexID current_vertex=mt_rand()%g_.getNumVertices();
-    vset_.insert(current_vertex);
+		vset_.insert(current_vertex);
     while(step_cnt<max_random_walk_step&&vset_.size()<target_vertex_cnt_)
     {
       auto [neighbors,neighbors_cnt]=g_.getOutNeighbors(current_vertex);
+			if(neighbors_cnt==0)break;
       VertexID new_vertex = neighbors[mt_rand()%neighbors_cnt];
       vset_.insert(new_vertex);
       eset_.insert({current_vertex,new_vertex});
@@ -62,6 +65,7 @@ class QueryGraphGenerator{
   bool check()
   {
       if(vset_.size()!=target_vertex_cnt_)return 0;
+			
       if(if_dense_)
       {
         if(eset_.size()/vset_.size()<3)return 0;
@@ -70,6 +74,7 @@ class QueryGraphGenerator{
       {
         if(eset_.size()/vset_.size()>=3)return 0;
       }
+			
       return 1;
   }
   void save(){}
@@ -85,15 +90,17 @@ class QueryGraphGenerator{
         save();
       }
     }
-    cout<<"Tried "<<trial_cnt_<<" times to get "<<success_cnt_<<" queries.\n";
+    std::cout<<"Tried "<<trial_cnt_<<" times to get "<<success_cnt_<<" queries.\n";
   }
+};
+
 }
 
 const char data_graph_dir[] = "/data/share/project/haxe/data/subgraph_matching_datasets/yeast/data_graph/yeast.graph";
 int main()
 {
   auto data_graph_dir_str = std::string(data_graph_dir);
-  Graph g(data_graph_dir_str);
-  circinus::QueryGraphGenerator qgg(g,200,4,1);
+  circinus::Graph g(data_graph_dir_str);
+  circinus::QueryGraphGenerator qgg(g,200,4,0);
   qgg.run();
 }
