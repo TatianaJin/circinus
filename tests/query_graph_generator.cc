@@ -61,6 +61,41 @@ class QueryGraphGenerator{
       current_vertex=new_vertex;
       ++step_cnt;
     }
+    if(vset_.size()<target_vertex_cnt_||!if_dense_)return;
+    //deal with the situation: 1.enough vertex 2.target dense qg(normally means not enough edges)
+    std::vector<VertexID> permutation1,permutation2;
+    std::copy(vset_.begin(),vset_.end(),permutation1.begin());
+    std::copy(vset_.begin(),vset_.end(),permutation2.begin());
+    std::random_shuffle(permutation1.begin(),permutation1.end());
+    std::random_shuffle(permutation2.begin(),permutation2.end());
+    uint32_t try_new_edge_cnt=0;
+    uint32_t try_new_edge_cnt_bound=0; 
+    for(VertexID start_v:permutation1)
+    {
+      for(VertexID end_v:permutation2)
+      {
+        ++try_new_edge_cnt;
+        if(try_new_edge_cnt_bound&&try_new_edge_cnt>try_new_edge_cnt_bound)return;
+        auto [neighbors,neighbors_cnt]=g_.getOutNeighbors(start_v);
+        if(!neighbors_cnt)continue;
+        int l=0,r=neighbors_cnt-1;
+        while(l<r)
+        {
+          int mid=(l+r)/2;
+          if(neighbors[mid]>=end_v)r=mid;
+          else l=mid+1;
+        }
+        if(neighbors[l]==end_v)
+        {
+          eset_.find({start_v,end_v});
+          eset_.find({end_v,start_v});
+          if(eset_.size()/vset_.size()>=3&&!try_new_edge_cnt_bound)
+          {
+            try_new_edge_cnt_bound=try_new_edge_cnt+mt_rand()%(target_vertex_cnt_*target_vertex_cnt_-try_new_edge_cnt+1);
+          }
+        }
+      }
+    }
   }
   bool check()
   {
