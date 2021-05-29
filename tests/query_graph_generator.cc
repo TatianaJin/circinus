@@ -15,9 +15,14 @@
 #include <vector>
 #include <set>
 #include <random>
+#include <algorithm>
 #include "graph/graph.h"
 #include "graph/types.h"
+#include "gflags/gflags.h"
 
+DEFINE_uint64(qg_cnt, 200, "target query graph count");
+DEFINE_uint64(v_cnt, 4, "vertex count in each query");
+DEFINE_bool(if_dense, false, "if dense query graph");
 
 namespace circinus {
 
@@ -30,6 +35,7 @@ class QueryGraphGenerator{
   uint32_t max_random_walk_step;
   uint32_t trial_cnt_;
   uint32_t success_cnt_;
+	uint32_t trial_cnt_bound_;
   std::set<VertexID> vset_;
   std::set< std::pair<VertexID,VertexID> > eset_;
  public:
@@ -40,7 +46,8 @@ class QueryGraphGenerator{
     if_dense_(if_dense),
     max_random_walk_step(5*target_vertex_cnt),
     trial_cnt_(0),
-    success_cnt_(0)
+    success_cnt_(0),
+		trial_cnt_bound_(1e8)
     {}
   void generate()
   {
@@ -61,11 +68,9 @@ class QueryGraphGenerator{
       current_vertex=new_vertex;
       ++step_cnt;
     }
-    if(vset_.size()<target_vertex_cnt_||!if_dense_)return;
+    if(vset_.size()<target_vertex_cnt_||!if_dense_||target_vertex_cnt_<8)return;
     //deal with the situation: 1.enough vertex 2.target dense qg(normally means not enough edges)
-    std::vector<VertexID> permutation1,permutation2;
-    std::copy(vset_.begin(),vset_.end(),permutation1.begin());
-    std::copy(vset_.begin(),vset_.end(),permutation2.begin());
+    std::vector<VertexID> permutation1(vset_.begin(),vset_.end()),permutation2(vset_.begin(),vset_.end());
     std::random_shuffle(permutation1.begin(),permutation1.end());
     std::random_shuffle(permutation2.begin(),permutation2.end());
     uint32_t try_new_edge_cnt=0;
@@ -100,7 +105,7 @@ class QueryGraphGenerator{
   bool check()
   {
       if(vset_.size()!=target_vertex_cnt_)return 0;
-			
+			if(target_vertex_cnt_<8)return 1;
       if(if_dense_)
       {
         if(eset_.size()/vset_.size()<3)return 0;
@@ -115,7 +120,7 @@ class QueryGraphGenerator{
   void save(){}
   void run()
   {
-    while(success_cnt_<target_query_graph_cnt_)
+    while(success_cnt_<target_query_graph_cnt_&&trial_cnt_<trial_cnt_bound_)
     {
       generate();
       ++trial_cnt_;
@@ -132,10 +137,11 @@ class QueryGraphGenerator{
 }
 
 const char data_graph_dir[] = "/data/share/project/haxe/data/subgraph_matching_datasets/yeast/data_graph/yeast.graph";
-int main()
+int main(int argc, char** argv)
 {
+  gflags::ParseCommandLineFlags(&argc, &argv, false);
   auto data_graph_dir_str = std::string(data_graph_dir);
   circinus::Graph g(data_graph_dir_str);
-  circinus::QueryGraphGenerator qgg(g,200,4,0);
+  circinus::QueryGraphGenerator qgg(g,FLAGS_qg_cnt,FLAGS_v_cnt,FLAGS_if_dense);
   qgg.run();
 }
