@@ -38,6 +38,7 @@ class QueryGraphGenerator{
 	uint32_t trial_cnt_bound_;
   std::set<VertexID> vset_;
   std::set< std::pair<VertexID,VertexID> > eset_;
+	double avg_deg;
  public:
   QueryGraphGenerator(Graph g,uint32_t target_query_graph_cnt,uint32_t target_vertex_cnt,bool if_dense):
     g_(g),
@@ -47,7 +48,8 @@ class QueryGraphGenerator{
     max_random_walk_step(5*target_vertex_cnt),
     trial_cnt_(0),
     success_cnt_(0),
-		trial_cnt_bound_(1e8)
+		trial_cnt_bound_(1e8),
+		avg_deg(0)
     {}
   void generate()
   {
@@ -62,15 +64,13 @@ class QueryGraphGenerator{
     {
       auto [neighbors,neighbors_cnt]=g_.getOutNeighbors(current_vertex);
 			if(neighbors_cnt==0)break;
-      if(if_dense_)
-      {
         for(auto neighbor_v : vset_)
         {
           int l=0,r=neighbors_cnt-1;
           while(l<r)
           {
             int mid=(l+r)/2;
-            if(neighbors[mid]>=end_v)r=mid;
+            if(neighbors[mid]>=neighbor_v)r=mid;
             else l=mid+1;
           }
           if(neighbors[l]==neighbor_v)
@@ -79,7 +79,6 @@ class QueryGraphGenerator{
             extra_edge_set.insert({neighbor_v,current_vertex});
           }
         }
-      }
       if(vset_.size()>=target_vertex_cnt_)break;
       VertexID new_vertex = neighbors[mt_rand()%neighbors_cnt];
       vset_.insert(new_vertex);
@@ -88,26 +87,28 @@ class QueryGraphGenerator{
       current_vertex=new_vertex;
       ++step_cnt;
     }
+    std::vector< std::pair<VertexID,VertexID> > diff_vec;
+		std::set_difference(extra_edge_set.begin(),extra_edge_set.end(),eset_.begin(),eset_.end(),std::back_inserter(diff_vec));
+		uint32_t all_edge_cnt=diff_vec.size()+eset_.size();
+		avg_deg+=1.0*all_edge_cnt/vset_.size();
     if(vset_.size()<target_vertex_cnt_||!if_dense_||target_vertex_cnt_<8)return;
     //deal with the situation: 1.enough vertex 2.target dense qg(normally means not enough edges)
-    std::vector< std::pair<VertexID,VertexID> > diff_vec;
-    std::set_difference(extra_edge_set.begin(),extra_edge_set.end(),eset_.begin(),eset_.end(),std::back_inserter(diff_vec));
-    uint32_t all_edge_cnt=diff_vec.size()+eset_.size();
     uint32_t d=all_edge_cnt-3*target_vertex_cnt_;
     if(d<0)return;
     d/=2;
     std::random_shuffle(diff_vec.begin(),diff_vec.end());
-    uint32_t new_edge_cnt=diff_vec.size()/2;
-    if(d>0)new_edge_cnt-=mt_rand()%(d+1);
-    for(uint32_t i=0;i<new_edge_cnt;++i)
+    uint32_t new_edge_cnt_bound=diff_vec.size()/2;
+    if(d>0)new_edge_cnt_bound-=mt_rand()%(d+1);
+		uint32_t new_edge_cnt=0;
+		for(uint32_t i=0;i<diff_vec.size()&&new_edge_cnt<new_edge_cnt_bound;++i)
     {
       auto p = diff_vec[i];
       if(eset_.find(p)==eset_.end())
       {
         eset_.insert(p);
         eset_.insert({p.second,p.first});
+				++new_edge_cnt;
       }
-      else --i;
     }
   }
   bool check()
@@ -127,11 +128,9 @@ class QueryGraphGenerator{
   void save(){}
   void run()
   {
-    double avg_deg=0;
     while(success_cnt_<target_query_graph_cnt_&&trial_cnt_<trial_cnt_bound_)
     {
       generate();
-      if(vset_.size())avg_deg+=1.0*eset_.size()/vset_.size();
       ++trial_cnt_;
       if(check())
       {
@@ -140,7 +139,7 @@ class QueryGraphGenerator{
       }
     }
     std::cout<<"Tried "<<trial_cnt_<<" times to get "<<success_cnt_<<" queries.\n";
-    std::cout<<"Avg degree of all tried subgraph: "<<avg_deg<<"\n";
+    std::cout<<"Avg degree of all tried random walk induced subgraph: "<<avg_deg/trial_cnt_<<"\n";
   }
 };
 
