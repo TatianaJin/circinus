@@ -57,10 +57,30 @@ class QueryGraphGenerator{
     uint32_t step_cnt=0;
     VertexID current_vertex=mt_rand()%g_.getNumVertices();
 		vset_.insert(current_vertex);
-    while(step_cnt<max_random_walk_step&&vset_.size()<target_vertex_cnt_)
+    std::set< std::pair<VertexID,VertexID> > extra_edge_set;
+    while(step_cnt<max_random_walk_step)
     {
       auto [neighbors,neighbors_cnt]=g_.getOutNeighbors(current_vertex);
 			if(neighbors_cnt==0)break;
+      if(if_dense_)
+      {
+        for(auto neighbor_v : vset_)
+        {
+          int l=0,r=neighbors_cnt-1;
+          while(l<r)
+          {
+            int mid=(l+r)/2;
+            if(neighbors[mid]>=end_v)r=mid;
+            else l=mid+1;
+          }
+          if(neighbors[l]==neighbor_v)
+          {
+            extra_edge_set.insert({current_vertex,neighbor_v});
+            extra_edge_set.insert({neighbor_v,current_vertex});
+          }
+        }
+      }
+      if(vset_.size()>=target_vertex_cnt_)break;
       VertexID new_vertex = neighbors[mt_rand()%neighbors_cnt];
       vset_.insert(new_vertex);
       eset_.insert({current_vertex,new_vertex});
@@ -70,36 +90,24 @@ class QueryGraphGenerator{
     }
     if(vset_.size()<target_vertex_cnt_||!if_dense_||target_vertex_cnt_<8)return;
     //deal with the situation: 1.enough vertex 2.target dense qg(normally means not enough edges)
-    std::vector<VertexID> permutation1(vset_.begin(),vset_.end()),permutation2(vset_.begin(),vset_.end());
-    std::random_shuffle(permutation1.begin(),permutation1.end());
-    std::random_shuffle(permutation2.begin(),permutation2.end());
-    uint32_t try_new_edge_cnt=0;
-    uint32_t try_new_edge_cnt_bound=0; 
-    for(VertexID start_v:permutation1)
+    std::vector< std::pair<VertexID,VertexID> > diff_vec;
+    std::set_difference(extra_edge_set.begin(),extra_edge_set.end(),eset_.begin(),eset_.end(),std::back_inserter(diff_vec));
+    uint32_t all_edge_cnt=diff_vec.size()+eset_.size();
+    uint32_t d=all_edge_cnt-3*target_vertex_cnt_;
+    if(d<0)return;
+    d/=2;
+    std::random_shuffle(diff_vec.begin(),diff_vec.end());
+    uint32_t new_edge_cnt=diff_vec.size()/2;
+    if(d>0)new_edge_cnt-=mt_rand()%(d+1);
+    for(uint32_t i=0;i<new_edge_cnt;++i)
     {
-      for(VertexID end_v:permutation2)
+      auto p = diff_vec[i];
+      if(eset_.find(p)==eset_.end())
       {
-        ++try_new_edge_cnt;
-        if(try_new_edge_cnt_bound&&try_new_edge_cnt>try_new_edge_cnt_bound)return;
-        auto [neighbors,neighbors_cnt]=g_.getOutNeighbors(start_v);
-        if(!neighbors_cnt)continue;
-        int l=0,r=neighbors_cnt-1;
-        while(l<r)
-        {
-          int mid=(l+r)/2;
-          if(neighbors[mid]>=end_v)r=mid;
-          else l=mid+1;
-        }
-        if(neighbors[l]==end_v)
-        {
-          eset_.find({start_v,end_v});
-          eset_.find({end_v,start_v});
-          if(eset_.size()/vset_.size()>=3&&!try_new_edge_cnt_bound)
-          {
-            try_new_edge_cnt_bound=try_new_edge_cnt+mt_rand()%(target_vertex_cnt_*target_vertex_cnt_-try_new_edge_cnt+1);
-          }
-        }
+        eset_.insert(p);
+        eset_.insert({p.second,p.first});
       }
+      else --i;
     }
   }
   bool check()
@@ -108,21 +116,22 @@ class QueryGraphGenerator{
 			if(target_vertex_cnt_<8)return 1;
       if(if_dense_)
       {
-        if(eset_.size()/vset_.size()<3)return 0;
+        if(eset_.size()<3*target_vertex_cnt_)return 0;
       }
       else
       {
-        if(eset_.size()/vset_.size()>=3)return 0;
+        if(eset_.size()>=3*target_vertex_cnt_)return 0;
       }
-			
       return 1;
   }
   void save(){}
   void run()
   {
+    double avg_deg=0;
     while(success_cnt_<target_query_graph_cnt_&&trial_cnt_<trial_cnt_bound_)
     {
       generate();
+      if(vset_.size())avg_deg+=1.0*eset_.size()/vset_.size();
       ++trial_cnt_;
       if(check())
       {
@@ -131,6 +140,7 @@ class QueryGraphGenerator{
       }
     }
     std::cout<<"Tried "<<trial_cnt_<<" times to get "<<success_cnt_<<" queries.\n";
+    std::cout<<"Avg degree of all tried subgraph: "<<avg_deg<<"\n";
   }
 };
 
