@@ -17,6 +17,7 @@
 #include <random>
 #include <algorithm>
 #include <fstream>
+#include <map>
 #include "graph/graph.h"
 #include "graph/types.h"
 #include "gflags/gflags.h"
@@ -145,7 +146,7 @@ class QueryGraphGenerator{
     std::map<VertexID,int> id_map;
     std::map<int,LabelID> label_map;
     std::map<int,int> degree_map;
-    std::vector<pair<int,int>> elist;
+    std::vector<std::pair<int,int>> elist;
     int newid=0;
     for(auto& v:vset_)
     {
@@ -163,7 +164,7 @@ class QueryGraphGenerator{
         elist.push_back({id1,id2});
       }
     }
-    ofstream out(fn);
+    std::ofstream out(fn);
     out<<"t "<<target_vertex_cnt_<<" "<<elist.size()<<"\n";
     for(int i=0;i<newid;++i)
     {
