@@ -128,7 +128,7 @@ class QueryGraphGenerator{
       }
       return 1;
   }
-  string getFilename()
+  std::string getFilename()
   {
     std::stringstream output_filename;
     output_filename<<output_dir_<<"/query_";
