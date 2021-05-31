@@ -16,6 +16,7 @@
 #include <set>
 #include <random>
 #include <algorithm>
+#include <fstream>
 #include "graph/graph.h"
 #include "graph/types.h"
 #include "gflags/gflags.h"
@@ -140,7 +141,39 @@ class QueryGraphGenerator{
   }
   void save()
   {
-    std::cout<<getFilename()<<"\n";
+    std::string fn=getFilename();
+    std::map<VertexID,int> id_map;
+    std::map<int,LabelID> label_map;
+    std::map<int,int> degree_map;
+    std::vector<pair<int,int>> elist;
+    int newid=0;
+    for(auto& v:vset_)
+    {
+      id_map[v]=newid;
+      label_map[newid]=g_.getVertexLabel(v);
+      ++newid;
+    }
+    for(auto& [v1,v2]:eset_)
+    {
+      int id1=id_map[v1],id2=id_map[v2];
+      if(id1<id2)
+      {
+        ++degree_map[id1];
+        ++degree_map[id2];
+        elist.push_back({id1,id2});
+      }
+    }
+    ofstream out(fn);
+    out<<"t "<<target_vertex_cnt_<<" "<<elist.size()<<"\n";
+    for(int i=0;i<newid;++i)
+    {
+      out<<"v "<<i<<" "<<label_map[i]<<" "<<degree_map[i]<<"\n";
+    }
+    for(auto& [v1,v2]:elist)
+    {
+      out<<"e "<<v1<<" "<<v2<<" 0\n";
+    }
+    out.close();
   }
   void run()
   {
