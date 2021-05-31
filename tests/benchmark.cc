@@ -87,6 +87,10 @@ DEFINE_string(profile_file, "", "profile file");
 DEFINE_string(vertex_cover, "static", "Vertex cover strategy: static, eager, all");
 DEFINE_string(batch_file, "", "Batch query file");
 DEFINE_bool(bipartite_graph, false, "use bipartite graph or not");
+DEFINE_bool(naive_run,true,"naive run or not");
+DEFINE_bool(naive_datagraph,"/data/share/users/qlma/query-graph-output/query_dense_4_1.graph","data graph file path");
+DEFINE_bool(naive_querygraph,"/data/share/users/qlma/query-graph-output/query_dense_4_1.graph","query graph file path");
+
 
 enum VertexCoverStrategy : uint32_t { Static = 0, Eager, Sample, Dynamic, All };
 
@@ -96,6 +100,40 @@ class Benchmark {
                                               "patents", "wordnet", "yeast", "youtube"};
 
  public:
+  std::vector<std::vector<VertexID>> naiveGetCandidateSets(const Graph& g, const QueryGraph& q) {
+    std::vector<std::vector<VertexID>> candidates(q.getNumVertices());
+    ExecutionConfig config;
+    for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
+      config.setInputSize(g.getVertexCardinalityByLabel(q.getVertexLabel(v)));
+      auto scan = circinus::Scan::newLDFScan(q.getVertexLabel(v), q.getVertexOutDegree(v), 0, config, 1);
+      auto scan_ctx = scan->initScanContext(0);
+      scan->scan(&g, &scan_ctx);
+      candidates[v] = std::move(scan_ctx.candidates);
+      //LOG(INFO) << "query vertex " << v << ' ' << scan->toString();
+    }
+    return candidates;
+  }
+  void naiverun(const std::string& datagraph,const std::string& naive_querygraph)
+  {
+    Graph g(datagraph);
+    QueryGraph q(naive_querygraph);
+    std::vector<QueryVertexID> use_order(q.getNumVertices());
+    for(int i=0;i<use_order.size();++i)use_order[i]=i;
+    auto candidates = naiveGetCandidateSets(g, q);
+    std::vector<double> candidate_cardinality;
+    candidate_cardinality.reserve(candidates.size());
+    for (auto& set : candidates) {
+      double size = set.size();
+      candidate_cardinality.push_back(size);
+    }
+    NaivePlanner planner(&q, &candidate_cardinality, GraphType::Normal);
+    ExecutionPlan* plan=planner.generatePlanWithoutCompression(use_order);
+    plan->setCandidateSets(candidates);
+    plan->getOutputs().init(1).limit(1);
+    batchDFSExecuteST(&g, plan);
+    auto n_matches = plan->getOutputs().getCount();
+    LOG(INFO) << "Got "<<n_matches<<" matches.";
+  }
   template <VertexCoverStrategy vcs>
   void run(const std::string& dataset, uint32_t query_size, const std::string& query_mode, uint32_t index,
            std::ostream* out) {
