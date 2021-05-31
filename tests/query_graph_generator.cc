@@ -24,7 +24,7 @@ DEFINE_uint64(qg_cnt, 200, "target query graph count");
 DEFINE_uint64(v_cnt, 4, "vertex count in each query");
 DEFINE_bool(if_dense, false, "if dense query graph");
 DEFINE_string(output_dir, "/data/share/users/qlma/query-graph-output/", "where to put the result");
-
+DEFINE_string(data_graph, "/data/share/project/haxe/data/subgraph_matching_datasets/yeast/data_graph/yeast.graph", "input data graph");
 namespace circinus {
 
 class QueryGraphGenerator{
@@ -42,8 +42,8 @@ class QueryGraphGenerator{
   std::set< std::pair<VertexID,VertexID> > eset_;
 	double avg_deg;
  public:
-  QueryGraphGenerator(Graph g,uint32_t target_query_graph_cnt,uint32_t target_vertex_cnt,bool if_dense, std::string output_dir):
-    g_(g),
+  QueryGraphGenerator(std::string data_graph,uint32_t target_query_graph_cnt,uint32_t target_vertex_cnt,bool if_dense, std::string output_dir):
+    g_(data_graph),
     target_query_graph_cnt_(target_query_graph_cnt),
     target_vertex_cnt_(target_vertex_cnt),
     if_dense_(if_dense),
@@ -151,12 +151,9 @@ class QueryGraphGenerator{
 
 }
 
-const char data_graph_dir[] = "/data/share/project/haxe/data/subgraph_matching_datasets/yeast/data_graph/yeast.graph";
 int main(int argc, char** argv)
 {
   gflags::ParseCommandLineFlags(&argc, &argv, false);
-  auto data_graph_dir_str = std::string(data_graph_dir);
-  circinus::Graph g(data_graph_dir_str);
-  circinus::QueryGraphGenerator qgg(g,FLAGS_qg_cnt,FLAGS_v_cnt,FLAGS_if_dense,FLAGS_output_dir);
+  circinus::QueryGraphGenerator qgg(FLAGS_data_graph,FLAGS_qg_cnt,FLAGS_v_cnt,FLAGS_if_dense,FLAGS_output_dir);
   qgg.run();
 }
