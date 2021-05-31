@@ -88,8 +88,8 @@ DEFINE_string(vertex_cover, "static", "Vertex cover strategy: static, eager, all
 DEFINE_string(batch_file, "", "Batch query file");
 DEFINE_bool(bipartite_graph, false, "use bipartite graph or not");
 DEFINE_bool(naive_run,true,"naive run or not");
-DEFINE_bool(naive_datagraph,"/data/share/users/qlma/query-graph-output/query_dense_4_1.graph","data graph file path");
-DEFINE_bool(naive_querygraph,"/data/share/users/qlma/query-graph-output/query_dense_4_1.graph","query graph file path");
+DEFINE_string(naive_datagraph,"/data/share/users/qlma/query-graph-output/query_dense_4_1.graph","data graph file path");
+DEFINE_string(naive_querygraph,"/data/share/users/qlma/query-graph-output/query_dense_4_1.graph","query graph file path");
 
 
 enum VertexCoverStrategy : uint32_t { Static = 0, Eager, Sample, Dynamic, All };
@@ -730,7 +730,11 @@ int main(int argc, char** argv) {
     run_benchmark(FLAGS_batch_file, out);
     return 0;
   }
-
+  if (FLAGS_naive_run == true) {
+	  FLAGS_vertex_cover = "all";
+		benchmark.naiverun(FLAGS_naive_datagraph,FLAGS_naive_querygraph);
+	}
+	else 
   if (FLAGS_vertex_cover == "static") {
     benchmark.run<Static>(FLAGS_dataset, FLAGS_query_size, FLAGS_query_mode, FLAGS_query_index, out);
   } else if (FLAGS_vertex_cover == "all") {
