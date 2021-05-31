@@ -23,6 +23,7 @@
 DEFINE_uint64(qg_cnt, 200, "target query graph count");
 DEFINE_uint64(v_cnt, 4, "vertex count in each query");
 DEFINE_bool(if_dense, false, "if dense query graph");
+DEFINE_string(output_dir, "/data/share/users/qlma/query-graph-output/", "where to put the result");
 
 namespace circinus {
 
@@ -32,6 +33,7 @@ class QueryGraphGenerator{
   uint32_t target_query_graph_cnt_;
   uint32_t target_vertex_cnt_;
   bool if_dense_;
+  std::string output_dir_;
   uint32_t max_random_walk_step;
   uint32_t trial_cnt_;
   uint32_t success_cnt_;
@@ -40,11 +42,12 @@ class QueryGraphGenerator{
   std::set< std::pair<VertexID,VertexID> > eset_;
 	double avg_deg;
  public:
-  QueryGraphGenerator(Graph g,uint32_t target_query_graph_cnt,uint32_t target_vertex_cnt,bool if_dense):
+  QueryGraphGenerator(Graph g,uint32_t target_query_graph_cnt,uint32_t target_vertex_cnt,bool if_dense, std::string output_dir):
     g_(g),
     target_query_graph_cnt_(target_query_graph_cnt),
     target_vertex_cnt_(target_vertex_cnt),
     if_dense_(if_dense),
+    output_dir_(output_dir),
     max_random_walk_step(5*target_vertex_cnt),
     trial_cnt_(0),
     success_cnt_(0),
@@ -125,7 +128,10 @@ class QueryGraphGenerator{
       }
       return 1;
   }
-  void save(){}
+  void save()
+  {
+    std::cout<<output_dir_<<"\n";
+  }
   void run()
   {
     while(success_cnt_<target_query_graph_cnt_&&trial_cnt_<trial_cnt_bound_)
@@ -151,6 +157,6 @@ int main(int argc, char** argv)
   gflags::ParseCommandLineFlags(&argc, &argv, false);
   auto data_graph_dir_str = std::string(data_graph_dir);
   circinus::Graph g(data_graph_dir_str);
-  circinus::QueryGraphGenerator qgg(g,FLAGS_qg_cnt,FLAGS_v_cnt,FLAGS_if_dense);
+  circinus::QueryGraphGenerator qgg(g,FLAGS_qg_cnt,FLAGS_v_cnt,FLAGS_if_dense,FLAGS_output_dir);
   qgg.run();
 }
