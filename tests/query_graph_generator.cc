@@ -128,9 +128,19 @@ class QueryGraphGenerator{
       }
       return 1;
   }
+  string getFilename()
+  {
+    std::stringstream output_filename;
+    output_filename<<output_dir_<<"/query_";
+    if(target_vertex_cnt_<8||if_dense_)output_filename<<"dense_";
+    else output_filename<<"sparse_";
+    output_filename<<std::to_string(target_vertex_cnt_)<<"_";
+    output_filename<<std::to_string(success_cnt_)<<".graph";
+    return output_filename.str();
+  }
   void save()
   {
-    std::cout<<output_dir_<<"\n";
+    std::cout<<getFilename()<<"\n";
   }
   void run()
   {
