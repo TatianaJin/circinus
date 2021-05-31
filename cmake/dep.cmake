@@ -75,27 +75,51 @@ else()
 endif()
 
 
-###gklib
-ExternalProject_Add(gklib_ep
-  CMAKE_ARGS "-DCMAKE_INSTALL_PREFIX=${THIRDPARTY_DIR}"
-	GIT_REPOSITORY https://github.com/KarypisLab/GKlib.git
-	GIT_TAG METIS-v5.1.1-DistDGL-0.5
-	BUILD_IN_SOURCE 1
-	CONFIGURE_COMMAND make config prefix=${THIRDPARTY_DIR}
-	BUILD_COMMAND make
-	INSTALL_COMMAND make install
-)
+set(install_metis false)
+# Workaround for avoiding repeated build due to BUILD_IN_SOURCE
+find_path(metis_INCLUDE NAMES metis.h HINTS "${THIRDPARTY_DIR}/include")
+find_library(metis_LIBRARY NAMES metis HINTS ${THIRDPARTY_DIR}/lib)
+if (metis_INCLUDE AND metis_LIBRARY)
+  message(STATUS "Found metis")
+  message(STATUS "  (Headers)     ${metis_INCLUDE}")
+  message(STATUS "  (Library)     ${metis_LIBRARY}")
+else()
+  # Dependency for metis
+  set(install_gklib false)
+  find_library(gklib_LIBRARY NAMES GKlib HINTS ${THIRDPARTY_DIR}/lib)
+  if (gklib_LIBRARY)
+    message(STATUS "Use GKlib in ${gklib_LIBRARY}")
+  else()
+    set(install_gklib true)
+    ###gklib
+    ExternalProject_Add(gklib_ep
+      CMAKE_ARGS "-DCMAKE_INSTALL_PREFIX=${THIRDPARTY_DIR}"
+      GIT_REPOSITORY https://github.com/KarypisLab/GKlib.git
+      GIT_TAG METIS-v5.1.1-DistDGL-0.5
+      BUILD_IN_SOURCE 1
+      CONFIGURE_COMMAND make config prefix=${THIRDPARTY_DIR}
+      BUILD_COMMAND make
+      INSTALL_COMMAND make install
+    )
+  endif()
 
-ExternalProject_Add(metis_ep
-  CMAKE_ARGS "-DCMAKE_INSTALL_PREFIX=${THIRDPARTY_DIR}"
-	GIT_REPOSITORY  https://github.com/b3ng1998/METIS.git
-	BUILD_IN_SOURCE 1
-	CONFIGURE_COMMAND make config shared=1 i64=1 prefix=${THIRDPARTY_DIR} gklib_path=${THIRDPARTY_DIR}
-	BUILD_COMMAND make
-	INSTALL_COMMAND make install
-)
+  set(install_metis true)
+  ExternalProject_Add(metis_ep
+    CMAKE_ARGS "-DCMAKE_INSTALL_PREFIX=${THIRDPARTY_DIR}/metis"
+    GIT_REPOSITORY  https://github.com/b3ng1998/METIS.git
+    BUILD_IN_SOURCE 1
+    CONFIGURE_COMMAND make config shared=1 i64=1 prefix=${THIRDPARTY_DIR} gklib_path=${THIRDPARTY_DIR}
+    BUILD_COMMAND make
+    INSTALL_COMMAND make install
+  )
+  list(APPEND EXTERNAL_DEPENDENCY metis_ep)
+  if (install_metis AND install_gklib)
+    add_dependencies(metis_ep gklib_ep)
+  endif()
+endif()
+list(APPEND EXTERNAL_LIBRARY ${PROJECT_SOURCE_DIR}/third_party/lib/libmetis.so)
+list(APPEND EXTERNAL_LIBRARY ${PROJECT_SOURCE_DIR}/third_party/lib/libGKlib.a)
 
-add_dependencies(metis_ep gklib_ep)
 
 ### parallel hashmap
 ExternalProject_Add(phmap_ep
@@ -103,6 +127,7 @@ ExternalProject_Add(phmap_ep
   GIT_REPOSITORY https://github.com/greg7mdp/parallel-hashmap.git
   GIT_TAG 1.32
 )
+list(APPEND EXTERNAL_DEPENDENCY phmap_ep)
 
 ### zmq
 find_path(ZMQ_INCLUDE_DIR NAMES zmq.hpp zmq_addon.hpp)
