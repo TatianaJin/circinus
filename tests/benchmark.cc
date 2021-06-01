@@ -87,10 +87,11 @@ DEFINE_string(profile_file, "", "profile file");
 DEFINE_string(vertex_cover, "static", "Vertex cover strategy: static, eager, all");
 DEFINE_string(batch_file, "", "Batch query file");
 DEFINE_bool(bipartite_graph, false, "use bipartite graph or not");
-DEFINE_bool(naive_run,false,"naive run or not");
-DEFINE_string(naive_datagraph,"/data/share/users/qlma/query-graph-output/query_dense_4_1.graph","data graph file path");
-DEFINE_string(naive_querygraph,"/data/share/users/qlma/query-graph-output/query_dense_4_1.graph","query graph file path");
-
+DEFINE_bool(naive_run, false, "naive run or not");
+DEFINE_string(naive_datagraph, "/data/share/users/qlma/query-graph-output/query_dense_4_1.graph",
+              "data graph file path");
+DEFINE_string(naive_querygraph, "/data/share/users/qlma/query-graph-output/query_dense_4_1.graph",
+              "query graph file path");
 
 enum VertexCoverStrategy : uint32_t { Static = 0, Eager, Sample, Dynamic, All };
 
@@ -100,15 +101,13 @@ class Benchmark {
                                               "patents", "wordnet", "yeast", "youtube"};
 
  public:
-  void getDFSOrder(std::vector<QueryVertexID>& use_order,QueryGraph q,QueryVertexID i,std::vector<bool>& visited)
-  {
+  void getDFSOrder(std::vector<QueryVertexID>& use_order, QueryGraph q, QueryVertexID i, std::vector<bool>& visited) {
     use_order.push_back(i);
-    visited[i]=1;
-    auto [vec,len]=q.getOutNeighbors(i);
-    for(uint32_t j=0;j<len;++j)
-    {
-      QueryVertexID nextv=vec[j];
-      if(!visited[nextv])getDFSOrder(use_order,q,nextv,visited);
+    visited[i] = 1;
+    auto[vec, len] = q.getOutNeighbors(i);
+    for (uint32_t j = 0; j < len; ++j) {
+      QueryVertexID nextv = vec[j];
+      if (!visited[nextv]) getDFSOrder(use_order, q, nextv, visited);
     }
   }
   std::vector<std::vector<VertexID>> naiveGetCandidateSets(const Graph& g, const QueryGraph& q) {
@@ -116,22 +115,21 @@ class Benchmark {
     ExecutionConfig config;
     for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
       config.setInputSize(g.getVertexCardinalityByLabel(q.getVertexLabel(v)));
-			if(config.getInputSize()<=0)break;
+      if (config.getInputSize() <= 0) break;
       auto scan = circinus::Scan::newLDFScan(q.getVertexLabel(v), q.getVertexOutDegree(v), 0, config, 1);
       auto scan_ctx = scan->initScanContext(0);
       scan->scan(&g, &scan_ctx);
       candidates[v] = std::move(scan_ctx.candidates);
-      //LOG(INFO) << "query vertex " << v << ' ' << scan->toString();
+      // LOG(INFO) << "query vertex " << v << ' ' << scan->toString();
     }
     return candidates;
   }
-  void naiverun(const std::string& datagraph,const std::string& naive_querygraph)
-  {
+  void naiverun(const std::string& datagraph, const std::string& naive_querygraph) {
     Graph g(datagraph);
     QueryGraph q(naive_querygraph);
     std::vector<QueryVertexID> use_order;
     std::vector<bool> visited(q.getNumVertices());
-    getDFSOrder(use_order,q,0,visited);
+    getDFSOrder(use_order, q, 0, visited);
     auto candidates = naiveGetCandidateSets(g, q);
     std::vector<double> candidate_cardinality;
     candidate_cardinality.reserve(candidates.size());
@@ -140,13 +138,13 @@ class Benchmark {
       candidate_cardinality.push_back(size);
     }
     NaivePlanner planner(&q, &candidate_cardinality, GraphType::Normal);
-    ExecutionPlan* plan=planner.generatePlanWithoutCompression(use_order);
+    ExecutionPlan* plan = planner.generatePlanWithoutCompression(use_order);
     plan->setCandidateSets(candidates);
-		plan->printPhysicalPlan();
+    plan->printPhysicalPlan();
     plan->getOutputs().init(1).limit(1);
     batchDFSExecuteST(&g, plan);
     auto n_matches = plan->getOutputs().getCount();
-		if(n_matches)std::cout<<"MATCH!!!\n";
+    if (n_matches) std::cout << "MATCH!!!\n";
   }
   template <VertexCoverStrategy vcs>
   void run(const std::string& dataset, uint32_t query_size, const std::string& query_mode, uint32_t index,
@@ -745,11 +743,9 @@ int main(int argc, char** argv) {
     return 0;
   }
   if (FLAGS_naive_run == true) {
-	  FLAGS_vertex_cover = "all";
-		benchmark.naiverun(FLAGS_naive_datagraph,FLAGS_naive_querygraph);
-	}
-	else 
-  if (FLAGS_vertex_cover == "static") {
+    FLAGS_vertex_cover = "all";
+    benchmark.naiverun(FLAGS_naive_datagraph, FLAGS_naive_querygraph);
+  } else if (FLAGS_vertex_cover == "static") {
     benchmark.run<Static>(FLAGS_dataset, FLAGS_query_size, FLAGS_query_mode, FLAGS_query_index, out);
   } else if (FLAGS_vertex_cover == "all") {
     benchmark.run<All>(FLAGS_dataset, FLAGS_query_size, FLAGS_query_mode, FLAGS_query_index, out);
