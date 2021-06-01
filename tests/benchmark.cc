@@ -87,7 +87,7 @@ DEFINE_string(profile_file, "", "profile file");
 DEFINE_string(vertex_cover, "static", "Vertex cover strategy: static, eager, all");
 DEFINE_string(batch_file, "", "Batch query file");
 DEFINE_bool(bipartite_graph, false, "use bipartite graph or not");
-DEFINE_bool(naive_run,true,"naive run or not");
+DEFINE_bool(naive_run,false,"naive run or not");
 DEFINE_string(naive_datagraph,"/data/share/users/qlma/query-graph-output/query_dense_4_1.graph","data graph file path");
 DEFINE_string(naive_querygraph,"/data/share/users/qlma/query-graph-output/query_dense_4_1.graph","query graph file path");
 
@@ -116,6 +116,7 @@ class Benchmark {
     ExecutionConfig config;
     for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
       config.setInputSize(g.getVertexCardinalityByLabel(q.getVertexLabel(v)));
+			if(config.getInputSize()<=0)break;
       auto scan = circinus::Scan::newLDFScan(q.getVertexLabel(v), q.getVertexOutDegree(v), 0, config, 1);
       auto scan_ctx = scan->initScanContext(0);
       scan->scan(&g, &scan_ctx);
@@ -128,10 +129,9 @@ class Benchmark {
   {
     Graph g(datagraph);
     QueryGraph q(naive_querygraph);
-    std::vector<QueryVertexID> use_order(q.getNumVertices());
+    std::vector<QueryVertexID> use_order;
     std::vector<bool> visited(q.getNumVertices());
     getDFSOrder(use_order,q,0,visited);
-    for(int i=0;i<use_order.size();++i)use_order[i]=i;
     auto candidates = naiveGetCandidateSets(g, q);
     std::vector<double> candidate_cardinality;
     candidate_cardinality.reserve(candidates.size());
@@ -146,7 +146,7 @@ class Benchmark {
     plan->getOutputs().init(1).limit(1);
     batchDFSExecuteST(&g, plan);
     auto n_matches = plan->getOutputs().getCount();
-    LOG(INFO) << "Got "<<n_matches<<" matches.";
+		if(n_matches)std::cout<<"MATCH!!!\n";
   }
   template <VertexCoverStrategy vcs>
   void run(const std::string& dataset, uint32_t query_size, const std::string& query_mode, uint32_t index,
