@@ -129,6 +129,7 @@ class Benchmark {
     NaivePlanner planner(&q, &candidate_cardinality, GraphType::Normal);
     ExecutionPlan* plan=planner.generatePlanWithoutCompression(use_order);
     plan->setCandidateSets(candidates);
+		plan->printPhysicalPlan();
     plan->getOutputs().init(1).limit(1);
     batchDFSExecuteST(&g, plan);
     auto n_matches = plan->getOutputs().getCount();
