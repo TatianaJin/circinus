@@ -100,6 +100,17 @@ class Benchmark {
                                               "patents", "wordnet", "yeast", "youtube"};
 
  public:
+  void getDFSOrder(std::vector<QueryVertexID>& use_order,QueryGraph q,QueryVertexID i,std::vector<bool>& visited)
+  {
+    use_order.push_back(i);
+    visited[i]=1;
+    auto [vec,len]=q.getOutNeighbors(i);
+    for(uint32_t j=0;j<len;++j)
+    {
+      QueryVertexID nextv=vec[j];
+      if(!visited[nextv])getDFSOrder(use_order,q,nextv,visited);
+    }
+  }
   std::vector<std::vector<VertexID>> naiveGetCandidateSets(const Graph& g, const QueryGraph& q) {
     std::vector<std::vector<VertexID>> candidates(q.getNumVertices());
     ExecutionConfig config;
@@ -118,6 +129,8 @@ class Benchmark {
     Graph g(datagraph);
     QueryGraph q(naive_querygraph);
     std::vector<QueryVertexID> use_order(q.getNumVertices());
+    std::vector<bool> visited(q.getNumVertices());
+    getDFSOrder(use_order,q,0,visited);
     for(int i=0;i<use_order.size();++i)use_order[i]=i;
     auto candidates = naiveGetCandidateSets(g, q);
     std::vector<double> candidate_cardinality;
