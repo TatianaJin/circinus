@@ -13,20 +13,27 @@
 // limitations under the License.
 
 #include <algorithm>
+#include <memory>
 #include <vector>
 
-#include "ops/filters/cfl_filter.h"
+#include "exec/execution_config.h"
+#include "ops/filters/filter.h"
+#include "ops/logical/filter/cfl_filter.h"
+#include "ops/order/cfl_order.h"
 #include "utils/utils.h"
 
 namespace circinus {
 
-CFLFilter::CFLFilter(const QueryGraph* query_graph, const Graph* data_graph, QueryVertexID start_vertex)
-    : FilterBase(query_graph, data_graph) {
-  start_vertex_ = start_vertex;
+LogicalCFLFilter::LogicalCFLFilter(const GraphMetadata& metadata, const QueryGraph* query_graph,
+                                   const std::vector<VertexID>& candidate_size)
+    : LogicalNeighborhoodFilter(query_graph) {
+  CFLOrder cfl_order;
+  start_vertex_ = cfl_order.getStartVertex(metadata, query_graph, candidate_size);
+  LOG(INFO) << "start_vertex " << start_vertex_;
   uint32_t query_vertices_num = query_graph->getNumVertices();
   bfs_tree_.resize(query_vertices_num);
   bfs_order_.reserve(query_vertices_num);
-  bfs(query_graph, start_vertex, bfs_tree_, bfs_order_);
+  bfs(query_graph, start_vertex_, bfs_tree_, bfs_order_);
 
   std::vector<uint32_t> order_index(query_vertices_num);
   for (uint32_t i = 0; i < query_vertices_num; ++i) {
@@ -76,13 +83,16 @@ CFLFilter::CFLFilter(const QueryGraph* query_graph, const Graph* data_graph, Que
   }
 }
 
-void CFLFilter::Filter(std::vector<std::vector<VertexID>>& candidates) {
+std::vector<std::unique_ptr<NeighborhoodFilter>> LogicalCFLFilter::toPhysicalOperators(const GraphMetadata& metadata,
+                                                                                       ExecutionConfig& exec) {
+  std::vector<std::unique_ptr<NeighborhoodFilter>> ret;
   for (uint32_t i = 0; i < level_num_; ++i) {
     for (uint32_t j = level_offset_[i]; j < level_offset_[i + 1]; ++j) {
       QueryVertexID query_vertex = bfs_order_[j];
       TreeNode& node = bfs_tree_[query_vertex];
       if (node.bn_.size() > 0) {
-        pruneByPivotVertices(query_vertex, node.bn_, candidates);
+        ret.emplace_back(std::make_unique<NeighborhoodFilter>(exec, query_graph_, query_vertex, node.bn_));
+        // merge output operator
       }
     }
 
@@ -90,7 +100,8 @@ void CFLFilter::Filter(std::vector<std::vector<VertexID>>& candidates) {
       QueryVertexID query_vertex = bfs_order_[j];
       TreeNode& node = bfs_tree_[query_vertex];
       if (node.fn_.size() > 0) {
-        pruneByPivotVertices(query_vertex, node.fn_, candidates);
+        ret.emplace_back(std::make_unique<NeighborhoodFilter>(exec, query_graph_, query_vertex, node.fn_));
+        // merge output operator
       }
     }
   }
@@ -100,10 +111,13 @@ void CFLFilter::Filter(std::vector<std::vector<VertexID>>& candidates) {
       QueryVertexID query_vertex = bfs_order_[j];
       TreeNode& node = bfs_tree_[query_vertex];
       if (node.under_level_.size() > 0) {
-        pruneByPivotVertices(query_vertex, node.under_level_, candidates);
+        ret.emplace_back(std::make_unique<NeighborhoodFilter>(exec, query_graph_, query_vertex, node.under_level_));
+        // merge output operator
       }
     }
   }
+
+  return ret;
 }
 
 }  // namespace circinus

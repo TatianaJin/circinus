@@ -69,9 +69,8 @@ QueryVertexID CFLOrder::getStartVertex(const std::vector<QueryVertexID>& query_v
   return start_vertex;
 }
 
-QueryVertexID CFLOrder::getStartVertex(const Graph* data_graph, const QueryGraph* query_graph,
-                                       const std::vector<uint32_t>& candidate_size) {
-  GraphMetadata metadata(*data_graph);
+QueryVertexID CFLOrder::getStartVertex(const GraphMetadata& metadata, const QueryGraph* query_graph,
+                                       const std::vector<VertexID>& candidate_size) {
   auto root_candidates = getTopThree(metadata, query_graph);
   return getStartVertex(root_candidates, {candidate_size.begin(), candidate_size.end()}, *query_graph, metadata);
 }

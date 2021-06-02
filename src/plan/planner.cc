@@ -79,6 +79,7 @@ CandidatePruningPlan* Planner::generateCandidatePruningPlan() {
 }
 
 CandidatePruningPlan* Planner::updateCandidatePruningPlan(const std::vector<VertexID>* cardinality) {
+  auto& q = query_context_->query_graph;
   auto& strategy = query_context_->query_config.candidate_pruning_strategy;
   if (strategy == CandidatePruningStrategy::LDF || strategy == CandidatePruningStrategy::NLF) {
     for (uint32_t i = 0; i < cardinality->size(); ++i) {
@@ -93,18 +94,22 @@ CandidatePruningPlan* Planner::updateCandidatePruningPlan(const std::vector<Vert
     phase = candidate_pruning_plan_.completePhase();
   }
   if (phase == 3) {
-    // TODO(boyang): generate logical neighbor filter for CFL, DAF, TSO and GQL
+    auto& metadata = *query_context_->graph_metadata;
     switch (strategy) {
     case CandidatePruningStrategy::DAF: {
+      candidate_pruning_plan_.newDPISOFilter(&q, metadata, *cardinality);
       break;
     }
     case CandidatePruningStrategy::CFL: {
+      candidate_pruning_plan_.newCFLFilter(&q, metadata, *cardinality);
       break;
     }
     case CandidatePruningStrategy::GQL: {
+      candidate_pruning_plan_.newGQLFilter(&q);
       break;
     }
     case CandidatePruningStrategy::TSO: {
+      candidate_pruning_plan_.newTSOFilter(&q, metadata, *cardinality);
       break;
     }
     default:

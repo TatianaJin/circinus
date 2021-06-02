@@ -14,6 +14,9 @@
 
 #include "graph/compressed_subgraphs.h"
 
+#include <unordered_map>
+#include <unordered_set>
+
 #include "glog/logging.h"
 
 namespace circinus {

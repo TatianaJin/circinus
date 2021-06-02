@@ -23,8 +23,8 @@
 
 namespace circinus {
 
-uint32_t TSOOrder::getStartVertex(const Graph* data_graph, const QueryGraph* query_graph,
-                                  std::vector<uint32_t> candidate_size) {
+QueryVertexID TSOOrder::getStartVertex(const GraphMetadata& metadata, const QueryGraph* query_graph,
+                                       const std::vector<VertexID>& candidate_size) {
   auto rank_compare = [](std::pair<VertexID, double> l, std::pair<VertexID, double> r) { return l.second < r.second; };
 
   std::priority_queue<std::pair<VertexID, double>, std::vector<std::pair<VertexID, double>>, decltype(rank_compare)>
@@ -33,7 +33,7 @@ uint32_t TSOOrder::getStartVertex(const Graph* data_graph, const QueryGraph* que
   for (QueryVertexID query_vertex = 0; query_vertex < query_graph->getNumVertices(); ++query_vertex) {
     LabelID label = query_graph->getVertexLabel(query_vertex);
     double degree = query_graph->getVertexOutDegree(query_vertex);
-    uint32_t frequency = data_graph->getNumVerticesByLabel(label);
+    uint32_t frequency = metadata.getLabelFrequency(label);
     double rank = frequency / degree;
     rank_queue.push(std::make_pair(query_vertex, rank));
   }
@@ -43,7 +43,7 @@ uint32_t TSOOrder::getStartVertex(const Graph* data_graph, const QueryGraph* que
   }
 
   QueryVertexID start_vertex = 0;
-  double min_candidates_num = data_graph->getNumVertices() + 1;
+  double min_candidates_num = metadata.getNumVertices() + 1;
 
   while (!rank_queue.empty()) {
     QueryVertexID query_vertex = rank_queue.top().first;
@@ -54,8 +54,8 @@ uint32_t TSOOrder::getStartVertex(const Graph* data_graph, const QueryGraph* que
       }
     } else {
       LabelID label = query_graph->getVertexLabel(query_vertex);
-      uint32_t frequency = data_graph->getNumVerticesByLabel(label);
-      if (frequency / (double)data_graph->getNumVertices() <= 0.05) {
+      uint32_t frequency = metadata.getLabelFrequency(label);
+      if (frequency / (double)metadata.getNumVertices() <= 0.05) {
         if (candidate_size[query_vertex] < min_candidates_num) {
           min_candidates_num = candidate_size[query_vertex];
           start_vertex = query_vertex;

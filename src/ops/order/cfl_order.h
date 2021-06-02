@@ -25,8 +25,8 @@ namespace circinus {
 
 class CFLOrder : public OrderBase {
  public:
-  QueryVertexID getStartVertex(const Graph* data_graph_, const QueryGraph* query_graph,
-                               const std::vector<uint32_t>& candidate_size);
+  QueryVertexID getStartVertex(const GraphMetadata& metadata, const QueryGraph* query_graph,
+                               const std::vector<VertexID>& candidate_size) override;
 
   std::vector<QueryVertexID> getTopThree(const GraphMetadata& metadata, const QueryGraph* q);
 

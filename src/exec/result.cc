@@ -15,10 +15,12 @@
 #include "exec/result.h"
 
 #include <memory>
+#include <utility>
 
 #include "exec/scan_task.h"
 #include "exec/task.h"
 #include "exec/traverse_task.h"
+#include "utils/utils.h"
 
 namespace circinus {
 
@@ -30,11 +32,29 @@ std::unique_ptr<Result> Result::newExecutionResult() { return std::make_unique<E
 
 void CandidateResult::collect(TaskBase* task) {
   auto scan = dynamic_cast<ScanTask*>(task);
-  DCHECK(scan != nullptr);
+  if (scan == nullptr) {
+    return;
+  }
   auto& shard_candidates = scan->getScanContext().candidates;
   if (!shard_candidates.empty()) {
     candidates_[task->getTaskId()].push_back(std::move(shard_candidates));
   }
+}
+
+void CandidateResult::merge() {
+  merged_candidates_.reserve(candidates_.size());
+  for (uint32_t i = 0; i < candidates_.size(); ++i) {
+    for (uint32_t j = 0; j < candidates_[i].size(); ++j) {
+      merged_candidates_[i].insert(merged_candidates_[i].end(), candidates_[i][j].begin(), candidates_[i][j].end());
+    }
+  }
+}
+
+void CandidateResult::remove_invalid(QueryVertexID query_vertex) {
+  merged_candidates_[query_vertex].erase(
+      std::remove_if(merged_candidates_[query_vertex].begin(), merged_candidates_[query_vertex].end(),
+                     [invalid = INVALID_VERTEX_ID](VertexID vid) { return vid == invalid; }),
+      merged_candidates_[query_vertex].end());
 }
 
 void ExecutionResult::collect(TaskBase* task) {

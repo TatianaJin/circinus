@@ -14,27 +14,25 @@
 
 #pragma once
 
+#include <memory>
+#include <unordered_map>
 #include <vector>
 
+#include "exec/execution_config.h"
 #include "graph/graph.h"
 #include "graph/query_graph.h"
-#include "ops/filters/filter_base.h"
+#include "ops/logical/filter/filter.h"
 
 namespace circinus {
 
-class CFLFilter : public FilterBase {
- private:
-  QueryVertexID start_vertex_;
-  std::vector<TreeNode> bfs_tree_;
-  std::vector<QueryVertexID> bfs_order_;
-  std::vector<QueryVertexID> level_offset_;
-  uint32_t level_num_;
+class NeighborhoodFilter;
 
+class LogicalGQLFilter : public LogicalNeighborhoodFilter {
  public:
-  CFLFilter(const QueryGraph* query_graph, const Graph* data_graph, QueryVertexID start_vertex);
+  explicit LogicalGQLFilter(const QueryGraph* query_graph);
 
-  /** The records that passed the filter will remain in candidates */
-  void Filter(std::vector<std::vector<VertexID>>& candidates);
+  std::vector<std::unique_ptr<NeighborhoodFilter>> toPhysicalOperators(const GraphMetadata& metadata,
+                                                                       ExecutionConfig& exec) override;
 };
 
 }  // namespace circinus

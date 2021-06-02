@@ -15,6 +15,7 @@
 #include "ops/logical/scan/ldf_scan.h"
 
 #include <algorithm>
+#include <memory>
 
 #include "graph/graph_metadata.h"
 #include "ops/scans.h"

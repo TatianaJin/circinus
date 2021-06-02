@@ -32,6 +32,8 @@ class ScanTask : public TaskBase {
 
   ScanContext& getScanContext() { return scan_context_; }
 
+  const Graph* getDataGraph() const override { return graph_; }
+
   void run() override { scan_->scan(graph_, &scan_context_); }
 };
 

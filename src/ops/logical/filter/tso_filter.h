@@ -14,24 +14,33 @@
 
 #pragma once
 
+#include <memory>
 #include <unordered_map>
 #include <vector>
 
-#include "ops/filters/filter_base.h"
+#include "exec/execution_config.h"
+#include "graph/graph.h"
+#include "graph/graph_metadata.h"
+#include "graph/query_graph.h"
+#include "graph/tree_node.h"
+#include "ops/logical/filter/filter.h"
 
 namespace circinus {
 
-class TSOFilter : public FilterBase {
+class NeighborhoodFilter;  // forward declaration
+
+class LogicalTSOFilter : public LogicalNeighborhoodFilter {
  private:
   QueryVertexID start_vertex_;
   std::vector<TreeNode> tree_;
   std::vector<QueryVertexID> dfs_order_;
 
  public:
-  TSOFilter(const QueryGraph* query_graph, const Graph* data_graph, QueryVertexID start_vertex);
+  LogicalTSOFilter(const GraphMetadata& metadata, const QueryGraph* query_graph,
+                   const std::vector<VertexID>& candidate_size);
 
-  /** @returns The number of records that passed the filter and are added to output */
-  void Filter(std::vector<std::vector<VertexID>>& candidates);
+  std::vector<std::unique_ptr<NeighborhoodFilter>> toPhysicalOperators(const GraphMetadata& metadata,
+                                                                       ExecutionConfig& exec) override;
 };
 
 }  // namespace circinus

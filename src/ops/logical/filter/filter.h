@@ -34,10 +34,14 @@ class LogicalLocalFilter {
 };
 
 class LogicalNeighborhoodFilter {
+ protected:
+  const QueryGraph* query_graph_;
+
  public:
+  explicit LogicalNeighborhoodFilter(const QueryGraph* query_graph) : query_graph_(query_graph) {}
+
   virtual ~LogicalNeighborhoodFilter() {}
   virtual std::vector<std::unique_ptr<NeighborhoodFilter>> toPhysicalOperators(const GraphMetadata& metadata,
                                                                                ExecutionConfig& exec) = 0;
 };
-
 }  // namespace circinus
