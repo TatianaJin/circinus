@@ -38,17 +38,17 @@ class ExpandKeyToSetVertexOperator : public ExpandVertexOperator {
       : ExpandVertexOperator(parents, target_vertex, query_vertex_indices, same_label_key_indices,
                              same_label_set_indices, set_pruning_threshold, filter) {}
 
-  uint32_t expand(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size) override {
-    return expandInner<QueryType::Execute>(outputs, batch_size);
+  uint32_t expand(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size, TraverseContext* ctx) override {
+    return expandInner<QueryType::Execute>(outputs, batch_size, ctx);
   }
 
   uint32_t expandAndProfileInner(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size,
-                                 uint32_t query_type) override {
+                                 uint32_t query_type, TraverseContext* ctx) override {
     if (query_type == 1) {
-      return expandInner<QueryType::Profile>(outputs, batch_size);
+      return expandInner<QueryType::Profile>(outputs, batch_size, ctx);
     }
     CHECK_EQ(query_type, 2) << "unknown query type " << query_type;
-    return expandInner<QueryType::ProfileWithMiniIntersection>(outputs, batch_size);
+    return expandInner<QueryType::ProfileWithMiniIntersection>(outputs, batch_size, ctx);
   }
 
   std::string toString() const override {
@@ -65,29 +65,29 @@ class ExpandKeyToSetVertexOperator : public ExpandVertexOperator {
 
  protected:
   template <QueryType profile>
-  inline uint32_t expandInner(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size) {
+  inline uint32_t expandInner(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size, TraverseContext* ctx) {
     uint32_t output_num = 0;
-    for (; output_num < batch_size && input_index_ < current_inputs_->size(); ++input_index_) {
-      const auto& input = (*current_inputs_)[input_index_];
+    for (; output_num < batch_size && ctx->input_index_ < ctx->current_inputs_->size(); ++ctx->input_index_) {
+      const auto& input = (*(ctx->current_inputs_))[ctx->input_index_];
       auto exceptions = input.getExceptions(same_label_key_indices_, same_label_set_indices_);
       std::vector<VertexID> new_set;
       for (uint32_t i = 0; i < parents_.size(); ++i) {
         uint32_t key = query_vertex_indices_[parents_[i]];
         uint32_t key_vid = input.getKeyVal(key);
         if (i == 0) {
-          intersect(*candidates_, ((G*)current_data_graph_)->getOutNeighbors(key_vid, 0, i), &new_set, exceptions);
+          intersect(*candidates_, ((G*)(ctx->current_data_graph_))->getOutNeighbors(key_vid, 0, i), &new_set, exceptions);
           if
             constexpr(isProfileMode(profile)) {
-              updateIntersectInfo(candidates_->size() + ((G*)current_data_graph_)->getVertexOutDegree(key_vid, 0, i),
+              updateIntersectInfo(candidates_->size() + ((G*)(ctx->current_data_graph_))->getVertexOutDegree(key_vid, 0, i),
                                   new_set.size());
             }
         } else {
           auto new_set_size = new_set.size();
           (void)new_set_size;
-          intersectInplace(new_set, ((G*)current_data_graph_)->getOutNeighbors(key_vid, 0, i), &new_set);
+          intersectInplace(new_set, ((G*)(ctx->current_data_graph_))->getOutNeighbors(key_vid, 0, i), &new_set);
           if
             constexpr(isProfileMode(profile)) {
-              updateIntersectInfo(new_set_size + ((G*)current_data_graph_)->getVertexOutDegree(key_vid, 0, i),
+              updateIntersectInfo(new_set_size + ((G*)(ctx->current_data_graph_))->getVertexOutDegree(key_vid, 0, i),
                                   new_set.size());
             }
         }
@@ -97,7 +97,7 @@ class ExpandKeyToSetVertexOperator : public ExpandVertexOperator {
       }
       if
         constexpr(isProfileMode(profile)) {
-          total_num_input_subgraphs_ += (*current_inputs_)[input_index_].getNumSubgraphs();
+          ctx->total_num_input_subgraphs_ += (*(ctx->current_inputs_))[ctx->input_index_].getNumSubgraphs();
           // consider reuse of partial intersection results at each parent
           if (isProfileWithMiniIntersectionMode(profile)) {
             std::vector<VertexID> parent_tuple(parents_.size());
@@ -105,7 +105,7 @@ class ExpandKeyToSetVertexOperator : public ExpandVertexOperator {
             for (uint32_t i = 0; i < parents_.size(); ++i) {
               uint32_t key_vid = input.getKeyVal(query_vertex_indices_[parents_[i]]);
               parent_tuple[i] = key_vid;
-              distinct_intersection_count_ +=
+              ctx->distinct_intersection_count_ +=
                   parent_tuple_sets_[i].emplace((char*)parent_tuple.data(), (i + 1) * sizeof(VertexID)).second;
             }
           }

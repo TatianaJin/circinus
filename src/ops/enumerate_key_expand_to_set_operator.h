@@ -63,17 +63,17 @@ class EnumerateKeyExpandToSetOperator : public ExpandVertexOperator {
                                   const std::array<std::vector<uint32_t>, 2>& same_label_indices,
                                   std::vector<int>&& enumerated_key_pruning_indices, SubgraphFilter* filter);
 
-  uint32_t expand(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size) override {
-    return expandInner<QueryType::Execute>(outputs, batch_size);
+  uint32_t expand(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size, TraverseContext* ctx) override {
+    return expandInner<QueryType::Execute>(outputs, batch_size, ctx);
   }
 
   uint32_t expandAndProfileInner(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size,
-                                 uint32_t query_type) override {
+                                 uint32_t query_type, TraverseContext* ctx) override {
     if (query_type == 1) {
-      return expandInner<QueryType::Profile>(outputs, batch_size);
+      return expandInner<QueryType::Profile>(outputs, batch_size, ctx);
     }
     CHECK_EQ(query_type, 2) << "unknown query type " << query_type;
-    return expandInner<QueryType::ProfileWithMiniIntersection>(outputs, batch_size);
+    return expandInner<QueryType::ProfileWithMiniIntersection>(outputs, batch_size, ctx);
   }
 
   std::string toString() const override {

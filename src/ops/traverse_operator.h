@@ -112,6 +112,30 @@ inline void intersect(const std::vector<VertexID>& set1, const std::vector<Verte
 void intersectInplace(const std::vector<VertexID>& set1, const std::pair<const VertexID*, uint32_t>& set2,
                       std::vector<VertexID>* intersection);
 
+struct TraverseContext {
+  /* transient variables for recording the current inputs */
+  uint32_t input_index_ = 0;
+  const std::vector<CompressedSubgraphs>* current_inputs_ = nullptr;
+  const void* current_data_graph_ = nullptr;
+
+  uint32_t current_inputs_size_ = 0;
+
+  /* for profiling */
+  uint64_t total_input_size_ = 0;
+  uint64_t total_output_size_ = 0;
+  uint64_t total_num_input_subgraphs_ = 0;
+  uint64_t total_num_output_subgraphs_ = 0;
+  double total_time_in_milliseconds_ = 0;
+
+  // to be updated in derived class
+  uint64_t intersection_count_ = 0;
+  uint64_t total_intersection_input_size_ = 0;
+  uint64_t total_intersection_output_size_ = 0;
+  uint64_t distinct_intersection_count_ =
+      0;  // the minimal number of intersection needed if all intersection function call results can be cached
+}
+
+
 class TraverseOperator : public Operator {
  protected:
   const std::vector<VertexID>* candidates_ = nullptr;
@@ -124,22 +148,23 @@ class TraverseOperator : public Operator {
   SubgraphFilter* const subgraph_filter_ = nullptr;  // owned by the execution plan
 
   /* transient variables for recording the current inputs */
-  uint32_t input_index_ = 0;
-  const std::vector<CompressedSubgraphs>* current_inputs_ = nullptr;
-  const void* current_data_graph_ = nullptr;
+  [[deprecated]] /*wy*/ uint32_t input_index_ = 0;
+  [[deprecated]] /*wy*/ const std::vector<CompressedSubgraphs>* current_inputs_ = nullptr;
+  [[deprecated]] /*wy*/ const void* current_data_graph_ = nullptr;
 
   uint32_t current_inputs_size_ = 0;
+  
   /* for profiling */
-  uint64_t total_input_size_ = 0;
-  uint64_t total_output_size_ = 0;
-  uint64_t total_num_input_subgraphs_ = 0;
-  uint64_t total_num_output_subgraphs_ = 0;
-  double total_time_in_milliseconds_ = 0;
+  [[deprecated]] /*wy*/ uint64_t total_input_size_ = 0;
+  [[deprecated]] /*wy*/ uint64_t total_output_size_ = 0;
+  [[deprecated]] /*wy*/ uint64_t total_num_input_subgraphs_ = 0;
+  [[deprecated]] /*wy*/ uint64_t total_num_output_subgraphs_ = 0;
+  [[deprecated]] /*wy*/ double total_time_in_milliseconds_ = 0;
   // to be updated in derived class
-  uint64_t intersection_count_ = 0;
-  uint64_t total_intersection_input_size_ = 0;
-  uint64_t total_intersection_output_size_ = 0;
-  uint64_t distinct_intersection_count_ =
+  [[deprecated]] /*wy*/ uint64_t intersection_count_ = 0;
+  [[deprecated]] /*wy*/ uint64_t total_intersection_input_size_ = 0;
+  [[deprecated]] /*wy*/ uint64_t total_intersection_output_size_ = 0;
+  [[deprecated]] /*wy*/ uint64_t distinct_intersection_count_ =
       0;  // the minimal number of intersection needed if all intersection function call results can be cached
 
   std::vector<std::pair<bool, uint32_t>> matching_order_indices_;
@@ -159,11 +184,11 @@ class TraverseOperator : public Operator {
 
   inline virtual void setCandidateSets(const std::vector<VertexID>* candidates) { candidates_ = candidates; }
   inline const std::vector<VertexID>* getCandidateSet() const { return candidates_; }
-  inline const uint32_t getInputIndex() const { return input_index_; }
+  // inline const uint32_t getInputIndex() const { return input_index_; }
   inline const auto& getSameLabelKeyIndices() const { return same_label_key_indices_; }
   inline const auto& getSameLabelSetIndices() const { return same_label_set_indices_; }
   inline auto getSetPruningThreshold() const { return set_pruning_threshold_; }
-  inline auto getCurrentDataGraph() const { return current_data_graph_; }
+  //inline auto getCurrentDataGraph() const { return current_data_graph_; }
   inline QueryVertexID getTargetQueryVertex() const { return target_vertex_; }
 
   inline const auto& getMatchingOrderIndices() const { return matching_order_indices_; }
@@ -184,23 +209,24 @@ class TraverseOperator : public Operator {
   virtual std::vector<BipartiteGraph*> computeBipartiteGraphs(
       const Graph* g, const std::vector<std::vector<VertexID>>& candidate_sets) = 0;
 
-  virtual void input(const std::vector<CompressedSubgraphs>& inputs, const void* data_graph) {
-    current_inputs_ = &inputs;
-    input_index_ = 0;
-    current_data_graph_ = data_graph;
+  virtual void input(const std::vector<CompressedSubgraphs>& inputs, const void* data_graph, TraverseContext* ctx) {
+    ctx->current_inputs_ = &inputs;
+    ctx->input_index_ = 0;
+    ctx->current_data_graph_ = data_graph;
+  }
+  
+  virtual uint32_t expand(std::vector<CompressedSubgraphs>* outputs, uint32_t cap, TraverseContext* ctx) =0;
+
+  virtual void inputAndProfile(const std::vector<CompressedSubgraphs>& inputs, const void* data_graph, TraverseContext* ctx) {
+    input(inputs, data_graph, ctx);
+    ctx->current_inputs_size_ = inputs.size();
+    ctx->total_input_size_ += inputs.size();
   }
 
-  virtual uint32_t expand(std::vector<CompressedSubgraphs>* outputs, uint32_t cap) = 0;
-
-  virtual void inputAndProfile(const std::vector<CompressedSubgraphs>& inputs, const void* data_graph) {
-    input(inputs, data_graph);
-    current_inputs_size_ = inputs.size();
-    total_input_size_ += inputs.size();
-  }
-
-  uint32_t expandAndProfile(std::vector<CompressedSubgraphs>* outputs, uint32_t cap, uint32_t query_type) {
+  uint32_t expandAndProfile(std::vector<CompressedSubgraphs>* outputs, uint32_t cap, uint32_t query_type, TraverseContext* ctx) {
     auto start = std::chrono::high_resolution_clock::now();
-    auto n = expandAndProfileInner(outputs, cap, query_type);
+    auto n = expandAndProfileInner(outputs, cap, query_type, ctx);
+    //auto n = expandAndProfileInner(outputs, cap, query_type);
     auto stop = std::chrono::high_resolution_clock::now();
     total_time_in_milliseconds_ +=
         (std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start).count() / 1000000.0);
@@ -237,12 +263,12 @@ class TraverseOperator : public Operator {
     total_intersection_output_size_ += output_size;
   }
 
-  std::string toProfileString() const override {
+  std::string toProfileString(TraverseContext* ctx) const override {
     std::stringstream ss;
-    ss << toString() << ',' << total_time_in_milliseconds_ << ',' << getTotalInputSize() << ',' << total_output_size_
-       << ',' << total_num_input_subgraphs_ << ',' << total_num_output_subgraphs_ << ',' << intersection_count_ << ','
-       << total_intersection_input_size_ << ',' << total_intersection_output_size_ << ','
-       << distinct_intersection_count_;
+    ss << toString() << ',' << ctx->total_time_in_milliseconds_ << ',' << getTotalInputSize() << ',' << ctx->total_output_size_
+       << ',' << ctx->total_num_input_subgraphs_ << ',' << ctx->total_num_output_subgraphs_ << ',' << ctx->intersection_count_ << ','
+       << ctx->total_intersection_input_size_ << ',' << ctx->total_intersection_output_size_ << ','
+       << ctx->distinct_intersection_count_;
     return ss.str();
   }
 
