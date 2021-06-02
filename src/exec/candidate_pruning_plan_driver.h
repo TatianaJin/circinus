@@ -14,8 +14,10 @@
 
 #pragma once
 
+#include <memory>
 #include <vector>
 
+#include "exec/filter_task.h"
 #include "exec/plan_driver.h"
 #include "exec/result.h"
 #include "plan/candidate_pruning_plan.h"

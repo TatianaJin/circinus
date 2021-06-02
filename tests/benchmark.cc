@@ -32,6 +32,7 @@
 #include "graph/graph.h"
 #include "graph/query_graph.h"
 #include "ops/filters.h"
+#include "ops/logical_filters.h"
 #include "ops/operators.h"
 #include "ops/order.h"
 #include "ops/scans.h"
@@ -41,35 +42,38 @@
 #include "utils/flags.h"
 #include "utils/hashmap.h"
 #include "utils/profiler.h"
+#include "utils/utils.h"
 
 using circinus::CompressedSubgraphs;
 using circinus::ExecutionConfig;
 using circinus::ExecutionPlan;
 using circinus::Graph;
 using circinus::GraphType;
+using circinus::GraphMetadata;
 using circinus::NaivePlanner;
-using circinus::NLFFilter;
-using circinus::CFLFilter;
-using circinus::CFLOrder;
-using circinus::DPISOFilter;
-using circinus::OrderBase;
-using circinus::TSOOrder;
-using circinus::TSOFilter;
-using circinus::GQLFilter;
 using circinus::QueryGraph;
 using circinus::QueryVertexID;
 using circinus::Task;
 using circinus::ThreadPool;
 using circinus::VertexID;
 using circinus::Profiler;
-using circinus::DPISOFilter;
-using circinus::TSOOrder;
-using circinus::TSOFilter;
-using circinus::GQLFilter;
-using circinus::OrderBase;
 using circinus::CoverNode;
 using circinus::QueryType;
 using circinus::TraverseOperator;
+using circinus::INVALID_VERTEX_ID;
+
+// logical filter
+using circinus::LogicalCFLFilter;
+using circinus::LogicalGQLFilter;
+using circinus::LogicalNLFFilter;
+using circinus::LogicalTSOFilter;
+using circinus::LogicalDPISOFilter;
+using circinus::LogicalNeighborhoodFilter;
+
+// physical filter
+using circinus::NeighborhoodFilter;
+using circinus::NLFFilter;
+using circinus::GQLFilter;
 
 #define BATCH_SIZE FLAGS_batch_size
 #define toSeconds(start, end) \
@@ -140,7 +144,7 @@ class Benchmark {
  protected:
   std::vector<std::vector<VertexID>> getCandidateSets(const Graph& g, const QueryGraph& q) {
     std::vector<std::vector<VertexID>> candidates(q.getNumVertices());
-    std::vector<uint32_t> candidate_size(q.getNumVertices());
+    std::vector<VertexID> candidate_size(q.getNumVertices());
     ExecutionConfig config;
     for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
       config.setInputSize(g.getVertexCardinalityByLabel(q.getVertexLabel(v)));
@@ -154,50 +158,38 @@ class Benchmark {
       candidate_size[v] = candidates[v].size();
       LOG(INFO) << "query vertex " << v << ' ' << scan->toString();
     }
-    if (FLAGS_filter == "cfl") {
-      CFLOrder cfl_order;
-      QueryVertexID start_vertex = cfl_order.getStartVertex(&g, &q, candidate_size);
-      // LOG(INFO) << "cfl order get start vertex " << start_vertex;
-      CFLFilter cfl_filter(&q, &g, start_vertex);
-      cfl_filter.Filter(candidates);
-    } else if (FLAGS_filter == "dpiso") {
-      OrderBase dpiso_order;
-      QueryVertexID start_vertex = dpiso_order.getStartVertex(&g, &q, candidate_size);
-      // LOG(INFO) << "dpiso order get start vertex " << start_vertex;
-      DPISOFilter dpiso_filter(&q, &g, start_vertex);
-      dpiso_filter.Filter(candidates);
-    } else if (FLAGS_filter == "tso") {
-      TSOOrder tso_order;
-      QueryVertexID start_vertex = tso_order.getStartVertex(&g, &q, candidate_size);
-      // LOG(INFO) << "tso order get start vertex " << start_vertex;
-      TSOFilter tso_filter(&q, &g, start_vertex);
-      tso_filter.Filter(candidates);
-    } else if (FLAGS_filter == "gql") {
-      std::vector<std::vector<VertexID>> gql_candidates;
-      circinus::unordered_map<QueryVertexID, circinus::unordered_set<VertexID>> gql_map;
-      for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
-        circinus::unordered_set<VertexID> gql_set;
-        for (auto i : candidates[v]) {
-          gql_set.insert(i);
-        }
-        gql_map[v] = std::move(gql_set);
-      }
-      for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
-        GQLFilter gql_filter(&q, v, &gql_map);
-        gql_filter.preFilter(g, candidates[v]);
-      }
-      for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
-        GQLFilter gql_filter(&q, v, &gql_map);
-        std::vector<VertexID> tempvec;
-        gql_filter.Filter(g, candidates[v], &tempvec);
-        gql_candidates.push_back(std::move(tempvec));
-      }
-      return gql_candidates;
-    }
 
-    //  for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
-    //   LOG(INFO) << "vertex " << v << " " << candidate_size[v] << "/" << candidates[v].size();
-    //}
+    if (FLAGS_filter != "ldf" && FLAGS_filter != "nlf") {
+      auto metadata = GraphMetadata(g);
+      std::unique_ptr<LogicalNeighborhoodFilter> logical_filter;
+      if (FLAGS_filter == "cfl") {
+        logical_filter = std::make_unique<LogicalCFLFilter>(metadata, &q, candidate_size);
+      } else if (FLAGS_filter == "dpiso") {
+        logical_filter = std::make_unique<LogicalDPISOFilter>(metadata, &q, candidate_size);
+      } else if (FLAGS_filter == "tso") {
+        logical_filter = std::make_unique<LogicalTSOFilter>(metadata, &q, candidate_size);
+      } else if (FLAGS_filter == "gql") {
+        logical_filter = std::make_unique<LogicalGQLFilter>(&q);
+      }
+      auto physical_filters = logical_filter->toPhysicalOperators(metadata, config);
+      LOG(INFO) << "total number of physical filters: " << physical_filters.size() << '\n';
+      for (auto& filter : physical_filters) {
+        QueryVertexID query_vertex = filter->getQueryVertex();
+        filter->setInputSize(candidate_size[query_vertex]);
+        auto filter_ctx = filter->initFilterContext(0);
+        filter->filter(&g, &candidates, &filter_ctx);
+        candidates[query_vertex].erase(std::remove_if(candidates[query_vertex].begin(), candidates[query_vertex].end(),
+                                                      [invalid_vertex_id = INVALID_VERTEX_ID](VertexID & candidate) {
+                                                        return candidate == invalid_vertex_id;
+                                                      }),
+                                       candidates[query_vertex].end());
+        candidate_size[query_vertex] = candidates[query_vertex].size();
+        LOG(INFO) << query_vertex << " -------- " << candidate_size[query_vertex];
+      }
+      for (QueryVertexID i = 0; i < q.getNumVertices(); ++i) {
+        LOG(INFO) << "query vertex " << i << " candidate size: " << candidates[i].size() << '\n';
+      }
+    }
     return candidates;
   }
 

@@ -14,8 +14,12 @@
 
 #pragma once
 
+#include <memory>
 #include <string>
 #include <tuple>
+#include <unordered_map>
+#include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include "graph/query_graph.h"

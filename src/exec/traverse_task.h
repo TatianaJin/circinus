@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <memory>
+#include <utility>
 #include <vector>
 
 #include "exec/task.h"
@@ -32,6 +34,8 @@ class TraverseTask : public TaskBase {
  public:
   TraverseTask(QueryId query_id, TaskId task_id, uint32_t shard_id, TraverseOperator* traverse, const Graph* graph)
       : TaskBase(query_id, task_id), traverse_(traverse), graph_(graph) {}
+
+  const Graph* getDataGraph() const override { return graph_; }
 
   void run() override {
     // TODO(tatiana)
@@ -73,6 +77,8 @@ class TraverseChainTask : public TaskBase {
       candidates_[i] = std::move(candidates[i].front());
     }
   }
+
+  const Graph* getDataGraph() const override { return graph_; }
 
   void run() override {
     auto op = op_tree_->root();

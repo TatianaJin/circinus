@@ -17,8 +17,10 @@
 #include <chrono>
 #include <deque>
 #include <fstream>
+#include <memory>
 #include <string>
 #include <thread>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 

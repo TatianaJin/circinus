@@ -86,6 +86,9 @@ endif()
 add_executable(Circinus src/circinus_main.cc)
 target_link_libraries(Circinus circinus ${EXTERNAL_LIBRARY})
 
+add_executable(GraphToBinary src/tools/graph_to_binary_main.cc)
+target_link_libraries(GraphToBinary circinus ${EXTERNAL_LIBRARY})
+
 # Tests
 if (BUILD_TESTS)
   include(CTest)

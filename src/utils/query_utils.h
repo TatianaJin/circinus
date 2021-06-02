@@ -15,6 +15,8 @@
 #pragma once
 
 #include <string>
+#include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "graph/graph.h"

@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "graph/graph.h"
+#include "graph/graph_metadata.h"
 #include "graph/query_graph.h"
 #include "graph/types.h"
 
@@ -25,9 +26,9 @@ namespace circinus {
 
 class OrderBase {
  public:
-  virtual uint32_t getStartVertex(const Graph* data_graph, const QueryGraph* query_graph,
-                                  std::vector<uint32_t> candidate_size) {
-    double min_score = data_graph->getNumVertices();
+  virtual uint32_t getStartVertex(const GraphMetadata& metadata, const QueryGraph* query_graph,
+                                  const std::vector<VertexID>& candidate_size) {
+    double min_score = metadata.getNumVertices();
     QueryVertexID start_vertex = 0;
 
     for (QueryVertexID v = 0; v < query_graph->getNumVertices(); ++v) {

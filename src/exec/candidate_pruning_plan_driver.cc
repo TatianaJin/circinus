@@ -15,13 +15,16 @@
 #include "exec/candidate_pruning_plan_driver.h"
 
 #include <memory>
+#include <utility>
 #include <vector>
 
+#include "exec/filter_task.h"
 #include "exec/plan_driver.h"
 #include "exec/result.h"
 #include "exec/scan_task.h"
 #include "plan/candidate_pruning_plan.h"
 #include "utils/query_utils.h"
+#include "utils/flags.h"
 
 namespace circinus {
 
@@ -45,22 +48,58 @@ void CandidatePruningPlanDriver::init(QueryId qid, QueryContext* query_ctx, Exec
       DLOG(INFO) << "Query " << qid << " Task " << task_id << " " << scan->getParallelism() << " shard(s)";
       operators_.push_back(std::move(scan));
     }
-  } else if (plan_->getPhase() == 2) {
-    // TODO(tatiana): inline local filters
-  } else {
-    // TODO(tatiana):
+  } else if (plan_->getPhase() == 3) {
+    auto filters = plan_->getFilterOperators(*query_ctx->graph_metadata, ctx.first);
+    task_counters_.resize(filters.size());
+    uint32_t task_id = 0;
+    auto& filter = filters[task_id];
+    // Parallelism
+    QueryVertexID query_vertex = filter->getQueryVertex();
+    uint64_t input_size = (*result_->getMergedCandidates())[query_vertex].size();
+    filter->setInputSize(input_size);
+    filter->setParallelism(input_size / FLAGS_batch_size);
+    task_counters_[task_id] = filter->getParallelism();
+    for (uint32_t i = 0; i < filter->getParallelism(); ++i) {
+
+      task_queue.putTask(new NeighborhoodFilterTask(qid, task_id, i, filter.get(), query_ctx->data_graph,
+                                                    result_->getMergedCandidates()));
+    }
+    for (auto& filter : filters) {
+      operators_.push_back(std::move(filter));
+    }
   }
 }
 
 void CandidatePruningPlanDriver::taskFinish(TaskBase* task, ThreadsafeTaskQueue* task_queue,
                                             ThreadsafeQueue<ServerEvent>* reply_queue) {
-  if (--task_counters_[task->getTaskId()] == 0 && ++n_finished_tasks_ == task_counters_.size()) {
-    if (plan_->getPhase() == 1 || plan_->getPhase() == 2) {
-      candidate_cardinality_ = result_->getCandidateCardinality();
-      reply_queue->push(std::move(*finish_event_));
-      reset();
-    } else {
-      // TODO(tatiana): more tasks for iterative pruning until finish
+  // TODO(BYLI) package merge operation and remove_invalid operation into tasks, determine the parallelism
+  if (--task_counters_[task->getTaskId()] == 0) {
+    if (++n_finished_tasks_ == task_counters_.size()) {
+      if (plan_->getPhase() == 1 || plan_->getPhase() == 2) {
+        candidate_cardinality_ = result_->getCandidateCardinality();
+        result_->merge();
+        reply_queue->push(std::move(*finish_event_));
+        reset();
+      } else {
+        result_->remove_invalid(dynamic_cast<NeighborhoodFilterTask*>(task)->getFilter()->getQueryVertex());
+        reply_queue->push(std::move(*finish_event_));
+        reset();
+      }
+      return;
+    }
+
+    if (plan_->getPhase() == 3) {
+      result_->remove_invalid(dynamic_cast<NeighborhoodFilterTask*>(task)->getFilter()->getQueryVertex());
+      auto filter = dynamic_cast<NeighborhoodFilter*>(operators_[n_finished_tasks_].get());
+      QueryVertexID query_vertex = filter->getQueryVertex();
+      uint64_t input_size = (*result_->getMergedCandidates())[query_vertex].size();
+      filter->setInputSize(input_size);
+      filter->setParallelism(input_size / FLAGS_batch_size);
+      task_counters_[n_finished_tasks_] = filter->getParallelism();
+      for (uint32_t i = 0; i < filter->getParallelism(); ++i) {
+        task_queue->putTask(new NeighborhoodFilterTask(task->getQueryId(), n_finished_tasks_, i, filter,
+                                                       task->getDataGraph(), result_->getMergedCandidates()));
+      }
     }
   }
 }

@@ -14,6 +14,9 @@
 
 #include "exec/execution_plan_driver.h"
 
+#include <memory>
+#include <utility>
+
 #include "exec/plan_driver.h"
 #include "exec/result.h"
 #include "exec/traverse_task.h"

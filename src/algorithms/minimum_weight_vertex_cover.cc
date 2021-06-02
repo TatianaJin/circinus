@@ -16,6 +16,7 @@
 
 #include <cassert>
 #include <deque>
+#include <utility>
 #include <vector>
 
 #include "graph/query_graph.h"

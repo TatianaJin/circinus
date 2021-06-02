@@ -14,7 +14,9 @@
 
 #pragma once
 
+#include <memory>
 #include <thread>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 

@@ -60,7 +60,7 @@ jobs:
       shell: bash
 
     - name: CppLint
-      run: ${{github.workspace}}/scripts/lint.py | grep "Total errors found. 0"
+      run: [[ $(${{github.workspace}}/scripts/lint.py | grep "Total errors found.") == 0 ]]
       shell: bash
 
     - name: Create Build Environment

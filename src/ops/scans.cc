@@ -16,6 +16,7 @@
 
 #include <numeric>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "exec/execution_config.h"
