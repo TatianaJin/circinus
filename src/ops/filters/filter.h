@@ -122,10 +122,6 @@ class NeighborhoodFilter : public Operator {
 
   inline void setInputSize(uint64_t filter_size) { filter_size_ = filter_size; }
 
-  inline uint32_t getParallelism() const { return parallelism_; }
-
-  inline void setParallelism(uint32_t parallelism) { parallelism_  = parallelism; }
-
   inline QueryVertexID getQueryVertex() const { return query_vertex_; }
 
   inline FilterContext initFilterContext(uint32_t task_idx) const {

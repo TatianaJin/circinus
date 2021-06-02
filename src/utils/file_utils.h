@@ -73,14 +73,26 @@ class Path {
 
 #endif  // HAS_FILESYSTEM
 
-inline std::ifstream openFile(const std::string& path) {
-  std::ifstream infile(path);
+inline std::ifstream openFile(const std::string& path, std::ios::openmode openmode = std::ios::in) {
+  std::ifstream infile(path, openmode);
   if (!infile.is_open()) {
     std::stringstream ss;
     ss << std::strerror(errno) << ": " << path;
     throw std::runtime_error(ss.str());
   }
+  infile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
   return infile;
+}
+
+inline std::ofstream openOutputFile(const std::string& path, std::ios::openmode openmode = std::ios::out) {
+  std::ofstream outfile(path, openmode);
+  if (!outfile.is_open()) {
+    std::stringstream ss;
+    ss << std::strerror(errno) << ": " << path;
+    throw std::runtime_error(ss.str());
+  }
+  outfile.exceptions(std::ofstream::failbit | std::ofstream::badbit);
+  return outfile;
 }
 
 }  // namespace circinus

@@ -11,11 +11,15 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
+#include <chrono>
+
 #include "./metis.h"
 #include "gflags/gflags.h"
 #include "glog/logging.h"
-#include "graph/graph.h"
 #include "gtest/gtest.h"
+
+#include "graph/graph.h"
 
 using circinus::Graph;
 /*
@@ -35,8 +39,8 @@ TEST(TestMetis, SimpleGraph) {
   idx_t part[9];
   printf("%d\n",
          METIS_PartGraphKway(&nvtxs, &ncon, xadj, adjncy, NULL, NULL, NULL, &nparts, NULL, NULL, NULL, &objval, part));
-  printf("cut-edge count=%d\n", objval);
-  for (int i = 0; i < 9; ++i) printf("%d ", part[i]);
+  printf("cut-edge count=%ld\n", objval);
+  for (int i = 0; i < 9; ++i) printf("%ld ", part[i]);
   printf("\n");
 }
 
@@ -52,13 +56,16 @@ void metisTest(std::string dataset, idx_t nparts) {
   idx_t ncon = 1;
   idx_t objval;
   idx_t *part = new idx_t[nvtxs];
+  auto start = std::chrono::steady_clock::now();
   // please refer to https://github.com/b3ng1998/METIS/blob/master/manual/manual.pdf
   auto res =
       METIS_PartGraphKway(&nvtxs, &ncon, xadj, adjncy, NULL, NULL, NULL, &nparts, NULL, NULL, NULL, &objval, part);
+  auto end = std::chrono::steady_clock::now();
+  printf("time = %ldms\n", std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count());
   EXPECT_EQ(METIS_OK, res);
-  auto objval1 = g.getMetisParts(nparts);
+  auto[dummy, objval1] = g.getMetisParts(nparts);
   EXPECT_EQ(objval1, objval);
-  printf("nparts=%d, cut-edge count=%d\n", nparts, objval);
+  printf("nparts=%ld, cut-edge count=%ld\n", nparts, objval);
 }
 void metisTestInList(std::string dataset) {
   for (auto nparts : nparts_list) metisTest(dataset, nparts);
