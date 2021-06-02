@@ -132,7 +132,10 @@ class CircinusServer {
     }
     auto start_loading = std::chrono::steady_clock::now();
     Graph data_graph;
-    data_graph.loadCompressed(input);
+    data_graph.loadUndirectedGraphFromBinary(input);
+    data_graph.buildLabelIndex();  // TODO(tatiana): construct label index only when suitable
+    auto memory = data_graph.getMemoryUsage();
+    LOG(INFO) << "graph " << name << " takes " << memory.first / 1024 / 1024 << "MB";
     GraphMetadata meta(data_graph);  // TODO(tatiana): more statistics, support partitioned graph
     auto end_loading = std::chrono::steady_clock::now();
     data_graphs_.insert({name, std::make_pair(data_graph, meta)});

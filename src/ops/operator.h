@@ -37,8 +37,8 @@ class Operator {
   virtual std::string toProfileString() const { return toString(); }
 
   inline uint32_t getParallelism() const { return parallelism_; }
-  
-  inline void setParallelism(uint32_t parallelism) { parallelism_  = parallelism; }
+
+  inline void setParallelism(uint32_t parallelism) { parallelism_ = parallelism; }
 
   virtual Operator* clone() const { return nullptr; }
 };

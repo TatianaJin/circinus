@@ -125,7 +125,7 @@ class Benchmark {
     std::ifstream input(FLAGS_data_dir + "/" + graph_path + ".bin", std::ios::binary);
     if (input.is_open()) {
       auto start_loading = std::chrono::steady_clock::now();
-      data_graph.loadCompressed(input);
+      data_graph.loadUndirectedGraphFromBinary(input);
       auto end_loading = std::chrono::steady_clock::now();
       LOG(INFO) << "========================";
       load_time = toSeconds(start_loading, end_loading);

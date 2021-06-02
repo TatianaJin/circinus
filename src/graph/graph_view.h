@@ -39,16 +39,16 @@ class GraphView {
   /**
    * nbr_label Hint of the label of out neighbors. The results do not guarantee that the hint is used.
    */
-  inline VertexID getVertexOutDegree(VertexID id, LabelID nbr_label, uint32_t graph_idx) const {
-    return graphs_[graph_idx]->getVertexOutDegree(id, nbr_label);
+  inline VertexID getVertexOutDegreeWithHint(VertexID id, LabelID nbr_label, uint32_t graph_idx) const {
+    return graphs_[graph_idx]->getVertexOutDegreeWithHint(id, nbr_label);
   }
 
   /**
    * nbr_label Hint of the label of out neighbors. The results do not guarantee that the hint is used.
    */
-  inline std::pair<const VertexID*, uint32_t> getOutNeighbors(VertexID id, LabelID nbr_label,
-                                                              uint32_t graph_idx) const {
-    return graphs_[graph_idx]->getOutNeighbors(id, nbr_label);
+  inline std::pair<const VertexID*, uint32_t> getOutNeighborsWithHint(VertexID id, LabelID nbr_label,
+                                                                      uint32_t graph_idx) const {
+    return graphs_[graph_idx]->getOutNeighborsWithHint(id, nbr_label);
   }
 };
 

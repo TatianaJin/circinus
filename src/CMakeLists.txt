@@ -29,6 +29,8 @@ set(circinus_exec_sources
 set(circinus_graph_sources
   ${PROJECT_SOURCE_DIR}/src/graph/compressed_subgraphs.cc
   ${PROJECT_SOURCE_DIR}/src/graph/graph.cc
+  ${PROJECT_SOURCE_DIR}/src/graph/graph_base.cc
+  ${PROJECT_SOURCE_DIR}/src/graph/partitioned_graph.cc
   ${PROJECT_SOURCE_DIR}/src/graph/query_graph.cc
 )
 set(circinus_ops_sources
