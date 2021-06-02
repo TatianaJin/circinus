@@ -120,9 +120,11 @@ class NeighborhoodFilter : public Operator {
         pivot_vertices_({pivot_vertex}),
         name_(std::move(name)) {}
 
-  inline void setFilterSize(VertexID filter_size) { filter_size_ = filter_size; }
+  inline void setInputSize(uint64_t filter_size) { filter_size_ = filter_size; }
 
   inline uint32_t getParallelism() const { return parallelism_; }
+
+  inline void setParallelism(uint32_t parallelism) { parallelism_  = parallelism; }
 
   inline QueryVertexID getQueryVertex() const { return query_vertex_; }
 
@@ -142,7 +144,6 @@ class NeighborhoodFilter : public Operator {
     for (uint32_t i = ctx->offset; i < ctx->end; ++i) {
       VertexID& candidate = (*candidates)[query_vertex_][i];
       const auto candidate_nbrs = g->getOutNeighbors(candidate);
-      bool still_candidate = true;
       for (QueryVertexID pivot_vertex : pivot_vertices_) {
         if (!intersectionNotNull(candidate_nbrs, std::make_pair((*candidates)[pivot_vertex].data(),
                                                                 (uint32_t)(*candidates)[pivot_vertex].size()))) {

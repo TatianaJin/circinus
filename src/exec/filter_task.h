@@ -40,7 +40,7 @@ class NeighborhoodFilterTask : public TaskBase {
 
   FilterContext& getFilterContext() { return filter_context_; }
 
-  const NeighborhoodFilter* getFilter() { return filter_; }
+  const NeighborhoodFilter* getFilter() const { return filter_; }
 
   const Graph* getDataGraph() const override { return graph_; }
 

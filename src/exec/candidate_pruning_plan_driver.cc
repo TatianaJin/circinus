@@ -24,6 +24,7 @@
 #include "exec/scan_task.h"
 #include "plan/candidate_pruning_plan.h"
 #include "utils/query_utils.h"
+#include "utils/flags.h"
 
 namespace circinus {
 
@@ -52,11 +53,19 @@ void CandidatePruningPlanDriver::init(QueryId qid, QueryContext* query_ctx, Exec
     task_counters_.resize(filters.size());
     uint32_t task_id = 0;
     auto& filter = filters[task_id];
-
+    // Parallelism
+    QueryVertexID query_vertex = filter->getQueryVertex();
+    uint64_t input_size = (*result_->getMergedCandidates())[query_vertex].size();
+    filter->setInputSize(input_size);
+    filter->setParallelism(input_size / FLAGS_batch_size);
     task_counters_[task_id] = filter->getParallelism();
     for (uint32_t i = 0; i < filter->getParallelism(); ++i) {
+
       task_queue.putTask(new NeighborhoodFilterTask(qid, task_id, i, filter.get(), query_ctx->data_graph,
                                                     result_->getMergedCandidates()));
+    }
+    for (auto& filter : filters) {
+      operators_.push_back(std::move(filter));
     }
   }
 }
@@ -82,6 +91,10 @@ void CandidatePruningPlanDriver::taskFinish(TaskBase* task, ThreadsafeTaskQueue*
     if (plan_->getPhase() == 3) {
       result_->remove_invalid(dynamic_cast<NeighborhoodFilterTask*>(task)->getFilter()->getQueryVertex());
       auto filter = dynamic_cast<NeighborhoodFilter*>(operators_[n_finished_tasks_].get());
+      QueryVertexID query_vertex = filter->getQueryVertex();
+      uint64_t input_size = (*result_->getMergedCandidates())[query_vertex].size();
+      filter->setInputSize(input_size);
+      filter->setParallelism(input_size / FLAGS_batch_size);
       task_counters_[n_finished_tasks_] = filter->getParallelism();
       for (uint32_t i = 0; i < filter->getParallelism(); ++i) {
         task_queue->putTask(new NeighborhoodFilterTask(task->getQueryId(), n_finished_tasks_, i, filter,

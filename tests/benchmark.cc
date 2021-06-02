@@ -122,16 +122,16 @@ class Benchmark {
 
   void loadDataset(Graph& data_graph, const std::string& dataset, double& load_time) {
     auto graph_path = dataset + "/data_graph/" + dataset + ".graph";
-    // std::ifstream input(FLAGS_data_dir + "/" + graph_path + ".bin", std::ios::binary);
-    // if (input.is_open()) {
-    //   auto start_loading = std::chrono::steady_clock::now();
-    //   data_graph.loadCompressed(input);
-    //   auto end_loading = std::chrono::steady_clock::now();
-    //   LOG(INFO) << "========================";
-    //   load_time = toSeconds(start_loading, end_loading);
-    //   LOG(INFO) << "graph " << graph_path << ".bin load time " << load_time;
-    //   return;
-    // }
+    std::ifstream input(FLAGS_data_dir + "/" + graph_path + ".bin", std::ios::binary);
+    if (input.is_open()) {
+      auto start_loading = std::chrono::steady_clock::now();
+      data_graph.loadCompressed(input);
+      auto end_loading = std::chrono::steady_clock::now();
+      LOG(INFO) << "========================";
+      load_time = toSeconds(start_loading, end_loading);
+      LOG(INFO) << "graph " << graph_path << ".bin load time " << load_time;
+      return;
+    }
     auto start_loading = std::chrono::steady_clock::now();
     data_graph = Graph(FLAGS_data_dir + "/" + graph_path);
     auto end_loading = std::chrono::steady_clock::now();
@@ -175,7 +175,7 @@ class Benchmark {
       LOG(INFO) << "total number of physical filters: " << physical_filters.size() << '\n';
       for (auto& filter : physical_filters) {
         QueryVertexID query_vertex = filter->getQueryVertex();
-        filter->setFilterSize(candidate_size[query_vertex]);
+        filter->setInputSize(candidate_size[query_vertex]);
         auto filter_ctx = filter->initFilterContext(0);
         filter->filter(&g, &candidates, &filter_ctx);
         candidates[query_vertex].erase(std::remove_if(candidates[query_vertex].begin(), candidates[query_vertex].end(),
