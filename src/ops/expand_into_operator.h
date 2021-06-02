@@ -15,7 +15,11 @@
 #pragma once
 
 #include <chrono>
+#include <memory>
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include "graph/query_graph.h"

@@ -15,6 +15,8 @@
 #pragma once
 
 #include <algorithm>
+#include <string>
+#include <utility>
 #include <vector>
 
 #include "exec/execution_config.h"
@@ -43,8 +45,8 @@ class NeighborhoodFilter : public Operator {
   VertexID filter_size_ = 0;
 
  private:
-  inline bool intersection_not_null_bs(const std::pair<const VertexID*, uint32_t>& set1,
-                                       const std::pair<const VertexID*, uint32_t>& set2) const {
+  inline bool intersectionNotNullBS(const std::pair<const VertexID*, uint32_t>& set1,
+                                    const std::pair<const VertexID*, uint32_t>& set2) const {
     if (set1.second <= set2.second) {
       auto lower_bound = set2.first;
       for (uint32_t i = 0; i < set1.second; ++i) {
@@ -60,14 +62,15 @@ class NeighborhoodFilter : public Operator {
         }
       }
     } else {
-      return intersection_not_null_bs(set2, set1);
+      return intersectionNotNullBS(set2, set1);
     }
+    return false;
   }
 
-  inline bool intersection_not_null(const std::pair<const VertexID*, uint32_t>& set1,
-                                    const std::pair<const VertexID*, uint32_t>& set2) const {
+  inline bool intersectionNotNull(const std::pair<const VertexID*, uint32_t>& set1,
+                                  const std::pair<const VertexID*, uint32_t>& set2) const {
     if (std::max(set1.second, set2.second) >= 32) {
-      return intersection_not_null_bs(set1, set2);
+      return intersectionNotNullBS(set1, set2);
     }
     if (set1.second <= set2.second) {
       uint32_t set2_index = 0;
@@ -85,8 +88,9 @@ class NeighborhoodFilter : public Operator {
         }
       }
     } else {
-      return intersection_not_null(set2, set1);
+      return intersectionNotNull(set2, set1);
     }
+    return false;
   }
 
  public:
@@ -116,8 +120,12 @@ class NeighborhoodFilter : public Operator {
         pivot_vertices_({pivot_vertex}),
         name_(std::move(name)) {}
 
+  inline void setFilterSize(VertexID filter_size) { filter_size_ = filter_size; }
+
   inline uint32_t getParallelism() const { return parallelism_; }
+
   inline QueryVertexID getQueryVertex() const { return query_vertex_; }
+
   inline FilterContext initFilterContext(uint32_t task_idx) const {
     DCHECK_LT(task_idx, parallelism_);
     auto chunk_size = filter_size_ / parallelism_;
@@ -125,20 +133,21 @@ class NeighborhoodFilter : public Operator {
     if (task_idx < filter_size_ % parallelism_) {
       return FilterContext((chunk_size + 1) * task_idx, chunk_size + 1);
     }
+    LOG(INFO) << filter_size_;
     return FilterContext(chunk_size * task_idx + (filter_size_ % parallelism_), chunk_size);
   }
 
   virtual void filter(const Graph* g, std::vector<std::vector<VertexID>>* candidates, FilterContext* ctx) const {
+    CHECK_LE(ctx->end, (*candidates)[query_vertex_].size()) << ctx->end << "  " << (*candidates)[query_vertex_].size();
     for (uint32_t i = ctx->offset; i < ctx->end; ++i) {
       VertexID& candidate = (*candidates)[query_vertex_][i];
       const auto candidate_nbrs = g->getOutNeighbors(candidate);
       bool still_candidate = true;
       for (QueryVertexID pivot_vertex : pivot_vertices_) {
-        still_candidate &= intersection_not_null(
-            candidate_nbrs,
-            std::make_pair((*candidates)[pivot_vertex].data(), (uint32_t)(*candidates)[pivot_vertex].size()));
-        if (!still_candidate) {
+        if (!intersectionNotNull(candidate_nbrs, std::make_pair((*candidates)[pivot_vertex].data(),
+                                                                (uint32_t)(*candidates)[pivot_vertex].size()))) {
           candidate = INVALID_VERTEX_ID;
+          break;
         }
       }
     }

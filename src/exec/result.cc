@@ -15,6 +15,7 @@
 #include "exec/result.h"
 
 #include <memory>
+#include <utility>
 
 #include "exec/scan_task.h"
 #include "exec/task.h"
@@ -44,10 +45,7 @@ void CandidateResult::merge() {
   merged_candidates_.reserve(candidates_.size());
   for (uint32_t i = 0; i < candidates_.size(); ++i) {
     for (uint32_t j = 0; j < candidates_[i].size(); ++j) {
-      merged_candidates_[i].reserve(merged_candidates_.size() + candidates_[i][j].size());
-      for (auto& candidate : candidates_[i][j]) {
-        merged_candidates_.emplace_back(std::move(candidate));
-      }
+      merged_candidates_[i].insert(merged_candidates_[i].end(), candidates_[i][j].begin(), candidates_[i][j].end());
     }
   }
 }

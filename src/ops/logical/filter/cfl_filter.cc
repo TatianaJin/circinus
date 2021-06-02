@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include <algorithm>
+#include <memory>
 #include <vector>
 
 #include "exec/execution_config.h"
@@ -28,6 +29,7 @@ LogicalCFLFilter::LogicalCFLFilter(const GraphMetadata& metadata, const QueryGra
     : LogicalNeighborhoodFilter(query_graph) {
   CFLOrder cfl_order;
   start_vertex_ = cfl_order.getStartVertex(metadata, query_graph, candidate_size);
+  LOG(INFO) << "start_vertex " << start_vertex_;
   uint32_t query_vertices_num = query_graph->getNumVertices();
   bfs_tree_.resize(query_vertices_num);
   bfs_order_.reserve(query_vertices_num);

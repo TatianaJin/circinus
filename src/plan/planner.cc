@@ -94,7 +94,6 @@ CandidatePruningPlan* Planner::updateCandidatePruningPlan(const std::vector<Vert
     phase = candidate_pruning_plan_.completePhase();
   }
   if (phase == 3) {
-    // TODO(boyang): generate logical neighbor filter for CFL, DAF, TSO and GQL
     auto& metadata = *query_context_->graph_metadata;
     switch (strategy) {
     case CandidatePruningStrategy::DAF: {

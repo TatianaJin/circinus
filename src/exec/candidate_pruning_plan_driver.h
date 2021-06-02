@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <memory>
 #include <vector>
 
 #include "exec/filter_task.h"
@@ -28,7 +29,6 @@ class CandidatePruningPlanDriver : public PlanDriver {
   CandidatePruningPlan* plan_;
   CandidateResult* result_;  // owned by ExecutorManager
   std::vector<VertexID> candidate_cardinality_;
-  std::vector<std::vector<std::unique_ptr<NeighborhoodFilterTask>>> tasks_;
 
  public:
   explicit CandidatePruningPlanDriver(CandidatePruningPlan* plan) : plan_(plan) {}

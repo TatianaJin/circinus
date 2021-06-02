@@ -14,6 +14,8 @@
 
 #include "ops/logical/filter/tso_filter.h"
 
+#include <memory>
+
 #include "ops/filters/filter.h"
 #include "ops/order/tso_order.h"
 #include "utils/utils.h"
@@ -39,12 +41,15 @@ std::vector<std::unique_ptr<NeighborhoodFilter>> LogicalTSOFilter::toPhysicalOpe
       continue;
     }
     TreeNode& node = tree_[query_vertex];
+    LOG(INFO) << query_vertex << " " << node.parent_;
     ret.emplace_back(std::make_unique<NeighborhoodFilter>(exec, query_graph_, query_vertex, node.parent_));
   }
 
   for (auto it = dfs_order_.rbegin(); it != dfs_order_.rend(); ++it) {
     TreeNode& node = tree_[*it];
-    ret.emplace_back(std::make_unique<NeighborhoodFilter>(exec, query_graph_, *it, node.children_));
+    if (node.children_.size() > 0) {
+      ret.emplace_back(std::make_unique<NeighborhoodFilter>(exec, query_graph_, *it, node.children_));
+    }
   }
 
   return ret;

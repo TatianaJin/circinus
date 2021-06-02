@@ -14,11 +14,13 @@
 
 #pragma once
 
+#include <memory>
 #include <vector>
 
 #include "exec/execution_config.h"
 #include "graph/graph.h"
 #include "graph/query_graph.h"
+#include "graph/tree_node.h"
 #include "ops/logical/filter/filter.h"
 
 namespace circinus {

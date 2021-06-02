@@ -71,19 +71,22 @@ class CandidatePruningPlan {
   const auto& getScanQueryVertices() const { return scan_.getQueryVertices(); }
 
   void newCFLFilter(const QueryGraph* q, const GraphMetadata& metadata, const std::vector<VertexID>& candidate_size) {
-    neighbor_filters_.push_back(std::make_unique<LogicalCFLFilter>(metadata, q, candidate_size));
+    neighbor_filters_.emplace_back(std::make_unique<LogicalCFLFilter>(metadata, q, candidate_size));
   }
 
   void newDPISOFilter(const QueryGraph* q, const GraphMetadata& metadata, const std::vector<VertexID>& candidate_size) {
-    neighbor_filters_.push_back(std::make_unique<LogicalDPISOFilter>(metadata, q, candidate_size));
+    neighbor_filters_.emplace_back(std::make_unique<LogicalDPISOFilter>(metadata, q, candidate_size));
   }
 
   void newTSOFilter(const QueryGraph* q, const GraphMetadata& metadata, const std::vector<VertexID>& candidate_size) {
-    neighbor_filters_.push_back(std::make_unique<LogicalTSOFilter>(metadata, q, candidate_size));
+    neighbor_filters_.emplace_back(std::make_unique<LogicalTSOFilter>(metadata, q, candidate_size));
   }
 
   void newGQLFilter(const QueryGraph* q) { neighbor_filters_.push_back(std::make_unique<LogicalGQLFilter>(q)); }
 
+  /**
+   * The returned filters should be executed sequentially, while each filter is executed in parallel.
+   */
   std::vector<std::unique_ptr<NeighborhoodFilter>> getFilterOperators(GraphMetadata& metadata,
                                                                       ExecutionConfig& exec_conf) {
     std::vector<std::unique_ptr<NeighborhoodFilter>> ret;

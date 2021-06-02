@@ -16,8 +16,12 @@
 
 #include <algorithm>
 #include <chrono>
+#include <memory>
 #include <queue>
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include "graph/compressed_subgraphs.h"

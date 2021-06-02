@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <vector>
+
 #include "exec/task.h"
 #include "graph/graph.h"
 #include "ops/filters.h"
@@ -39,6 +41,8 @@ class NeighborhoodFilterTask : public TaskBase {
   FilterContext& getFilterContext() { return filter_context_; }
 
   const NeighborhoodFilter* getFilter() { return filter_; }
+
+  const Graph* getDataGraph() const override { return graph_; }
 
   void run() override { filter_->filter(graph_, candidates_, &filter_context_); }
 };

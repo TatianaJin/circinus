@@ -37,7 +37,7 @@ if(CMAKE_COMPILER_IS_GNUCXX)
     set(CMAKE_CXX_FLAGS_DEBUG "-g")
   endif()
   set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -g")
-  set(CMAKE_CXX_FLAGS_RELEASE "-O3 -Wall -march=native -DNDEBUG")
+  set(CMAKE_CXX_FLAGS_RELEASE "-O3 -march=native -DNDEBUG")
 endif()
 
 ### Dependencies and CMake utils
@@ -77,6 +77,9 @@ endif()
 ### Executables
 add_executable(Circinus src/circinus_main.cc)
 target_link_libraries(Circinus circinus ${EXTERNAL_LIBRARY})
+
+add_executable(GraphToBinary src/tools/graph_to_binary_main.cc)
+target_link_libraries(GraphToBinary circinus ${EXTERNAL_LIBRARY})
 
 # Tests
 if (BUILD_TESTS)

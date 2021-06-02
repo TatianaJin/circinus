@@ -14,6 +14,8 @@
 
 #include "ops/logical/filter/gql_filter.h"
 
+#include <memory>
+
 #include "ops/filters/filter.h"
 #include "ops/filters/gql_filter.h"
 #include "utils/utils.h"

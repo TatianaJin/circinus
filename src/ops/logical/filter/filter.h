@@ -18,12 +18,8 @@
 #include <vector>
 
 #include "exec/execution_config.h"
-#include "graph/graph.h"
 #include "graph/graph_metadata.h"
-#include "graph/query_graph.h"
-#include "graph/tree_node.h"
 #include "graph/types.h"
-#include "utils/hashmap.h"
 
 namespace circinus {
 
@@ -42,7 +38,7 @@ class LogicalNeighborhoodFilter {
   const QueryGraph* query_graph_;
 
  public:
-  LogicalNeighborhoodFilter(const QueryGraph* query_graph) : query_graph_(query_graph) {}
+  explicit LogicalNeighborhoodFilter(const QueryGraph* query_graph) : query_graph_(query_graph) {}
 
   virtual ~LogicalNeighborhoodFilter() {}
   virtual std::vector<std::unique_ptr<NeighborhoodFilter>> toPhysicalOperators(const GraphMetadata& metadata,

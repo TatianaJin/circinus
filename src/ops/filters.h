@@ -16,12 +16,6 @@
 
 #include "ops/filters/filter.h"
 #include "ops/filters/gql_filter.h"
-
-#include "ops/logical/filter/cfl_filter.h"
-#include "ops/logical/filter/dpiso_filter.h"
-#include "ops/logical/filter/filter.h"
-#include "ops/logical/filter/gql_filter.h"
-#include "ops/logical/filter/nlf_filter.h"
-#include "ops/logical/filter/tso_filter.h"
-
-namespace circinus {}  // namespace circinus
+#include "ops/filters/local_filter.h"
+#include "ops/filters/nlf_filter.h"
+#include "ops/filters/subgraph_filter.h"

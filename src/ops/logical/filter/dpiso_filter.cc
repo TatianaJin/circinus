@@ -14,6 +14,8 @@
 
 #include "ops/logical/filter/dpiso_filter.h"
 
+#include <memory>
+
 #include "exec/execution_config.h"
 #include "ops/filters/filter.h"
 #include "ops/order/dpiso_order.h"

@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <memory>
 #include <unordered_map>
 #include <vector>
 
@@ -21,6 +22,7 @@
 #include "graph/graph.h"
 #include "graph/graph_metadata.h"
 #include "graph/query_graph.h"
+#include "graph/tree_node.h"
 #include "ops/logical/filter/filter.h"
 
 namespace circinus {

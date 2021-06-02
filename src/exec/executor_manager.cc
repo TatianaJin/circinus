@@ -14,6 +14,7 @@
 
 #include "exec/executor_manager.h"
 
+#include <memory>
 #include <utility>
 
 #include "exec/result.h"

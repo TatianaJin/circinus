@@ -36,7 +36,7 @@ def list_files(paths=None):
         dirs, files = default_dirs, []
         for d in dirs:
             cmd = 'find {} -type f -regex "{}"'.format(d, cpp_suffix)
-            res = subprocess.check_output(cmd, shell=True).rstrip().decode("utf-8") 
+            res = subprocess.check_output(cmd, shell=True).rstrip().decode("utf-8")
             files += res.split('\n')
         removes = []
         for f in files:

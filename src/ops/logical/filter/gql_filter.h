@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <memory>
 #include <unordered_map>
 #include <vector>
 
@@ -28,7 +29,7 @@ class NeighborhoodFilter;
 
 class LogicalGQLFilter : public LogicalNeighborhoodFilter {
  public:
-  LogicalGQLFilter(const QueryGraph* query_graph);
+  explicit LogicalGQLFilter(const QueryGraph* query_graph);
 
   std::vector<std::unique_ptr<NeighborhoodFilter>> toPhysicalOperators(const GraphMetadata& metadata,
                                                                        ExecutionConfig& exec) override;

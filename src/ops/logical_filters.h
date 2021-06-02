@@ -12,9 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <algorithm>
-#include <vector>
+#pragma once
 
-#include "ops/filters/filter.h"
-
-namespace circinus {}  // namespace circinus
+#include "ops/logical/filter/cfl_filter.h"
+#include "ops/logical/filter/dpiso_filter.h"
+#include "ops/logical/filter/filter.h"
+#include "ops/logical/filter/gql_filter.h"
+#include "ops/logical/filter/nlf_filter.h"
+#include "ops/logical/filter/tso_filter.h"
