@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "graph/graph.h"
+#include "graph/partitioned_graph.h"
 #include "graph/types.h"
 #include "utils/hashmap.h"
 
@@ -27,8 +28,8 @@ class GraphMetadata {
  private:
   bool directed_ = false;
   bool labeled_ = true;
-  bool sorted_by_degree_ = false;
-  bool sorted_by_label_ = false;
+  bool sorted_by_degree_ = false;  // this refers to secondary sorting
+  bool sorted_by_label_ = false;   // this refers to primary sorting
   bool has_label_index_ = true;
   VertexID n_vertices_ = 0;
   unordered_map<LabelID, VertexID> label_frequency_;
@@ -42,12 +43,40 @@ class GraphMetadata {
   std::vector<GraphMetadata> partitioned_metadata_;
 
  public:
-  explicit GraphMetadata(const Graph& g) {
-    collectBasicInfo(g);
-    if (has_label_index_) {
+  GraphMetadata(bool directed, bool labeled, bool sorted_by_degree, bool sorted_by_label, bool has_label_index,
+                VertexID n_vertices, VertexID vertex_offset = 0)
+      : directed_(directed),
+        labeled_(labeled),
+        sorted_by_degree_(sorted_by_degree),
+        sorted_by_label_(sorted_by_label),
+        has_label_index_(has_label_index),
+        n_vertices_(n_vertices),
+        vertex_offset_(vertex_offset) {}
+
+  explicit GraphMetadata(const Graph& g, bool use_label_index = true)
+      : GraphMetadata(false, g.getNumLabels() > 1, false, false, use_label_index, g.getNumVertices()) {
+    if (use_label_index) {
       collectLabelFrequency(g);
     }
   }
+
+  explicit GraphMetadata(const ReorderedPartitionedGraph& g, bool sorted_by_degree = true)
+      : GraphMetadata(false, g.getNumLabels() > 1, false, g.getNumPartitions() == 1, false, g.getNumVertices()) {
+    if (g.getNumPartitions() > 1) {
+      partitioned_metadata_.reserve(g.getNumPartitions());
+      for (uint32_t partition = 0; partition < g.getNumPartitions(); ++partition) {
+        auto[start, end] = g.getPartitionRange(partition);
+        partitioned_metadata_.emplace_back(directed_, labeled_, sorted_by_degree, true, false, end - start, start);
+        // set label frequency in metadata
+        auto& pm = partitioned_metadata_.back();
+        auto& offsets = g.getLabelOffsetsInPartition(partition);
+        for (auto& pair : offsets) {
+          pm.label_frequency_.insert({pair.first, pair.second.second - pair.second.first});
+        }
+      }
+    }
+  }
+
   inline bool isDirected() const { return directed_; }
   inline bool isLabeled() const { return labeled_; }
   inline bool isSortedByDegree() const { return sorted_by_degree_; }
@@ -92,14 +121,11 @@ class GraphMetadata {
   inline uint32_t numPartitions() const { return partitioned_metadata_.empty() ? 1 : partitioned_metadata_.size(); }
   const GraphMetadata& getPartition(uint32_t idx) const { return partitioned_metadata_[idx]; }
 
-  // FIXME(tatiana)
-  void collectBasicInfo(const Graph& graph) {
-    n_vertices_ = graph.getNumVertices();
-    labeled_ = graph.getNumLabels() > 1;
+  void collectDegreeFrequency(const GraphBase& graph) {
+    // TODO(tatiana): see if needed
   }
 
-  void collectDegreeFrequency(const Graph& graph) {}
-  void collectLabelFrequency(const Graph& g) {
+  void collectLabelFrequency(const GraphBase& g) {
     for (auto label : g.getLabels()) {
       label_frequency_.insert({label, g.getVertexCardinalityByLabel(label)});
     }

@@ -86,7 +86,7 @@ class GraphBase {
    * @param nparts The number of desired partitions.
    * @returns The number of edge cuts among partitions.
    */
-  std::pair<std::vector<idx_t>, idx_t> getMetisParts(idx_t nparts) {
+  std::pair<std::vector<idx_t>, idx_t> getMetisParts(idx_t nparts) const {
     std::vector<idx_t> parts;
     parts.resize(n_vertices_);
     idx_t* xadj = (idx_t*)getVList();
@@ -154,6 +154,13 @@ class GraphBase {
     for (size_t i = 0; i < size; ++i) {
       input.read(reinterpret_cast<char*>(&vec[i]), sizeof(T));
     }
+  }
+
+  void copyMetadata(const GraphBase& src) {
+    n_vertices_ = src.n_vertices_;
+    n_edges_ = src.n_edges_;
+    max_degree_ = src.max_degree_;
+    vertex_cardinality_by_label_ = src.vertex_cardinality_by_label_;
   }
 };
 

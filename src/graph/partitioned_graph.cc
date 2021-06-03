@@ -29,12 +29,51 @@ namespace circinus {
 
 const std::pair<VertexID, VertexID> ReorderedPartitionedGraph::ZERO_RANGE = {0, 0};
 
+ReorderedPartitionedGraph::ReorderedPartitionedGraph(const std::string& path, uint32_t n_partitions,
+                                                     bool sort_by_degree)
+    : n_partitions_(n_partitions), partition_offsets_(n_partitions + 1, 0), label_ranges_per_part_(n_partitions) {
+  auto labels = loadUndirectedGraph(path);
+  vertex_ids_.resize(getNumVertices());
+  std::iota(vertex_ids_.begin(), vertex_ids_.end(), 0);
+  // TODO(tatiana): now only single-thread processing, support parallel processing later
+  // partition and reorder
+  if (n_partitions > 1) {
+    auto[parts, n_edge_cuts] = getMetisParts(n_partitions);
+    n_edge_cuts_ = n_edge_cuts;
+    reorder(sort_by_degree, labels, parts, this);
+  } else {
+    reorder(sort_by_degree, labels, this);
+  }
+  computeLabelOffsets(labels);
+  reconstructByOrder();
+}
+
+ReorderedPartitionedGraph::ReorderedPartitionedGraph(const Graph& graph, uint32_t n_partitions, bool sort_by_degree)
+    : n_partitions_(n_partitions),
+      vertex_ids_(graph.getNumVertices()),
+      partition_offsets_(n_partitions + 1, 0),
+      label_ranges_per_part_(n_partitions) {
+  copyMetadata(graph);
+  auto& labels = graph.getVertexLabels();
+  std::iota(vertex_ids_.begin(), vertex_ids_.end(), 0);
+  if (n_partitions > 1) {
+    auto[parts, n_edge_cuts] = graph.getMetisParts(n_partitions);
+    n_edge_cuts_ = n_edge_cuts;
+    reorder(sort_by_degree, labels, parts, &graph);
+  } else {
+    reorder(sort_by_degree, labels, &graph);
+  }
+  computeLabelOffsets(labels);
+  reconstructByOrder(graph);
+}
+
 template <bool by_partition, bool by_degree>
-void ReorderedPartitionedGraph::sortVertices(const std::vector<idx_t>& parts, const std::vector<LabelID> labels) {
-  std::sort(vertex_ids_.begin(), vertex_ids_.end(), [this, &labels, &parts](VertexID v1, VertexID v2) {
+void ReorderedPartitionedGraph::sortVertices(const std::vector<idx_t>& parts, const std::vector<LabelID> labels,
+                                             const GraphBase* src_graph) {
+  std::sort(vertex_ids_.begin(), vertex_ids_.end(), [src_graph, &labels, &parts](VertexID v1, VertexID v2) {
     if (!by_partition || parts[v1] == parts[v2]) {
       if (labels[v1] == labels[v2]) {
-        return !by_degree || getVertexOutDegree(v1) <= getVertexOutDegree(v2);
+        return !by_degree || src_graph->getVertexOutDegree(v1) > src_graph->getVertexOutDegree(v2);
       }
       return labels[v1] < labels[v2];
     }
@@ -44,11 +83,11 @@ void ReorderedPartitionedGraph::sortVertices(const std::vector<idx_t>& parts, co
 
 // TODO(tatiana): now only single-thread processing, support parallel processing later
 void ReorderedPartitionedGraph::reorder(bool sort_by_degree, const std::vector<LabelID>& labels,
-                                        const std::vector<idx_t>& parts) {
+                                        const std::vector<idx_t>& parts, const GraphBase* src_graph) {
   if (sort_by_degree) {
-    sortVertices<true, true>(parts, labels);
+    sortVertices<true, true>(parts, labels, src_graph);
   } else {
-    sortVertices<true, false>(parts, labels);
+    sortVertices<true, false>(parts, labels, src_graph);
   }
 
   // construct partition offsets
@@ -62,11 +101,12 @@ void ReorderedPartitionedGraph::reorder(bool sort_by_degree, const std::vector<L
   partition_offsets_.back() = vertex_ids_.size();
 }
 
-void ReorderedPartitionedGraph::reorder(bool sort_by_degree, const std::vector<LabelID>& labels) {
+void ReorderedPartitionedGraph::reorder(bool sort_by_degree, const std::vector<LabelID>& labels,
+                                        const GraphBase* src_graph) {
   if (sort_by_degree) {
-    sortVertices<false, true>({}, labels);
+    sortVertices<false, true>({}, labels, src_graph);
   } else {
-    sortVertices<false, false>({}, labels);
+    sortVertices<false, false>({}, labels, src_graph);
   }
   partition_offsets_ = {0, getNumVertices()};
 }
@@ -79,7 +119,7 @@ void ReorderedPartitionedGraph::computeLabelOffsets(const std::vector<LabelID>& 
     while (start < end) {
       LabelID current_label = labels[*start];
       auto range_end = std::lower_bound(start + 1, end, current_label + 1,
-                                        [this, &labels](VertexID v, LabelID label) { return labels[v] < label; });
+                                        [&labels](VertexID v, LabelID label) { return labels[v] < label; });
       label_ranges_per_part_[i].insert(
           {labels[*start], {start - vertex_ids_.begin(), range_end - vertex_ids_.begin()}});
       start = range_end;
@@ -109,6 +149,28 @@ void ReorderedPartitionedGraph::reconstructByOrder() {
   }
   vlist_.swap(new_vlist);
   elist_.swap(new_elist);
+}
+
+void ReorderedPartitionedGraph::reconstructByOrder(const GraphBase& src_graph) {
+  // reconstruct vlist and elist
+  std::vector<VertexID> vertex_order(
+      vertex_ids_.size());  // original vertex id, the index in vlist_ of the vertex with the original id
+  for (VertexID i = 0; i < vertex_ids_.size(); ++i) {
+    vertex_order[vertex_ids_[i]] = i;
+  }
+  elist_.resize(src_graph.getNumEdges() * 2);
+  vlist_.resize(src_graph.getNumVertices() + 1);
+  VertexID new_vertex_id = 0;
+  vlist_[new_vertex_id] = 0;
+  for (auto v : vertex_ids_) {
+    vlist_[new_vertex_id + 1] = vlist_[new_vertex_id];
+    auto nbrs = src_graph.getOutNeighbors(v);
+    for (uint32_t i = 0; i < nbrs.second; ++i) {
+      elist_[vlist_[new_vertex_id + 1]] = vertex_order[nbrs.first[i]];
+      ++vlist_[new_vertex_id + 1];
+    }
+    ++new_vertex_id;
+  }
 }
 
 void ReorderedPartitionedGraph::dumpToFile(const std::string& path) const {
