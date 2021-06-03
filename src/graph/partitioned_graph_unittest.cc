@@ -31,6 +31,7 @@ using circinus::VertexID;
 class TestReorderedPartitionedGraph : public testing::Test {
  protected:
   uint32_t n_partitions_ = 10;
+
   template <class GraphA, class GraphB>
   void checkLabel(const GraphA& g, const GraphB& b) {
     auto g_labels = g.getLabels();
@@ -40,6 +41,49 @@ class TestReorderedPartitionedGraph : public testing::Test {
     std::sort(b_labels.begin(), b_labels.end());
     for (uint32_t i = 0; i < b_labels.size(); ++i) {
       ASSERT_EQ(g_labels[i], b_labels[i]);
+    }
+  }
+
+  void checkGraphConsistency(const ReorderedPartitionedGraph& g, const Graph& b) {
+    ASSERT_EQ(g.getNumVertices(), b.getNumVertices());
+    ASSERT_EQ(g.getNumEdges(), b.getNumEdges());
+    ASSERT_EQ(g.getGraphMaxDegree(), b.getGraphMaxDegree());
+
+    checkLabel(g, b);
+
+    for (VertexID i = 0; i < g.getNumVertices(); ++i) {
+      ASSERT_EQ(g.getVertexOutDegree(i), b.getVertexOutDegree(g.getOriginalVertexId(i)));
+      ASSERT_EQ(g.getVertexLabel(i), b.getVertexLabel(g.getOriginalVertexId(i)));
+      auto g_nbs = g.getOutNeighbors(i);
+      auto b_nbs = b.getOutNeighbors(g.getOriginalVertexId(i));
+      EXPECT_EQ(g_nbs.second, b_nbs.second);
+      std::vector<VertexID> g_nbrs_sorted_original_id(g_nbs.second);
+      for (uint32_t j = 0; j < g_nbs.second; ++j) {
+        g_nbrs_sorted_original_id[j] = g.getOriginalVertexId(g_nbs.first[j]);
+      }
+      std::sort(g_nbrs_sorted_original_id.begin(), g_nbrs_sorted_original_id.end());
+      for (uint32_t j = 0; j < g_nbs.second; ++j) {
+        ASSERT_EQ(g_nbrs_sorted_original_id[j], b_nbs.first[j]);
+      }
+    }
+
+    std::vector<bool> label_mask(g.getNumVertices(), false);
+    for (auto label : g.getLabels()) {
+      ASSERT_EQ(g.getVertexCardinalityByLabel(label), b.getVertexCardinalityByLabel(label));
+      VertexID label_frequency = 0;
+      for (uint32_t i = 0; i < n_partitions_; ++i) {
+        auto gv = g.getVertexRangeByLabel(label, i);
+        label_frequency += gv.second - gv.first;
+        for (auto j = gv.first; j < gv.second; ++j) {
+          label_mask[g.getOriginalVertexId(j)] = true;
+        }
+      }
+      auto bv = b.getVerticesByLabel(label);
+      ASSERT_EQ(label_frequency, bv->size());
+      ASSERT_EQ(g.getVertexCardinalityByLabel(label), b.getVertexCardinalityByLabel(label));
+      for (uint32_t i = 0; i < label_frequency; ++i) {
+        ASSERT_TRUE(label_mask[(*bv)[i]]) << "label " << label << " idx " << i;
+      }
     }
   }
 };
@@ -63,47 +107,14 @@ TEST_F(TestReorderedPartitionedGraph, SerdeConsistencyWithGraph) {
   ReorderedPartitionedGraph g(graph_path, n_partitions_);
   g.dumpToFile(graph_path + ".check");
   Graph b(graph_path + ".check");
+  checkGraphConsistency(g, b);
+}
 
-  ASSERT_EQ(g.getNumVertices(), b.getNumVertices());
-  ASSERT_EQ(g.getNumEdges(), b.getNumEdges());
-  ASSERT_EQ(g.getGraphMaxDegree(), b.getGraphMaxDegree());
-
-  checkLabel(g, b);
-
-  for (VertexID i = 0; i < g.getNumVertices(); ++i) {
-    ASSERT_EQ(g.getVertexOutDegree(i), b.getVertexOutDegree(g.getOriginalVertexId(i)));
-    ASSERT_EQ(g.getVertexLabel(i), b.getVertexLabel(g.getOriginalVertexId(i)));
-    auto g_nbs = g.getOutNeighbors(i);
-    auto b_nbs = b.getOutNeighbors(g.getOriginalVertexId(i));
-    EXPECT_EQ(g_nbs.second, b_nbs.second);
-    std::vector<VertexID> g_nbrs_sorted_original_id(g_nbs.second);
-    for (uint32_t j = 0; j < g_nbs.second; ++j) {
-      g_nbrs_sorted_original_id[j] = g.getOriginalVertexId(g_nbs.first[j]);
-    }
-    std::sort(g_nbrs_sorted_original_id.begin(), g_nbrs_sorted_original_id.end());
-    for (uint32_t j = 0; j < g_nbs.second; ++j) {
-      ASSERT_EQ(g_nbrs_sorted_original_id[j], b_nbs.first[j]);
-    }
-  }
-
-  std::vector<bool> label_mask(g.getNumVertices(), false);
-  for (auto label : g.getLabels()) {
-    ASSERT_EQ(g.getVertexCardinalityByLabel(label), b.getVertexCardinalityByLabel(label));
-    VertexID label_frequency = 0;
-    for (uint32_t i = 0; i < n_partitions_; ++i) {
-      auto gv = g.getVertexRangeByLabel(label, i);
-      label_frequency += gv.second - gv.first;
-      for (auto j = gv.first; j < gv.second; ++j) {
-        label_mask[g.getOriginalVertexId(j)] = true;
-      }
-    }
-    auto bv = b.getVerticesByLabel(label);
-    ASSERT_EQ(label_frequency, bv->size());
-    ASSERT_EQ(g.getVertexCardinalityByLabel(label), b.getVertexCardinalityByLabel(label));
-    for (uint32_t i = 0; i < label_frequency; ++i) {
-      ASSERT_TRUE(label_mask[(*bv)[i]]) << "label " << label << " idx " << i;
-    }
-  }
+TEST_F(TestReorderedPartitionedGraph, ConversionFromGraph) {
+  std::string graph_path = "resources/human.graph";
+  Graph b(graph_path);
+  ReorderedPartitionedGraph g(b, n_partitions_);
+  checkGraphConsistency(g, b);
 }
 
 TEST_F(TestReorderedPartitionedGraph, BinarySerDe) {

@@ -97,28 +97,24 @@ class NeighborhoodFilter : public Operator {
   NeighborhoodFilter(ExecutionConfig& conf, const QueryGraph* query_graph, const QueryVertexID query_vertex,
                      std::string&& name = "NeighborhoodFilter")
       : Operator(conf.getParallelism()),
-        filter_size_(conf.getInputSize()),
         query_graph_(query_graph),
         query_vertex_(query_vertex),
-        name_(std::move(name)) {}
+        name_(std::move(name)),
+        filter_size_(conf.getInputSize()) {}
 
   NeighborhoodFilter(ExecutionConfig& conf, const QueryGraph* query_graph, const QueryVertexID query_vertex,
                      const std::vector<QueryVertexID>& pivot_vertices, std::string&& name = "NeighborhoodFilter")
       : Operator(conf.getParallelism()),
-        filter_size_(conf.getInputSize()),
         query_graph_(query_graph),
         query_vertex_(query_vertex),
         pivot_vertices_(pivot_vertices),
-        name_(std::move(name)) {}
+        name_(std::move(name)),
+        filter_size_(conf.getInputSize()) {}
 
   NeighborhoodFilter(ExecutionConfig& conf, const QueryGraph* query_graph, const QueryVertexID query_vertex,
                      const QueryVertexID& pivot_vertex, std::string&& name = "NeighborhoodFilter")
-      : Operator(conf.getParallelism()),
-        filter_size_(conf.getInputSize()),
-        query_graph_(query_graph),
-        query_vertex_(query_vertex),
-        pivot_vertices_({pivot_vertex}),
-        name_(std::move(name)) {}
+      : NeighborhoodFilter(conf, query_graph, query_vertex, std::vector<QueryVertexID>{pivot_vertex}, std::move(name)) {
+  }
 
   inline void setInputSize(uint64_t filter_size) { filter_size_ = filter_size; }
 

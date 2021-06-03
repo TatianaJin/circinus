@@ -21,6 +21,7 @@
 #include <utility>
 #include <vector>
 
+#include "graph/graph.h"
 #include "graph/graph_base.h"
 #include "graph/types.h"
 
@@ -45,24 +46,13 @@ class ReorderedPartitionedGraph : public GraphBase {
       label_ranges_per_part_;  // {partition, {label, {start, end}}}
 
  public:
-  explicit ReorderedPartitionedGraph(const std::string& path, uint32_t n_partitions = 20, bool sort_by_degree = true)
-      : n_partitions_(n_partitions), partition_offsets_(n_partitions + 1, 0), label_ranges_per_part_(n_partitions) {
-    auto labels = loadUndirectedGraph(path);
-    vertex_ids_.resize(getNumVertices());
-    std::iota(vertex_ids_.begin(), vertex_ids_.end(), 0);
-    // TODO(tatiana): now only single-thread processing, support parallel processing later
-    // partition and reorder
-    if (n_partitions > 1) {
-      auto[parts, n_edge_cuts_] = getMetisParts(n_partitions);
-      reorder(sort_by_degree, labels, parts);
-    } else {
-      reorder(sort_by_degree, labels);
-    }
-    computeLabelOffsets(labels);
-    reconstructByOrder();
-  }
+  explicit ReorderedPartitionedGraph(const std::string& path, uint32_t n_partitions = 20, bool sort_by_degree = true);
+
+  explicit ReorderedPartitionedGraph(const Graph& graph, uint32_t n_partitions = 20, bool sort_by_degree = true);
 
   ReorderedPartitionedGraph() {}  // for loading from binary
+
+  inline uint32_t getNumPartitions() const { return n_partitions_; }
 
   inline VertexID getOriginalVertexId(VertexID id) const { return vertex_ids_[id]; }
 
@@ -152,9 +142,17 @@ class ReorderedPartitionedGraph : public GraphBase {
 
   /* end of overload functions */
 
-  std::pair<VertexID, VertexID> getPartitionRange(uint32_t partition) const {
-    DCHECK_LT(partition + 1, partition_offsets_.size());
+  /**
+   * @returns The range [first, last) of ids of the vertices in the partition.
+   */
+  inline std::pair<VertexID, VertexID> getPartitionRange(uint32_t partition) const {
+    DCHECK_LT(partition, n_partitions_);
     return std::make_pair(partition_offsets_[partition], partition_offsets_[partition + 1]);
+  }
+
+  inline const auto& getLabelOffsetsInPartition(uint32_t partition) const {
+    DCHECK_LT(partition, n_partitions_);
+    return label_ranges_per_part_[partition];
   }
 
   inline const std::pair<VertexID, VertexID>& getVertexRangeByLabel(LabelID lid, uint32_t partition) const {
@@ -176,12 +174,14 @@ class ReorderedPartitionedGraph : public GraphBase {
   void saveAsBinaryInner(std::ostream& output) const override;
 
   template <bool by_partition, bool by_degree>
-  void sortVertices(const std::vector<idx_t>& parts, const std::vector<LabelID> labels);
+  void sortVertices(const std::vector<idx_t>& parts, const std::vector<LabelID> labels, const GraphBase* src_graph);
 
-  void reorder(bool sort_by_degree, const std::vector<LabelID>& labels);
-  void reorder(bool sort_by_degree, const std::vector<LabelID>& labels, const std::vector<idx_t>& parts);
+  void reorder(bool sort_by_degree, const std::vector<LabelID>& labels, const GraphBase*);
+  void reorder(bool sort_by_degree, const std::vector<LabelID>& labels, const std::vector<idx_t>& parts,
+               const GraphBase*);
   void computeLabelOffsets(const std::vector<LabelID>& labels);
   void reconstructByOrder();
+  void reconstructByOrder(const GraphBase& src_graph);
 };
 
 }  // namespace circinus

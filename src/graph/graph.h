@@ -77,6 +77,8 @@ class Graph : public GraphBase {
     return &vertex_ids_by_label_.at(lid);
   }
 
+  const auto& getVertexLabels() const { return labels_; }
+
   void clear() override {
     GraphBase::clear();
     labels_.clear();
