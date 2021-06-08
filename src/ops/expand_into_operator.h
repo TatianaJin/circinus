@@ -15,7 +15,11 @@
 #pragma once
 
 #include <chrono>
+#include <memory>
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include "graph/query_graph.h"
@@ -28,7 +32,6 @@ namespace circinus {
 template <typename G>
 class ExpandIntoOperator : public TraverseOperator {
   std::vector<QueryVertexID> parents_;
-  QueryVertexID target_vertex_;
   unordered_map<QueryVertexID, uint32_t> query_vertex_indices_;
   // for profiling
   std::vector<QueryVertexID> key_parents_;  // the key parents of the previous operator
@@ -38,9 +41,8 @@ class ExpandIntoOperator : public TraverseOperator {
   ExpandIntoOperator(const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
                      const unordered_map<QueryVertexID, uint32_t>& query_vertex_indices,
                      const std::vector<QueryVertexID>& prev_key_parents, SubgraphFilter* subgraph_filter = nullptr)
-      : TraverseOperator(subgraph_filter),
+      : TraverseOperator(target_vertex, subgraph_filter),
         parents_(parents),
-        target_vertex_(target_vertex),
         query_vertex_indices_(query_vertex_indices),
         key_parents_(prev_key_parents) {}
 
@@ -102,7 +104,7 @@ class ExpandIntoOperator : public TraverseOperator {
     while (input_index_ < current_inputs_->size()) {
       auto input = (*current_inputs_)[input_index_];
       auto key_vertex_id = input.getKeyVal(query_vertex_indices_[target_vertex_]);
-      auto key_out_neighbors = ((G*)current_data_graph_)->getOutNeighbors(key_vertex_id, 0, 0);
+      auto key_out_neighbors = ((G*)current_data_graph_)->getOutNeighborsWithHint(key_vertex_id, 0, 0);
       bool add = true;
       if
         constexpr(isProfileMode(profile)) {
@@ -166,7 +168,7 @@ class ExpandIntoOperator : public TraverseOperator {
         uint32_t id = query_vertex_indices_[vid];
         if
           constexpr(!std::is_same<G, Graph>::value) {
-            key_out_neighbors = ((G*)current_data_graph_)->getOutNeighbors(key_vertex_id, 0, parent_idx);
+            key_out_neighbors = ((G*)current_data_graph_)->getOutNeighborsWithHint(key_vertex_id, 0, parent_idx);
           }
         intersect(*(input.getSet(id)), key_out_neighbors, &new_set);
         if
@@ -178,6 +180,7 @@ class ExpandIntoOperator : public TraverseOperator {
           break;
         }
 #ifdef USE_FILTER
+        // TODO(tatiana): include same-label keys for checking when sets are updated (ExpandInto and ExpandSettoKey)
         input.UpdateSets(id, std::make_shared<std::vector<VertexID>>(std::move(new_set)));
         if (filter(input)) {
           add = false;

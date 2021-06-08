@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <unordered_map>
 #include <vector>
 
 #include "graph/types.h"
@@ -28,7 +29,6 @@ class ExpandEdgeOperator : public TraverseOperator {
   uint32_t parent_index_;  // index of parent query vertex in the compressed subgraphs
   uint32_t target_index_;  // index of target query vertex in the compressed subgraphs
   QueryVertexID parent_id_;
-  QueryVertexID target_id_;
 
  public:
   /**
@@ -62,11 +62,10 @@ class ExpandEdgeOperator : public TraverseOperator {
                      const std::vector<uint32_t>& same_label_key_indices,
                      const std::vector<uint32_t>& same_label_set_indices, uint64_t set_pruning_threshold,
                      SubgraphFilter* filter)
-      : TraverseOperator(same_label_key_indices, same_label_set_indices, set_pruning_threshold, filter),
+      : TraverseOperator(target, same_label_key_indices, same_label_set_indices, set_pruning_threshold, filter),
         parent_index_(parent_index),
         target_index_(target_index),
-        parent_id_(parent),
-        target_id_(target) {}
+        parent_id_(parent) {}
 
   virtual ~ExpandEdgeOperator() {}
 
@@ -74,15 +73,14 @@ class ExpandEdgeOperator : public TraverseOperator {
       const Graph* g, const std::vector<std::vector<VertexID>>& candidate_sets) override {
     std::vector<BipartiteGraph*> ret;
     ret.reserve(1);
-    ret.emplace_back(new BipartiteGraph(parent_id_, target_id_));
+    ret.emplace_back(new BipartiteGraph(parent_id_, target_vertex_));
     ret.back()->populateGraph(g, &candidate_sets);
     return ret;
   }
 
-  // TODO(tatiana): statistics for how much saving is made
  protected:
   inline void toStringInner(std::stringstream& ss) const {
-    ss << ' ' << parent_id_ << " -> " << target_id_;
+    ss << ' ' << parent_id_ << " -> " << target_vertex_;
     if (candidates_ != nullptr) ss << " (" << candidates_->size() << ")";
   }
 };

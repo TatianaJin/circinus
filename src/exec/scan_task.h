@@ -14,24 +14,27 @@
 
 #pragma once
 
-#include <unordered_map>
-#include <vector>
-
-#include "ops/filters/filter_base.h"
+#include "exec/task.h"
+#include "graph/graph.h"
+#include "ops/scans.h"
 
 namespace circinus {
 
-class DPISOFilter : public FilterBase {
+class ScanTask : public TaskBase {
  private:
-  QueryVertexID start_vertex_;
-  std::vector<TreeNode> tree_;
-  std::vector<QueryVertexID> bfs_order_;
+  ScanContext scan_context_;
+  const Scan* scan_;  // not owned
+  const Graph* graph_;
 
  public:
-  DPISOFilter(const QueryGraph* query_graph, const Graph* data_graph, QueryVertexID start_vertex);
+  ScanTask(QueryId query_id, TaskId task_id, uint32_t shard_id, const Scan* scan, const Graph* graph)
+      : TaskBase(query_id, task_id), scan_context_(scan->initScanContext(shard_id)), scan_(scan), graph_(graph) {}
 
-  /** @returns The number of records that passed the filter and are added to output */
-  void Filter(std::vector<std::vector<VertexID>>& candidates);
+  ScanContext& getScanContext() { return scan_context_; }
+
+  const Graph* getDataGraph() const override { return graph_; }
+
+  void run() override { scan_->scan(graph_, &scan_context_); }
 };
 
 }  // namespace circinus

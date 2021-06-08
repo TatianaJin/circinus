@@ -14,14 +14,37 @@
 
 #pragma once
 
+#include <utility>
 #include <vector>
 
 #include "graph/compressed_subgraphs.h"
 #include "graph/graph.h"
+#include "utils/query_utils.h"
 
 namespace circinus {
 
-// TODO(tatiana): add query id for concurrent processing
+class TaskBase {
+ private:
+  uint16_t query_id_;
+  uint16_t task_id_;
+
+ public:
+  TaskBase(QueryId query_id, TaskId task_id) : query_id_(query_id), task_id_(task_id) {}
+
+  virtual ~TaskBase() {}
+
+  bool isBefore(TaskBase* other) const {
+    return (query_id_ == other->query_id_) ? task_id_ < other->task_id_ : query_id_ < other->query_id_;
+  }
+
+  inline auto getQueryId() const { return query_id_; }
+  inline auto getTaskId() const { return task_id_; }
+
+  virtual const Graph* getDataGraph() const = 0;
+  virtual void run() = 0;
+  virtual void profile() { run(); }
+};
+
 class Task {
   uint32_t level_;
   std::vector<CompressedSubgraphs> input_;

@@ -33,15 +33,15 @@ if(GTEST_FOUND)
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
   )
 
-  add_executable(TestFilterCandidates unittest_main.cc test_filter_candidates.cc)
-  target_link_libraries(TestFilterCandidates circinus ${GTEST_LIBRARY} ${EXTERNAL_LIBRARY})
-  add_test(NAME TestFilterCandidates
-    COMMAND TestFilterCandidates
-    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-  )
+  #add_executable(TestFilterCandidates unittest_main.cc test_filter_candidates.cc)
+  #target_link_libraries(TestFilterCandidates circinus ${GTEST_LIBRARY} ${EXTERNAL_LIBRARY})
+  #add_test(NAME TestFilterCandidates
+  #  COMMAND TestFilterCandidates
+  #  WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+  #)
 
   add_executable(TestMetis unittest_main.cc test_metis.cc)
-  target_link_libraries(TestMetis circinus ${GTEST_LIBRARY} ${EXTERNAL_LIBRARY} ${PROJECT_SOURCE_DIR}/third_party/lib/libmetis.so ${PROJECT_SOURCE_DIR}/third_party/lib/libGKlib.a )
+  target_link_libraries(TestMetis circinus ${GTEST_LIBRARY} ${EXTERNAL_LIBRARY})
   add_test(NAME TestMetis
     COMMAND TestMetis
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}

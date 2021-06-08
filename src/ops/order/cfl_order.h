@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "graph/graph.h"
+#include "graph/graph_metadata.h"
 #include "graph/query_graph.h"
 #include "ops/order/order_base.h"
 
@@ -24,8 +25,14 @@ namespace circinus {
 
 class CFLOrder : public OrderBase {
  public:
-  uint32_t getStartVertex(const Graph* data_graph_, const QueryGraph* query_graph,
-                          std::vector<uint32_t>& candidate_size);
+  QueryVertexID getStartVertex(const GraphMetadata& metadata, const QueryGraph* query_graph,
+                               const std::vector<VertexID>& candidate_size) override;
+
+  std::vector<QueryVertexID> getTopThree(const GraphMetadata& metadata, const QueryGraph* q);
+
+  QueryVertexID getStartVertex(const std::vector<QueryVertexID>& query_vertices,
+                               const std::vector<VertexID>& cardinality, const QueryGraph& q,
+                               const GraphMetadata& metadata);
 };
 
 }  // namespace circinus

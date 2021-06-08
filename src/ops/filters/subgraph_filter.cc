@@ -15,10 +15,12 @@
 #include "ops/filters/subgraph_filter.h"
 
 #include <algorithm>
+#include <unordered_map>
+#include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include "glog/logging.h"
-
 #include "graph/compressed_subgraphs.h"
 
 namespace circinus {

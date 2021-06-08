@@ -14,24 +14,9 @@
 
 #pragma once
 
-#include <unordered_map>
-#include <vector>
-
-#include "ops/filters/filter_base.h"
-
 namespace circinus {
 
-class TSOFilter : public FilterBase {
- private:
-  QueryVertexID start_vertex_;
-  std::vector<TreeNode> tree_;
-  std::vector<QueryVertexID> dfs_order_;
-
- public:
-  TSOFilter(const QueryGraph* query_graph, const Graph* data_graph, QueryVertexID start_vertex);
-
-  /** @returns The number of records that passed the filter and are added to output */
-  void Filter(std::vector<std::vector<VertexID>>& candidates);
-};
+/** Get a free port on IPV4. */
+int GetAvailablePort();
 
 }  // namespace circinus

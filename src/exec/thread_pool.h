@@ -15,6 +15,7 @@
 #pragma once
 
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include "exec/task_queue.h"
@@ -23,14 +24,14 @@
 
 namespace circinus {
 
-class ThreadPool {
+class[[deprecated]] ThreadPool {
   ExecutionPlan* plan_;
   TaskQueue task_queue_;
   std::vector<std::thread> pool_;
   uint32_t n_threads_;
 
  public:
-  ThreadPool(uint32_t n_threads, ExecutionPlan* plan) : plan_(plan), task_queue_(n_threads), n_threads_(n_threads) {}
+  ThreadPool(uint32_t n_threads, ExecutionPlan * plan) : plan_(plan), task_queue_(n_threads), n_threads_(n_threads) {}
 
   ~ThreadPool() {
     for (auto& t : pool_) {
@@ -38,7 +39,7 @@ class ThreadPool {
     }
   }
 
-  inline void addInitTask(uint32_t level, std::vector<CompressedSubgraphs>&& input, const Graph* data_graph) {
+  inline void addInitTask(uint32_t level, std::vector<CompressedSubgraphs> && input, const Graph* data_graph) {
     task_queue_.putTaskUnSafe(level, std::move(input), data_graph);
   }
 

@@ -20,27 +20,23 @@
 
 #include "graph/graph.h"
 #include "graph/query_graph.h"
-#include "ops/filters/filter_base.h"
+#include "ops/filters/filter.h"
 #include "utils/hashmap.h"
 #include "utils/utils.h"
 
 namespace circinus {
 
-class GQLFilter : public FilterBase {
+class GQLFilter : public NeighborhoodFilter {
  private:
-  QueryVertexID query_vid_;
-  unordered_map<QueryVertexID, unordered_set<VertexID>>* valid_candidates_;
-
-  bool verify(const Graph& data_graph, VertexID data_vertex);
+  bool verify(const Graph* data_graph, const VertexID data_vertex,
+              std::vector<std::vector<VertexID>>* candidates) const;
 
  public:
-  GQLFilter(const QueryGraph* query_graph, QueryVertexID query_vid,
-            unordered_map<QueryVertexID, unordered_set<VertexID>>* valid_candidates);
+  GQLFilter(ExecutionConfig& conf, const QueryGraph* query_graph, QueryVertexID query_vertex)
+      : NeighborhoodFilter(conf, query_graph, query_vertex) {}
 
-  void preFilter(const Graph& data_graph, std::vector<VertexID>& candidates);
-
-  /** @returns The number of records that passed the filter and are added to output */
-  uint32_t Filter(const Graph& data_graph, std::vector<VertexID>& candidates, std::vector<VertexID>* output);
+  void filter(const Graph* data_graph, std::vector<std::vector<VertexID>>* candidates,
+              FilterContext* ctx) const override;
 };
 
 }  // namespace circinus

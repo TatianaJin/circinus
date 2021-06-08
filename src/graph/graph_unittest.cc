@@ -86,7 +86,8 @@ TEST_F(TestGraph, BinarySerDe) {
   g.saveAsBinary(graph_path + ".bin");
   Graph b;
   std::ifstream input(graph_path + ".bin", std::ios::binary);
-  b.loadCompressed(input);
+  b.loadUndirectedGraphFromBinary(input);
+  b.buildLabelIndex();
 
   ASSERT_EQ(g.getNumVertices(), b.getNumVertices());
   ASSERT_EQ(g.getNumEdges(), b.getNumEdges());
@@ -115,9 +116,9 @@ TEST_F(TestGraph, BinarySerDe) {
   for (auto label : g.getLabels()) {
     ASSERT_EQ(g.getVertexCardinalityByLabel(label), b.getVertexCardinalityByLabel(label));
     auto* gv = g.getVerticesByLabel(label);
-    auto* bv = g.getVerticesByLabel(label);
+    auto* bv = b.getVerticesByLabel(label);
     ASSERT_EQ(gv->size(), bv->size());
-    ASSERT_EQ(g.getNumVerticesByLabel(label), b.getNumVerticesByLabel(label));
+    ASSERT_EQ(g.getVertexCardinalityByLabel(label), b.getVertexCardinalityByLabel(label));
     for (uint32_t i = 0; i < gv->size(); ++i) {
       ASSERT_EQ((*gv)[i], (*bv)[i]) << "label " << label << " idx " << i;
     }

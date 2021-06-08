@@ -17,83 +17,39 @@
 #include <algorithm>
 #include <fstream>
 #include <string>
+#include <unordered_map>
 #include <vector>
+
+#include "utils/file_utils.h"
 
 namespace circinus {
 
-Graph::Graph(const std::string& path) {
-  std::ifstream infile(path);
-  CHECK(infile.is_open()) << "Cannot open file " << path;
-
-  char line_type;
-  // process line: t n_vertices n_edges
-  infile >> line_type >> n_vertices_ >> n_edges_;
-  vlist_.resize(n_vertices_ + 1);
-  vlist_.front() = 0;
-  elist_.resize(n_edges_ * 2);
-  labels_.resize(n_vertices_);
-
-  // the first n_vertices_ lines should be of type v, with continuous vertex id from 0
-  VertexID id;
-  LabelID label;
-  VertexID degree;
-  for (uint32_t i = 0; i < n_vertices_; ++i) {
-    CHECK(infile >> line_type >> id >> label >> degree);
-    DCHECK_EQ(line_type, 'v');
-    DCHECK_EQ(id, i);
-    labels_[id] = label;
-    vlist_[id + 1] = vlist_[id] + degree;
-    max_degree_ = std::max(max_degree_, degree);
-    vertex_cardinality_by_label_[label] += 1;
-  }
-
-  // next n_edges_ lines should be of type e
-  std::vector<uint32_t> next_neighbor_offset(n_vertices_, 0);
-  VertexID v1, v2;
-  for (EdgeID i = 0; i < n_edges_; ++i) {
-    CHECK(infile >> line_type) << i + n_vertices_ + 2 << " " << path;
-    if (line_type != 'e') {  // there may be a dummy 0 after "e src dst"
-      CHECK(infile >> line_type >> v1 >> v2) << i + n_vertices_ + 2 << " " << path;
-    } else {
-      CHECK(infile >> v1 >> v2) << i + n_vertices_ + 2 << " " << path;
-    }
-    DCHECK_EQ(line_type, 'e');
-
-    // store an undirected edge as two directed edges
-    uint32_t offset = vlist_[v1] + next_neighbor_offset[v1];
-    elist_[offset] = v2;
-    offset = vlist_[v2] + next_neighbor_offset[v2];
-    elist_[offset] = v1;
-    ++next_neighbor_offset[v1];
-    ++next_neighbor_offset[v2];
-  }
-
-  infile.close();
-
-  // check
-  for (VertexID i = 0; i < n_vertices_; ++i) {
-    DCHECK_EQ(next_neighbor_offset[v1], getVertexOutDegree(v1)) << v1;
-  }
-
+void Graph::buildLabelIndex() {
+  vertex_ids_by_label_.reserve(vertex_cardinality_by_label_.size());
   // build vertex by label index
   for (auto& pair : vertex_cardinality_by_label_) {
     vertex_ids_by_label_[pair.first].reserve(pair.second);
   }
-  // sort neighbors by id for each vertex
-  for (VertexID i = 0; i < n_vertices_; ++i) {
-    std::sort(elist_.begin() + vlist_[i], elist_.begin() + vlist_[i + 1]);
+  for (VertexID i = 0; i < getNumVertices(); ++i) {
     vertex_ids_by_label_[labels_[i]].push_back(i);
   }
 }
 
-void Graph::DumpToFile(const std::string& path) const {
-  std::ofstream output(path);
+Graph::Graph(const std::string& path, bool build_label_index) {
+  labels_ = loadUndirectedGraph(path);
+  if (build_label_index) {
+    buildLabelIndex();
+  }
+}
+
+void Graph::dumpToFile(const std::string& path) const {
+  auto output = openOutputFile(path);
   output << "t " << getNumVertices() << ' ' << getNumEdges() << '\n';
-  for (uint32_t i = 0; i < getNumVertices(); ++i) {
+  for (VertexID i = 0; i < getNumVertices(); ++i) {
     output << "v " << i << ' ' << getVertexLabel(i) << ' ' << getVertexOutDegree(i) << '\n';
   }
 
-  for (uint32_t i = 0; i < getNumVertices(); ++i) {
+  for (VertexID i = 0; i < getNumVertices(); ++i) {
     auto neighbors = getOutNeighbors(i);
     for (uint32_t j = 0; j < neighbors.second; ++j) {
       if (i < neighbors.first[j]) {
@@ -104,89 +60,33 @@ void Graph::DumpToFile(const std::string& path) const {
   output.close();
 }
 
-void Graph::loadCompressed(std::istream& input) {
-  clear();
-  input.read(reinterpret_cast<char*>(&n_vertices_), sizeof(n_vertices_));
-  input.read(reinterpret_cast<char*>(&n_edges_), sizeof(n_edges_));
-  input.read(reinterpret_cast<char*>(&max_degree_), sizeof(max_degree_));
-  // vlist
-  size_t vlist_size;
-  input.read(reinterpret_cast<char*>(&vlist_size), sizeof(vlist_size));
-  CHECK_EQ(vlist_size, n_vertices_ + 1);
-  vlist_.resize(vlist_size);
-  for (size_t i = 0; i < vlist_size; ++i) {
-    input.read(reinterpret_cast<char*>(&vlist_[i]), sizeof(vlist_[i]));
-  }
-  // elist
-  size_t elist_size;
-  input.read(reinterpret_cast<char*>(&elist_size), sizeof(elist_size));
-  CHECK_EQ(elist_size, 2 * n_edges_);
-  elist_.resize(elist_size);
-  for (size_t i = 0; i < elist_size; ++i) {
-    input.read(reinterpret_cast<char*>(&elist_[i]), sizeof(elist_[i]));
-  }
-  // labels
-  size_t labels_size;
-  input.read(reinterpret_cast<char*>(&labels_size), sizeof(labels_size));
-  CHECK_EQ(labels_size, n_vertices_);
-  labels_.resize(labels_size);
-  for (size_t i = 0; i < labels_size; ++i) {
-    input.read(reinterpret_cast<char*>(&labels_[i]), sizeof(labels_[i]));
-  }
-  // vertex_cardinality_by_label
-  size_t map_size;
-  input.read(reinterpret_cast<char*>(&map_size), sizeof(map_size));
-  for (size_t i = 0; i < map_size; ++i) {
-    LabelID l;
-    uint32_t count;
-    input.read(reinterpret_cast<char*>(&l), sizeof(l));
-    input.read(reinterpret_cast<char*>(&count), sizeof(count));
-    vertex_cardinality_by_label_[l] = count;
-  }
-  // build vertex by label index
-  for (auto& pair : vertex_cardinality_by_label_) {
-    vertex_ids_by_label_[pair.first].reserve(pair.second);
-  }
-  for (VertexID i = 0; i < n_vertices_; ++i) {
-    vertex_ids_by_label_[labels_[i]].push_back(i);
-  }
+void Graph::loadUndirectedGraphFromBinary(std::istream& input) {
+  GraphBase::loadUndirectedGraphFromBinary(input);
+  binaryStreamToVector(input, labels_);
+  CHECK_EQ(labels_.size(), n_vertices_);
 }
 
-void Graph::saveAsBinary(const std::string& path) const {
-  std::ofstream output(path, std::ios::out | std::ios::binary);
-  output.write(reinterpret_cast<const char*>(&n_vertices_), sizeof(n_vertices_));
-  output.write(reinterpret_cast<const char*>(&n_edges_), sizeof(n_edges_));
-  output.write(reinterpret_cast<const char*>(&max_degree_), sizeof(max_degree_));
-  {
-    size_t vlist_size = vlist_.size();
-    output.write(reinterpret_cast<const char*>(&vlist_size), sizeof(vlist_size));
-    for (auto v : vlist_) {
-      output.write(reinterpret_cast<const char*>(&v), sizeof(v));
-    }
+void Graph::saveAsBinaryInner(std::ostream& output) const {
+  GraphBase::saveAsBinaryInner(output);
+  vectorToBinaryStream(output, labels_);
+}
+
+std::pair<double, double> Graph::getMemoryUsage() const {
+  auto ret = GraphBase::getMemoryUsage();
+  ret.first += sizeof(Graph) - sizeof(GraphBase);
+  ret.second += sizeof(Graph) - sizeof(GraphBase);
+  ret.first += labels_.capacity() * sizeof(LabelID);
+  ret.second += labels_.size() * sizeof(LabelID);
+  auto pair_size = sizeof(unordered_map<LabelID, std::vector<VertexID>>::value_type);
+  ret.first += vertex_ids_by_label_.bucket_count() * (pair_size + 1);
+  ret.second += vertex_ids_by_label_.bucket_count() * (pair_size + 1);
+  for (auto& pair : vertex_ids_by_label_) {
+    ret.first += pair.second.capacity() * sizeof(VertexID);
   }
-  {
-    size_t elist_size = elist_.size();
-    output.write(reinterpret_cast<const char*>(&elist_size), sizeof(elist_size));
-    for (auto v : elist_) {
-      output.write(reinterpret_cast<const char*>(&v), sizeof(v));
-    }
+  for (auto& pair : vertex_ids_by_label_) {
+    ret.second += pair.second.size() * sizeof(VertexID);
   }
-  {
-    auto labels_size = labels_.size();
-    output.write(reinterpret_cast<const char*>(&labels_size), sizeof(labels_size));
-    for (auto l : labels_) {
-      output.write(reinterpret_cast<const char*>(&l), sizeof(l));
-    }
-  }
-  {
-    auto size = vertex_cardinality_by_label_.size();
-    output.write(reinterpret_cast<const char*>(&size), sizeof(size));
-    for (auto& pair : vertex_cardinality_by_label_) {
-      output.write(reinterpret_cast<const char*>(&pair.first), sizeof(pair.first));
-      output.write(reinterpret_cast<const char*>(&pair.second), sizeof(pair.second));
-    }
-  }
-  output.close();
+  return ret;
 }
 
 }  // namespace circinus

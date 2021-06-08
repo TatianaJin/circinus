@@ -32,18 +32,15 @@
 #include "plan/naive_planner.h"
 
 using circinus::CompressedSubgraphs;
+using circinus::ExecutionConfig;
 using circinus::ExecutionPlan;
 using circinus::Graph;
-using circinus::LDFScan;
+using circinus::Scan;
 using circinus::NaivePlanner;
 using circinus::NLFFilter;
 using circinus::QueryGraph;
 using circinus::QueryVertexID;
 using circinus::VertexID;
-
-#define BATCH_SIZE 32
-
-DEFINE_string(data_dir, "/data/share/project/haxe/data/subgraph_matching_datasets", "The directory of datasets");
 
 class PrintExecutionPlan : public testing::Test {
  protected:
@@ -71,14 +68,14 @@ class PrintExecutionPlan : public testing::Test {
 
   std::vector<std::vector<VertexID>> getCandidateSets(const Graph& g, const QueryGraph& q) {
     std::vector<std::vector<VertexID>> candidates(q.getNumVertices());
+    ExecutionConfig config;
     for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
-      LDFScan scan(&q, v, &g);
-      NLFFilter filter(&q, v);
-      std::vector<VertexID> buffer;
-      while (scan.Scan(&buffer, BATCH_SIZE) > 0) {
-        filter.Filter(g, buffer, &candidates[v]);
-        buffer.clear();
-      }
+      config.setInputSize(g.getVertexCardinalityByLabel(q.getVertexLabel(v)));
+      auto scan = circinus::Scan::newLDFScan(q.getVertexLabel(v), q.getVertexOutDegree(v), 0, config, 1);
+      scan->addFilter(std::make_unique<NLFFilter>(&q, v));
+      auto scan_ctx = scan->initScanContext(0);
+      scan->scan(&g, &scan_ctx);
+      candidates[v] = std::move(scan_ctx.candidates);
     }
     for (auto& candidate : candidates) {
       LOG(INFO) << "candidate set size " << candidate.size();
@@ -97,7 +94,7 @@ class PrintExecutionPlan : public testing::Test {
       std::vector<double> candidate_cardinality;
       candidate_cardinality.reserve(candidates.size());
       for (auto& set : candidates) {
-        candidate_cardinality.push_back(std::log((double)set.size()));
+        candidate_cardinality.push_back(set.size());
       }
       NaivePlanner planner(&q, &candidate_cardinality);
       ExecutionPlan* plan;

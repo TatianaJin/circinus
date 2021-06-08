@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "graph/graph.h"
+#include "graph/graph_metadata.h"
 #include "graph/query_graph.h"
 #include "ops/order/order_base.h"
 
@@ -25,8 +26,8 @@ namespace circinus {
 
 class TSOOrder : public OrderBase {
  public:
-  uint32_t getStartVertex(const Graph* data_graph_, const QueryGraph* query_graph_,
-                          std::vector<uint32_t> candidate_size);
+  QueryVertexID getStartVertex(const GraphMetadata& metadata, const QueryGraph* query_graph_,
+                               const std::vector<VertexID>& candidate_size) override;
 };
 
 }  // namespace circinus

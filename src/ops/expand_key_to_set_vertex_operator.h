@@ -16,6 +16,9 @@
 
 #include <algorithm>
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include "graph/types.h"
@@ -75,19 +78,21 @@ class ExpandKeyToSetVertexOperator : public ExpandVertexOperator {
         uint32_t key = query_vertex_indices_[parents_[i]];
         uint32_t key_vid = input.getKeyVal(key);
         if (i == 0) {
-          intersect(*candidates_, ((G*)current_data_graph_)->getOutNeighbors(key_vid, 0, i), &new_set, exceptions);
+          intersect(*candidates_, ((G*)current_data_graph_)->getOutNeighborsWithHint(key_vid, 0, i), &new_set,
+                    exceptions);
           if
             constexpr(isProfileMode(profile)) {
-              updateIntersectInfo(candidates_->size() + ((G*)current_data_graph_)->getVertexOutDegree(key_vid, 0, i),
-                                  new_set.size());
+              updateIntersectInfo(
+                  candidates_->size() + ((G*)current_data_graph_)->getVertexOutDegreeWithHint(key_vid, 0, i),
+                  new_set.size());
             }
         } else {
           auto new_set_size = new_set.size();
           (void)new_set_size;
-          intersectInplace(new_set, ((G*)current_data_graph_)->getOutNeighbors(key_vid, 0, i), &new_set);
+          intersectInplace(new_set, ((G*)current_data_graph_)->getOutNeighborsWithHint(key_vid, 0, i), &new_set);
           if
             constexpr(isProfileMode(profile)) {
-              updateIntersectInfo(new_set_size + ((G*)current_data_graph_)->getVertexOutDegree(key_vid, 0, i),
+              updateIntersectInfo(new_set_size + ((G*)current_data_graph_)->getVertexOutDegreeWithHint(key_vid, 0, i),
                                   new_set.size());
             }
         }

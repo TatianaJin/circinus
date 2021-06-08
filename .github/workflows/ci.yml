@@ -24,7 +24,7 @@ jobs:
 
     - name: Install dependencies
       run: |
-        sudo apt-get install wget build-essential libgflags-dev libgoogle-glog-dev clang-format-3.9 -y
+        sudo apt-get install wget build-essential libgflags-dev libgoogle-glog-dev clang-format-3.9 libzmq3-dev -y
 
     - name: Setup CMake
       uses: jwlawson/actions-setup-cmake@v1.8
@@ -45,12 +45,22 @@ jobs:
         sudo make install -j8
         cd ../..
 
+    - name: Setup CPPZMQ
+      run: |
+        # cppzmq
+        git clone https://github.com/zeromq/cppzmq
+        cd cppzmq
+        git checkout tags/v4.6.0
+        cd ..
+        sudo cp cppzmq/zmq.hpp /usr/local/include
+        sudo cp cppzmq/zmq_addon.hpp /usr/local/include
+
     - name: Check clang-format
       run: ${{github.workspace}}/scripts/clang-format.py
       shell: bash
 
     - name: CppLint
-      run: ${{github.workspace}}/scripts/lint.py | grep "Total errors found. 0"
+      run: if [[ $(${{github.workspace}}/scripts/lint.py | grep "Total errors found.") == 0 ]]; then exit 1; else exit 0; fi
       shell: bash
 
     - name: Create Build Environment

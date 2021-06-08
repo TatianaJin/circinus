@@ -19,6 +19,7 @@
 #include <map>
 #include <mutex>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "graph/compressed_subgraphs.h"

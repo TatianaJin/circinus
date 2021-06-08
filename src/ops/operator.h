@@ -22,7 +22,11 @@ class Operator {
  private:
   Operator* next_ = nullptr;
 
+ protected:
+  uint32_t parallelism_;
+
  public:
+  explicit Operator(uint32_t parallelism = 1) : parallelism_(parallelism) {}
   virtual ~Operator() {}
 
   inline void setNext(Operator* next) { next_ = next; }
@@ -32,7 +36,11 @@ class Operator {
 
   virtual std::string toProfileString() const { return toString(); }
 
-  virtual Operator* clone() const = 0;
+  inline uint32_t getParallelism() const { return parallelism_; }
+
+  inline void setParallelism(uint32_t parallelism) { parallelism_ = parallelism; }
+
+  virtual Operator* clone() const { return nullptr; }
 };
 
 }  // namespace circinus

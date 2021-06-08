@@ -15,6 +15,8 @@
 #pragma once
 
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -122,6 +124,7 @@ class ExecutionPlan {
   inline const OperatorTree& getOperators() const { return operators_; }
   inline OperatorTree& getOperators() { return operators_; }
 
+  // TODO(tatiana): move this logic to execution time
   inline void setCandidateSets(std::vector<std::vector<VertexID>>& cs) {
     candidate_sets_ = cs;
     uint64_t total_key_candidate_size = 1, total_set_candidate_size = 1;
@@ -140,11 +143,13 @@ class ExecutionPlan {
     LOG(INFO) << "ratio " << ((double)total_set_candidate_size / total_key_candidate_size);
   }
 
+  // TODO(tatiana): unused
   inline const std::vector<VertexID>& getCandidateSet(QueryVertexID id) const {
     DCHECK_LT(id, candidate_sets_.size());
     return candidate_sets_[id];
   }
 
+  // TODO(tatiana): unused
   inline const std::vector<std::vector<VertexID>>* getCandidateSets() const { return &candidate_sets_; }
 
   inline const bool isToKey(QueryVertexID id) const { return dynamic_cover_key_level_.count(id) != 0; }

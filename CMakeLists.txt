@@ -56,33 +56,28 @@ if (BUILD_SHARED)
   add_library(circinus SHARED ${circinus_sources})
   target_compile_definitions(circinus PUBLIC "USE_FILTER")
   target_link_libraries(circinus ${EXTERNAL_LIBRARY})
-  add_dependencies(circinus phmap_ep)
-  add_dependencies(circinus gklib_ep)
-  add_dependencies(circinus metis_ep)
 
   add_library(circinus_no_filter SHARED ${circinus_sources})
   target_link_libraries(circinus_no_filter ${EXTERNAL_LIBRARY})
-  add_dependencies(circinus_no_filter phmap_ep)
-  add_dependencies(circinus_no_filter gklib_ep)
-  add_dependencies(circinus_no_filter metis_ep)
 else()
   # Static
   add_library(circinus STATIC ${circinus_objs})
   target_compile_definitions(circinus PUBLIC "USE_FILTER")
   target_link_libraries(circinus ${EXTERNAL_LIBRARY})
-  add_dependencies(circinus phmap_ep)
-  add_dependencies(circinus gklib_ep)
-  add_dependencies(circinus metis_ep)
 
   add_library(circinus_no_filter STATIC ${circinus_objs})
   target_link_libraries(circinus_no_filter ${EXTERNAL_LIBRARY})
-  add_dependencies(circinus_no_filter phmap_ep)
-  add_dependencies(circinus_no_filter gklib_ep)
-  add_dependencies(circinus_no_filter metis_ep)
 endif()
+add_dependencies(circinus ${EXTERNAL_DEPENDENCY})
+add_dependencies(circinus_no_filter ${EXTERNAL_DEPENDENCY})
 
 
 ### Executables
+add_executable(Circinus src/circinus_main.cc)
+target_link_libraries(Circinus circinus ${EXTERNAL_LIBRARY})
+
+add_executable(GraphToBinary src/tools/graph_to_binary_main.cc)
+target_link_libraries(GraphToBinary circinus ${EXTERNAL_LIBRARY})
 
 # Tests
 if (BUILD_TESTS)

@@ -18,6 +18,7 @@
 #include <chrono>
 #include <fstream>
 #include <string>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -115,6 +116,7 @@ void intersectInplace(const std::vector<VertexID>& set1, const std::pair<const V
 class TraverseOperator : public Operator {
  protected:
   const std::vector<VertexID>* candidates_ = nullptr;
+  const QueryVertexID target_vertex_;
 
   /* for non-repeated-vertex check */
   uint64_t set_pruning_threshold_ = ~0u;
@@ -144,12 +146,13 @@ class TraverseOperator : public Operator {
   std::vector<std::pair<bool, uint32_t>> matching_order_indices_;
 
  public:
-  TraverseOperator() {}
-  explicit TraverseOperator(SubgraphFilter* filter) : subgraph_filter_(filter) {}
-  TraverseOperator(const std::vector<uint32_t>& same_label_key_indices,
+  TraverseOperator(QueryVertexID target_vertex, SubgraphFilter* filter)
+      : target_vertex_(target_vertex), subgraph_filter_(filter) {}
+  TraverseOperator(QueryVertexID target_vertex, const std::vector<uint32_t>& same_label_key_indices,
                    const std::vector<uint32_t>& same_label_set_indices, uint64_t set_pruning_threshold,
                    SubgraphFilter* filter = nullptr)
-      : set_pruning_threshold_(set_pruning_threshold),
+      : target_vertex_(target_vertex),
+        set_pruning_threshold_(set_pruning_threshold),
         same_label_key_indices_(same_label_key_indices),
         same_label_set_indices_(same_label_set_indices),
         subgraph_filter_(filter) {}
@@ -162,6 +165,7 @@ class TraverseOperator : public Operator {
   inline const auto& getSameLabelSetIndices() const { return same_label_set_indices_; }
   inline auto getSetPruningThreshold() const { return set_pruning_threshold_; }
   inline auto getCurrentDataGraph() const { return current_data_graph_; }
+  inline QueryVertexID getTargetQueryVertex() const { return target_vertex_; }
 
   inline const auto& getMatchingOrderIndices() const { return matching_order_indices_; }
   inline void setMatchingOrderIndices(std::vector<std::pair<bool, uint32_t>>&& matching_order_indices) {

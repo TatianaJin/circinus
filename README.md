@@ -27,3 +27,21 @@ For testing, Circinus uses [googletest](https://github.com/google/googletest/rel
 2. Run unit tests
 
         $ make test                            # Run unit tests
+
+
+### Introduction to Circinus
+
+#### Circinus Server and Client
+
+Circinus Server manages the whole process of query processing. It owns an executor manager for query execution.
+
+Circinus Client takes query from user, sends the query to the server, and displays the results to user. Multiple concurrent clients are supported, while a standalone mode is available for running Circius Server and Client in the same process.
+
+#### Executor Manager
+
+Accepts tasks from the circinus server and supports asynchronous execution of tasks. A thread pool is maintained to run tasks in parallel.
+
+#### Planner
+For each query, Circinus Server instantiates a Planner that generates logical `Plan`s for candidate pruning and subgraph matching. The generated `Plan`s are then translated into physical operators based on runtime information for execution.
+
+A `Plan` has a `PlanDriver` that generates task intances for parallel execution of the physical operators. While the physical operators provide the application logic, the `PlanDriver` is a bridge between the execution engine and the application logic, which specifies the input to the logic, and leave task coordination to the execution engine.
