@@ -109,9 +109,9 @@ class QueryGraphGenerator {
     if (vset_.size() != target_vertex_cnt_) return 0;
     if (target_vertex_cnt_ < 8) return 1;
     if (if_dense_) {
-      if (eset_.size() < 3 * target_vertex_cnt_) return 0;
+      if (2 * eset_.size() < 3 * target_vertex_cnt_) return 0;
     } else {
-      if (eset_.size() >= 3 * target_vertex_cnt_) return 0;
+      if (2 * eset_.size() >= 3 * target_vertex_cnt_) return 0;
     }
     return 1;
   }
