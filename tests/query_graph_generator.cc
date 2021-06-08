@@ -71,49 +71,36 @@ class QueryGraphGenerator {
       auto[neighbors, neighbors_cnt] = g_.getOutNeighbors(current_vertex);
       if (neighbors_cnt == 0) break;
       for (auto neighbor_v : vset_) {
-        int l = 0, r = neighbors_cnt - 1;
-        while (l < r) {
-          int mid = (l + r) / 2;
-          if (neighbors[mid] >= neighbor_v)
-            r = mid;
-          else
-            l = mid + 1;
-        }
-        if (neighbors[l] == neighbor_v) {
-          extra_edge_set.insert({current_vertex, neighbor_v});
-          extra_edge_set.insert({neighbor_v, current_vertex});
+        if(std::binary_search(neighbors,neighbors+neighbors_cnt,neighbor_v))
+        {
+          if(current_vertex<neighbor_v)extra_edge_set.insert({current_vertex, neighbor_v});
+          else extra_edge_set.insert({neighbor_v, current_vertex});
         }
       }
       if (vset_.size() >= target_vertex_cnt_) break;
       VertexID new_vertex = neighbors[mt_rand() % neighbors_cnt];
       vset_.insert(new_vertex);
-      eset_.insert({current_vertex, new_vertex});
-      eset_.insert({new_vertex, current_vertex});
+      if(current_vertex<new_vertex)eset_.insert({current_vertex, new_vertex});
+      else eset_.insert({new_vertex, current_vertex});
       current_vertex = new_vertex;
       ++step_cnt;
     }
     std::vector<std::pair<VertexID, VertexID>> diff_vec;
     std::set_difference(extra_edge_set.begin(), extra_edge_set.end(), eset_.begin(), eset_.end(),
                         std::back_inserter(diff_vec));
-    uint32_t all_edge_cnt = diff_vec.size() + eset_.size();
-    avg_deg += 1.0 * all_edge_cnt / vset_.size();
+    int all_edge_cnt = diff_vec.size() + eset_.size();
+    avg_deg += 2.0 * all_edge_cnt / vset_.size();
     if (vset_.size() < target_vertex_cnt_ || !if_dense_ || target_vertex_cnt_ < 8) return;
     // deal with the situation: 1.enough vertex 2.target dense qg(normally means not enough edges)
-    uint32_t d = all_edge_cnt - 3 * target_vertex_cnt_;
+    int d = 2* all_edge_cnt - 3 * target_vertex_cnt_;
     if (d < 0) return;
     d /= 2;
     std::random_shuffle(diff_vec.begin(), diff_vec.end());
-    uint32_t new_edge_cnt_bound = diff_vec.size() / 2;
-    if (d > 0) new_edge_cnt_bound -= mt_rand() % (d + 1);
-    uint32_t new_edge_cnt = 0;
-    for (uint32_t i = 0; i < diff_vec.size() && new_edge_cnt < new_edge_cnt_bound; ++i) {
-      auto p = diff_vec[i];
-      if (eset_.find(p) == eset_.end()) {
-        eset_.insert(p);
-        eset_.insert({p.second, p.first});
-        ++new_edge_cnt;
+    int new_edge_cnt_bound = diff_vec.size();
+    new_edge_cnt_bound -= mt_rand() % (d + 1);
+    for (int i = 0; i < new_edge_cnt_bound; ++i) {
+      eset_.insert(diff_vec[i]);
       }
-    }
   }
   bool check() {
     if (vset_.size() != target_vertex_cnt_) return 0;
@@ -150,11 +137,9 @@ class QueryGraphGenerator {
     }
     for (auto & [ v1, v2 ] : eset_) {
       int id1 = id_map[v1], id2 = id_map[v2];
-      if (id1 < id2) {
-        ++degree_map[id1];
-        ++degree_map[id2];
-        elist.push_back({id1, id2});
-      }
+      ++degree_map[id1];
+      ++degree_map[id2];
+      elist.push_back({id1, id2});
     }
     std::ofstream out(fn);
     out << "t " << target_vertex_cnt_ << " " << elist.size() << "\n";
