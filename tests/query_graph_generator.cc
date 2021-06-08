@@ -71,17 +71,20 @@ class QueryGraphGenerator {
       auto[neighbors, neighbors_cnt] = g_.getOutNeighbors(current_vertex);
       if (neighbors_cnt == 0) break;
       for (auto neighbor_v : vset_) {
-        if(std::binary_search(neighbors,neighbors+neighbors_cnt,neighbor_v))
-        {
-          if(current_vertex<neighbor_v)extra_edge_set.insert({current_vertex, neighbor_v});
-          else extra_edge_set.insert({neighbor_v, current_vertex});
+        if (std::binary_search(neighbors, neighbors + neighbors_cnt, neighbor_v)) {
+          if (current_vertex < neighbor_v)
+            extra_edge_set.insert({current_vertex, neighbor_v});
+          else
+            extra_edge_set.insert({neighbor_v, current_vertex});
         }
       }
       if (vset_.size() >= target_vertex_cnt_) break;
       VertexID new_vertex = neighbors[mt_rand() % neighbors_cnt];
       vset_.insert(new_vertex);
-      if(current_vertex<new_vertex)eset_.insert({current_vertex, new_vertex});
-      else eset_.insert({new_vertex, current_vertex});
+      if (current_vertex < new_vertex)
+        eset_.insert({current_vertex, new_vertex});
+      else
+        eset_.insert({new_vertex, current_vertex});
       current_vertex = new_vertex;
       ++step_cnt;
     }
@@ -92,7 +95,7 @@ class QueryGraphGenerator {
     avg_deg += 2.0 * all_edge_cnt / vset_.size();
     if (vset_.size() < target_vertex_cnt_ || !if_dense_ || target_vertex_cnt_ < 8) return;
     // deal with the situation: 1.enough vertex 2.target dense qg(normally means not enough edges)
-    int d = 2* all_edge_cnt - 3 * target_vertex_cnt_;
+    int d = 2 * all_edge_cnt - 3 * target_vertex_cnt_;
     if (d < 0) return;
     d /= 2;
     std::random_shuffle(diff_vec.begin(), diff_vec.end());
@@ -100,7 +103,7 @@ class QueryGraphGenerator {
     new_edge_cnt_bound -= mt_rand() % (d + 1);
     for (int i = 0; i < new_edge_cnt_bound; ++i) {
       eset_.insert(diff_vec[i]);
-      }
+    }
   }
   bool check() {
     if (vset_.size() != target_vertex_cnt_) return 0;
