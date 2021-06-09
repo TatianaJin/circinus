@@ -1,7 +1,7 @@
 #!/bin/bash
 # check all query graphs in $path using $checker
 path="${1:-/data/share/users/qlma/query-graph-output}"
-checker="${2:-/home/qlma/circinus/build/tests/Benchmark}"
+checker="${2:-/data/share/users/qlma/executables/NaiveMatch}"
 let cnt=0
 for dir1 in $path/*; do
   for dir2 in $path/*; do
@@ -15,7 +15,7 @@ for dir1 in $path/*; do
       prefix2=${file2%_*}
       if [ $prefix1 = $prefix2 ]
       then
-        $checker -naive_run=1 -naive_datagraph=$dir1 -naive_querygraph=$dir2  --minloglevel=4 | grep 'MATCH!!!'
+        $checker -naive_datagraph=$dir1 -naive_querygraph=$dir2  --minloglevel=4 | grep 'MATCH!!!'
         if [ $? -eq 0 ]
         then
           echo $dir1
