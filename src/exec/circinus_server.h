@@ -82,7 +82,7 @@ class CircinusServer {
   auto& getZMQContext() { return zmq_ctx_; }
 
   inline void shutDown() { event_queue_.push(Event(Event::ShutDown)); }
-  bool loadGraph(std::string&& gpath, std::string&& gname, std::string&& config, std::string&& client_addr = "");
+  bool loadGraph(std::string&& gpath, std::string&& gname, std::string&& config = "", std::string&& client_addr = "");
   bool query(std::string&& game, std::string&& qpath, std::string&& config, std::string&& client_addr = "");
 
  protected:

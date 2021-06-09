@@ -599,7 +599,6 @@ void NaivePlanner::generateOrder(const std::vector<QueryVertexID>& use_order) {
     s += std::to_string(select_cover[j]) + " ";
   }
   LOG(INFO) << s;
-
   if (use_order.empty()) {
     TwoCoreSolver solver;
     auto& core_table = solver.get2CoreTable(query_graph_);

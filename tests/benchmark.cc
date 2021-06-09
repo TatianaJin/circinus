@@ -244,6 +244,7 @@ class Benchmark {
   }
 
   void batchDFSExecuteST(const Graph* g, ExecutionPlan* plan) {
+    LOG(INFO) << plan->getRootQueryVertexID();
     auto seeds = plan->getCandidateSet(plan->getRootQueryVertexID());
     if (FLAGS_bipartite_graph) {
       auto data_graphs_for_operators = setupBipartiteGraphs(g, plan);

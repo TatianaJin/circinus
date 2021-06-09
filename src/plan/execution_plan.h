@@ -145,7 +145,7 @@ class ExecutionPlan {
 
   // TODO(tatiana): unused
   inline const std::vector<VertexID>& getCandidateSet(QueryVertexID id) const {
-    DCHECK_LT(id, candidate_sets_.size());
+    CHECK_LT(id, candidate_sets_.size());
     return candidate_sets_[id];
   }
 
