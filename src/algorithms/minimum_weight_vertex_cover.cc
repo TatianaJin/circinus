@@ -20,7 +20,6 @@
 #include <vector>
 
 #include "graph/query_graph.h"
-#include "utils/flags.h"
 
 namespace circinus {
 
@@ -104,11 +103,6 @@ void WeightedBnB::dfs(std::vector<int> assignment, std::deque<QueryEdge> uncover
   if (((double)(clock() - start_time_) / CLOCKS_PER_SEC) > cutoff_time_) {
     return;
   }
-  
-  // if (best_covers_.size() >= FLAGS_cover_size) {
-  //   return;
-  // }
-
 
   auto current_weight = computeAssignmentWeight(assignment, vertex_weights_);
   // prune when the current count already has more vertices than the best solution found so far
@@ -130,15 +124,6 @@ void WeightedBnB::dfs(std::vector<int> assignment, std::deque<QueryEdge> uncover
 
   // when a vertex cover is found
   if (uncovered_edges.empty()) {
-    // if (current_weight < best_cover_weight_ * 1.1) {
-    //   best_covers_.emplace_back(std::move(assignment));
-    //   if (current_weight < best_cover_weight_) {
-    //     best_cover_weight_ = current_weight;
-    //   }
-    // }
-    // return;
-  
-    
     if (current_weight < best_cover_weight_) {  // a cover better than current best covers is found
       best_cover_weight_ = current_weight;
       history_cover_size_.push_back(current_weight);

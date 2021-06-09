@@ -24,6 +24,7 @@
 #include <utility>
 #include <vector>
 
+#include "glog/logging.h"
 #include "graph/types.h"
 #include "utils/hashmap.h"
 
@@ -243,14 +244,14 @@ class CompressedSubgraphs {
 
   std::ostream& logEnumerated(std::ostream& ss, std::vector<std::pair<bool, uint32_t>>& log_indices,
                               uint64_t limit = ~0u) const;
-
   /** Get the value of the key vertex at key_idx. */
-  VertexID getKeyVal(uint32_t key_idx) const { 
-    CHECK(key_idx < keys_.size()) << key_idx << "  " << keys_.size();
-    return keys_[key_idx]; 
+  VertexID getKeyVal(uint32_t key_idx) const {
+    DCHECK_LT(key_idx, keys_.size()) << key_idx << "  " << keys_.size();
+    return keys_[key_idx];
   }
 
   const std::vector<VertexID>& getKeys() const { return keys_; }
+
   std::vector<VertexID>& getKeys() { return keys_; }
 
   unordered_set<VertexID> getKeyMap() const { return unordered_set<VertexID>(keys_.begin(), keys_.end()); }

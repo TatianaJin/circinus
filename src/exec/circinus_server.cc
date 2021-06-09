@@ -29,7 +29,8 @@ namespace circinus {
 void CircinusServer::Listen() {
   client_server_thread_ = std::thread([this]() {
     zmq::socket_t socket(zmq_ctx_, ZMQ_PULL);
-    socket.bind("tcp://*:" + std::to_string(GetAvailablePort()));
+    // socket.bind("tcp://*:" + std::to_string(GetAvailablePort()));
+    socket.bind("tcp://*:55954");
     while (true) {
       zmq::multipart_t msg;
       msg.recv(socket);
@@ -40,17 +41,27 @@ void CircinusServer::Listen() {
         break;
       } else if (event_str == "query") {
         DCHECK_GE(msg.size(), 3);
-        if (msg.size() == 3) {
-          query(msg.popstr(), msg.popstr(), msg.popstr());  // graph name, query path, query config
-        } else {                                            // need to reply to client
-          query(msg.popstr(), msg.popstr(), msg.popstr(), msg.popstr());
+        auto graph_name = msg.popstr();
+        auto query_path = msg.popstr();
+        auto query_config = msg.popstr();
+        if (msg.size() == 0) {
+          query(std::move(graph_name), std::move(query_path), std::move(query_config));
+        } else {  // need to reply to client
+          query(std::move(graph_name), std::move(query_path), std::move(query_config), msg.popstr());
         }
       } else if (event_str == "load") {
         DCHECK_GE(msg.size(), 3);
-        if (msg.size() == 3) {                                  // need to reply to client
-          loadGraph(msg.popstr(), msg.popstr(), msg.popstr());  // graph path, graph name, load config
-        } else {
-          loadGraph(msg.popstr(), msg.popstr(), msg.popstr(), msg.popstr());
+        auto graph_path = msg.popstr();
+        auto graph_name = msg.popstr();
+        if (msg.size() == 0) {
+          loadGraph(std::move(graph_path), std::move(graph_name));
+        } else if (msg.size() == 1) {
+          auto load_config = msg.popstr();
+          loadGraph(std::move(graph_path), std::move(graph_name), std::move(load_config));
+        } else {  // need to reply to client
+          auto load_config = msg.popstr();
+          auto client_addr = msg.popstr();
+          loadGraph(std::move(graph_path), std::move(graph_name), std::move(load_config), std::move(client_addr));
         }
       }
     }
@@ -101,6 +112,7 @@ void CircinusServer::Serve(bool listen) {
 bool CircinusServer::loadGraph(std::string&& graph_path, std::string&& graph_name, std::string&& load_config,
                                std::string&& client_addr) {
   Event event(Event::LoadGraph);
+  LOG(INFO) << "load " << graph_path << " " << graph_name << " " << load_config;
   event.args.reserve(3);
   event.args.emplace_back(std::move(graph_path));
   event.args.emplace_back(std::move(graph_name));
@@ -112,6 +124,7 @@ bool CircinusServer::loadGraph(std::string&& graph_path, std::string&& graph_nam
 
 bool CircinusServer::query(std::string&& graph_name, std::string&& query_path, std::string&& query_config,
                            std::string&& client_addr) {
+  LOG(INFO) << "query " << graph_name << " " << query_path << " " << query_config;
   Event event(Event::NewQuery);
   event.args.reserve(3);
   event.args.emplace_back(std::move(graph_name));
