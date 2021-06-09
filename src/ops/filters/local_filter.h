@@ -23,6 +23,8 @@ namespace circinus {
 
 class LocalFilter {
  public:
+  virtual ~LocalFilter() {}
+
   /** @returns The number of records that passed the filter and are added to output */
   uint32_t filter(const Graph& data_graph, const std::vector<VertexID>& candidates,
                   std::vector<VertexID>* output) const {

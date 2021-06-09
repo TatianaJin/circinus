@@ -29,6 +29,8 @@ class Result {
   static std::unique_ptr<Result> newCandidateResult(TaskId n_tasks);
   static std::unique_ptr<Result> newExecutionResult();
 
+  virtual ~Result() {}
+
   virtual void collect(TaskBase* task) = 0;
 };
 
