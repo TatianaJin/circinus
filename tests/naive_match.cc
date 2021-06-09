@@ -45,10 +45,9 @@ using circinus::QueryVertexID;
 using circinus::CoverNode;
 using circinus::QueryType;
 using circinus::TraverseOperator;
+using circinus::VertexID;
 
 
-
-DEFINE_bool(naive_run, false, "naive run or not");
 DEFINE_string(naive_datagraph, "/data/share/users/qlma/query-graph-output/query_dense_4_1.graph",
               "data graph file path");
 DEFINE_string(naive_querygraph, "/data/share/users/qlma/query-graph-output/query_dense_4_1.graph",
@@ -96,17 +95,17 @@ DEFINE_string(naive_querygraph, "/data/share/users/qlma/query-graph-output/query
     plan->setCandidateSets(candidates);
     plan->printPhysicalPlan();
     plan->getOutputs().init(1).limit(1);
+		auto seeds = plan->getCandidateSet(plan->getRootQueryVertexID());
     if (plan->isInCover(plan->getRootQueryVertexID()))
     {
-        plan->getOperators().execute(g, std::vector<CompressedSubgraphs>(seeds.begin(), seeds.end()), 0);
+        plan->getOperators().execute(&g, std::vector<CompressedSubgraphs>(seeds.begin(), seeds.end()), 0);
     }
     else
     {
         std::vector<CompressedSubgraphs> input;
       input.emplace_back(std::make_shared<std::vector<VertexID>>(std::move(seeds)));
-      plan->getOperators().execute(g, input, 0);
+      plan->getOperators().execute(&g, input, 0);
     }
-    batchDFSExecuteST(&g, plan);
     auto n_matches = plan->getOutputs().getCount();
     if (n_matches) std::cout << "MATCH!!!\n";
   }
