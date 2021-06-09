@@ -80,6 +80,8 @@ DEFINE_string(naive_querygraph, "/data/share/users/qlma/query-graph-output/query
   void naiverun(const std::string& datagraph, const std::string& naive_querygraph) {
     Graph g(datagraph);
     QueryGraph q(naive_querygraph);
+    if(g.getNumEdges()!=q.getNumEdges())return;
+    if(g.getNumVertices()!=q.getNumVertices())return;
     std::vector<QueryVertexID> use_order;
     std::vector<bool> visited(q.getNumVertices());
     getDFSOrder(use_order, q, 0, visited);

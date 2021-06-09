@@ -68,6 +68,7 @@ class QueryGraph {
   explicit QueryGraph(const std::string& path);
 
   inline QueryVertexID getNumVertices() const { return n_vertices_; }
+  inline EdgeID getNumEdges() const { return n_edges_; }
   inline QueryVertexID getGraphMaxDegree() const { return max_degree_; }
   inline uint32_t getVertexCardinalityByLabel(LabelID label) const {
     auto pos = vertex_cardinality_by_label_.find(label);
