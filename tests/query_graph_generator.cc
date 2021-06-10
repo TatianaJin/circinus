@@ -94,6 +94,7 @@ class QueryGraphGenerator {
     int all_edge_cnt = diff_vec.size() + eset_.size();
     avg_deg += 2.0 * all_edge_cnt / vset_.size();
     if (vset_.size() < target_vertex_cnt_ || !if_dense_ || target_vertex_cnt_ < 8) return;
+    // can be changed according to generating rules
     // deal with the situation: 1.enough vertex 2.target dense qg(normally means not enough edges)
     int d = 2 * all_edge_cnt - 3 * target_vertex_cnt_;
     if (d < 0) return;
@@ -106,6 +107,7 @@ class QueryGraphGenerator {
     }
   }
   bool check() {
+    // can be changed according to generating rules
     if (vset_.size() != target_vertex_cnt_) return 0;
     if (target_vertex_cnt_ < 8) return 1;
     if (if_dense_) {
@@ -116,6 +118,7 @@ class QueryGraphGenerator {
     return 1;
   }
   std::string getFilename() {
+    // can be changed according to generating rules`
     std::stringstream output_filename;
     output_filename << output_dir_ << "/query_";
     if (target_vertex_cnt_ < 8 || if_dense_)
