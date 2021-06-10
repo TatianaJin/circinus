@@ -53,9 +53,9 @@ class Planner {
    */
   CandidatePruningPlan* generateCandidatePruningPlan();
 
-  CandidatePruningPlan* updateCandidatePruningPlan(const std::vector<VertexID>* cardinality);
+  CandidatePruningPlan* updateCandidatePruningPlan(const std::vector<std::vector<VertexID>>* cardinality);
 
-  BacktrackingPlan* generateExecutionPlan(const std::vector<VertexID>*, bool multithread = true);
+  BacktrackingPlan* generateExecutionPlan(const std::vector<std::vector<VertexID>>*, bool multithread = true);
 };
 
 }  // namespace circinus

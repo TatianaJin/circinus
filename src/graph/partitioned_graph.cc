@@ -149,6 +149,10 @@ void ReorderedPartitionedGraph::reconstructByOrder() {
   }
   vlist_.swap(new_vlist);
   elist_.swap(new_elist);
+  // sort neighbors by id for each vertex
+  for (VertexID i = 0; i < n_vertices_; ++i) {
+    std::sort(elist_.begin() + vlist_[i], elist_.begin() + vlist_[i + 1]);
+  }
 }
 
 void ReorderedPartitionedGraph::reconstructByOrder(const GraphBase& src_graph) {
@@ -170,6 +174,10 @@ void ReorderedPartitionedGraph::reconstructByOrder(const GraphBase& src_graph) {
       ++vlist_[new_vertex_id + 1];
     }
     ++new_vertex_id;
+  }
+  // sort neighbors by id for each vertex
+  for (VertexID i = 0; i < n_vertices_; ++i) {
+    std::sort(elist_.begin() + vlist_[i], elist_.begin() + vlist_[i + 1]);
   }
 }
 

@@ -25,7 +25,7 @@ class ExecutionConfig {
  private:
   /* system level config */
   const uint32_t n_executors_;
-  const uint32_t max_parallelism_;
+  uint32_t max_parallelism_;
 
   /* transient, for each operator */
   VertexID input_size_;
@@ -41,6 +41,7 @@ class ExecutionConfig {
   uint32_t getBatchSize() const { return FLAGS_batch_size; }
   uint32_t getNumExecutors() const { return n_executors_; }
 
+  void setMaxParallelism(uint32_t p) { max_parallelism_ = p; }
   void setParallelism(uint32_t p) { parallelism_ = std::min(p, max_parallelism_); }
   void setInputSize(VertexID size) { input_size_ = size; }
 };

@@ -19,7 +19,7 @@
 #include <utility>
 #include <vector>
 
-#include "graph/graph.h"
+#include "graph/graph_base.h"
 #include "graph/graph_metadata.h"
 #include "graph/query_graph.h"
 #include "graph/types.h"
@@ -152,10 +152,10 @@ inline std::vector<QueryVertexID> getOrder(const std::string& order_str, uint32_
 struct QueryContext {
   QueryGraph query_graph;
   QueryConfig query_config;
-  Graph* data_graph;
+  GraphBase* data_graph;
   GraphMetadata* graph_metadata;
 
-  QueryContext(QueryGraph&& q, QueryConfig&& config, Graph* g, GraphMetadata* metadata)
+  QueryContext(QueryGraph&& q, QueryConfig&& config, GraphBase* g, GraphMetadata* metadata)
       : query_graph(std::move(q)), query_config(std::move(config)), data_graph(g), graph_metadata(metadata) {}
 
   void operator=(QueryContext&& context) {

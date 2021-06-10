@@ -21,6 +21,8 @@
 
 namespace circinus {
 
+#define SHARDING_FACTOR 3
+
 ExecutorManager::ExecutorManager(ThreadsafeQueue<ServerEvent>* queue) : reply_queue_(queue) {
   executors_.start(&task_queue_, &finished_tasks_);
   finish_task_handler_ = std::thread([this]() {
@@ -36,7 +38,6 @@ ExecutorManager::ExecutorManager(ThreadsafeQueue<ServerEvent>* queue) : reply_qu
         driver = state.second.get();
       }
       DCHECK(ctx->second != nullptr);
-      ctx->second->collect(task.get());
       driver->taskFinish(task.get(), &task_queue_, reply_queue_);
     }
   });
@@ -75,6 +76,9 @@ void ExecutorManager::ExecutorPool::start(ThreadsafeTaskQueue* task_queue,
 }
 
 // TODO(tatiana): setup ExecutionConfig
-ExecutionConfig ExecutorManager::getExecutionConfig() const { return ExecutionConfig(); }
+ExecutionConfig ExecutorManager::getExecutionConfig() const {
+  return ExecutionConfig(executors_.getNumExecutors(),
+                         executors_.getNumExecutors() == 1 ? 1 : executors_.getNumExecutors() * SHARDING_FACTOR);
+}
 
 }  // namespace circinus

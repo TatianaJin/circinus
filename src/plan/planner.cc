@@ -27,6 +27,9 @@
 
 namespace circinus {
 
+/**
+ * For now, in the case of partitioned graph, all graph partitions share the same candidate pruning plan.
+ */
 CandidatePruningPlan* Planner::generateCandidatePruningPlan() {
   auto& q = query_context_->query_graph;
   auto& strategy = query_context_->query_config.candidate_pruning_strategy;
@@ -43,12 +46,14 @@ CandidatePruningPlan* Planner::generateCandidatePruningPlan() {
   case CandidatePruningStrategy::LDF: {
     LOG(INFO) << "Prune candidate by LDF";
     candidate_pruning_plan_.newLDFScan(q);
+    candidate_pruning_plan_.setPartitionResult(query_context_->graph_metadata->numPartitions() > 1);
     return &candidate_pruning_plan_;
   }
   case CandidatePruningStrategy::NLF: {
     LOG(INFO) << "Prune candidate by NLF";
     candidate_pruning_plan_.newLDFScan(q);
     candidate_pruning_plan_.newNLFFilter(q);
+    candidate_pruning_plan_.setPartitionResult(query_context_->graph_metadata->numPartitions() > 1);
     return &candidate_pruning_plan_;
   }
   case CandidatePruningStrategy::DAF: {
@@ -78,12 +83,19 @@ CandidatePruningPlan* Planner::generateCandidatePruningPlan() {
   return &candidate_pruning_plan_;
 }
 
-CandidatePruningPlan* Planner::updateCandidatePruningPlan(const std::vector<VertexID>* cardinality) {
+CandidatePruningPlan* Planner::updateCandidatePruningPlan(const std::vector<std::vector<VertexID>>* part_cardinality) {
   auto& q = query_context_->query_graph;
   auto& strategy = query_context_->query_config.candidate_pruning_strategy;
+  auto n_qvs = (*part_cardinality)[0].size();
+  std::vector<VertexID> cardinality(n_qvs, 0);
+  for (uint32_t i = 0; i < part_cardinality->size(); ++i) {
+    for (uint32_t j = 0; j < n_qvs; ++j) {
+      cardinality[j] += (*part_cardinality)[i][j];
+    }
+  }
   if (strategy == CandidatePruningStrategy::LDF || strategy == CandidatePruningStrategy::NLF) {
-    for (uint32_t i = 0; i < cardinality->size(); ++i) {
-      DLOG(INFO) << "|C(v" << i << ")|: " << (*cardinality)[i];
+    for (uint32_t i = 0; i < cardinality.size(); ++i) {
+      DLOG(INFO) << " |C(v" << i << ")|: " << cardinality[i];
     }
     candidate_pruning_plan_.setFinished();
     return &candidate_pruning_plan_;
@@ -97,11 +109,11 @@ CandidatePruningPlan* Planner::updateCandidatePruningPlan(const std::vector<Vert
     auto& metadata = *query_context_->graph_metadata;
     switch (strategy) {
     case CandidatePruningStrategy::DAF: {
-      candidate_pruning_plan_.newDPISOFilter(&q, metadata, *cardinality);
+      candidate_pruning_plan_.newDPISOFilter(&q, metadata, cardinality);
       break;
     }
     case CandidatePruningStrategy::CFL: {
-      candidate_pruning_plan_.newCFLFilter(&q, metadata, *cardinality);
+      candidate_pruning_plan_.newCFLFilter(&q, metadata, cardinality);
       break;
     }
     case CandidatePruningStrategy::GQL: {
@@ -109,7 +121,7 @@ CandidatePruningPlan* Planner::updateCandidatePruningPlan(const std::vector<Vert
       break;
     }
     case CandidatePruningStrategy::TSO: {
-      candidate_pruning_plan_.newTSOFilter(&q, metadata, *cardinality);
+      candidate_pruning_plan_.newTSOFilter(&q, metadata, cardinality);
       break;
     }
     default:
@@ -117,12 +129,17 @@ CandidatePruningPlan* Planner::updateCandidatePruningPlan(const std::vector<Vert
     }
     return &candidate_pruning_plan_;
   }
+  candidate_pruning_plan_.setPartitionResult(query_context_->graph_metadata->numPartitions() > 1);
+  for (uint32_t i = 0; i < cardinality.size(); ++i) {
+    DLOG(INFO) << " |C(v" << i << ")|: " << cardinality[i];
+  }
   candidate_pruning_plan_.setFinished();
   return &candidate_pruning_plan_;
 }
 
-BacktrackingPlan* Planner::generateExecutionPlan(const std::vector<VertexID>* candidate_cardinality, bool multithread) {
-  std::vector<double> cardinality{candidate_cardinality->begin(), candidate_cardinality->end()};
+BacktrackingPlan* Planner::generateExecutionPlan(const std::vector<std::vector<VertexID>>* candidate_cardinality,
+                                                 bool multithread) {
+  std::vector<double> cardinality{candidate_cardinality->front().begin(), candidate_cardinality->front().end()};
 
   /* The data graph representation varies depending on the execution strategy.
    * For query execution with partitioned graphs, use GraphView. For query on normal graphs, use Normal;

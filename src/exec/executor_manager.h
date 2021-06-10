@@ -56,13 +56,15 @@ class ExecutorManager {
 
     void start(ThreadsafeTaskQueue* task_queue, ThreadsafeQueue<std::unique_ptr<TaskBase>>* finished_task);
     inline void shutDown() { running_ = false; }
+    inline uint32_t getNumExecutors() const { return n_threads_; }
   } executors_;
 
   ThreadsafeQueue<ServerEvent>* reply_queue_;  // to server, not owned
   ThreadsafeTaskQueue task_queue_;
   ThreadsafeQueue<std::unique_ptr<TaskBase>> finished_tasks_;
 
-  unordered_map<QueryId, std::pair<ExecutionContext, std::unique_ptr<PlanDriver>>> execution_ctx_;
+  // stl is used as phmap invalidates the reference/pointer to element upon flat map mutation
+  std::unordered_map<QueryId, std::pair<ExecutionContext, std::unique_ptr<PlanDriver>>> execution_ctx_;
   std::mutex execution_ctx_mu_;
   std::thread finish_task_handler_;
 

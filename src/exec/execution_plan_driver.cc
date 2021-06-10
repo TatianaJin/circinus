@@ -39,7 +39,8 @@ void ExecutionPlanDriver::init(QueryId qid, QueryContext* query_ctx, ExecutionCo
   task_counters_[0] = root_ptr->getParallelism();
   for (uint32_t i = 0; i < root_ptr->getParallelism(); ++i) {
     auto traverse = dynamic_cast<TraverseOperator*>(root_ptr);
-    task_queue.putTask(new TraverseTask(qid, 0, i, traverse, query_ctx->data_graph));
+    // FIXME(tatiana): support partitioned graph
+    task_queue.putTask(new TraverseTask(qid, 0, i, traverse, (const Graph*)query_ctx->data_graph));
   }
 }
 
@@ -61,10 +62,10 @@ void MatchingParallelExecutionPlanDriver::init(QueryId qid, QueryContext* query_
   if (ctx.first.getNumExecutors() == 1) {
     // one task for single-thread execution
     task_counters_.push_back(1);
-    task_queue.putTask(new TraverseChainTask(qid, 0, ctx.first.getBatchSize(), plan_->getOperatorTree(),
-                                             query_ctx->data_graph,
-                                             dynamic_cast<CandidateResult*>(candidate_result.get())->getCandidates(),
-                                             plan_->getInputCandidateIndex(), plan_->inputsAreKeys()));
+    task_queue.putTask(new TraverseChainTask(
+        qid, 0, ctx.first.getBatchSize(), plan_->getOperatorTree(), (const Graph*)query_ctx->data_graph,
+        *dynamic_cast<CandidateResult*>(candidate_result.get())->getMergedCandidates(), plan_->getInputCandidateIndex(),
+        plan_->inputsAreKeys()));
     return;
   }
   // // init task counter for root and put tasks to task queue

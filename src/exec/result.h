@@ -27,41 +27,47 @@ namespace circinus {
 class Result {
  public:
   static std::unique_ptr<Result> newCandidateResult(TaskId n_tasks);
+  static std::unique_ptr<Result> newPartitionedCandidateResult(TaskId n_tasks, uint32_t n_partitions);
   static std::unique_ptr<Result> newExecutionResult();
 
   virtual ~Result() {}
 
+  // FIXME(tatiana): not a suitable common interface?
   virtual void collect(TaskBase* task) = 0;
 };
 
 class CandidateResult : public Result {
- private:
+ protected:
   std::vector<std::vector<std::vector<VertexID>>> candidates_;  // {query vertex, {shard, candidates}}
   std::vector<std::vector<VertexID>> merged_candidates_;
 
  public:
   explicit CandidateResult(TaskId n_tasks) : candidates_(n_tasks) {}
 
+  virtual ~CandidateResult() {}
+
   void collect(TaskBase* task) override;
+
+  virtual std::vector<std::vector<VertexID>> getCandidateCardinality() const;
 
   void merge();
 
   void remove_invalid(QueryVertexID query_vertex);
 
   std::vector<std::vector<VertexID>>* getMergedCandidates() { return &merged_candidates_; }
+};
 
-  const std::vector<std::vector<std::vector<VertexID>>>& getCandidates() const { return candidates_; }
-  std::vector<std::vector<std::vector<VertexID>>>& getCandidates() { return candidates_; }
-
-  std::vector<VertexID> getCandidateCardinality() const {
-    std::vector<VertexID> ret(candidates_.size(), 0);
-    for (uint32_t i = 0; i < candidates_.size(); ++i) {
-      for (auto& shard : candidates_[i]) {
-        ret[i] += shard.size();
-      }
+class PartitionedCandidateResult : public CandidateResult {
+ public:
+  explicit PartitionedCandidateResult(uint32_t n_qvs, uint32_t n_partitions) : CandidateResult(n_qvs) {
+    for (auto& shards : candidates_) {
+      shards.resize(n_partitions);
     }
-    return ret;
   }
+
+  void collect(TaskBase* task) override;
+
+  std::vector<std::vector<VertexID>> getCandidateCardinality() const override;
 };
 
 class ExecutionResult : public Result {

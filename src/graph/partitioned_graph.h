@@ -96,7 +96,7 @@ class ReorderedPartitionedGraph : public GraphBase {
         return pair.first;
       }
     }
-    LOG(ERROR) << "cannot find label range " << id << " partition " << partition;
+    LOG(FATAL) << "cannot find label range for vertex " << id << " partition " << partition;
     return 0;
   }
 
@@ -149,6 +149,9 @@ class ReorderedPartitionedGraph : public GraphBase {
     DCHECK_LT(partition, n_partitions_);
     return std::make_pair(partition_offsets_[partition], partition_offsets_[partition + 1]);
   }
+
+  inline VertexID getPartitionOffset(uint32_t partition) const { return partition_offsets_[partition]; }
+  inline VertexID getPartitionEnd(uint32_t partition) const { return partition_offsets_[partition + 1]; }
 
   inline const auto& getLabelOffsetsInPartition(uint32_t partition) const {
     DCHECK_LT(partition, n_partitions_);

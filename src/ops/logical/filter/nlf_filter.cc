@@ -35,7 +35,7 @@ std::vector<std::unique_ptr<LocalFilter>> LogicalNLFFilter::toPhysicalOperators(
   ret.reserve(size);
   if (metadata.isSortedByLabel()) {
     for (uint32_t i = 0; i < size; ++i) {
-      ret.push_back(std::make_unique<QuickNLFFilter>(std::move(out_neighbor_label_frequency_[i])));
+      ret.push_back(std::make_unique<QuickNLFFilter>(out_neighbor_label_frequency_[i]));
     }
   } else if (maximum_neighbor_degree_filter_) {
     for (uint32_t i = 0; i < size; ++i) {

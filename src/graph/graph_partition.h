@@ -22,15 +22,48 @@ namespace circinus {
  * A partition view of ReorderedPartitionedGraph.
  */
 class GraphPartition {
-  ReorderedPartitionedGraph* const original_graph_ = nullptr;
-  const VertexID offset_;  // The vertex id of the first vertex in the partition
-  const VertexID n_vertices_;
+  const ReorderedPartitionedGraph* const original_graph_ = nullptr;
+  const uint32_t src_partition_;  // the major partition
+  const uint32_t dst_partition_;  // the (local) partition that shows a view of the neighborhood
 
  public:
-  GraphPartition(ReorderedPartitionedGraph* original_graph, VertexID offset, VertexID n_vertices)
-      : original_graph_(original_graph), offset_(offset), n_vertices_(n_vertices) {}
+  GraphPartition(const ReorderedPartitionedGraph* original_graph, uint32_t partition)
+      : GraphPartition(original_graph, partition, partition) {}
 
-  inline VertexID getNumVertices() const { return n_vertices_; }
+  GraphPartition(const ReorderedPartitionedGraph* original_graph, uint32_t src_partition, uint32_t dst_partition)
+      : original_graph_(original_graph), src_partition_(src_partition), dst_partition_(dst_partition) {}
+
+  inline VertexID getPartitionOffset() const { return original_graph_->getPartitionOffset(src_partition_); }
+  inline VertexID getPartitionEnd() const { return original_graph_->getPartitionEnd(src_partition_); }
+
+  inline VertexID getOriginalId(VertexID id) const { return original_graph_->getOriginalVertexId(id); }
+
+  /* start of vertex accessors within src-dst partition */
+
+  /** @returns The range of (reordered) vertex ids within src_partition_. */
+  inline const std::pair<VertexID, VertexID>& getVertexRangeByLabel(LabelID lid) const {
+    return original_graph_->getVertexRangeByLabel(lid, src_partition_);
+  }
+
+  /* end of vertex accessors within src-dst partition */
+
+  /* start of full neighborhood accessors for filtering */
+
+  /** @param vid The reordered vertex id. */
+  inline LabelID getVertexLabel(VertexID vid) const {
+    if (vid >= getPartitionOffset() && vid < getPartitionEnd()) {
+      return original_graph_->getVertexLabelInPartition(vid, src_partition_);
+    }
+    return original_graph_->getVertexLabel(vid);
+  }
+
+  /** @param vid The reordered vertex id. */
+  inline VertexID getVertexOutDegree(VertexID vid) const { return original_graph_->getVertexOutDegree(vid); }
+
+  /** @param vid The reordered vertex id. */
+  inline auto getOutNeighbors(VertexID vid) const { return original_graph_->getOutNeighbors(vid); }
+
+  /* end of full neighborhood accessors for filtering */
 };
 
 }  // namespace circinus

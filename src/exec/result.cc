@@ -28,13 +28,14 @@ std::unique_ptr<Result> Result::newCandidateResult(TaskId n_tasks) {
   return std::make_unique<CandidateResult>(n_tasks);
 }
 
+std::unique_ptr<Result> Result::newPartitionedCandidateResult(TaskId n_tasks, uint32_t n_partitions) {
+  return std::make_unique<PartitionedCandidateResult>(n_tasks, n_partitions);
+}
+
 std::unique_ptr<Result> Result::newExecutionResult() { return std::make_unique<ExecutionResult>(); }
 
 void CandidateResult::collect(TaskBase* task) {
   auto scan = dynamic_cast<ScanTask*>(task);
-  if (scan == nullptr) {
-    return;
-  }
   auto& shard_candidates = scan->getScanContext().candidates;
   if (!shard_candidates.empty()) {
     candidates_[task->getTaskId()].push_back(std::move(shard_candidates));
@@ -46,8 +47,10 @@ void CandidateResult::merge() {
   for (uint32_t i = 0; i < candidates_.size(); ++i) {
     for (uint32_t j = 0; j < candidates_[i].size(); ++j) {
       merged_candidates_[i].insert(merged_candidates_[i].end(), candidates_[i][j].begin(), candidates_[i][j].end());
+      candidates_[i][j].clear();
     }
   }
+  candidates_.clear();
 }
 
 void CandidateResult::remove_invalid(QueryVertexID query_vertex) {
@@ -55,6 +58,33 @@ void CandidateResult::remove_invalid(QueryVertexID query_vertex) {
       std::remove_if(merged_candidates_[query_vertex].begin(), merged_candidates_[query_vertex].end(),
                      [invalid = INVALID_VERTEX_ID](VertexID vid) { return vid == invalid; }),
       merged_candidates_[query_vertex].end());
+}
+
+std::vector<std::vector<VertexID>> CandidateResult::getCandidateCardinality() const {
+  std::vector<VertexID> ret(candidates_.size(), 0);
+  for (uint32_t i = 0; i < candidates_.size(); ++i) {
+    for (auto& shard : candidates_[i]) {
+      ret[i] += shard.size();
+    }
+  }
+  return {std::move(ret)};
+}
+
+void PartitionedCandidateResult::collect(TaskBase* task) {
+  auto scan = dynamic_cast<ScanTask*>(task);
+  candidates_[scan->getTaskId()][scan->getPartition()] = std::move(scan->getScanContext().candidates);
+}
+
+std::vector<std::vector<VertexID>> PartitionedCandidateResult::getCandidateCardinality() const {
+  auto n_partitions = candidates_.front().size();
+  std::vector<std::vector<VertexID>> ret(n_partitions);
+  for (uint32_t i = 0; i < n_partitions; ++i) {
+    ret[i].resize(candidates_.size(), 0);
+    for (uint32_t j = 0; j < candidates_.size(); ++j) {
+      ret[i][j] += candidates_[j][i].size();
+    }
+  }
+  return ret;
 }
 
 void ExecutionResult::collect(TaskBase* task) {
