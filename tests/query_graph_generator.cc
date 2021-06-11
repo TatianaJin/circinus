@@ -39,9 +39,9 @@ class QueryGraphGenerator {
   bool if_dense_;
   std::string output_dir_;
   uint32_t max_random_walk_step;
-  uint32_t trial_cnt_;
+  uint32_t attempt_cnt_;
   uint32_t success_cnt_;
-  uint32_t trial_cnt_bound_;
+  uint32_t attempt_cnt_bound_;
   std::set<VertexID> vset_;
   std::set<std::pair<VertexID, VertexID>> eset_;
   double avg_deg;
@@ -55,9 +55,9 @@ class QueryGraphGenerator {
         if_dense_(if_dense),
         output_dir_(output_dir),
         max_random_walk_step(5 * target_vertex_cnt),
-        trial_cnt_(0),
+        attempt_cnt_(0),
         success_cnt_(0),
-        trial_cnt_bound_(1e8),
+        attempt_cnt_bound_(1e8),
         avg_deg(0) {}
   void generate() {
     std::mt19937 mt_rand(std::chrono::system_clock::now().time_since_epoch().count());
@@ -158,16 +158,16 @@ class QueryGraphGenerator {
     out.close();
   }
   void run() {
-    while (success_cnt_ < target_query_graph_cnt_ && trial_cnt_ < trial_cnt_bound_) {
+    while (success_cnt_ < target_query_graph_cnt_ && attempt_cnt_ < attempt_cnt_bound_) {
       generate();
-      ++trial_cnt_;
+      ++attempt_cnt_;
       if (check()) {
         ++success_cnt_;
         save();
       }
     }
-    std::cout << "Tried " << trial_cnt_ << " times to get " << success_cnt_ << " queries.\n";
-    std::cout << "Avg degree of all tried random walk induced subgraph: " << avg_deg / trial_cnt_ << "\n";
+    std::cout << "Tried " << attempt_cnt_ << " times to get " << success_cnt_ << " queries.\n";
+    std::cout << "Avg degree of all tried random walk induced subgraphs: " << avg_deg / attempt_cnt_ << "\n";
   }
 };
 }  // namespace circinus
