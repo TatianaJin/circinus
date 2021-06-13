@@ -24,9 +24,9 @@
 
 namespace circinus {
 
-int GetAvailablePort() {
+int GetAvailablePort(int default_port) {
   struct sockaddr_in addr;
-  addr.sin_port = htons(0);                  // 0 means let system pick up an available port.
+  addr.sin_port = htons(default_port);       // 0 means let system pick up an available port.
   addr.sin_family = AF_INET;                 // IPV4
   addr.sin_addr.s_addr = htonl(INADDR_ANY);  // set addr to any interface
 
@@ -44,6 +44,19 @@ int GetAvailablePort() {
   int ret = ntohs(addr.sin_port);
   close(sock);
   return ret;
+}
+
+int GetAvailablePort(int default_port, int n_tries) {
+  auto target_port = default_port;
+  auto port = 0;
+  LOG(INFO) << "Try binding to " << target_port << "...";
+  while ((port = GetAvailablePort(target_port)) == 0) {
+    if (++target_port > default_port + n_tries) {
+      LOG(FATAL) << "Cannot find an available port after " << n_tries << " probes.";
+    }
+    LOG(INFO) << "Can not bind to " << (target_port - 1) << ". Retry binding to " << target_port << "...";
+  }
+  return port;
 }
 
 }  // namespace circinus

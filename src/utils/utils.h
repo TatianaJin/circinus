@@ -127,4 +127,23 @@ static inline uint64_t getNumSubgraphs(const std::vector<CompressedSubgraphs>& g
   return count;
 }
 
+#ifdef __GNUG__
+#include <cxxabi.h>
+#include <cstdlib>
+#include <memory>
+template <typename T>
+std::string getTypename(const T& t) {
+  auto name = typeid(t).name();
+  int status = 0;
+  // enable c++11 by passing the flag -std=c++11 to g++
+  std::unique_ptr<char, void (*)(void*)> res{abi::__cxa_demangle(name, NULL, NULL, &status), std::free};
+  return (status == 0) ? res.get() : name;
+}
+#else
+template <typename T>
+std::string getTypename(const T& t) {
+  return typeid(t).name();
+}
+#endif
+
 }  // namespace circinus

@@ -42,7 +42,7 @@ void CandidateResult::collect(TaskBase* task) {
 }
 
 void CandidateResult::merge() {
-  merged_candidates_.reserve(candidates_.size());
+  merged_candidates_.resize(candidates_.size());
   for (uint32_t i = 0; i < candidates_.size(); ++i) {
     for (uint32_t j = 0; j < candidates_[i].size(); ++j) {
       merged_candidates_[i].insert(merged_candidates_[i].end(), candidates_[i][j].begin(), candidates_[i][j].end());

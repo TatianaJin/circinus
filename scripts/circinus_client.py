@@ -2,6 +2,7 @@
 
 import atexit
 import readline
+import socket
 import struct
 import sys
 import os.path as osp
@@ -9,6 +10,8 @@ import glob as gb
 from argparse import ArgumentParser
 
 import zmq
+
+context = zmq.Context()
 
 
 def parse_args():
@@ -30,7 +33,6 @@ def parse_args():
 
 
 def connect_to(hostname, port):
-  context = zmq.Context()
   send_sock = zmq.Socket(context, zmq.PUSH)
   send_url = "tcp://{0}:{1}".format(hostname, port)
 
@@ -67,6 +69,17 @@ def pack(data, mode='int'):
     return struct.pack('x', '')
 
 
+def unpack(data, mode='str'):
+  if mode == "bool":
+    return struct.unpack('?', data)[0]
+  if mode == "double":
+    return struct.unpack('d', data)[0]
+  if mode == "uint64_t":
+    return struct.unpack('Q', data)[0]
+  if mode == "str":
+    return struct.unpack('s', data).decode('utf-8')[0]
+
+
 class CircinusCommandCompleter:
 
   def __init__(self, send_sock, histfile=osp.join(osp.expanduser("~"), ".circinus_history"), history_length=1000):
@@ -78,6 +91,36 @@ class CircinusCommandCompleter:
       "query": ["query <graph_name> <query_path> <query_config_kvs>"],
       "shutdown": ["shutdown"]
     }
+    self.recv_sock = zmq.Socket(context, zmq.PULL)
+    self.client_addr = "tcp://{0}:{1}".format(socket.gethostname(), self.recv_sock.bind_to_random_port("tcp://*"))
+
+  def process_cmds(self, cmds):
+    # complete the command
+    if cmds[0] == "load":
+      if len(cmds) == 2:
+        cmds = [cmds[0], osp.join(cmds[1], "data_graph", "{0}.graph.bin".format(cmds[1])), cmds[1], '']
+      elif len(cmds) == 3:
+        cmds.append('')  # empty config
+    if cmds[0] == "query":
+      pass
+    cmds.append(self.client_addr)  # print(cmds)
+
+    # send query to server
+    self.send_sock.send_multipart([pack(x, mode='str') for x in cmds])
+
+    # recv result
+    msgs = self.recv_sock.recv_multipart()
+    flag = unpack(msgs[0], 'bool')
+    if flag:
+      if cmds[0] == "load":
+        print("Loaded graph in {0} seconds".format(unpack(msgs[1], 'double')))
+      if cmds[0] == "query":
+        # TODO(tatiana): query time and other info
+        print("Query finished in ? seconds. Count = {0}".format(unpack(msgs[1], 'uint64_t')))
+    else:
+      print(unpack(msgs[1]))
+
+    return cmds
 
   def init_history(self, histfile, history_length):
     readline.parse_and_bind("tab: complete")
@@ -123,8 +166,8 @@ class CircinusCommandCompleter:
         if cmd == "" or len(cmd_line) == 1:
           continue
 
-        cmds = [pack(x, mode='str') for x in cmd.split(" ") if x != ""]
-        self.send_sock.send_multipart(cmds)
+        cmds = [x for x in cmd.split(" ") if x != ""]
+        self.process_cmds(cmds)
         last_cmd = ""
 
 
