@@ -15,6 +15,8 @@
 #include <chrono>
 #include <cmath>
 #include <fstream>
+#include <random>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -29,36 +31,48 @@
 #include "graph/compressed_subgraphs.h"
 #include "graph/graph.h"
 #include "graph/query_graph.h"
-#include "ops/expand_edge_operator.h"
 #include "ops/filters.h"
+#include "ops/logical_filters.h"
+#include "ops/operators.h"
 #include "ops/order.h"
 #include "ops/scans.h"
+#include "ops/types.h"
 #include "plan/execution_plan.h"
 #include "plan/naive_planner.h"
 #include "utils/flags.h"
 #include "utils/hashmap.h"
+#include "utils/profiler.h"
+#include "utils/utils.h"
 
 using circinus::CompressedSubgraphs;
 using circinus::ExecutionConfig;
 using circinus::ExecutionPlan;
 using circinus::Graph;
-using circinus::Scan;
+using circinus::GraphType;
+using circinus::GraphMetadata;
 using circinus::NaivePlanner;
-using circinus::NLFFilter;
-using circinus::CFLFilter;
-using circinus::CFLOrder;
-using circinus::DPISOFilter;
-using circinus::OrderBase;
-using circinus::TSOOrder;
-using circinus::TSOFilter;
-using circinus::GQLFilter;
 using circinus::QueryGraph;
 using circinus::QueryVertexID;
 using circinus::Task;
 using circinus::ThreadPool;
 using circinus::VertexID;
-using circinus::unordered_map;
-using circinus::unordered_set;
+using circinus::Profiler;
+using circinus::CoverNode;
+using circinus::QueryType;
+using circinus::TraverseOperator;
+using circinus::INVALID_VERTEX_ID;
+// logical filter
+using circinus::LogicalCFLFilter;
+using circinus::LogicalGQLFilter;
+using circinus::LogicalNLFFilter;
+using circinus::LogicalTSOFilter;
+using circinus::LogicalDPISOFilter;
+using circinus::LogicalNeighborhoodFilter;
+
+// physical filter
+using circinus::NeighborhoodFilter;
+using circinus::NLFFilter;
+using circinus::GQLFilter;
 
 #define BATCH_SIZE FLAGS_batch_size
 #define toSeconds(start, end) \
@@ -74,71 +88,56 @@ const std::pair<int, int> query_index_range = {1, 200};
 
 std::vector<std::vector<VertexID>> getCandidateSets(const Graph& g, const QueryGraph& q,
                                                     const std::string& filter_str) {
-  const char* filter_cstr = filter_str.c_str();
   std::vector<std::vector<VertexID>> candidates(q.getNumVertices());
-  std::vector<uint32_t> candidate_size(q.getNumVertices());
+  std::vector<VertexID> candidate_size(q.getNumVertices());
   ExecutionConfig config;
   for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
     config.setInputSize(g.getVertexCardinalityByLabel(q.getVertexLabel(v)));
-
     auto scan = circinus::Scan::newLDFScan(q.getVertexLabel(v), q.getVertexOutDegree(v), 0, config, 1);
-    if (strcmp(filter_cstr, "dpiso") != 0 && strcmp(filter_cstr, "ldf") != 0) {
+    if (filter_str.compare("ldf") && filter_str.compare("dpiso")) {
       scan->addFilter(std::make_unique<NLFFilter>(&q, v));
     }
     auto scan_ctx = scan->initScanContext(0);
     scan->scan(&g, &scan_ctx);
     candidates[v] = std::move(scan_ctx.candidates);
     candidate_size[v] = candidates[v].size();
-  }
-  if (strcmp(filter_cstr, "cfl") == 0) {
-    CFLOrder cfl_order;
-    QueryVertexID start_vertex = cfl_order.getStartVertex(&g, &q, candidate_size);
-    // LOG(INFO) << "cfl order get start vertex " << start_vertex;
-    CFLFilter cfl_filter(&q, &g, start_vertex);
-    cfl_filter.Filter(candidates);
-  } else if (strcmp(filter_cstr, "dpiso") == 0) {
-    OrderBase dpiso_order;
-    QueryVertexID start_vertex = dpiso_order.getStartVertex(&g, &q, candidate_size);
-    // LOG(INFO) << "dpiso order get start vertex " << start_vertex;
-    DPISOFilter dpiso_filter(&q, &g, start_vertex);
-    dpiso_filter.Filter(candidates);
-  } else if (strcmp(filter_cstr, "tso") == 0) {
-    TSOOrder tso_order;
-    QueryVertexID start_vertex = tso_order.getStartVertex(&g, &q, candidate_size);
-    // LOG(INFO) << "tso order get start vertex " << start_vertex;
-    TSOFilter tso_filter(&q, &g, start_vertex);
-    tso_filter.Filter(candidates);
-  } else if (strcmp(filter_cstr, "gql") == 0) {
-    std::vector<std::vector<VertexID>> gql_candidates;
-    unordered_map<QueryVertexID, unordered_set<VertexID>> gql_map;
-    for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
-      unordered_set<VertexID> gql_set;
-      for (auto i : candidates[v]) {
-        gql_set.insert(i);
-      }
-      gql_map[v] = std::move(gql_set);
-    }
-    for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
-      GQLFilter gql_filter(&q, v, &gql_map);
-      gql_filter.preFilter(g, candidates[v]);
-    }
-    for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
-      GQLFilter gql_filter(&q, v, &gql_map);
-      std::vector<VertexID> tempvec;
-      gql_filter.Filter(g, candidates[v], &tempvec);
-      gql_candidates.push_back(std::move(tempvec));
-    }
-    //   for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
-    //     LOG(INFO) << "vertex " << v << " " << candidate_size[v] << "/" << gql_candidates[v].size();
-    //}
-    return gql_candidates;
+    // LOG(INFO) << "query vertex " << v << ' ' << scan->toString();
   }
 
-  //  for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
-  //   LOG(INFO) << "vertex " << v << " " << candidate_size[v] << "/" << candidates[v].size();
-  //}
+  if (filter_str.compare("ldf") && filter_str.compare("nlf")) {
+    auto metadata = GraphMetadata(g);
+    std::unique_ptr<LogicalNeighborhoodFilter> logical_filter;
+    if (filter_str.compare("cfl")) {
+      logical_filter = std::make_unique<LogicalCFLFilter>(metadata, &q, candidate_size);
+    } else if (filter_str.compare("dpiso")) {
+      logical_filter = std::make_unique<LogicalDPISOFilter>(metadata, &q, candidate_size);
+    } else if (filter_str.compare("tso")) {
+      logical_filter = std::make_unique<LogicalTSOFilter>(metadata, &q, candidate_size);
+    } else if (filter_str.compare("gql")) {
+      logical_filter = std::make_unique<LogicalGQLFilter>(&q);
+    }
+    auto physical_filters = logical_filter->toPhysicalOperators(metadata, config);
+    // LOG(INFO) << "total number of physical filters: " << physical_filters.size() << '\n';
+    for (auto& filter : physical_filters) {
+      QueryVertexID query_vertex = filter->getQueryVertex();
+      filter->setInputSize(candidate_size[query_vertex]);
+      auto filter_ctx = filter->initFilterContext(0);
+      filter->filter(&g, &candidates, &filter_ctx);
+      candidates[query_vertex].erase(std::remove_if(candidates[query_vertex].begin(), candidates[query_vertex].end(),
+                                                    [invalid_vertex_id = INVALID_VERTEX_ID](VertexID & candidate) {
+                                                      return candidate == invalid_vertex_id;
+                                                    }),
+                                     candidates[query_vertex].end());
+      candidate_size[query_vertex] = candidates[query_vertex].size();
+      // LOG(INFO) << query_vertex << " -------- " << candidate_size[query_vertex];
+    }
+    // for (QueryVertexID i = 0; i < q.getNumVertices(); ++i) {
+    //   LOG(INFO) << "query vertex " << i << " candidate size: " << candidates[i].size() << '\n';
+    // }
+  }
   return candidates;
 }
+
 void run(const std::string& dataset, const std::string& filter, std::vector<std::string>& answers) {
   auto graph_path = dataset + "/data_graph/" + dataset + ".graph";
   auto data_dir_str = std::string(data_dir);
