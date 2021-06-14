@@ -63,7 +63,7 @@ class TraverseChainTask : public TaskBase {
 
  public:
   TraverseChainTask(QueryId qid, TaskId tid, uint32_t batch_size, OperatorTree& ops, const Graph* graph,
-                    std::vector<std::vector<std::vector<VertexID>>>& candidates, uint32_t input_candidate_index,
+                    std::vector<std::vector<VertexID>>& candidates, uint32_t input_candidate_index,
                     bool inputs_are_keys)
       : TaskBase(qid, tid),
         graph_(graph),
@@ -73,8 +73,7 @@ class TraverseChainTask : public TaskBase {
         input_candidate_index_(input_candidate_index),
         inputs_are_keys_(inputs_are_keys) {
     for (uint32_t i = 0; i < candidates.size(); ++i) {
-      CHECK_EQ(candidates[i].size(), 1);
-      candidates_[i] = std::move(candidates[i].front());
+      candidates_[i] = std::move(candidates[i]);
     }
   }
 

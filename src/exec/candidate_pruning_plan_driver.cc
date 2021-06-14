@@ -57,7 +57,7 @@ void CandidatePruningPlanDriver::init(QueryId qid, QueryContext* query_ctx, Exec
     QueryVertexID query_vertex = filter->getQueryVertex();
     uint64_t input_size = (*result_->getMergedCandidates())[query_vertex].size();
     filter->setInputSize(input_size);
-    filter->setParallelism(input_size / FLAGS_batch_size);
+    filter->setParallelism((input_size + FLAGS_batch_size - 1) / FLAGS_batch_size);
     task_counters_[task_id] = filter->getParallelism();
     for (uint32_t i = 0; i < filter->getParallelism(); ++i) {
       task_queue.putTask(new NeighborhoodFilterTask(qid, task_id, i, filter.get(), query_ctx->data_graph,
@@ -73,14 +73,16 @@ void CandidatePruningPlanDriver::taskFinish(TaskBase* task, ThreadsafeTaskQueue*
                                             ThreadsafeQueue<ServerEvent>* reply_queue) {
   // TODO(BYLI) package merge operation and remove_invalid operation into tasks, determine the parallelism
   if (--task_counters_[task->getTaskId()] == 0) {
+    LOG(INFO) << "CandidatePhase " << plan_->getPhase() << " finished";
     if (++n_finished_tasks_ == task_counters_.size()) {
       if (plan_->getPhase() == 1 || plan_->getPhase() == 2) {
-        candidate_cardinality_ = result_->getCandidateCardinality();
         result_->merge();
+        candidate_cardinality_ = result_->getMergedCandidateCardinality();
         reply_queue->push(std::move(*finish_event_));
         reset();
       } else {
         result_->remove_invalid(dynamic_cast<NeighborhoodFilterTask*>(task)->getFilter()->getQueryVertex());
+        candidate_cardinality_ = result_->getMergedCandidateCardinality();
         reply_queue->push(std::move(*finish_event_));
         reset();
       }
@@ -93,7 +95,7 @@ void CandidatePruningPlanDriver::taskFinish(TaskBase* task, ThreadsafeTaskQueue*
       QueryVertexID query_vertex = filter->getQueryVertex();
       uint64_t input_size = (*result_->getMergedCandidates())[query_vertex].size();
       filter->setInputSize(input_size);
-      filter->setParallelism(input_size / FLAGS_batch_size);
+      filter->setParallelism((input_size + FLAGS_batch_size - 1) / FLAGS_batch_size);
       task_counters_[n_finished_tasks_] = filter->getParallelism();
       for (uint32_t i = 0; i < filter->getParallelism(); ++i) {
         task_queue->putTask(new NeighborhoodFilterTask(task->getQueryId(), n_finished_tasks_, i, filter,

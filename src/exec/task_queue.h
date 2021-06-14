@@ -45,6 +45,8 @@ class ThreadsafeTaskQueue {
     }
   }
 
+  const uint32_t Size() const { return queue_.size(); }
+
   void putTask(TaskBase* task) {
     {
       std::lock_guard<std::mutex> lock(mu_);

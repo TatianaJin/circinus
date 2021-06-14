@@ -50,8 +50,17 @@ class CandidateResult : public Result {
 
   std::vector<std::vector<VertexID>>* getMergedCandidates() { return &merged_candidates_; }
 
-  const std::vector<std::vector<std::vector<VertexID>>>& getCandidates() const { return candidates_; }
-  std::vector<std::vector<std::vector<VertexID>>>& getCandidates() { return candidates_; }
+  const std::vector<std::vector<VertexID>>& getCandidates() const { return merged_candidates_; }
+  std::vector<std::vector<VertexID>>& getCandidates() { return merged_candidates_; }
+
+  std::vector<VertexID> getMergedCandidateCardinality() const {
+    std::vector<VertexID> ret(merged_candidates_.size(), 0);
+    for (QueryVertexID u = 0; u < merged_candidates_.size(); ++u) {
+      LOG(INFO) << "QueryVertexID " << u << " candidates size " << merged_candidates_[u].size();
+      ret[u] = merged_candidates_[u].size();
+    }
+    return ret;
+  }
 
   std::vector<VertexID> getCandidateCardinality() const {
     std::vector<VertexID> ret(candidates_.size(), 0);
