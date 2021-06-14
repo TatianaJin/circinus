@@ -107,13 +107,13 @@ std::vector<std::vector<VertexID>> getCandidateSets(const Graph& g, const QueryG
   if (filter_str.compare("ldf") && filter_str.compare("nlf")) {
     auto metadata = GraphMetadata(g);
     std::unique_ptr<LogicalNeighborhoodFilter> logical_filter;
-    if (filter_str.compare("cfl")) {
+    if (filter_str.compare("cfl") == 0) {
       logical_filter = std::make_unique<LogicalCFLFilter>(metadata, &q, candidate_size);
-    } else if (filter_str.compare("dpiso")) {
+    } else if (filter_str.compare("dpiso") == 0) {
       logical_filter = std::make_unique<LogicalDPISOFilter>(metadata, &q, candidate_size);
-    } else if (filter_str.compare("tso")) {
+    } else if (filter_str.compare("tso") == 0) {
       logical_filter = std::make_unique<LogicalTSOFilter>(metadata, &q, candidate_size);
-    } else if (filter_str.compare("gql")) {
+    } else if (filter_str.compare("gql") == 0) {
       logical_filter = std::make_unique<LogicalGQLFilter>(&q);
     }
     auto physical_filters = logical_filter->toPhysicalOperators(metadata, config);

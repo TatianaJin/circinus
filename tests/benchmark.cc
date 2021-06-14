@@ -184,7 +184,6 @@ class Benchmark {
                                                       }),
                                        candidates[query_vertex].end());
         candidate_size[query_vertex] = candidates[query_vertex].size();
-        LOG(INFO) << query_vertex << " -------- " << candidate_size[query_vertex];
       }
       for (QueryVertexID i = 0; i < q.getNumVertices(); ++i) {
         LOG(INFO) << "query vertex " << i << " candidate size: " << candidates[i].size() << '\n';
