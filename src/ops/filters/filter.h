@@ -45,8 +45,9 @@ class NeighborhoodFilter : public Operator {
   VertexID filter_size_ = 0;
 
  private:
-  inline bool intersectionNotNullBS(const std::pair<const VertexID*, uint32_t>& set1,
-                                    const std::pair<const VertexID*, uint32_t>& set2) const {
+  // TODO(tatiana): use template forward iterator
+  static inline bool intersectionNotNullBS(const std::pair<const VertexID*, uint32_t>& set1,
+                                           const std::pair<const VertexID*, uint32_t>& set2) {
     if (set1.second <= set2.second) {
       auto lower_bound = set2.first;
       for (uint32_t i = 0; i < set1.second; ++i) {
@@ -67,8 +68,8 @@ class NeighborhoodFilter : public Operator {
     return false;
   }
 
-  inline bool intersectionNotNull(const std::pair<const VertexID*, uint32_t>& set1,
-                                  const std::pair<const VertexID*, uint32_t>& set2) const {
+  static inline bool intersectionNotNull(const std::pair<const VertexID*, uint32_t>& set1,
+                                         const std::pair<const VertexID*, uint32_t>& set2) {
     if (std::max(set1.second, set2.second) >= 32) {
       return intersectionNotNullBS(set1, set2);
     }

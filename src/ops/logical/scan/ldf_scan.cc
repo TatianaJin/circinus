@@ -44,6 +44,10 @@ std::vector<std::unique_ptr<Scan>> LogicalLDFScan::toPhysicalOperators(const Gra
       workload.output_cardinality =
           std::min(workload.output_cardinality, metadata.getNumVerticesWithInDegreeGE(in_degrees_[i]));
     }
+    if (workload.output_cardinality == 0) {  // no vertices satisfying the condition, so no need to scan
+      ret.push_back(nullptr);
+      break;
+    }
     // instantiate physial scan operators
     if (metadata.isLabeled()) {
       // 2 for finding label range, 1 for building label index, 0 for full scan

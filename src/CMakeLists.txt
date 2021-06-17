@@ -40,6 +40,7 @@ set(circinus_ops_sources
   ${PROJECT_SOURCE_DIR}/src/ops/filters/gql_filter.cc
   ${PROJECT_SOURCE_DIR}/src/ops/filters/nlf_filter.cc
   ${PROJECT_SOURCE_DIR}/src/ops/filters/subgraph_filter.cc
+  ${PROJECT_SOURCE_DIR}/src/ops/logical/compressed_input.cc
   ${PROJECT_SOURCE_DIR}/src/ops/logical/filter/cfl_filter.cc
   ${PROJECT_SOURCE_DIR}/src/ops/logical/filter/dpiso_filter.cc
   ${PROJECT_SOURCE_DIR}/src/ops/logical/filter/gql_filter.cc

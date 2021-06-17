@@ -34,7 +34,6 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
   query_graph_ = g;
   cover_table_ = cover_table;
   operators_.reserve(g->getNumVertices());
-  root_query_vertex_ = matching_order.front();
   if (matching_order.size() == 1) {
     // TODO(tatiana): handle no traversal
     return;
@@ -157,7 +156,6 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
   query_graph_ = g;
   cover_table_ = cover_table;
   operators_.reserve(g->getNumVertices());
-  root_query_vertex_ = matching_order.front();
   dynamic_cover_key_level_ = level_become_key;
   if (matching_order.size() == 1) {
     // TODO(tatiana): handle no traversal

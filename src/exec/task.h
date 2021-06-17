@@ -40,7 +40,7 @@ class TaskBase {
   inline auto getQueryId() const { return query_id_; }
   inline auto getTaskId() const { return task_id_; }
 
-  virtual const Graph* getDataGraph() const = 0;
+  virtual const GraphBase* getDataGraph() const = 0;
   virtual void run() = 0;
   virtual void profile() { run(); }
 };

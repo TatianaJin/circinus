@@ -33,28 +33,34 @@
 
 namespace circinus {
 
+// FIXME(tatiana): tidy up
 class ExecutionPlan {
  protected:
+  const GraphType graph_type_;
   const QueryGraph* query_graph_;
 
-  std::vector<std::vector<VertexID>> candidate_sets_;
-  unordered_map<QueryVertexID, Operator*> target_vertex_to_ops_;
   OperatorTree operators_;
-  Outputs outputs_;
+  // TODO(tatiana): change to use unique_ptr
   std::vector<SubgraphFilter*> subgraph_filters_;  // owned, need to delete upon destruction
 
-  const GraphType graph_type_;
+  /* matching order related */
+  std::vector<QueryVertexID> matching_order_;
 
-  QueryVertexID root_query_vertex_;
+  /* compression related */
+  bool inputs_are_keys_ = true;
   std::vector<int> cover_table_;
   unordered_map<QueryVertexID, uint32_t> dynamic_cover_key_level_;
-
   /** The index of each query vertex in the CompressedSubgraphs
    * For key vertices, the index is n_keys-th key following the matching order
    * For non-key vertices, the index n_sets-th key following the matching order */
   unordered_map<QueryVertexID, uint32_t> query_vertex_indices_;
 
-  std::vector<QueryVertexID> matching_order_;
+  // FIXME(tatiana): remove >>
+  std::vector<std::vector<VertexID>> candidate_sets_;
+  unordered_map<QueryVertexID, Operator*> target_vertex_to_ops_;
+  // << remove
+
+  Outputs outputs_;  // FIXME(tatiana): move to executor manager result
 
   void addKeys(const std::vector<QueryVertexID>& keys_to_add, std::vector<QueryVertexID>& set_vertices,
                uint32_t& n_keys) {
@@ -87,6 +93,9 @@ class ExecutionPlan {
                             const unordered_map<QueryVertexID, uint32_t>& level_become_key);
 
   void setProfiler(Profiler* profiler) { operators_.setProfiler(profiler); }
+
+  void setInputAreKeys(bool flag) { inputs_are_keys_ = flag; }
+  bool inputAreKeys() const { return inputs_are_keys_; }
 
   void printPhysicalPlan() const {
     if (operators_.empty()) return;
@@ -124,7 +133,7 @@ class ExecutionPlan {
   inline const OperatorTree& getOperators() const { return operators_; }
   inline OperatorTree& getOperators() { return operators_; }
 
-  // TODO(tatiana): move this logic to execution time
+  // FIXME(tatiana): move this logic to execution time
   inline void setCandidateSets(std::vector<std::vector<VertexID>>& cs) {
     candidate_sets_ = cs;
     uint64_t total_key_candidate_size = 1, total_set_candidate_size = 1;
@@ -135,7 +144,7 @@ class ExecutionPlan {
       } else {
         total_set_candidate_size *= candidate_sets_[i].size();
       }
-      if (i == root_query_vertex_) continue;
+      if (i == matching_order_.front()) continue;
       ((TraverseOperator*)target_vertex_to_ops_[i])->setCandidateSets(&candidate_sets_[i]);
     }
     LOG(INFO) << "total_key_candidate_size=" << total_key_candidate_size
@@ -143,28 +152,32 @@ class ExecutionPlan {
     LOG(INFO) << "ratio " << ((double)total_set_candidate_size / total_key_candidate_size);
   }
 
-  // TODO(tatiana): unused
+  // FIXME(tatiana): remove
   inline const std::vector<VertexID>& getCandidateSet(QueryVertexID id) const {
     CHECK_LT(id, candidate_sets_.size());
     return candidate_sets_[id];
   }
 
-  // TODO(tatiana): unused
+  // FIXME(tatiana): remove
   inline const std::vector<std::vector<VertexID>>* getCandidateSets() const { return &candidate_sets_; }
 
+  // FIXME(tatiana): remove
   inline const bool isToKey(QueryVertexID id) const { return dynamic_cover_key_level_.count(id) != 0; }
 
-  inline const uint32_t getToKeyLevel(QueryVertexID id) const { return dynamic_cover_key_level_.find(id)->second; }
-
+  // FIXME(tatiana): remove
   inline OperatorTree cloneOperators() const { return operators_.clone(); }
 
-  inline QueryVertexID getRootQueryVertexID() const { return root_query_vertex_; }
+  inline QueryVertexID getRootQueryVertexID() const { return matching_order_.front(); }
+  inline const auto& getMatchingOrder() const { return matching_order_; }
 
   inline bool isInCover(QueryVertexID id) const { return cover_table_[id] == 1; }
+  inline const uint32_t getToKeyLevel(QueryVertexID id) const { return dynamic_cover_key_level_.find(id)->second; }
 
+  // FIXME(tatiana): move output to execution plan driver
   inline const Outputs& getOutputs() const { return outputs_; }
   inline Outputs& getOutputs() { return outputs_; }
 
+ protected:
   inline void setMatchingOrderIndices(QueryVertexID target_vertex, TraverseOperator* op) {
     std::vector<std::pair<bool, uint32_t>> matching_order_indices;
     for (auto& v : matching_order_) {
@@ -174,7 +187,6 @@ class ExecutionPlan {
     op->setMatchingOrderIndices(std::move(matching_order_indices));
   }
 
- protected:
   inline SubgraphFilter* createFilter(std::vector<std::vector<uint32_t>>&& pruning_set_indices) {
     SubgraphFilter* filter = nullptr;
     if (pruning_set_indices.empty()) {

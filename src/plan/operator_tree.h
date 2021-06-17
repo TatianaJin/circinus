@@ -28,11 +28,10 @@ namespace circinus {
 
 // forward declaration
 class Task;
-class TaskQueue;
 
 /** Uses flag: FLAGS_batch_size */
 class OperatorTree {
-  std::vector<Operator*> operators_;
+  std::vector<Operator*> operators_;  // FIXME(tatiana): use unique_ptr?
   Profiler* profiler_;
 
  public:
@@ -63,7 +62,12 @@ class OperatorTree {
     return ret;
   }
 
-  bool handleTask(Task* task, TaskQueue* queue, uint32_t thread_id);
+  inline void setOutput(Outputs* outputs) const {
+    auto op = operators_.back();
+    auto output_op = dynamic_cast<OutputOperator*>(op);
+    CHECK(output_op != nullptr) << op->toString();
+    output_op->setOutput(outputs);
+  }
 
   bool execute(const Graph* g, const std::vector<CompressedSubgraphs>& inputs, uint32_t level = 0);
   bool profile(const Graph* g, const std::vector<CompressedSubgraphs>& inputs, uint32_t query_type, uint32_t level = 0);

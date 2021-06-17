@@ -24,6 +24,7 @@ namespace circinus {
 template <typename G>
 class GraphView {
   /** Each graph corresponds to a query graph edge in `Expand` */
+  // TODO(tatiana): change to use unique_ptr?
   std::vector<G*> graphs_;  // owned, need to delete upon destruction
 
  public:

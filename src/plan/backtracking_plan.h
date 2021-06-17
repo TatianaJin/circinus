@@ -14,26 +14,61 @@
 
 #pragma once
 
+#include <memory>
+#include <utility>
 #include <vector>
 
+#include "exec/execution_config.h"
+#include "graph/graph_metadata.h"
+#include "ops/logical/compressed_input.h"
+#include "plan/candidate_scope.h"
 #include "plan/execution_plan.h"
 #include "plan/operator_tree.h"
 
 namespace circinus {
 
 class BacktrackingPlan {
-  ExecutionPlan* plan_;
-  bool inputs_are_keys_;
-  uint32_t input_candidate_index_;
+  std::vector<ExecutionPlan*> plans_;
+  std::vector<std::pair<uint32_t, std::vector<CandidateScope>>> partitioned_plans_;
+  std::vector<std::unique_ptr<LogicalCompressedInputOperator>> input_operators_;
 
  public:
-  BacktrackingPlan(ExecutionPlan* plan, bool inputs_are_keys, uint32_t input_candidate_index)
-      : plan_(plan), inputs_are_keys_(inputs_are_keys), input_candidate_index_(input_candidate_index) {}
-  OperatorTree& getOperatorTree() { return plan_->getOperators(); }
+  OperatorTree& getOperatorTree(uint32_t plan_idx = 0) { return plans_[plan_idx]->getOperators(); }
 
-  bool inputsAreKeys() const { return inputs_are_keys_; }
-  uint32_t getInputCandidateIndex() const { return input_candidate_index_; }
-  Outputs& getOutputs() const { return plan_->getOutputs(); }
+  std::unique_ptr<InputOperator> getInputOperator(uint32_t plan_idx, const GraphMetadata& metadata,
+                                                  ExecutionConfig& exec_conf) {
+    return nullptr;  // TODO(byli)
+  }
+
+  inline const auto& getPlans() const { return plans_; }
+
+  inline uint32_t getNumPartitionedPlans() const { return partitioned_plans_.size(); }
+  inline const auto& getPartitionedPlan(uint32_t idx) const { return partitioned_plans_[idx]; }
+
+  inline uint32_t addPlan(ExecutionPlan* plan) {
+    plans_.push_back(plan);
+    return plans_.size() - 1;
+  }
+
+  /**
+   * @param partitioned_plans A vector of {plan_idx, candiate scope for each query vertex}.
+   */
+  inline void addPartitionedPlans(std::vector<std::pair<uint32_t, std::vector<CandidateScope>>>&& partitioned_plans) {
+    partitioned_plans_ = std::move(partitioned_plans);
+  }
+
+  inline void addInputOperator(std::unique_ptr<LogicalCompressedInputOperator>&& op) {
+    input_operators_.push_back(std::move(op));
+  }
+
+  // FIXME(tatiana): deprecate the following functions?
+  inline bool inputsAreKeys(uint32_t plan_idx = 0) const { return plans_[plan_idx]->inputAreKeys(); }
+
+  inline uint32_t getInputCandidateIndex(uint32_t plan_idx = 0) const {
+    return plans_[plan_idx]->getRootQueryVertexID();  // now assume all vertices have candidates
+  }
+
+  inline Outputs& getOutputs(uint32_t plan_idx = 0) const { return plans_[plan_idx]->getOutputs(); }
 };
 
 }  // namespace circinus

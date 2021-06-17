@@ -18,8 +18,13 @@
 #include <utility>
 #include <vector>
 
+#include "glog/logging.h"
+
+#include "exec/result.h"
 #include "exec/task.h"
 #include "graph/graph.h"
+#include "graph/graph_partition.h"
+#include "ops/input_operator.h"
 #include "ops/traverse_operator.h"
 #include "plan/operator_tree.h"
 
@@ -27,17 +32,40 @@ namespace circinus {
 
 class TraverseTask : public TaskBase {
  private:
-  // TODO(tatiana): change to const functor?
-  TraverseOperator* traverse_;  // not owned
-  const Graph* graph_;
+  std::unique_ptr<InputOperator> input_op_;
+  OperatorTree* op_tree_;  // not owned
+  const ReorderedPartitionedGraph* graph_;
+  const uint32_t batch_size_;
+  std::vector<CandidateSetView> candidates_;
+  std::vector<GraphView<GraphPartition*>> graph_views_;
 
  public:
-  TraverseTask(QueryId query_id, TaskId task_id, uint32_t shard_id, TraverseOperator* traverse, const Graph* graph)
-      : TaskBase(query_id, task_id), traverse_(traverse), graph_(graph) {}
+  TraverseTask(QueryId query_id, TaskId task_id, uint32_t batch_size, OperatorTree& op_tree,
+               std::unique_ptr<InputOperator>&& input_op, const std::vector<CandidateScope>& scopes,
+               const GraphBase* graph, CandidateResult* candidates)
+      : TaskBase(query_id, task_id),
+        input_op_(std::move(input_op)),
+        op_tree_(&op_tree),
+        graph_(dynamic_cast<const ReorderedPartitionedGraph*>(graph)),
+        batch_size_(batch_size) {
+    CHECK(graph_ != nullptr);
+    CHECK_EQ(candidates->getMergedCandidates()->size(), scopes.size());
+    auto partitioned_candidates = dynamic_cast<PartitionedCandidateResult*>(candidates);
+    CHECK(partitioned_candidates != nullptr);
 
-  const Graph* getDataGraph() const override { return graph_; }
+    candidates_.reserve(scopes.size());
+    for (uint32_t i = 0; i < scopes.size(); ++i) {
+      candidates_.emplace_back(&partitioned_candidates->getMergedCandidates(i), scopes[i],
+                               partitioned_candidates->getCandidatePartitionOffsets(i));
+    }
+    graph_views_ = setupGraphView(graph_, op_tree, scopes);
+  }
+
+  const GraphBase* getDataGraph() const override { return graph_; }
 
   void run() override {
+    auto inputs = input_op_->getInputs(candidates_);
+    op_tree_->execute()
     // TODO(tatiana)
     // traverse_->input();
     // traverse_->expand();
@@ -48,6 +76,22 @@ class TraverseTask : public TaskBase {
     // traverse_->inputAndProfile();
     // traverse_->expandAndProfile();
   }
+
+ protected:
+  static std::vector<GraphView<GraphPartition*>> setupGraphView(const ReorderedPartitionedGraph* g,
+                                                                const OperatorTree& op_tree,
+                                                                const std::vector<CandidateScope>& scopes) {
+    std::vector<GraphView<GraphPartition*>> data_graphs_for_operators;
+    size_t len = op_tree.getOperatorSize() - 1;
+    data_graphs_for_operators.reserve(len);
+    for (size_t i = 0; i < len; ++i) {
+      auto op = op_tree.getOperator(i);
+      auto traverse_op = dynamic_cast<TraverseOperator*>(op);
+      CHECK(traverse_op != nullptr);
+      data_graphs_for_operators.emplace_back(traverse_op->computeGraphPartitions(g, scopes));
+    }
+    return data_graphs_for_operators;
+  }
 };
 
 /**
@@ -56,29 +100,25 @@ class TraverseTask : public TaskBase {
 class TraverseChainTask : public TaskBase {
   const Graph* graph_;
   const uint32_t batch_size_;
-  OperatorTree* const op_tree_;                    // not owned
-  std::vector<std::vector<VertexID>> candidates_;  // not owned
+  OperatorTree* const op_tree_;  // not owned
+  std::vector<std::vector<VertexID>> candidates_;
   const uint32_t input_candidate_index_;
   const bool inputs_are_keys_;
 
  public:
   TraverseChainTask(QueryId qid, TaskId tid, uint32_t batch_size, OperatorTree& ops, const Graph* graph,
-                    std::vector<std::vector<std::vector<VertexID>>>& candidates, uint32_t input_candidate_index,
+                    std::vector<std::vector<VertexID>>& candidates, uint32_t input_candidate_index,
                     bool inputs_are_keys)
       : TaskBase(qid, tid),
         graph_(graph),
         batch_size_(batch_size),
         op_tree_(&ops),
-        candidates_(candidates.size()),
         input_candidate_index_(input_candidate_index),
         inputs_are_keys_(inputs_are_keys) {
-    for (uint32_t i = 0; i < candidates.size(); ++i) {
-      CHECK_EQ(candidates[i].size(), 1);
-      candidates_[i] = std::move(candidates[i].front());
-    }
+    candidates_.swap(candidates);
   }
 
-  const Graph* getDataGraph() const override { return graph_; }
+  const GraphBase* getDataGraph() const override { return graph_; }
 
   void run() override {
     auto op = op_tree_->root();

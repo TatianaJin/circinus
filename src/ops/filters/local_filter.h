@@ -17,7 +17,9 @@
 #include <vector>
 
 #include "graph/graph.h"
+#include "graph/graph_partition.h"
 #include "graph/types.h"
+#include "utils/utils.h"
 
 namespace circinus {
 
@@ -41,6 +43,9 @@ class LocalFilter {
 
   /** @returns True if vertex v is not a valid mapping */
   virtual bool prune(const Graph& data_graph, VertexID v) const = 0;
+  virtual bool prune(const GraphPartition& g, VertexID v) const {
+    LOG(FATAL) << getTypename(*this) << " on GraphPartition is not supported";
+  }
 };
 
 }  // namespace circinus

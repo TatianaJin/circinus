@@ -22,6 +22,7 @@
 
 #include "exec/execution_config.h"
 #include "graph/graph.h"
+#include "graph/graph_partition.h"
 #include "graph/query_graph.h"
 #include "graph/types.h"
 #include "ops/filters.h"
@@ -57,7 +58,9 @@ class Scan : public Operator {
   static std::unique_ptr<Scan> newDegreeScan(VertexID out_d, VertexID in_d, ExecutionConfig& conf);
 
   explicit Scan(ExecutionConfig& conf, std::string&& name = "Scan")
-      : Operator(conf.getParallelism()), scan_size_(conf.getInputSize()), name_(std::move(name)) {}
+      : Operator(conf.getParallelism()), scan_size_(conf.getInputSize()), name_(std::move(name)) {
+    // DLOG(INFO) << "Scan size " << scan_size_ << " parallelism " << parallelism_;
+  }
 
   virtual ~Scan() {}
 
@@ -69,9 +72,11 @@ class Scan : public Operator {
     auto chunk_size = scan_size_ / parallelism_;
     CHECK_NE(chunk_size, 0) << "scan_size=" << scan_size_ << ", parallelism=" << parallelism_;
     if (task_idx < scan_size_ % parallelism_) {
-      return ScanContext((chunk_size + 1) * task_idx, chunk_size + 1);
+      auto offset = (chunk_size + 1) * task_idx;
+      return ScanContext(offset, offset + chunk_size + 1);
     }
-    return ScanContext(chunk_size * task_idx + (scan_size_ % parallelism_), chunk_size);
+    auto offset = chunk_size * task_idx + (scan_size_ % parallelism_);
+    return ScanContext(offset, offset + chunk_size);
   }
 
   std::string toString() const override {
@@ -81,9 +86,13 @@ class Scan : public Operator {
   }
 
   virtual void scan(const Graph* g, ScanContext* ctx) const = 0;
+  virtual void scan(const GraphPartition* g, ScanContext* ctx) const {
+    LOG(FATAL) << getTypename(*this) << " on GraphPartition not supported";
+  }
 
  protected:
-  bool validate(const Graph& g, VertexID v) const {
+  template <typename GraphView>
+  bool validate(const GraphView& g, VertexID v) const {
     for (auto& filter : filters_) {
       if (filter->prune(g, v)) {
         return false;

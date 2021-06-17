@@ -27,6 +27,7 @@ namespace circinus {
 class ExecutionPlanDriver : public PlanDriver {
   BacktrackingPlan* plan_;
   ExecutionResult* result_;  // owned by ExecutorManager
+  std::unique_ptr<CandidateResult> candidate_result_ = nullptr;
 
  public:
   explicit ExecutionPlanDriver(BacktrackingPlan* plan) : plan_(plan) {}

@@ -77,7 +77,8 @@ class OutputOperator : public Operator {
   uint64_t leftover_input_ = 0;
 
  public:
-  explicit OutputOperator(Outputs* outputs, SameLabelIndices&& same_label_indices)
+  // TODO(tatiana): set SameLabelIndices in planner and set outputs in execution plan driver
+  OutputOperator(Outputs* outputs, SameLabelIndices&& same_label_indices)
       : outputs_(outputs), same_label_indices_(std::move(same_label_indices)) {}
   virtual ~OutputOperator() {}
 
@@ -87,6 +88,8 @@ class OutputOperator : public Operator {
   static OutputOperator* newOutputOperator(
       OutputType type, Outputs* outputs,
       std::vector<std::pair<std::vector<uint32_t>, std::vector<uint32_t>>>&& same_label_indices);
+
+  void setOutput(Outputs* outputs) { outputs_ = outputs; }
 
   virtual bool validateAndOutput(const std::vector<CompressedSubgraphs>& input, uint32_t output_index) = 0;
 

@@ -25,6 +25,8 @@
 #include "graph/bipartite_graph.h"
 #include "graph/compressed_subgraphs.h"
 #include "graph/graph.h"
+#include "graph/graph_partition.h"
+#include "graph/partitioned_graph.h"
 #include "graph/types.h"
 #include "ops/filters/subgraph_filter.h"
 #include "ops/operator.h"
@@ -113,6 +115,13 @@ class TraverseOperator : public Operator {
 
   virtual std::vector<BipartiteGraph*> computeBipartiteGraphs(
       const Graph* g, const std::vector<std::vector<VertexID>>& candidate_sets) = 0;
+
+  virtual std::vector<GraphPartition*> computeGraphPartitions(const ReorderedPartitionedGraph* g,
+                                                              const std::vector<CandidateScope>& candidate_scopes) {
+    std::vector<GraphPartition*> ret;
+    LOG(FATAL) << "Not implemented yet";
+    return {};
+  }
 
   virtual void input(const std::vector<CompressedSubgraphs>& inputs, const void* data_graph) {
     current_inputs_ = &inputs;

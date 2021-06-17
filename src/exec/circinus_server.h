@@ -30,7 +30,7 @@
 #include "exec/candidate_pruning_plan_driver.h"
 #include "exec/executor_manager.h"
 #include "exec/threadsafe_queue.h"
-#include "graph/graph.h"
+#include "graph/graph_base.h"
 #include "graph/graph_metadata.h"
 #include "graph/query_graph.h"
 #include "graph/types.h"
@@ -46,7 +46,7 @@ struct QueryState {
   Planner* planner = nullptr;
   std::string client_addr;
 
-  QueryState(QueryGraph&& q, QueryConfig&& config, Graph* g, GraphMetadata* m)
+  QueryState(QueryGraph&& q, QueryConfig&& config, GraphBase* g, GraphMetadata* m)
       : query_context(std::move(q), std::move(config), g, m) {}
 };
 
@@ -54,7 +54,7 @@ class CircinusServer {
  protected:
   using Event = ServerEvent;
 
-  unordered_map<std::string, std::pair<Graph, GraphMetadata>> data_graphs_;
+  unordered_map<std::string, std::pair<std::unique_ptr<GraphBase>, GraphMetadata>> data_graphs_;
   std::deque<QueryState> active_queries_;
   std::vector<uint32_t> reusable_indices_;
 
@@ -102,7 +102,7 @@ class CircinusServer {
    */
   void handleLoadGraph(const Event& event);
 
-  void handleShutDown(const Event& event) {
+  inline void handleShutDown(const Event& event) {
     // TODO(tatiana): finish up before shutdown
   }
 
@@ -120,27 +120,9 @@ class CircinusServer {
    * @param name The name by which the loaded graph is referred to.
    * @returns Graph loading time in seconds.
    */
-  double loadGraphFromBinary(const std::string& graph_path, const std::string& name) {
-    std::ifstream input(graph_path, std::ios::binary);
-    if (!input.is_open()) {                // cannot open file
-      if (Path::isRelative(graph_path)) {  // if relative path, try search under FLAGS_data_dir
-        return loadGraphFromBinary(Path::join(FLAGS_data_dir, graph_path), name);
-      }
-      std::stringstream ss;
-      ss << std::strerror(errno) << ": " << graph_path;
-      throw std::runtime_error(ss.str());
-    }
-    auto start_loading = std::chrono::steady_clock::now();
-    Graph data_graph;
-    data_graph.loadUndirectedGraphFromBinary(input);
-    data_graph.buildLabelIndex();  // TODO(tatiana): construct label index only when suitable
-    auto memory = data_graph.getMemoryUsage();
-    LOG(INFO) << "graph " << name << " takes " << memory.first / 1024 / 1024 << "MB";
-    GraphMetadata meta(data_graph);  // TODO(tatiana): more statistics, support partitioned graph
-    auto end_loading = std::chrono::steady_clock::now();
-    data_graphs_.insert({name, std::make_pair(data_graph, meta)});
-    return ((double)std::chrono::duration_cast<std::chrono::microseconds>(end_loading - start_loading).count()) / 1e6;
-  }
+  double loadGraphFromBinary(const std::string& graph_path, const std::string& name);
+
+  double loadPartitionedGraphFromBinary(const std::string& graph_path, const std::string& name, uint32_t n_partitions);
 
   /** Handles new Query, used together with prepareQuery(uint32_t).
    * @param graph_name The graph queried.
@@ -148,22 +130,7 @@ class CircinusServer {
    * @param query_config_str The string of the query config.
    * @returns The index of the new query.
    */
-  inline uint32_t newQuery(const std::string& graph_name, const std::string& query_file,
-                           const std::string& query_config_str) {
-    QueryGraph q(query_file);
-    QueryConfig config(query_config_str);
-
-    auto& graph = data_graphs_.at(graph_name);
-    if (reusable_indices_.empty()) {
-      active_queries_.emplace_back(std::move(q), std::move(config), &graph.first, &graph.second);
-      return active_queries_.size() - 1;
-    }
-    // reuse deleted index
-    auto idx = reusable_indices_.back();
-    active_queries_[idx].query_context = QueryContext(std::move(q), std::move(config), &graph.first, &graph.second);
-    reusable_indices_.pop_back();
-    return idx;
-  }
+  uint32_t newQuery(const std::string& graph_name, const std::string& query_file, const std::string& query_config_str);
 
   /** Invokes Phase 1 planning and execution of a query.
    * @param query_index The index of the query to run.
@@ -179,22 +146,7 @@ class CircinusServer {
 
   /** Handles query results.
    */
-  void finishQuery(uint32_t query_index, void* result, const std::string& error) {
-    auto& query = active_queries_[query_index];
-    delete query.planner;
-    query.planner = nullptr;
-    reusable_indices_.push_back(query_index);
-    if (error.empty()) {
-      if (query.query_context.query_config.output == "count") {
-        replyToClient(query.client_addr, result, 8);
-      } else {
-        // TODO(tatiana): support other output option
-        LOG(WARNING) << "Output option not implemented yet: " << query.query_context.query_config.output;
-      }
-    } else {
-      replyToClient(query.client_addr, error);
-    }
-  }
+  void finishQuery(uint32_t query_index, void* result, const std::string& error);
 
   /**
    * Copy is incurred to copy data to zmq message buffer

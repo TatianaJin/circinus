@@ -21,6 +21,7 @@
 
 #include "exec/execution_config.h"
 #include "graph/graph.h"
+#include "graph/graph_partition.h"
 #include "graph/query_graph.h"
 #include "graph/types.h"
 
@@ -55,6 +56,18 @@ class LDFScanBase : public Scan {
     }
   }
 
+  void scan(const GraphPartition* g, ScanContext* ctx) const override {
+    DCHECK(!directed) << "now graph partition only support undirected graph";
+    auto range_start = g->getVertexRangeByLabel(label_).first;
+    if (ctx->scan_offset >= ctx->scan_end) return;
+    while (ctx->scan_offset < ctx->scan_end) {
+      auto v = range_start + ctx->scan_offset++;
+      if (g->getVertexOutDegree(v) >= min_out_degree_ && validate(*g, v)) {
+        ctx->candidates.push_back(v);
+      }
+    }
+  }
+
   std::string toString() const override {
     std::stringstream ss;
     ss << name_ << " (label=" << label_ << ", min_out_degree=" << min_out_degree_
@@ -77,11 +90,11 @@ class LDFFullScanBase : public LDFScanBase<directed> {
   void scan(const Graph* g, ScanContext* ctx) const override {
     if (ctx->scan_offset >= ctx->scan_end) return;
     while (ctx->scan_offset < ctx->scan_end) {
-      auto v = ctx->scan_offset++;
+      auto v = g->getVertexGlobalId(ctx->scan_offset++);
       if (g->getVertexLabel(v) == this->label_ && g->getVertexOutDegree(v) >= this->min_out_degree_ &&
           (!directed || (static_cast<const DirectedGraph*>(g)->getVertexInDegree(v) >= this->min_in_degree_)) &&
           this->validate(*g, v)) {
-        ctx->candidates.push_back(g->getVertexGlobalId(v));
+        ctx->candidates.push_back(v);
       }
     }
   }
@@ -103,11 +116,11 @@ class DegreeScanBase : public Scan {
   void scan(const Graph* g, ScanContext* ctx) const override {
     if (ctx->scan_offset >= ctx->scan_end) return;
     while (ctx->scan_offset < ctx->scan_end) {
-      auto v = ctx->scan_offset++;
+      auto v = g->getVertexGlobalId(ctx->scan_offset++);
       if (g->getVertexOutDegree(v) >= min_out_degree_ &&
           (!directed || (static_cast<const DirectedGraph*>(g)->getVertexInDegree(v) >= min_in_degree_)) &&
           validate(*g, v)) {
-        ctx->candidates.push_back(g->getVertexGlobalId(v));
+        ctx->candidates.push_back(v);
       }
     }
   }
