@@ -29,4 +29,26 @@ using VertexSet = std::shared_ptr<std::vector<VertexID>>;
 
 enum class GraphType : uint32_t { Normal, GraphView, BipartiteGraphView };
 
+enum class CandidateScopeType : uint8_t { All, Partition, Inverse };
+
+class CandidateScope {
+ private:
+  CandidateScopeType type_ = CandidateScopeType::All;
+  uint32_t partition_ = 0;
+
+ public:
+  void usePartition(uint32_t partition) {
+    partition_ = partition;
+    type_ = CandidateScopeType::Partition;
+  }
+
+  void excludePartition(uint32_t partition) {
+    partition_ = partition;
+    type_ = CandidateScopeType::Inverse;
+  }
+
+  inline auto getType() const { return type_; }
+  inline uint32_t getPartition() const { return partition_; }
+};
+
 }  // namespace circinus

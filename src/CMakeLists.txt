@@ -21,6 +21,7 @@ set(circinus_algo_sources
 )
 set(circinus_exec_sources
   ${PROJECT_SOURCE_DIR}/src/exec/candidate_pruning_plan_driver.cc
+  ${PROJECT_SOURCE_DIR}/src/exec/candidate_set_view.cc
   ${PROJECT_SOURCE_DIR}/src/exec/circinus_server.cc
   ${PROJECT_SOURCE_DIR}/src/exec/executor_manager.cc
   ${PROJECT_SOURCE_DIR}/src/exec/execution_plan_driver.cc

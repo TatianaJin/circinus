@@ -12,13 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "ops/traverse_operator.h"
+#pragma once
 
-#include <utility>
+#include <iterator>
 #include <vector>
 
-#include "graph/types.h"
-#include "utils/hashmap.h"
+#include "glog/logging.h"
 
-// TODO(tatiana): remove empty file?
-namespace circinus {}  // namespace circinus
+#include "graph/types.h"
+#include "graph/vertex_set_view.h"
+
+namespace circinus {
+
+class CandidateSetView : public VertexSetView {
+ public:
+  CandidateSetView(const std::vector<VertexID>* candidates, const CandidateScope& scope,
+                   const std::vector<VertexID>& partition_offsets);
+};
+
+}  // namespace circinus
