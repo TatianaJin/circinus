@@ -43,7 +43,7 @@
 #include "utils/hashmap.h"
 #include "utils/profiler.h"
 #include "utils/utils.h"
-#include "tests/FilterAndOrder.h"
+#include "ops/FilterAndOrder.h"
 
 using circinus::CompressedSubgraphs;
 using circinus::ExecutionConfig;
