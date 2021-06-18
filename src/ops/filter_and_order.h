@@ -68,11 +68,33 @@ class FilterAndOrder
   private:
     std::unique_ptr<LogicalNeighborhoodFilter> logical_filter_;
     std::map<std::pair<QueryVertexID,QueryVertexID>,BipartiteGraph> bg_map_;
+    bool filtered=0;
+    std::vector<std::vector<VertexID>> candidates_sets_;
+    const Graph* g_pointer_;
+    const QueryGraph* q_pointer_;
     std::string filter_string_;
   public:
-    FilterAndOrder(std::string filter_string):filter_string_(filter_string){}
-    std::vector<std::vector<VertexID>> getCandidateSets(const Graph& g, const QueryGraph& q) { 
-      std::vector<std::vector<VertexID>> candidates(q.getNumVertices());
+    FilterAndOrder(const Graph* g_pointer,const QueryGraph* q_pointer,std::string filter_string):
+                   g_pointer_(g_pointer),q_pointer_(q_pointer),filter_string_(filter_string){}
+    BipartiteGraph getBipartiteGraph(QueryVertexID v1,QueryVertexID v2)
+    {
+      assert(filtered);
+      std::pair<QueryVertexID,QueryVertexID> p(v1,v2);
+      auto bg = bg_map_.find(p);
+      if(bg==bg_map_.end())
+      {
+        BipartiteGraph newbg(v1,v2);
+        newbg.populateGraph(g_pointer_,&candidates_sets_);
+        auto res=bg_map_.insert({p,std::move(newbg)});
+        bg=res.first;
+      }
+      return *bg;
+    }
+    std::vector<std::vector<VertexID>> getCandidateSets() { 
+      if(filtered)return candidates_sets_;
+      const Graph g=*g_pointer_;
+      const QueryGraph q=*q_pointer_;
+      candidates_sets_.resize(q.getNumVertices());
       std::vector<VertexID> candidate_size(q.getNumVertices());
       ExecutionConfig config;
       for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
@@ -83,9 +105,8 @@ class FilterAndOrder
         }
         auto scan_ctx = scan->initScanContext(0);
         scan->scan(&g, &scan_ctx);
-        candidates[v] = std::move(scan_ctx.candidates);
-        candidate_size[v] = candidates[v].size();
-        // LOG(INFO) << "query vertex " << v << ' ' << scan->toString();
+        candidates_sets_[v] = std::move(scan_ctx.candidates);
+        candidate_size[v] = candidates_sets_[v].size();
       }
 
       if (filter_string_.compare("ldf") && filter_string_.compare("nlf")) {
@@ -104,16 +125,17 @@ class FilterAndOrder
           QueryVertexID query_vertex = filter->getQueryVertex();
           filter->setInputSize(candidate_size[query_vertex]);
           auto filter_ctx = filter->initFilterContext(0);
-          filter->filter(&g, &candidates, &filter_ctx);
-          candidates[query_vertex].erase(std::remove_if(candidates[query_vertex].begin(), candidates[query_vertex].end(),
+          filter->filter(&g, &candidates_sets_, &filter_ctx);
+          candidates_sets_[query_vertex].erase(std::remove_if(candidates_sets_[query_vertex].begin(), candidates_sets_[query_vertex].end(),
                                                         [invalid_vertex_id = INVALID_VERTEX_ID](VertexID & candidate) {
                                                           return candidate == invalid_vertex_id;
                                                         }),
-                                        candidates[query_vertex].end());
-          candidate_size[query_vertex] = candidates[query_vertex].size();
+                                        candidates_sets_[query_vertex].end());
+          candidate_size[query_vertex] = candidates_sets_[query_vertex].size();
         }
       }
-      return candidates;
+      filtered=1;
+      return candidates_sets_;
     }
 };
 
