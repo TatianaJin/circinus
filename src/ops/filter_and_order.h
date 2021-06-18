@@ -78,7 +78,7 @@ class FilterAndOrder
       for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
         config.setInputSize(g.getVertexCardinalityByLabel(q.getVertexLabel(v)));
         auto scan = circinus::Scan::newLDFScan(q.getVertexLabel(v), q.getVertexOutDegree(v), 0, config, 1);
-        if (filter_string_.compare("ldf")==0 && filter_string_.compare("dpiso")==0) {
+        if (filter_string_.compare("ldf") && filter_string_.compare("dpiso")) {
           scan->addFilter(std::make_unique<NLFFilter>(&q, v));
         }
         auto scan_ctx = scan->initScanContext(0);
@@ -88,15 +88,15 @@ class FilterAndOrder
         // LOG(INFO) << "query vertex " << v << ' ' << scan->toString();
       }
 
-      if (filter_string_.compare("ldf")==0 && filter_string_.compare("nlf")==0) {
+      if (filter_string_.compare("ldf") && filter_string_.compare("nlf")) {
         auto metadata = GraphMetadata(g);
-        if (filter_string_.compare("cfl")) {
+        if (filter_string_.compare("cfl")==0) {
           logical_filter_ = std::make_unique<LogicalCFLFilter>(metadata, &q, candidate_size);
-        } else if (filter_string_.compare("dpiso")) {
+        } else if (filter_string_.compare("dpiso")==0) {
           logical_filter_ = std::make_unique<LogicalDPISOFilter>(metadata, &q, candidate_size);
-        } else if (filter_string_.compare("tso")) {
+        } else if (filter_string_.compare("tso")==0) {
           logical_filter_ = std::make_unique<LogicalTSOFilter>(metadata, &q, candidate_size);
-        } else if (filter_string_.compare("gql")) {
+        } else if (filter_string_.compare("gql")==0) {
           logical_filter_ = std::make_unique<LogicalGQLFilter>(&q);
         }
         auto physical_filters = logical_filter_->toPhysicalOperators(metadata, config);

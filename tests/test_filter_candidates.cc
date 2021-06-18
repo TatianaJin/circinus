@@ -44,6 +44,7 @@
 #include "utils/profiler.h"
 #include "utils/utils.h"
 #include "ops/filter_and_order.h"
+using circinus::FilterAndOrder;
 
 using circinus::CompressedSubgraphs;
 using circinus::ExecutionConfig;
@@ -94,7 +95,6 @@ void run(const std::string& dataset, const std::string& filter, std::vector<std:
                                              //  LOG(INFO) << "========================";
                                              // LOG(INFO) << "graph " << graph_path << " query " << query_path;
   int index = 0;
-  FilterAndOrder fao(filter);
   for (auto& query_size : query_size_list)
     for (auto& query_mode : query_mode_list)
       for (int i = query_index_range.first; i <= query_index_range.second; ++i) {
@@ -106,7 +106,8 @@ void run(const std::string& dataset, const std::string& filter, std::vector<std:
         QueryGraph q(query_dir);  // load query graph
         std::stringstream ss;
         ss << dataset << ',' << query_size << ',' << query_mode << ',' << i << ':';
-        auto candidates = fao.getCandidateSets(g, q, filter);  // get candidates for each query vertex
+        FilterAndOrder fao(filter);
+        auto candidates = fao.getCandidateSets(g, q);  // get candidates for each query vertex
         for (auto v : candidates) {
           ss << v.size() << ' ';
         }
