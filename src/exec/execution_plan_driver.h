@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <memory>
+
 #include "exec/plan_driver.h"
 #include "exec/result.h"
 #include "exec/traverse_task.h"

@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <utility>
+
 #include "graph/partitioned_graph.h"
 
 namespace circinus {

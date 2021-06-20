@@ -68,6 +68,29 @@ class NeighborhoodFilter : public Operator {
     return false;
   }
 
+ public:
+  NeighborhoodFilter(ExecutionConfig& conf, const QueryGraph* query_graph, const QueryVertexID query_vertex,
+                     std::string&& name = "NeighborhoodFilter")
+      : Operator(conf.getParallelism()),
+        query_graph_(query_graph),
+        query_vertex_(query_vertex),
+        name_(std::move(name)),
+        filter_size_(conf.getInputSize()) {}
+
+  NeighborhoodFilter(ExecutionConfig& conf, const QueryGraph* query_graph, const QueryVertexID query_vertex,
+                     const std::vector<QueryVertexID>& pivot_vertices, std::string&& name = "NeighborhoodFilter")
+      : Operator(conf.getParallelism()),
+        query_graph_(query_graph),
+        query_vertex_(query_vertex),
+        pivot_vertices_(pivot_vertices),
+        name_(std::move(name)),
+        filter_size_(conf.getInputSize()) {}
+
+  NeighborhoodFilter(ExecutionConfig& conf, const QueryGraph* query_graph, const QueryVertexID query_vertex,
+                     const QueryVertexID& pivot_vertex, std::string&& name = "NeighborhoodFilter")
+      : NeighborhoodFilter(conf, query_graph, query_vertex, std::vector<QueryVertexID>{pivot_vertex}, std::move(name)) {
+  }
+
   static inline bool intersectionNotNull(const std::pair<const VertexID*, uint32_t>& set1,
                                          const std::pair<const VertexID*, uint32_t>& set2) {
     if (std::max(set1.second, set2.second) >= 32) {
@@ -92,29 +115,6 @@ class NeighborhoodFilter : public Operator {
       return intersectionNotNull(set2, set1);
     }
     return false;
-  }
-
- public:
-  NeighborhoodFilter(ExecutionConfig& conf, const QueryGraph* query_graph, const QueryVertexID query_vertex,
-                     std::string&& name = "NeighborhoodFilter")
-      : Operator(conf.getParallelism()),
-        query_graph_(query_graph),
-        query_vertex_(query_vertex),
-        name_(std::move(name)),
-        filter_size_(conf.getInputSize()) {}
-
-  NeighborhoodFilter(ExecutionConfig& conf, const QueryGraph* query_graph, const QueryVertexID query_vertex,
-                     const std::vector<QueryVertexID>& pivot_vertices, std::string&& name = "NeighborhoodFilter")
-      : Operator(conf.getParallelism()),
-        query_graph_(query_graph),
-        query_vertex_(query_vertex),
-        pivot_vertices_(pivot_vertices),
-        name_(std::move(name)),
-        filter_size_(conf.getInputSize()) {}
-
-  NeighborhoodFilter(ExecutionConfig& conf, const QueryGraph* query_graph, const QueryVertexID query_vertex,
-                     const QueryVertexID& pivot_vertex, std::string&& name = "NeighborhoodFilter")
-      : NeighborhoodFilter(conf, query_graph, query_vertex, std::vector<QueryVertexID>{pivot_vertex}, std::move(name)) {
   }
 
   inline void setInputSize(uint64_t filter_size) { filter_size_ = filter_size; }

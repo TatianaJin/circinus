@@ -15,6 +15,7 @@
 #pragma once
 
 #include <iterator>
+#include <utility>
 #include <vector>
 
 #include "glog/logging.h"
@@ -71,12 +72,12 @@ class VertexSetView {
     friend inline bool operator==(const ConstIterator& a, const ConstIterator& b) {
       DCHECK(a.ranges_ == b.ranges_) << "The iterators are from different views";
       return a.idx_in_range_ == b.idx_in_range_ && a.range_idx_ == b.range_idx_;
-    };
+    }
 
     friend inline bool operator!=(const ConstIterator& a, const ConstIterator& b) {
       DCHECK(a.ranges_ == b.ranges_) << "The iterators are from different views";
       return a.idx_in_range_ != b.idx_in_range_ || a.range_idx_ != b.range_idx_;
-    };
+    }
 
     /** search from this iterator to end */
     inline ConstIterator getLowerBound(const ConstIterator& end, value_type v) const {

@@ -14,8 +14,10 @@
 
 #include "plan/planner.h"
 
+#include <algorithm>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "ops/logical/compressed_input.h"
