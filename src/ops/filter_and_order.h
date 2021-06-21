@@ -76,7 +76,8 @@ class FilterAndOrder
   public:
     FilterAndOrder(const Graph* g_pointer,const QueryGraph* q_pointer,std::string filter_string):
                    g_pointer_(g_pointer),q_pointer_(q_pointer),filter_string_(filter_string){}
-    BipartiteGraph getBipartiteGraph(QueryVertexID v1,QueryVertexID v2)
+
+    const BipartiteGraph* getBipartiteGraph(QueryVertexID v1,QueryVertexID v2)
     {
       assert(filtered);
       std::pair<QueryVertexID,QueryVertexID> p(v1,v2);
@@ -88,8 +89,9 @@ class FilterAndOrder
         auto res=bg_map_.insert({p,std::move(newbg)});
         bg=res.first;
       }
-      return bg->second;
+      return &(bg->second);
     }
+
     std::vector<std::vector<VertexID>> getCandidateSets() { 
       if(filtered)return candidates_sets_;
       const Graph g=*g_pointer_;
@@ -184,14 +186,45 @@ class FilterAndOrder
       std::vector<size_t> parent;
       std::vector<size_t> children;
 
+      size_t begin=path.size() - 2,end=path.size() - 1;
+
       estimated_embeddings_num.resize(path.size() - 1);
-      auto last_edge =getBipartiteGraph(path[path.size() - 2],path[path.size() - 1]);
-      children.resize(last_edge.getNumVertices());
+      auto last_edge =getBipartiteGraph(path[begin],path[end]);
+      children.resize(last_edge->getNumVertices());
       
       size_t sum = 0;
-      for (VertexID i = 0; i < last_edge.getNumVertices(); ++i) {
-          children[i] = last_edge.offset_[i + 1] - last_edge.offset_[i];
-          sum += children[i];
+      for (auto& v : candidates_sets_[path[begin]]) {
+          int offset=last_edge->getOffset(v);
+          children[offset] = last_edge->getVertexOutDegree(v);
+          sum += children[offset];
+      }
+
+      estimated_embeddings_num[begin] = sum;
+
+      for (int i = begin; i >= 1; --i) {
+        begin = path[i - 1];
+        end = path[i];
+        auto edge = getBipartiteGraph(path[begin],path[end]);
+        parent.resize(edge->getNumVertices());
+
+        sum=0;
+        for(auto& v : candidates_sets_[path[begin]])
+        {
+          size_t local_sum = 0;
+          auto& [nbrs,cnt]=edge.getOutNeighbors(v);
+          for(uint32_t j=0;j<cnt;++j)
+          {
+            auto nbr=nbrs[j];
+            local_sum += children[last_edge->getOffset(nbr)];
+          }
+          parent[edge->getOffset(v)]=local_sum;
+          sum+=local_sum;
+        }
+
+        estimated_embeddings_num[i - 1] = sum;
+        parent.swap(children);
+
+        last_edge=edge;
       }
     }
   QueryVertexID generateNoneTreeEdgesCount(
@@ -207,6 +240,7 @@ class FilterAndOrder
 
       return non_tree_edge_count;
     }
+    
   void generateRootToLeafPaths(
     const std::vector<TreeNode>& tree_node,
     QueryVertexID cur_vertex,
