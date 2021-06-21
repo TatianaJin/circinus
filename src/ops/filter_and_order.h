@@ -88,7 +88,7 @@ class FilterAndOrder
         auto res=bg_map_.insert({p,std::move(newbg)});
         bg=res.first;
       }
-      return *bg;
+      return bg->second;
     }
     std::vector<std::vector<VertexID>> getCandidateSets() { 
       if(filtered)return candidates_sets_;
