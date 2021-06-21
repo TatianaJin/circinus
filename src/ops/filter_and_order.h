@@ -139,6 +139,89 @@ class FilterAndOrder
       filtered=1;
       return candidates_sets_;
     }
+  QueryVertexID selectGQLStartVertex(const QueryGraph *query_graph)
+  {
+    QueryVertexID start_vertex=0;
+    QueryVertexID qg_v_cnt= query_graph->getNumVertices();
+    for(QueryVertexID i=1;i<qg_v_cnt;++i)
+    {
+      QueryVertexID cur_vertex=i;
+      size_t size1=candidates_sets_[cur_vertex].size(),size2=candidates_sets_[start_vertex].size();
+      if(size1<size2)
+      {
+        start_vertex = cur_vertex;
+      }
+      else
+      if (size1==size2&&query_graph->getVertexOutDegree(cur_vertex)>query_graph->getVertexOutDegree(start_vertex))
+      {
+        start_vertex = cur_vertex;
+      }
+    }
+    return start_vertex;
+  }
+
+  void updateValidVertices(QueryVertexID query_vertex,std::vector<bool> &visited,std::vector<bool> &adjacent)
+  {
+    visited[query_vertex] = true;
+    auto [nbrs,cnt]=q_pointer_->getOutNeighbors(query_vertex);
+    for(uint32_t i=0;i<cnt;++i)
+    {
+      adjacent[nbrs[i]]=true;
+    }
+  }
+
+  std::vector<QueryVertexID> getGQLOrder(
+    const Graph *data_graph, const QueryGraph *query_graph
+  )
+  {
+    QueryVertexID qg_v_cnt= query_graph->getNumVertices();
+    std::vector<bool> visited_vertices(qg_v_cnt, false);
+    std::vector<bool> adjacent_vertices(qg_v_cnt, false);
+    vector<QueryVertexID> order(qg_v_cnt);
+
+    QueryVertexID start_vertex= selectGQLStartVertex(query_graph);
+    order[0]=start_vertex;
+    updateValidVertices(start_vertex,visited_vertices,adjacent_vertices);
+
+    for(QueryVertexID i=1;i<qg_v_cnt;++i)
+    {
+      QueryVertexID next_vertex;
+      QueryVertexID min_value = data_graph->getNumVertices()+1;
+      for(QueryVertexID j=0;j<qg_v_cnt;++j)
+      {
+        QueryVertexID cur_vertex=j;
+        if (!visited_vertices[cur_vertex] && adjacent_vertices[cur_vertex]) {
+          size_t cnt=candidates_sets_[cur_vertex].size();
+          if(cnt<min_value)
+          {
+            min_value=cnt;
+            next_vertex = cur_vertex;
+          }
+          else if (cnt==min_value&&query_graph->getVertexOutDegree(cur_vertex)>query_graph->getVertexOutDegree(next_vertex))
+          {
+            next_vertex = cur_vertex;
+          }
+        }
+      }
+      updateValidVertices(next_vertex,visited_vertices,adjacent_vertices);
+      order[i]=next_vertex;
+    }
+    return order;
+  }
+  
+  std::vector<QueryVertexID> getDPISOOrder(
+    const QueryGraph *query_graph,
+    std::vector<QueryVertexID> bfs_order
+  )
+  {
+    QueryVertexID qg_v_cnt= query_graph->getNumVertices();
+    std::vector<QueryVertexID> order(qg_v_cnt);
+    for(QueryVertexID i=0;i<qg_v_cnt;++i)
+    {
+      order[i]=bfs_order[i];
+    }
+    return order;
+  }
 
   std::vector<QueryVertexID> getTSOOrder(
     const QueryGraph *query_graph,
@@ -167,6 +250,7 @@ class FilterAndOrder
     std::sort(path_orders.begin(), path_orders.end());
     std::vector<bool> visited_vertices(qg_v_cnt, false);
     std::vector<QueryVertexID> order;
+    order.reserve(qg_v_cnt);
     for (auto& path : path_orders) {
       for(auto v:*(path.second))
       {
@@ -240,7 +324,7 @@ class FilterAndOrder
 
       return non_tree_edge_count;
     }
-    
+
   void generateRootToLeafPaths(
     const std::vector<TreeNode>& tree_node,
     QueryVertexID cur_vertex,
