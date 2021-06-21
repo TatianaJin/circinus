@@ -256,7 +256,7 @@ class FilterAndOrder
         for(auto& v : candidates_sets_[path[begin]])
         {
           size_t local_sum = 0;
-          auto& [nbrs,cnt]=edge.getOutNeighbors(v);
+          auto& [nbrs,cnt]=edge->getOutNeighbors(v);
           for(uint32_t j=0;j<cnt;++j)
           {
             auto nbr=nbrs[j];
@@ -292,7 +292,7 @@ class FilterAndOrder
     std::vector<QueryVertexID> &cur_path,
     std::vector<std::vector<QueryVertexID>>&paths )
   {
-    TreeNode& cur_node = tree_node[cur_vertex];
+    auto& cur_node = tree_node[cur_vertex];
     cur_path.push_back(cur_vertex);
     if(cur_node.children_.size()==0)
     {
@@ -302,7 +302,7 @@ class FilterAndOrder
     {
       for(auto child:cur_node.children_)
       {
-        generateRootToLeafPaths(tree_node, next_vertex, cur_path, paths);
+        generateRootToLeafPaths(tree_node, child, cur_path, paths);
       }
     }
     cur_path.pop_back();
@@ -344,6 +344,7 @@ class FilterAndOrder
           visited_vertices[v]=true;
         }
       }
+    }
     return order;
   }
   
