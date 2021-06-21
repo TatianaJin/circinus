@@ -137,6 +137,97 @@ class FilterAndOrder
       filtered=1;
       return candidates_sets_;
     }
+
+  std::vector<QueryVertexID> getTSOOrder(
+    const QueryGraph *query_graph,
+    std::map<std::pair<QueryVertexID,QueryVertexID>,BipartiteGraph> bg_map,
+    const std::vector<TreeNode>& tree,
+    std::vector<QueryVertexID> dfs_order
+    )
+  {
+    QueryVertexID qg_v_cnt= query_graph->getNumVertices();
+    std::vector<std::vector<QueryVertexID>>paths;
+    paths.reserve(qg_v_cnt);
+
+    std::vector<QueryVertexID> single_path;
+    single_path.reserve(qg_v_cnt);
+
+    generateRootToLeafPaths(tree,dfs_order[0],single_path,paths);
+    std::vector<std::pair<double, std::vector<QueryVertexID>*>> path_orders;
+    for(auto& path:paths)
+    {
+      std::vector<size_t> estimated_embeddings_num;
+      VertexID non_tree_edges_count = generateNoneTreeEdgesCount(query_graph,tree,path);
+      estimatePathEmbeddsingsNum(path, estimated_embeddings_num);
+      double score = estimated_embeddings_num[0] / (double) (non_tree_edges_count + 1);
+      path_orders.emplace_back(std::make_pair(score, &path));
+    }
+    std::sort(path_orders.begin(), path_orders.end());
+    std::vector<bool> visited_vertices(qg_v_cnt, false);
+    std::vector<QueryVertexID> order;
+    for (auto& path : path_orders) {
+      for(auto v:*(path.second))
+      {
+        if(!visited_vertices[v])
+        {
+          order.push_back(v);
+          visited_vertices[v]=true;
+        }
+      }
+    return order;
+  }
+  void estimatePathEmbeddsingsNum(
+    std::vector<QueryVertexID> &path,
+    std::vector<size_t> &estimated_embeddings_num)
+    {
+      assert(path.size() > 1);
+      std::vector<size_t> parent;
+      std::vector<size_t> children;
+
+      estimated_embeddings_num.resize(path.size() - 1);
+      auto last_edge =getBipartiteGraph(path[path.size() - 2],path[path.size() - 1]);
+      children.resize(last_edge.getNumVertices());
+      
+      size_t sum = 0;
+      for (VertexID i = 0; i < last_edge.getNumVertices(); ++i) {
+          children[i] = last_edge.offset_[i + 1] - last_edge.offset_[i];
+          sum += children[i];
+      }
+    }
+  QueryVertexID generateNoneTreeEdgesCount(
+    const QueryGraph *query_graph,
+    const std::vector<TreeNode>& tree_node,
+    std::vector<QueryVertexID> &path)
+    {
+      auto non_tree_edge_count = query_graph->getVertexOutDegree(path[0]) - tree_node[path[0]].children_.size();
+      for (size_t i = 1; i < path.size(); ++i) {
+        auto vertex = path[i];
+        non_tree_edge_count += query_graph->getVertexOutDegree(vertex) - tree_node[vertex].children_.size() - 1;
+      }
+
+      return non_tree_edge_count;
+    }
+  void generateRootToLeafPaths(
+    const std::vector<TreeNode>& tree_node,
+    QueryVertexID cur_vertex,
+    std::vector<QueryVertexID> &cur_path,
+    std::vector<std::vector<QueryVertexID>>&paths )
+  {
+    TreeNode& cur_node = tree_node[cur_vertex];
+    cur_path.push_back(cur_vertex);
+    if(cur_node.children_.size()==0)
+    {
+      paths.emplace_back(cur_path);
+    }
+    else
+    {
+      for(auto child:cur_node.children_)
+      {
+        generateRootToLeafPaths(tree_node, next_vertex, cur_path, paths);
+      }
+    }
+    cur_path.pop_back();
+  }
 };
 
 }
