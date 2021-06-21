@@ -256,7 +256,7 @@ class FilterAndOrder
         for(auto& v : candidates_sets_[path[begin]])
         {
           size_t local_sum = 0;
-          auto& [nbrs,cnt]=edge->getOutNeighbors(v);
+          auto [nbrs,cnt]=edge->getOutNeighbors(v);
           for(uint32_t j=0;j<cnt;++j)
           {
             auto nbr=nbrs[j];
