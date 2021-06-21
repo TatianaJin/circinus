@@ -177,7 +177,7 @@ class FilterAndOrder
     QueryVertexID qg_v_cnt= query_graph->getNumVertices();
     std::vector<bool> visited_vertices(qg_v_cnt, false);
     std::vector<bool> adjacent_vertices(qg_v_cnt, false);
-    vector<QueryVertexID> order(qg_v_cnt);
+    std::vector<QueryVertexID> order(qg_v_cnt);
 
     QueryVertexID start_vertex= selectGQLStartVertex(query_graph);
     order[0]=start_vertex;
@@ -223,45 +223,6 @@ class FilterAndOrder
     return order;
   }
 
-  std::vector<QueryVertexID> getTSOOrder(
-    const QueryGraph *query_graph,
-    std::map<std::pair<QueryVertexID,QueryVertexID>,BipartiteGraph> bg_map,
-    const std::vector<TreeNode>& tree,
-    std::vector<QueryVertexID> dfs_order
-    )
-  {
-    QueryVertexID qg_v_cnt= query_graph->getNumVertices();
-    std::vector<std::vector<QueryVertexID>>paths;
-    paths.reserve(qg_v_cnt);
-
-    std::vector<QueryVertexID> single_path;
-    single_path.reserve(qg_v_cnt);
-
-    generateRootToLeafPaths(tree,dfs_order[0],single_path,paths);
-    std::vector<std::pair<double, std::vector<QueryVertexID>*>> path_orders;
-    for(auto& path:paths)
-    {
-      std::vector<size_t> estimated_embeddings_num;
-      VertexID non_tree_edges_count = generateNoneTreeEdgesCount(query_graph,tree,path);
-      estimatePathEmbeddsingsNum(path, estimated_embeddings_num);
-      double score = estimated_embeddings_num[0] / (double) (non_tree_edges_count + 1);
-      path_orders.emplace_back(std::make_pair(score, &path));
-    }
-    std::sort(path_orders.begin(), path_orders.end());
-    std::vector<bool> visited_vertices(qg_v_cnt, false);
-    std::vector<QueryVertexID> order;
-    order.reserve(qg_v_cnt);
-    for (auto& path : path_orders) {
-      for(auto v:*(path.second))
-      {
-        if(!visited_vertices[v])
-        {
-          order.push_back(v);
-          visited_vertices[v]=true;
-        }
-      }
-    return order;
-  }
   void estimatePathEmbeddsingsNum(
     std::vector<QueryVertexID> &path,
     std::vector<size_t> &estimated_embeddings_num)
@@ -346,6 +307,46 @@ class FilterAndOrder
     }
     cur_path.pop_back();
   }
+  std::vector<QueryVertexID> getTSOOrder(
+    const QueryGraph *query_graph,
+    std::map<std::pair<QueryVertexID,QueryVertexID>,BipartiteGraph> bg_map,
+    const std::vector<TreeNode>& tree,
+    std::vector<QueryVertexID> dfs_order
+    )
+  {
+    QueryVertexID qg_v_cnt= query_graph->getNumVertices();
+    std::vector<std::vector<QueryVertexID>>paths;
+    paths.reserve(qg_v_cnt);
+
+    std::vector<QueryVertexID> single_path;
+    single_path.reserve(qg_v_cnt);
+
+    generateRootToLeafPaths(tree,dfs_order[0],single_path,paths);
+    std::vector<std::pair<double, std::vector<QueryVertexID>*>> path_orders;
+    for(auto& path:paths)
+    {
+      std::vector<size_t> estimated_embeddings_num;
+      VertexID non_tree_edges_count = generateNoneTreeEdgesCount(query_graph,tree,path);
+      estimatePathEmbeddsingsNum(path, estimated_embeddings_num);
+      double score = estimated_embeddings_num[0] / (double) (non_tree_edges_count + 1);
+      path_orders.emplace_back(std::make_pair(score, &path));
+    }
+    std::sort(path_orders.begin(), path_orders.end());
+    std::vector<bool> visited_vertices(qg_v_cnt, false);
+    std::vector<QueryVertexID> order;
+    order.reserve(qg_v_cnt);
+    for (auto& path : path_orders) {
+      for(auto v:*(path.second))
+      {
+        if(!visited_vertices[v])
+        {
+          order.push_back(v);
+          visited_vertices[v]=true;
+        }
+      }
+    return order;
+  }
+  
 };
 
 }
