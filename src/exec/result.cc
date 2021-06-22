@@ -14,6 +14,7 @@
 
 #include "exec/result.h"
 
+#include <algorithm>
 #include <memory>
 #include <utility>
 
@@ -42,18 +43,25 @@ void CandidateResult::collect(TaskBase* task) {
   }
 }
 
-void CandidateResult::merge() {
-  merged_candidates_.resize(candidates_.size());
-  for (uint32_t i = 0; i < candidates_.size(); ++i) {
-    for (uint32_t j = 0; j < candidates_[i].size(); ++j) {
-      merged_candidates_[i].insert(merged_candidates_[i].end(), candidates_[i][j].begin(), candidates_[i][j].end());
-      candidates_[i][j].clear();
+void CandidateResult::merge(TaskBase* task) {
+  auto task_id = task->getTaskId();
+  std::vector<uint32_t> order(candidates_[task_id].size());
+  std::iota(order.begin(), order.end(), 0);
+  sort(order.begin(), order.end(), [&](uint32_t l, uint32_t r) {
+    if (candidates_[task_id][l].empty() || candidates_[task_id][r].empty()) {
+      return true;
     }
+    return candidates_[task_id][l].front() < candidates_[task_id][r].front();
+  });
+
+  for (uint32_t j : order) {
+    merged_candidates_[task_id].insert(merged_candidates_[task_id].end(), candidates_[task_id][j].begin(),
+                                       candidates_[task_id][j].end());
+    candidates_[task_id][j].clear();
   }
-  candidates_.clear();
 }
 
-void CandidateResult::remove_invalid(QueryVertexID query_vertex) {
+void CandidateResult::removeInvalid(QueryVertexID query_vertex) {
   merged_candidates_[query_vertex].erase(
       std::remove_if(merged_candidates_[query_vertex].begin(), merged_candidates_[query_vertex].end(),
                      [invalid = INVALID_VERTEX_ID](VertexID vid) { return vid == invalid; }),
@@ -72,30 +80,44 @@ std::vector<std::vector<VertexID>> CandidateResult::getCandidateCardinality() co
 
 void PartitionedCandidateResult::collect(TaskBase* task) {
   auto scan = dynamic_cast<ScanTask*>(task);
-  candidates_[scan->getTaskId()][scan->getPartition()] = std::move(scan->getScanContext().candidates);
+  uint32_t task_id = scan->getTaskId();
+  uint32_t partition = scan->getPartition();
+  candidates_[task_id][partition] = std::move(scan->getScanContext().candidates);
+  per_partition_candidate_cardinality_[partition][task_id] = candidates_[task_id][partition].size();
 }
 
-std::vector<std::vector<VertexID>> PartitionedCandidateResult::getCandidateCardinality() const {
-  auto n_partitions = candidates_.front().size();
-  std::vector<std::vector<VertexID>> ret(n_partitions);
-  for (uint32_t i = 0; i < n_partitions; ++i) {
-    ret[i].resize(candidates_.size(), 0);
-    for (uint32_t j = 0; j < candidates_.size(); ++j) {
-      ret[i][j] += candidates_[j][i].size();
-    }
+void PartitionedCandidateResult::merge(TaskBase* task) {
+  uint32_t task_id = task->getTaskId();
+  candidate_partition_offsets_[task_id].resize(candidates_[task_id].size() + 1, 0);
+  for (uint32_t j = 0; j < candidates_[task_id].size(); ++j) {
+    candidate_partition_offsets_[task_id][j + 1] =
+        candidate_partition_offsets_[task_id][j] + candidates_[task_id][j].size();
   }
-  return ret;
+  CandidateResult::merge(task);
 }
 
-void PartitionedCandidateResult::merge() {
-  candidate_partition_offsets_.resize(candidates_.size());
-  for (uint32_t i = 0; i < candidate_partition_offsets_.size(); ++i) {
-    candidate_partition_offsets_[i].resize(candidates_[i].size() + 1, 0);
-    for (uint32_t j = 0; j < candidates_[i].size(); ++j) {
-      candidate_partition_offsets_[i][j + 1] = candidate_partition_offsets_[i][j] + candidates_[i][j].size();
+void PartitionedCandidateResult::removeInvalid(QueryVertexID query_vertex) {
+  VertexID last_invalid_sum = 0;
+  VertexID invalid_sum = 0;
+  VertexID valid_idx = 0;
+  for (uint32_t i = 1, j = 0; i < candidate_partition_offsets_[query_vertex].size(); ++i) {
+    VertexID& offset = candidate_partition_offsets_[query_vertex][i];
+    for (; j < offset; ++j) {
+      if (merged_candidates_[query_vertex][j] == INVALID_VERTEX_ID) {
+        invalid_sum++;
+      } else {
+        merged_candidates_[query_vertex][valid_idx++] = merged_candidates_[query_vertex][j];
+      }
     }
+    CHECK_LE(invalid_sum, offset) << "Error: invalid vertex number greater than offset.";
+    CHECK_LE(invalid_sum - last_invalid_sum, per_partition_candidate_cardinality_[i - 1][query_vertex])
+        << "Error: per partition invalid vertex number greater than cardinality.";
+
+    offset -= invalid_sum;
+    per_partition_candidate_cardinality_[i - 1][query_vertex] -= invalid_sum - last_invalid_sum;
+    merged_candidates_[query_vertex].resize(valid_idx);
+    last_invalid_sum = invalid_sum;
   }
-  CandidateResult::merge();
 }
 
 }  // namespace circinus

@@ -82,8 +82,8 @@ LogicalCompressedInputOperator::LogicalCompressedInputOperator(const QueryGraph*
   }
 }
 
-std::vector<std::unique_ptr<InputOperator>> LogicalCompressedInputOperator::toPhysicalOperators() {
-  return {std::make_unique<InputOperator>(input_query_vertex_, inputs_are_keys_, &qv_pivots_)};
+std::unique_ptr<InputOperator> LogicalCompressedInputOperator::toPhysicalOperators() {
+  return std::make_unique<InputOperator>(input_query_vertex_, inputs_are_keys_, &qv_pivots_);
 }
 
 }  // namespace circinus

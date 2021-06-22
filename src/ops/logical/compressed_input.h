@@ -43,7 +43,7 @@ class LogicalCompressedInputOperator {
 
   virtual ~LogicalCompressedInputOperator() {}
 
-  virtual std::vector<std::unique_ptr<InputOperator>> toPhysicalOperators();
+  virtual std::unique_ptr<InputOperator> toPhysicalOperators();
 };
 
 }  // namespace circinus

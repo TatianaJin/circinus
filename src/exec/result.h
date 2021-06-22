@@ -40,7 +40,7 @@ class CandidateResult : public Result {
   std::vector<std::vector<VertexID>> merged_candidates_;
 
  public:
-  explicit CandidateResult(TaskId n_tasks) : candidates_(n_tasks) {}
+  explicit CandidateResult(TaskId n_tasks) : candidates_(n_tasks), merged_candidates_(n_tasks) {}
 
   virtual ~CandidateResult() {}
 
@@ -48,9 +48,9 @@ class CandidateResult : public Result {
 
   virtual std::vector<std::vector<VertexID>> getCandidateCardinality() const;
 
-  virtual void merge();
+  virtual void merge(TaskBase* task);
 
-  void remove_invalid(QueryVertexID query_vertex);
+  virtual void removeInvalid(QueryVertexID query_vertex);
 
   std::vector<std::vector<VertexID>>* getMergedCandidates() { return &merged_candidates_; }
 
@@ -59,9 +59,13 @@ class CandidateResult : public Result {
 
 class PartitionedCandidateResult : public CandidateResult {
   std::vector<std::vector<VertexID>> candidate_partition_offsets_;
+  std::vector<std::vector<VertexID>> per_partition_candidate_cardinality_;
 
  public:
-  explicit PartitionedCandidateResult(uint32_t n_qvs, uint32_t n_partitions) : CandidateResult(n_qvs) {
+  explicit PartitionedCandidateResult(uint32_t n_qvs, uint32_t n_partitions)
+      : candidate_partition_offsets_(n_qvs),
+        per_partition_candidate_cardinality_(n_partitions, std::vector<VertexID>(n_qvs)),
+        CandidateResult(n_qvs) {
     for (auto& shards : candidates_) {
       shards.resize(n_partitions);
     }
@@ -69,9 +73,13 @@ class PartitionedCandidateResult : public CandidateResult {
 
   void collect(TaskBase* task) override;
 
-  std::vector<std::vector<VertexID>> getCandidateCardinality() const override;
+  void merge(TaskBase* task) override;
 
-  void merge() override;
+  void removeInvalid(QueryVertexID query_vertex) override;
+
+  std::vector<std::vector<VertexID>> getCandidateCardinality() const override {
+    return per_partition_candidate_cardinality_;
+  }
 
   inline const auto& getCandidatePartitionOffsets(uint32_t idx) const {
     CHECK(!candidate_partition_offsets_.empty()) << "merge() must be called before getCandidatePartitionOffsets";
