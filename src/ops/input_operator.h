@@ -43,7 +43,7 @@ class InputOperator : public Operator {
     uint32_t cur_idx = 0;
     if (qv_pivots_->empty()) {
       for (uint32_t i = 1; i < qv_pivots_->size(); ++i) {
-        CHECK_EQ((*qv_pivots_)[i - 1].second, (*qv_pivots_)[i].first) << "qv pivots is not a path.";
+        CHECK_EQ((*qv_pivots_)[i].second, (*qv_pivots_)[i - 1].first) << "qv pivots is not a path.";
       }
 
       candidate[cur_idx].assign(candidates[(*qv_pivots_)[cur_idx].second].begin(),
@@ -63,14 +63,15 @@ class InputOperator : public Operator {
         return std::vector<CompressedSubgraphs>(candidate[cur_idx].begin(), candidate[cur_idx].end());
       } else {
         return std::vector<CompressedSubgraphs>(
-            {CompressedSubgraphs(std::make_shared<std::vector<VertexID>>(candidate[cur_idx]))});
+            {CompressedSubgraphs(std::make_shared<std::vector<VertexID>>(std::move(candidate[cur_idx])))});
       }
     } else {
       if (inputs_are_keys_) {
-        return std::vector<CompressedSubgraphs>(candidates.begin(), candidates.end());
+        return std::vector<CompressedSubgraphs>(candidates[starting_vertex_].begin(),
+                                                candidates[starting_vertex_].end());
       } else {
-        return std::vector<CompressedSubgraphs>(
-            {CompressedSubgraphs(std::make_shared<std::vector<VertexID>>(candidate[cur_idx]))});
+        return std::vector<CompressedSubgraphs>({CompressedSubgraphs(std::make_shared<std::vector<VertexID>>(
+            std::vector<VertexID>(candidates[starting_vertex_].begin(), candidates[starting_vertex_].end())))});
       }
     }
   }

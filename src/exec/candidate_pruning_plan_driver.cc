@@ -133,7 +133,9 @@ void CandidatePruningPlanDriver::taskFinish(TaskBase* task, ThreadsafeTaskQueue*
     }
 
     if (plan_->getPhase() == 1) {
-      result_->merge(task);
+      if (!plan_->toPartitionResult()) {
+        result_->merge(task);
+      }
     } else if (plan_->getPhase() == 3) {
       result_->removeInvalid(dynamic_cast<NeighborhoodFilterTask*>(task)->getFilter()->getQueryVertex());
       auto filter = dynamic_cast<NeighborhoodFilter*>(operators_[n_finished_tasks_].get());

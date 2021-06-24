@@ -100,13 +100,14 @@ void PartitionedCandidateResult::removeInvalid(QueryVertexID query_vertex) {
   VertexID last_invalid_sum = 0;
   VertexID invalid_sum = 0;
   VertexID valid_idx = 0;
-  for (uint32_t i = 1, j = 0; i < candidate_partition_offsets_[query_vertex].size(); ++i) {
+  VertexID idx = 0;
+  for (uint32_t i = 1; i < candidate_partition_offsets_[query_vertex].size(); ++i) {
     VertexID& offset = candidate_partition_offsets_[query_vertex][i];
-    for (; j < offset; ++j) {
-      if (merged_candidates_[query_vertex][j] == INVALID_VERTEX_ID) {
+    for (; idx < offset; ++idx) {
+      if (merged_candidates_[query_vertex][idx] == INVALID_VERTEX_ID) {
         invalid_sum++;
-      } else {
-        merged_candidates_[query_vertex][valid_idx++] = merged_candidates_[query_vertex][j];
+      } else if (valid_idx++ != idx) {
+        merged_candidates_[query_vertex][valid_idx - 1] = merged_candidates_[query_vertex][idx];
       }
     }
     CHECK_LE(invalid_sum, offset) << "Error: invalid vertex number greater than offset.";
@@ -115,9 +116,9 @@ void PartitionedCandidateResult::removeInvalid(QueryVertexID query_vertex) {
 
     offset -= invalid_sum;
     per_partition_candidate_cardinality_[i - 1][query_vertex] -= invalid_sum - last_invalid_sum;
-    merged_candidates_[query_vertex].resize(valid_idx);
     last_invalid_sum = invalid_sum;
   }
+  merged_candidates_[query_vertex].resize(valid_idx);
 }
 
 }  // namespace circinus
