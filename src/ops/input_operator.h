@@ -90,6 +90,14 @@ class PartitionedInputOperator : public InputOperator {
         return std::vector<CompressedSubgraphs>(
             {CompressedSubgraphs(std::make_shared<std::vector<VertexID>>(std::move(candidate[cur_idx])))});
       }
+    } else {
+      if (inputs_are_keys_) {
+        return std::vector<CompressedSubgraphs>(candidates[starting_vertex_].begin(),
+                                                candidates[starting_vertex_].end());
+      } else {
+        return std::vector<CompressedSubgraphs>({CompressedSubgraphs(std::make_shared<std::vector<VertexID>>(
+            std::vector<VertexID>(candidates[starting_vertex_].begin(), candidates[starting_vertex_].end())))});
+      }
     }
     return InputOperator::getInputs(data_graph, candidates);
   }
