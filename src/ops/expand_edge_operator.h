@@ -69,12 +69,20 @@ class ExpandEdgeOperator : public TraverseOperator {
 
   virtual ~ExpandEdgeOperator() {}
 
-  std::vector<BipartiteGraph*> computeBipartiteGraphs(
+  std::vector<std::unique_ptr<BipartiteGraph>> computeBipartiteGraphs(
       const Graph* g, const std::vector<std::vector<VertexID>>& candidate_sets) override {
-    std::vector<BipartiteGraph*> ret;
+    std::vector<std::unique_ptr<BipartiteGraph>> ret;
     ret.reserve(1);
-    ret.emplace_back(new BipartiteGraph(parent_id_, target_vertex_));
+    ret.emplace_back(std::make_unique<BipartiteGraph>(parent_id_, target_vertex_));
     ret.back()->populateGraph(g, &candidate_sets);
+    return ret;
+  }
+
+  std::vector<std::unique_ptr<GraphPartitionBase>> computeGraphPartitions(
+      const ReorderedPartitionedGraph* g, const std::vector<CandidateScope>& candidate_scopes) const override {
+    std::vector<std::unique_ptr<GraphPartitionBase>> ret;
+    ret.emplace_back(
+        GraphPartitionBase::createGraphPartition(candidate_scopes[parent_id_], candidate_scopes[target_vertex_], g));
     return ret;
   }
 

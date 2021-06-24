@@ -164,9 +164,6 @@ class ExecutionPlan {
   // FIXME(tatiana): remove
   inline const bool isToKey(QueryVertexID id) const { return dynamic_cover_key_level_.count(id) != 0; }
 
-  // FIXME(tatiana): remove
-  inline OperatorTree cloneOperators() const { return operators_.clone(); }
-
   inline QueryVertexID getRootQueryVertexID() const { return matching_order_.front(); }
   inline const auto& getMatchingOrder() const { return matching_order_; }
 

@@ -21,6 +21,7 @@
 #include "exec/execution_config.h"
 #include "graph/graph_metadata.h"
 #include "graph/types.h"
+#include "ops/input_operator.h"
 #include "ops/logical/compressed_input.h"
 #include "plan/execution_plan.h"
 #include "plan/operator_tree.h"
@@ -30,7 +31,7 @@ namespace circinus {
 class BacktrackingPlan {
   std::vector<ExecutionPlan*> plans_;
   std::vector<std::pair<uint32_t, std::vector<CandidateScope>>> partitioned_plans_;
-  std::vector<std::unique_ptr<LogicalCompressedInputOperator>> input_operators_;
+  std::vector<std::unique_ptr<LogicalCompressedInputOperator>> input_operators_;  // size = plans_.size();
 
  public:
   OperatorTree& getOperatorTree(uint32_t plan_idx = 0) { return plans_[plan_idx]->getOperators(); }

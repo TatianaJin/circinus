@@ -77,24 +77,19 @@ class ExpandKeyToSetVertexOperator : public ExpandVertexOperator {
       for (uint32_t i = 0; i < parents_.size(); ++i) {
         uint32_t key = query_vertex_indices_[parents_[i]];
         uint32_t key_vid = input.getKeyVal(key);
+        auto neighbors = ((G*)current_data_graph_)->getOutNeighborsWithHint(key_vid, ALL_LABEL, i);
         if (i == 0) {
-          intersect(*candidates_, ((G*)current_data_graph_)->getOutNeighborsWithHint(key_vid, 0, i), &new_set,
-                    exceptions);
+          intersect(*candidates_, neighbors, &new_set, exceptions);
           if
             constexpr(isProfileMode(profile)) {
-              updateIntersectInfo(
-                  candidates_->size() + ((G*)current_data_graph_)->getVertexOutDegreeWithHint(key_vid, 0, i),
-                  new_set.size());
+              updateIntersectInfo(candidates_->size() + neighbors.size(), new_set.size());
             }
         } else {
           auto new_set_size = new_set.size();
           (void)new_set_size;
-          intersectInplace(new_set, ((G*)current_data_graph_)->getOutNeighborsWithHint(key_vid, 0, i), &new_set);
+          intersectInplace(new_set, neighbors, &new_set);
           if
-            constexpr(isProfileMode(profile)) {
-              updateIntersectInfo(new_set_size + ((G*)current_data_graph_)->getVertexOutDegreeWithHint(key_vid, 0, i),
-                                  new_set.size());
-            }
+            constexpr(isProfileMode(profile)) { updateIntersectInfo(new_set_size + neighbors.size(), new_set.size()); }
         }
         if (new_set.size() == 0) {
           break;

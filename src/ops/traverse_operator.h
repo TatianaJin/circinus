@@ -36,10 +36,9 @@
 
 namespace circinus {
 
-inline void removeExceptions(const std::pair<const VertexID*, uint32_t>& setPair, std::vector<VertexID>* res,
+inline void removeExceptions(const VertexSetView& set, std::vector<VertexID>* res,
                              const unordered_set<VertexID>& except = {}) {
-  for (uint32_t i = 0; i < setPair.second; ++i) {
-    auto vid = setPair.first[i];
+  for (auto vid : set) {
     if (except.count(vid) == 0) res->emplace_back(vid);
   }
 }
@@ -113,15 +112,11 @@ class TraverseOperator : public Operator {
     return subgraph_filter_->filter(subgraphs, start, end);
   }
 
-  virtual std::vector<BipartiteGraph*> computeBipartiteGraphs(
+  virtual std::vector<std::unique_ptr<BipartiteGraph>> computeBipartiteGraphs(
       const Graph* g, const std::vector<std::vector<VertexID>>& candidate_sets) = 0;
 
-  virtual std::vector<GraphPartition*> computeGraphPartitions(const ReorderedPartitionedGraph* g,
-                                                              const std::vector<CandidateScope>& candidate_scopes) {
-    std::vector<GraphPartition*> ret;
-    LOG(FATAL) << "Not implemented yet";
-    return {};
-  }
+  virtual std::vector<std::unique_ptr<GraphPartitionBase>> computeGraphPartitions(
+      const ReorderedPartitionedGraph* g, const std::vector<CandidateScope>& candidate_scopes) const = 0;
 
   virtual void input(const std::vector<CompressedSubgraphs>& inputs, const void* data_graph) {
     current_inputs_ = &inputs;

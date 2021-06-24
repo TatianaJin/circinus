@@ -52,16 +52,6 @@ class OperatorTree {
   inline Operator* getOperator(uint32_t idx) const { return operators_[idx]; }
   inline size_t getOperatorSize() const { return operators_.size(); }
 
-  inline OperatorTree clone() const {
-    OperatorTree ret;
-    ret.operators_.reserve(operators_.size());
-    ret.profiler_ = profiler_;
-    for (auto op : operators_) {
-      ret.operators_.push_back(op->clone());
-    }
-    return ret;
-  }
-
   inline void setOutput(Outputs* outputs) const {
     auto op = operators_.back();
     auto output_op = dynamic_cast<OutputOperator*>(op);

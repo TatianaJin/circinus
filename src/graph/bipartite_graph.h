@@ -69,13 +69,13 @@ class BipartiteGraph : public Graph {  // only use variable:vlist_,elist_  funct
   /**
    * @returns The original ids of neighbor vertices of the given vertex
    */
-  inline std::pair<const VertexID*, uint32_t> getOutNeighbors(VertexID id, LabelID dummy = 0) const {
+  inline VertexSetView getOutNeighborsWithHint(VertexID id, LabelID nbr_label = ALL_LABEL) const {
     DCHECK_EQ(offset_by_vertex_.count(id), 1);
     const uint32_t offset = offset_by_vertex_.at(id);
-    return Graph::getOutNeighbors(offset);
+    return Graph::getOutNeighborsWithHint(offset, nbr_label);
   }
 
-  inline VertexID getVertexOutDegree(VertexID id, LabelID dummy = 0) const {
+  inline VertexID getVertexOutDegree(VertexID id, LabelID nbr_label = ALL_LABEL) const {
     DCHECK_EQ(offset_by_vertex_.count(id), 1);
     const uint32_t offset = offset_by_vertex_.at(id);
     return Graph::getVertexOutDegree(offset);

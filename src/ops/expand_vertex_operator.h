@@ -18,6 +18,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "algorithms/intersect.h"
 #include "graph/compressed_subgraphs.h"
 #include "graph/query_graph.h"
 #include "ops/traverse_operator.h"
@@ -45,13 +46,24 @@ class ExpandVertexOperator : public TraverseOperator {
 
   const auto& getQueryVertexIndices() const { return query_vertex_indices_; }
 
-  std::vector<BipartiteGraph*> computeBipartiteGraphs(
+  std::vector<std::unique_ptr<BipartiteGraph>> computeBipartiteGraphs(
       const Graph* g, const std::vector<std::vector<VertexID>>& candidate_sets) override {
-    std::vector<BipartiteGraph*> ret;
+    std::vector<std::unique_ptr<BipartiteGraph>> ret;
     ret.reserve(parents_.size());
     for (auto parent_vertex : parents_) {
-      ret.emplace_back(new BipartiteGraph(parent_vertex, target_vertex_));
+      ret.emplace_back(std::make_unique<BipartiteGraph>(parent_vertex, target_vertex_));
       ret.back()->populateGraph(g, &candidate_sets);
+    }
+    return ret;
+  }
+
+  std::vector<std::unique_ptr<GraphPartitionBase>> computeGraphPartitions(
+      const ReorderedPartitionedGraph* g, const std::vector<CandidateScope>& candidate_scopes) const override {
+    std::vector<std::unique_ptr<GraphPartitionBase>> ret;
+    ret.reserve(parents_.size());
+    for (auto parent_vertex : parents_) {
+      ret.emplace_back(GraphPartitionBase::createGraphPartition(candidate_scopes[parent_vertex],
+                                                                candidate_scopes[target_vertex_], g));
     }
     return ret;
   }

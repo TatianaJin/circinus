@@ -23,6 +23,7 @@
 #include <utility>
 #include <vector>
 
+#include "algorithms/intersect.h"
 #include "graph/types.h"
 #include "ops/expand_vertex_operator.h"
 #include "ops/types.h"
@@ -77,6 +78,28 @@ class EnumerateKeyExpandToSetOperator : public ExpandVertexOperator {
     }
     CHECK_EQ(query_type, 2) << "unknown query type " << query_type;
     return expandInner<QueryType::ProfileWithMiniIntersection>(outputs, batch_size);
+  }
+
+  std::vector<std::unique_ptr<GraphPartitionBase>> computeGraphPartitions(
+      const ReorderedPartitionedGraph* g, const std::vector<CandidateScope>& candidate_scopes) const override {
+    std::vector<std::unique_ptr<GraphPartitionBase>> ret;
+    ret.reserve(parents_.size());
+    if (parents_.size() - keys_to_enumerate_.size() > 0) {
+      // existing key parents first
+      unordered_set<QueryVertexID> keys_to_enumerate_set(keys_to_enumerate_.begin(), keys_to_enumerate_.end());
+      for (auto v : parents_) {
+        if (keys_to_enumerate_set.count(v) == 0) {
+          ret.emplace_back(
+              GraphPartitionBase::createGraphPartition(candidate_scopes[v], candidate_scopes[target_vertex_], g));
+        }
+      }
+    }
+    // then keys to enumerate
+    for (auto parent_vertex : keys_to_enumerate_) {
+      ret.emplace_back(GraphPartitionBase::createGraphPartition(candidate_scopes[parent_vertex],
+                                                                candidate_scopes[target_vertex_], g));
+    }
+    return ret;
   }
 
   std::string toString() const override {
@@ -225,26 +248,25 @@ uint32_t EnumerateKeyExpandToSetOperator<G>::expandInner(std::vector<CompressedS
           ++enumerate_key_idx_[enumerate_key_depth];
           continue;
         }
+        auto pidx = enumerate_key_depth + existing_key_parent_indices_.size();  // parent index
         DCHECK(target_sets_[enumerate_key_depth + 1].empty()) << enumerate_key_depth;
+        auto neighbors = ((G*)current_data_graph_)->getOutNeighborsWithHint(key_vid, ALL_LABEL, pidx);
         if (target_sets_[enumerate_key_depth].empty()) {
           DCHECK_EQ(enumerate_key_depth, 0);
-          intersect(*candidates_, ((G*)current_data_graph_)->getOutNeighborsWithHint(key_vid, 0, 0),
-                    &target_sets_[enumerate_key_depth + 1], existing_vertices_);
+          intersect(*candidates_, neighbors, &target_sets_[enumerate_key_depth + 1], existing_vertices_);
         } else {
-          intersect(target_sets_[enumerate_key_depth],
-                    ((G*)current_data_graph_)->getOutNeighborsWithHint(key_vid, 0, 0),
-                    &target_sets_[enumerate_key_depth + 1], existing_vertices_);
+          intersect(target_sets_[enumerate_key_depth], neighbors, &target_sets_[enumerate_key_depth + 1],
+                    existing_vertices_);
         }
 
         if
           constexpr(isProfileMode(profile)) {
             updateIntersectInfo((target_sets_[enumerate_key_depth].empty() ? candidates_->size()
                                                                            : target_sets_[enumerate_key_depth].size()) +
-                                    ((G*)current_data_graph_)->getVertexOutDegreeWithHint(key_vid, 0, 0),
+                                    neighbors.size(),
                                 target_sets_[enumerate_key_depth + 1].size());
             if
               constexpr(isProfileWithMiniIntersectionMode(profile)) {
-                auto pidx = enumerate_key_depth + existing_key_parent_indices_.size();  // parent index
                 parent_tuple_[pidx] = key_vid;
                 distinct_intersection_count_ +=
                     parent_tuple_sets_[pidx].emplace((char*)parent_tuple_.data(), (pidx + 1) * sizeof(VertexID)).second;
@@ -341,16 +363,15 @@ bool EnumerateKeyExpandToSetOperator<G>::expandInner() {  // handles a new input
     uint32_t key_vid = input.getKeyVal(existing_key_parent_indices_[i]);
     auto target_set_size = target_set.size();
     (void)target_set_size;
+    auto neighbors = ((G*)current_data_graph_)->getOutNeighborsWithHint(key_vid, ALL_LABEL, i);
     if (i == 0) {
-      intersect(*candidates_, ((G*)current_data_graph_)->getOutNeighborsWithHint(key_vid, 0, 0), &target_set,
-                existing_vertices_);
+      intersect(*candidates_, neighbors, &target_set, existing_vertices_);
     } else {
-      intersectInplace(target_set, ((G*)current_data_graph_)->getOutNeighborsWithHint(key_vid, 0, 0), &target_set);
+      intersectInplace(target_set, neighbors, &target_set);
     }
     if
       constexpr(isProfileMode(profile)) {
-        updateIntersectInfo(target_set_size + ((G*)current_data_graph_)->getVertexOutDegreeWithHint(key_vid, 0, 0),
-                            target_set.size());
+        updateIntersectInfo(target_set_size + neighbors.size(), target_set.size());
         if
           constexpr(isProfileWithMiniIntersectionMode(profile)) {
             parent_tuple_[i] = key_vid;

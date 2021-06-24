@@ -37,7 +37,7 @@ class TraverseTask : public TaskBase {
   const ReorderedPartitionedGraph* graph_;
   const uint32_t batch_size_;
   std::vector<CandidateSetView> candidates_;
-  std::vector<GraphView<GraphPartition*>> graph_views_;
+  std::vector<GraphView<GraphPartitionBase>> graph_views_;
 
  public:
   TraverseTask(QueryId query_id, TaskId task_id, uint32_t batch_size, OperatorTree& op_tree,
@@ -64,8 +64,8 @@ class TraverseTask : public TaskBase {
   const GraphBase* getDataGraph() const override { return graph_; }
 
   void run() override {
-    auto inputs = input_op_->getInputs(candidates_);
-    op_tree_->execute()
+    auto inputs = input_op_->getInputs(graph_, candidates_);
+    // op_tree_->execute()
     // TODO(tatiana)
     // traverse_->input();
     // traverse_->expand();
@@ -78,10 +78,10 @@ class TraverseTask : public TaskBase {
   }
 
  protected:
-  static std::vector<GraphView<GraphPartition*>> setupGraphView(const ReorderedPartitionedGraph* g,
-                                                                const OperatorTree& op_tree,
-                                                                const std::vector<CandidateScope>& scopes) {
-    std::vector<GraphView<GraphPartition*>> data_graphs_for_operators;
+  static std::vector<GraphView<GraphPartitionBase>> setupGraphView(const ReorderedPartitionedGraph* g,
+                                                                   const OperatorTree& op_tree,
+                                                                   const std::vector<CandidateScope>& scopes) {
+    std::vector<GraphView<GraphPartitionBase>> data_graphs_for_operators;
     size_t len = op_tree.getOperatorSize() - 1;
     data_graphs_for_operators.reserve(len);
     for (size_t i = 0; i < len; ++i) {
