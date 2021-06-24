@@ -101,7 +101,7 @@ class CandidatePruningPlan {
   /**
    * The returned filters should be executed sequentially, while each filter is executed in parallel.
    */
-  std::vector<std::unique_ptr<NeighborhoodFilter>> getFilterOperators(GraphMetadata& metadata,
+  std::vector<std::unique_ptr<NeighborhoodFilter>> getFilterOperators(const GraphMetadata& metadata,
                                                                       ExecutionConfig& exec_conf) {
     std::vector<std::unique_ptr<NeighborhoodFilter>> ret;
     for (auto& filter : neighbor_filters_) {

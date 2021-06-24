@@ -90,7 +90,6 @@ void CandidatePruningPlanDriver::init(QueryId qid, QueryContext* query_ctx, Exec
       operators_.push_back(std::move(scan));
     }
   } else if (plan_->getPhase() == 3) {
-    // TODO(tatiana): support partitioned graph
     auto filters = plan_->getFilterOperators(*query_ctx->graph_metadata, ctx.first);
     task_counters_.resize(filters.size());
     uint32_t task_id = 0;
@@ -99,7 +98,7 @@ void CandidatePruningPlanDriver::init(QueryId qid, QueryContext* query_ctx, Exec
     QueryVertexID query_vertex = filter->getQueryVertex();
     uint64_t input_size = (*result_->getMergedCandidates())[query_vertex].size();
     filter->setInputSize(input_size);
-    filter->setParallelism(input_size / FLAGS_batch_size);
+    filter->setParallelism((input_size + FLAGS_batch_size - 1) / FLAGS_batch_size);
     task_counters_[task_id] = filter->getParallelism();
     for (uint32_t i = 0; i < filter->getParallelism(); ++i) {
       task_queue.putTask(new NeighborhoodFilterTask(qid, task_id, i, filter.get(), (const Graph*)query_ctx->data_graph,
@@ -122,28 +121,28 @@ void CandidatePruningPlanDriver::taskFinish(TaskBase* task, ThreadsafeTaskQueue*
     if (++n_finished_tasks_ == task_counters_.size()) {
       if (plan_->getPhase() == 1) {
         candidate_cardinality_ = result_->getCandidateCardinality();
-        if (!plan_->toPartitionResult()) {
-          result_->merge();
-        }
         reply_queue->push(std::move(*finish_event_));
         reset();
       } else if (plan_->getPhase() == 3) {
-        // FIXME(tatiana): make sure the candidate sets are sorted before entering the backtracking phase
-        // TODO(tatiana): provide per-partition candidate cardinality when plan_->toPartitionResult() is true
-        result_->remove_invalid(dynamic_cast<NeighborhoodFilterTask*>(task)->getFilter()->getQueryVertex());
+        result_->removeInvalid(dynamic_cast<NeighborhoodFilterTask*>(task)->getFilter()->getQueryVertex());
+        candidate_cardinality_ = result_->getCandidateCardinality();
         reply_queue->push(std::move(*finish_event_));
         reset();
       }
       return;
     }
 
-    if (plan_->getPhase() == 3) {
-      result_->remove_invalid(dynamic_cast<NeighborhoodFilterTask*>(task)->getFilter()->getQueryVertex());
+    if (plan_->getPhase() == 1) {
+      if (!plan_->toPartitionResult()) {
+        result_->merge(task);
+      }
+    } else if (plan_->getPhase() == 3) {
+      result_->removeInvalid(dynamic_cast<NeighborhoodFilterTask*>(task)->getFilter()->getQueryVertex());
       auto filter = dynamic_cast<NeighborhoodFilter*>(operators_[n_finished_tasks_].get());
       QueryVertexID query_vertex = filter->getQueryVertex();
       uint64_t input_size = (*result_->getMergedCandidates())[query_vertex].size();
       filter->setInputSize(input_size);
-      filter->setParallelism(input_size / FLAGS_batch_size);
+      filter->setParallelism((input_size + FLAGS_batch_size - 1) / FLAGS_batch_size);
       task_counters_[n_finished_tasks_] = filter->getParallelism();
       for (uint32_t i = 0; i < filter->getParallelism(); ++i) {
         task_queue->putTask(new NeighborhoodFilterTask(task->getQueryId(), n_finished_tasks_, i, filter,

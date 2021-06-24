@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <algorithm>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 

@@ -15,7 +15,9 @@
 #pragma once
 
 #include <cstring>
+#include <memory>
 #include <queue>
+#include <string>
 #include <vector>
 
 #include "graph/compressed_subgraphs.h"
@@ -130,7 +132,6 @@ static inline uint64_t getNumSubgraphs(const std::vector<CompressedSubgraphs>& g
 #ifdef __GNUG__
 #include <cxxabi.h>
 #include <cstdlib>
-#include <memory>
 template <typename T>
 std::string getTypename(const T& t) {
   auto name = typeid(t).name();

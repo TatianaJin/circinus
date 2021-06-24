@@ -20,8 +20,8 @@
 
 #include "exec/execution_config.h"
 #include "graph/graph_metadata.h"
+#include "graph/types.h"
 #include "ops/logical/compressed_input.h"
-#include "plan/candidate_scope.h"
 #include "plan/execution_plan.h"
 #include "plan/operator_tree.h"
 
