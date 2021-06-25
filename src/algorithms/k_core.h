@@ -24,12 +24,11 @@ class TwoCoreSolver {
  private:
   const QueryGraph* graph_;
   std::vector<int> core_table_;
-  bool generated=0;
 
  public:
   inline static bool isInCore(const std::vector<int>& core_table, QueryVertexID v) { return core_table[v] > 1; }
 
-  TwoCoreSolver(const QueryGraph* graph):graph_(graph){}
+  TwoCoreSolver(const QueryGraph* graph);
 
   inline bool isInCore(QueryVertexID v) const { return core_table_[v] > 1; }
 
@@ -41,7 +40,7 @@ class TwoCoreSolver {
     return count;
   }
 
-  const std::vector<int>& get2CoreTable();
+  const std::vector<int>& get2CoreTable() const {return core_table_;}
 
   std::vector<QueryVertexID> get2CoreVertices();
 

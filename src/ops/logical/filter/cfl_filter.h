@@ -53,7 +53,7 @@ class LogicalCFLFilter : public LogicalNeighborhoodFilter {
                                const std::vector<VertexID>& cardinality, const QueryGraph& q,
                                const GraphMetadata& metadata);
   
-  TwoCoreSolver getTwoCoreSolver() {return two_core_solver_;}
+  const TwoCoreSolver& getTwoCoreSolver() {return two_core_solver_;}
 
 };
 
