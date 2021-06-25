@@ -21,7 +21,6 @@
 #include "ops/filters.h"
 #include "ops/logical_filters.h"
 #include "ops/operators.h"
-#include "ops/order.h"
 #include "ops/scans.h"
 #include "ops/types.h"
 #include "plan/execution_plan.h"

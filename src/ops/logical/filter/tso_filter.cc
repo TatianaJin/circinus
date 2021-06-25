@@ -17,7 +17,6 @@
 #include <memory>
 
 #include "ops/filters/filter.h"
-#include "ops/order/tso_order.h"
 #include "utils/utils.h"
 
 namespace circinus {

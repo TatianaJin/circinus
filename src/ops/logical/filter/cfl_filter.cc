@@ -19,7 +19,6 @@
 #include "exec/execution_config.h"
 #include "ops/filters/filter.h"
 #include "ops/logical/filter/cfl_filter.h"
-#include "ops/order/cfl_order.h"
 #include "utils/utils.h"
 
 namespace circinus {

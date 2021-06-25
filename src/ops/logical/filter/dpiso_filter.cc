@@ -18,7 +18,6 @@
 
 #include "exec/execution_config.h"
 #include "ops/filters/filter.h"
-#include "ops/order/dpiso_order.h"
 #include "utils/utils.h"
 
 namespace circinus {

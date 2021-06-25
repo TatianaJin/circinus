@@ -18,7 +18,6 @@
 #include <string>
 #include <vector>
 
-#include "ops/order/cfl_order.h"
 #include "plan/backtracking_plan.h"
 #include "plan/candidate_pruning_plan.h"
 #include "plan/execution_plan.h"
