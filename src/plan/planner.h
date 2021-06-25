@@ -46,6 +46,8 @@ class Planner {
  public:
   explicit Planner(QueryContext& query_context) : query_context_(&query_context) {}
 
+  virtual ~Planner() {}
+
   /** Generates a candidate pruning plan.
    * A candidate pruning plan has three phases, which are all optional.
    * <li> Phase 1 uses a chain of local filters to generate candidate sets for a set of query vertices

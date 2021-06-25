@@ -63,9 +63,9 @@ class PartitionedCandidateResult : public CandidateResult {
 
  public:
   explicit PartitionedCandidateResult(uint32_t n_qvs, uint32_t n_partitions)
-      : candidate_partition_offsets_(n_qvs),
-        per_partition_candidate_cardinality_(n_partitions, std::vector<VertexID>(n_qvs)),
-        CandidateResult(n_qvs) {
+      : CandidateResult(n_qvs),
+        candidate_partition_offsets_(n_qvs),
+        per_partition_candidate_cardinality_(n_partitions, std::vector<VertexID>(n_qvs)) {
     for (auto& shards : candidates_) {
       shards.resize(n_partitions);
     }
