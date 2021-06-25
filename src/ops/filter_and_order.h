@@ -90,7 +90,7 @@ class FilterAndOrder
       }
       return &(bg->second);
     }
-    std::vector<std::vector<VertexID>> getOrder()
+    std::vector<QueryVertexID> getOrder()
     {
       if (filter_string_.compare("cfl")==0) {
         return getCFLOrder();
