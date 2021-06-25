@@ -30,8 +30,8 @@ std::vector<QueryVertexID> CFLOrder::getTopThree(const GraphMetadata& metadata, 
   std::priority_queue<std::pair<QueryVertexID, double>, std::vector<std::pair<QueryVertexID, double>>,
                       decltype(rank_compare)>
       rank_queue(rank_compare);
-  const auto& core_table = two_core_solver_.get2CoreTable(q);
-  uint32_t core_size = two_core_solver_.getCoreSize(core_table);
+  const auto& core_table = two_core_solver_.get2CoreTable();
+  uint32_t core_size = two_core_solver_.getCoreSize();
 
   for (QueryVertexID query_vertex = 0; query_vertex < q->getNumVertices(); ++query_vertex) {
     if (core_size == 0 || two_core_solver_.isInCore(core_table, query_vertex)) {

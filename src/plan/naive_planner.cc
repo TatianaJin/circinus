@@ -74,8 +74,8 @@ ExecutionPlan* NaivePlanner::generatePlan(const std::vector<QueryVertexID>& use_
     }
     LOG(INFO) << res << "  " << s;
 
-    TwoCoreSolver solver;
-    auto& core_table = solver.get2CoreTable(query_graph_);
+    TwoCoreSolver solver(query_graph_);
+    auto& core_table = solver.get2CoreTable();
     // now we only consider a random smallest MWVC from covers
     QueryVertexID v = 0;
     std::vector<QueryVertexID> cover;
@@ -105,8 +105,8 @@ ExecutionPlan* NaivePlanner::generatePlanWithoutCompression(const std::vector<Qu
   std::vector<int> select_cover(query_graph_->getNumVertices(), 1);
 
   if (use_order.empty()) {
-    TwoCoreSolver solver;
-    auto& core_table = solver.get2CoreTable(query_graph_);
+    TwoCoreSolver solver(query_graph_);
+    auto& core_table = solver.get2CoreTable();
     // now we only consider a random smallest MWVC from covers
     std::vector<QueryVertexID> cover(query_graph_->getNumVertices());
     std::iota(cover.begin(), cover.end(), 0);
@@ -295,8 +295,8 @@ std::pair<uint32_t, uint32_t> NaivePlanner::analyzeDynamicCoreCoverEager(const s
     matching_order_ = use_order;
   }
   if (matching_order_.empty()) {
-    TwoCoreSolver solver;
-    auto& core_table = solver.get2CoreTable(query_graph_);
+    TwoCoreSolver solver(query_graph_);
+    auto& core_table = solver.get2CoreTable();
     // now we only consider a random smallest MWVC from covers
     QueryVertexID v = 0;
     std::vector<QueryVertexID> cover;
@@ -327,8 +327,8 @@ ExecutionPlan* NaivePlanner::generatePlanWithEagerDynamicCover(const std::vector
   auto select_cover = covers[smallest_covers.first.front()];
 
   if (use_order.empty()) {
-    TwoCoreSolver solver;
-    auto& core_table = solver.get2CoreTable(query_graph_);
+    TwoCoreSolver solver(query_graph_);
+    auto& core_table = solver.get2CoreTable();
     // now we only consider a random smallest MWVC from covers
     QueryVertexID v = 0;
     std::vector<QueryVertexID> cover;
@@ -600,8 +600,8 @@ void NaivePlanner::generateOrder(const std::vector<QueryVertexID>& use_order) {
   }
   LOG(INFO) << s;
   if (use_order.empty()) {
-    TwoCoreSolver solver;
-    auto& core_table = solver.get2CoreTable(query_graph_);
+    TwoCoreSolver solver(query_graph_);
+    auto& core_table = solver.get2CoreTable();
     // now we only consider a random smallest MWVC from covers
     QueryVertexID v = 0;
     std::vector<QueryVertexID> cover;

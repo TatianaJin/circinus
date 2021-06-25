@@ -19,7 +19,8 @@
 
 namespace circinus {
 
-std::vector<QueryVertexID> TwoCoreSolver::get2CoreVertices(const QueryGraph* graph) {
+std::vector<QueryVertexID> TwoCoreSolver::get2CoreVertices() {
+  const QueryGraph* graph=graph_;
   std::vector<QueryVertexID> ret;
   auto vertices_count = graph->getNumVertices();
   if (!generated) {
@@ -33,9 +34,10 @@ std::vector<QueryVertexID> TwoCoreSolver::get2CoreVertices(const QueryGraph* gra
   return ret;
 }
 
-const std::vector<int>& TwoCoreSolver::get2CoreTable(const QueryGraph* graph) {
+const std::vector<int>& TwoCoreSolver::get2CoreTable() {
   if(generated)return core_table_;
   generated=1;
+  const QueryGraph* graph=graph_;
   auto vertices_count = graph->getNumVertices();
   auto max_degree = graph->getGraphMaxDegree();
 
