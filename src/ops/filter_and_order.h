@@ -516,7 +516,7 @@ class FilterAndOrder
             break;
           }
 
-          double cur_value = paths_embededdings_num[i][path_root_vertex_idx] / (double)candidates_count[core_paths[i][path_root_vertex_idx]];
+          double cur_value = paths_embededdings_num[i][path_root_vertex_idx] / (double)(candidates_sets_[core_paths[i][path_root_vertex_idx]].size());
           if (cur_value < min_value) {
               min_value = cur_value;
               selected_path_index = i;
@@ -562,7 +562,7 @@ class FilterAndOrder
                   break;
               }
 
-              double cur_value = paths_embededdings_num[i][path_root_vertex_idx] / (double)candidates_count[tree_paths[i][path_root_vertex_idx]];
+              double cur_value = paths_embededdings_num[i][path_root_vertex_idx] / (double)(candidates_sets_[tree_paths[i][path_root_vertex_idx]].size());
               if (cur_value < min_value) {
                   min_value = cur_value;
                   selected_path_index = i;
@@ -590,7 +590,7 @@ class FilterAndOrder
 
         for (QueryVertexID i = 0; i < leaves.size(); ++i) {
             QueryVertexID vertex = leaves[i];
-            double cur_value = candidates_count[vertex];
+            double cur_value = candidates_sets_[vertex].size();
 
             if (cur_value < min_value) {
                 min_value = cur_value;
