@@ -101,22 +101,20 @@ class TraverseChainTask : public TaskBase {
   const Graph* graph_;
   const uint32_t batch_size_;
   OperatorTree* const op_tree_;  // not owned
-  std::vector<std::vector<VertexID>> candidates_;
+  std::vector<CandidateSetView> candidates_;
   const uint32_t input_candidate_index_;
   const bool inputs_are_keys_;
 
  public:
   TraverseChainTask(QueryId qid, TaskId tid, uint32_t batch_size, OperatorTree& ops, const Graph* graph,
-                    std::vector<std::vector<VertexID>>& candidates, uint32_t input_candidate_index,
-                    bool inputs_are_keys)
+                    std::vector<CandidateSetView>&& candidates, uint32_t input_candidate_index, bool inputs_are_keys)
       : TaskBase(qid, tid),
         graph_(graph),
         batch_size_(batch_size),
         op_tree_(&ops),
+        candidates_(std::move(candidates)),
         input_candidate_index_(input_candidate_index),
-        inputs_are_keys_(inputs_are_keys) {
-    candidates_.swap(candidates);
-  }
+        inputs_are_keys_(inputs_are_keys) {}
 
   const GraphBase* getDataGraph() const override { return graph_; }
 
@@ -124,6 +122,7 @@ class TraverseChainTask : public TaskBase {
     auto op = op_tree_->root();
     auto traverse = dynamic_cast<TraverseOperator*>(op);
     while (traverse != nullptr) {
+      DCHECK_LT(traverse->getTargetQueryVertex(), candidates_.size());
       // now assume all query vertices have candidate sets
       traverse->setCandidateSets(&candidates_[traverse->getTargetQueryVertex()]);
       LOG(INFO) << "set candidates for " << traverse->getTargetQueryVertex() << " " << traverse->toString();
@@ -135,7 +134,8 @@ class TraverseChainTask : public TaskBase {
                                                                  candidates_[input_candidate_index_].end()));
     } else {
       std::vector<CompressedSubgraphs> input;
-      input.emplace_back(std::make_shared<std::vector<VertexID>>(std::move(candidates_[input_candidate_index_])));
+      input.emplace_back(std::make_shared<std::vector<VertexID>>(candidates_[input_candidate_index_].begin(),
+                                                                 candidates_[input_candidate_index_].end()));
       op_tree_->execute(graph_, input);
     }
   }

@@ -45,18 +45,4 @@ class TaskBase {
   virtual void profile() { run(); }
 };
 
-class Task {
-  uint32_t level_;
-  std::vector<CompressedSubgraphs> input_;
-  const Graph* data_graph_;
-
- public:
-  Task(uint32_t level, std::vector<CompressedSubgraphs>&& input, const Graph* graph)
-      : level_(level), input_(std::move(input)), data_graph_(graph) {}
-
-  inline uint32_t getLevel() const { return level_; }
-  inline const auto& getInput() const { return input_; }
-  inline const Graph* getDataGraph() const { return data_graph_; }
-};
-
 }  // namespace circinus

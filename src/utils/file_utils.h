@@ -62,6 +62,8 @@ class Path {
     return join(ss, args...).str();
   }
 
+  static inline bool isRelative(const std::string& path) { return path.empty() || path[0] != '/'; }
+
  private:
   static inline std::stringstream& join(std::stringstream& ss, const std::string& base) { return ss << "/" << base; }
   template <typename... Args>

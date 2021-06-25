@@ -138,7 +138,8 @@ class TestExpandEdgeCosts : public testing::Test {
     auto op_filter = newExpandEdgeOperator(parent, target, cover, indices, q, false);
     auto op = op_filter.first;
     auto start = std::chrono::high_resolution_clock::now();
-    op->setCandidateSets(&candidates[target]);
+    circinus::CandidateSetView view(candidates[target]);
+    op->setCandidateSets(&view);
     op->input(seeds, &g);
     std::vector<CompressedSubgraphs> outputs;
     while (op->expand(&outputs, BATCH_SIZE) > 0) {
@@ -192,7 +193,8 @@ class TestExpandEdgeCosts : public testing::Test {
                                                    same_label_indices[1], same_label_indices[0], ~0u, filter);
     }
     auto start = std::chrono::high_resolution_clock::now();
-    op->setCandidateSets(&candidates[target]);
+    circinus::CandidateSetView view(candidates[target]);
+    op->setCandidateSets(&view);
     op->input(seeds, &g);
     if
       constexpr(use_bipartite_graph) {
@@ -221,7 +223,7 @@ class TestExpandEdgeCosts : public testing::Test {
     auto op_filter = newExpandEdgeOperator(parent, target, cover, indices, q, use_bipartite_graph);
     auto op_expand_edge = op_filter.first;
     start = std::chrono::high_resolution_clock::now();
-    op_expand_edge->setCandidateSets(&candidates[target]);
+    op_expand_edge->setCandidateSets(&view);
     op_expand_edge->input(seeds, &g);
     if
       constexpr(use_bipartite_graph) {

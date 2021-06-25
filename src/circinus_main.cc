@@ -85,7 +85,7 @@ int main(int argc, char** argv) {
             auto success = reply.poptyp<bool>();
             if (success) {
               // TODO(tatiana): time and result
-              std::cout << "Query finished. count = " << reply.poptyp<uint64_t>() << std::endl;
+              std::cout << reply.popstr() << std::endl;
             } else {
               auto msg = reply.pop();
               std::cerr << std::string_view((char*)msg.data(), msg.size()) << std::endl;

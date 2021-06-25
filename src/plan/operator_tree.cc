@@ -19,8 +19,6 @@
 #include <utility>
 #include <vector>
 
-#include "glog/logging.h"
-
 #include "exec/task.h"
 #include "exec/task_queue.h"
 #include "graph/compressed_subgraphs.h"

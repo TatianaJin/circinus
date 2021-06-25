@@ -56,7 +56,7 @@ class ExpandEdgeKeyToSetOperator : public ExpandEdgeOperator {
  public:
   CONSTRUCT(KeyToSet)
 
-  void setCandidateSets(const std::vector<VertexID>* candidates) override {
+  void setCandidateSets(const CandidateSetView* candidates) override {
     candidates_ = candidates;
     candidate_set_.insert(candidates->begin(), candidates->end());
   }
@@ -146,7 +146,7 @@ class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
  public:
   CONSTRUCT(KeyToKey)
 
-  void setCandidateSets(const std::vector<VertexID>* candidates) override {
+  void setCandidateSets(const CandidateSetView* candidates) override {
     candidates_ = candidates;
     candidate_set_.insert(candidates->begin(), candidates->end());
   }
@@ -247,8 +247,6 @@ class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
           total_intersection_output_size_ += current_targets_.size();
         }
     }
-    // intersect(*candidates_, current_data_graph_->getOutNeighbors(parent_match), &current_targets_,
-    // input.getKeyMap());
   }
 };
 
@@ -270,11 +268,11 @@ class CurrentResults {
 template <QueryType profile, typename G>
 class CurrentResultsByCandidate : public CurrentResults {
  private:
-  uint32_t candidate_index_ = 0;
+  CandidateSetView::ConstIterator candidate_iter_;
 
  public:
   CurrentResultsByCandidate(const CompressedSubgraphs* input, uint32_t parent_index, TraverseOperator* owner)
-      : CurrentResults(input, parent_index, owner) {}
+      : CurrentResults(input, parent_index, owner), candidate_iter_(owner->getCandidateSet()->begin()) {}
 
   uint32_t getResults(std::vector<CompressedSubgraphs>* outputs, uint32_t cap) override {
     uint32_t n = 0;
@@ -282,9 +280,9 @@ class CurrentResultsByCandidate : public CurrentResults {
 
     auto exceptions = input_->getExceptions(owner_->getSameLabelKeyIndices(), owner_->getSameLabelSetIndices());
     auto data_graph = ((G*)owner_->getCurrentDataGraph());
-    for (; n < cap && candidate_index_ < owner_->getCandidateSet()->size(); ++candidate_index_) {
+    for (; n < cap && candidate_iter_ != owner_->getCandidateSet()->end(); ++candidate_iter_) {
       std::vector<VertexID> parents;
-      auto candidate = (*owner_->getCandidateSet())[candidate_index_];
+      VertexID candidate = *candidate_iter_;
       if (exceptions.count(candidate)) {
         continue;
       }

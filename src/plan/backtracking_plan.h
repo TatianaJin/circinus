@@ -62,14 +62,13 @@ class BacktrackingPlan {
     input_operators_.push_back(std::move(op));
   }
 
-  // FIXME(tatiana): deprecate the following functions?
+  // TODO(tatiana): deprecate the function
   inline bool inputsAreKeys(uint32_t plan_idx = 0) const { return plans_[plan_idx]->inputAreKeys(); }
 
+  // TODO(tatiana): deprecate the function
   inline uint32_t getInputCandidateIndex(uint32_t plan_idx = 0) const {
     return plans_[plan_idx]->getRootQueryVertexID();  // now assume all vertices have candidates
   }
-
-  inline Outputs& getOutputs(uint32_t plan_idx = 0) const { return plans_[plan_idx]->getOutputs(); }
 };
 
 }  // namespace circinus

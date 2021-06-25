@@ -71,8 +71,12 @@ void CandidateResult::removeInvalid(QueryVertexID query_vertex) {
 std::vector<std::vector<VertexID>> CandidateResult::getCandidateCardinality() const {
   std::vector<VertexID> ret(candidates_.size(), 0);
   for (uint32_t i = 0; i < candidates_.size(); ++i) {
-    for (auto& shard : candidates_[i]) {
-      ret[i] += shard.size();
+    if (!merged_candidates_[i].empty()) {
+      ret[i] = merged_candidates_[i].size();
+    } else {
+      for (auto& shard : candidates_[i]) {
+        ret[i] += shard.size();
+      }
     }
   }
   return {std::move(ret)};

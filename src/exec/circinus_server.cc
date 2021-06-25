@@ -103,6 +103,7 @@ void CircinusServer::Serve(bool listen) {
         break;
       }
       default:
+        // TODO(tatiana): explain and profile mode
         LOG(FATAL) << "Unknown event type " << event;
       }
     } catch (const std::exception& e) {
@@ -299,14 +300,15 @@ inline uint32_t CircinusServer::newQuery(const std::string& graph_name, const st
   return idx;
 }
 
-void CircinusServer::finishQuery(uint32_t query_index, void* result, const std::string& error) {
+void CircinusServer::finishQuery(uint32_t query_index, const void* result, const std::string& error) {
   auto& query = active_queries_[query_index];
   delete query.planner;
   query.planner = nullptr;
   reusable_indices_.push_back(query_index);
   if (error.empty()) {
     if (query.query_context.query_config.output == "count") {
-      replyToClient(query.client_addr, result, 8);
+      auto reply = reinterpret_cast<const QueryResult*>(result)->toString();
+      replyToClient(query.client_addr, reply.data(), reply.size(), true);
     } else {
       // TODO(tatiana): support other output option
       LOG(WARNING) << "Output option not implemented yet: " << query.query_context.query_config.output;

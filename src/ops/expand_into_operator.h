@@ -62,12 +62,12 @@ class ExpandIntoOperator : public TraverseOperator {
   }
 
   std::vector<std::unique_ptr<BipartiteGraph>> computeBipartiteGraphs(
-      const Graph* g, const std::vector<std::vector<VertexID>>& candidate_sets) override {
+      const Graph* g, const std::vector<CandidateSetView>& candidate_sets) override {
     std::vector<std::unique_ptr<BipartiteGraph>> ret;
     ret.reserve(parents_.size());
     for (auto parent_vertex : parents_) {
       ret.emplace_back(std::make_unique<BipartiteGraph>(parent_vertex, target_vertex_));
-      ret.back()->populateGraph(g, &candidate_sets);
+      ret.back()->populateGraph(g, candidate_sets);
     }
     return ret;
   }

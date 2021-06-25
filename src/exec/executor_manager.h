@@ -43,7 +43,6 @@ class ExecutorManager {
    private:
     std::vector<std::thread> pool_;
     uint32_t n_threads_;
-    bool running_ = false;
 
    public:
     explicit ExecutorPool(uint32_t n_threads = FLAGS_num_cores) : n_threads_(n_threads) {}
@@ -55,7 +54,11 @@ class ExecutorManager {
     }
 
     void start(ThreadsafeTaskQueue* task_queue, ThreadsafeQueue<std::unique_ptr<TaskBase>>* finished_task);
-    inline void shutDown() { running_ = false; }
+    inline void shutDown(ThreadsafeTaskQueue* task_queue) {
+      for (uint32_t i = 0; i < n_threads_; ++i) {
+        task_queue->putTask(nullptr);
+      }
+    }
     inline uint32_t getNumExecutors() const { return n_threads_; }
   } executors_;
 
@@ -70,6 +73,12 @@ class ExecutorManager {
 
  public:
   explicit ExecutorManager(ThreadsafeQueue<ServerEvent>* queue);
+
+  ~ExecutorManager() {
+    executors_.shutDown(&task_queue_);
+    finished_tasks_.push(nullptr);
+    finish_task_handler_.join();
+  }
 
   /* interface with circinus server, called by the circinus main thread */
   /**

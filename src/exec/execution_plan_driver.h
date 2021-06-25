@@ -24,15 +24,33 @@
 
 namespace circinus {
 
-/** Supports partition-parallel execution.
- */
-class ExecutionPlanDriver : public PlanDriver {
+class ExecutionPlanDriverBase : public PlanDriver {
+ protected:
   BacktrackingPlan* plan_;
-  ExecutionResult* result_;  // owned by ExecutorManager
   std::unique_ptr<CandidateResult> candidate_result_ = nullptr;
+  ExecutionResult* result_;  // owned by ExecutorManager
 
  public:
-  explicit ExecutionPlanDriver(BacktrackingPlan* plan) : plan_(plan) {}
+  explicit ExecutionPlanDriverBase(BacktrackingPlan* plan) : plan_(plan) {}
+  virtual ~ExecutionPlanDriverBase() {}
+
+  void init(QueryId qid, QueryContext* query_ctx, ExecutionContext& ctx, ThreadsafeTaskQueue& task_queue) override {
+    candidate_result_.reset(dynamic_cast<CandidateResult*>(ctx.second.release()));
+    ctx.second = Result::newExecutionResult();
+    result_ = (ExecutionResult*)ctx.second.get();
+    result_->getOutputs().init(ctx.first.getNumExecutors()).limit(query_ctx->query_config.limit);
+
+    finish_event_ = std::make_unique<ServerEvent>(ServerEvent::ExecutionPhase);
+    finish_event_->data = result_->data();
+    finish_event_->query_id = qid;
+  }
+};
+
+/** Supports partition-parallel execution.
+ */
+class ExecutionPlanDriver : public ExecutionPlanDriverBase {
+ public:
+  explicit ExecutionPlanDriver(BacktrackingPlan* plan) : ExecutionPlanDriverBase(plan) {}
 
   void init(QueryId qid, QueryContext* query_ctx, ExecutionContext& ctx, ThreadsafeTaskQueue& task_queue) override;
 
@@ -41,12 +59,9 @@ class ExecutionPlanDriver : public PlanDriver {
 
 /** Alternative to ExecutionPlanDriver, supports matching-parallel execution.
  */
-class MatchingParallelExecutionPlanDriver : public PlanDriver {
-  BacktrackingPlan* plan_;
-  ExecutionResult* result_;  // owned by ExecutorManager
-
+class MatchingParallelExecutionPlanDriver : public ExecutionPlanDriverBase {
  public:
-  explicit MatchingParallelExecutionPlanDriver(BacktrackingPlan* plan) : plan_(plan) {}
+  explicit MatchingParallelExecutionPlanDriver(BacktrackingPlan* plan) : ExecutionPlanDriverBase(plan) {}
 
   void init(QueryId qid, QueryContext* query_ctx, ExecutionContext& ctx, ThreadsafeTaskQueue& task_queue) override;
 

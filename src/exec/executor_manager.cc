@@ -65,9 +65,12 @@ void ExecutorManager::ExecutorPool::start(ThreadsafeTaskQueue* task_queue,
                                           ThreadsafeQueue<std::unique_ptr<TaskBase>>* finished_task) {
   pool_.reserve(n_threads_);
   for (uint32_t i = 0; i < n_threads_; ++i) {
-    pool_.push_back(std::thread([i, task_queue, finished_task]() {
+    pool_.push_back(std::thread([this, i, task_queue, finished_task]() {
       while (true) {
         auto task = task_queue->getTask();
+        if (task == nullptr) {
+          break;
+        }
         task->run();
         finished_task->push(std::move(task));
       }

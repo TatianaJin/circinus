@@ -27,14 +27,7 @@ namespace circinus {
 
 void ExecutionPlanDriver::init(QueryId qid, QueryContext* query_ctx, ExecutionContext& ctx,
                                ThreadsafeTaskQueue& task_queue) {
-  candidate_result_.reset(dynamic_cast<CandidateResult*>(ctx.second.release()));
-  ctx.second = Result::newExecutionResult();
-  result_ = (ExecutionResult*)ctx.second.get();
-  result_->getOutputs().init(ctx.first.getNumExecutors()).limit(query_ctx->query_config.limit);
-
-  finish_event_ = std::make_unique<ServerEvent>(ServerEvent::ExecutionPhase);
-  finish_event_->data = result_->data();
-  finish_event_->query_id = qid;
+  ExecutionPlanDriverBase::init(qid, query_ctx, ctx, task_queue);
 
   auto n_plans = plan_->getNumPartitionedPlans();
   CHECK_EQ(plan_->getPlans().size(), n_plans) << "now one partitioned plan per graph partition";
@@ -53,7 +46,7 @@ void ExecutionPlanDriver::taskFinish(TaskBase* task, ThreadsafeTaskQueue* task_q
                                      ThreadsafeQueue<ServerEvent>* reply_queue) {
   if (--task_counters_[task->getTaskId()] == 0 && ++n_finished_tasks_ == task_counters_.size()) {
     // TODO(tatiana): now we only consider count as output
-    result_->setCount(result_->getOutputs().getCount());
+    result_->setCount();
     reply_queue->push(std::move(*finish_event_));
     reset();
   }
@@ -61,21 +54,17 @@ void ExecutionPlanDriver::taskFinish(TaskBase* task, ThreadsafeTaskQueue* task_q
 
 void MatchingParallelExecutionPlanDriver::init(QueryId qid, QueryContext* query_ctx, ExecutionContext& ctx,
                                                ThreadsafeTaskQueue& task_queue) {
-  auto candidate_result = std::move(ctx.second);
-  ctx.second = Result::newExecutionResult();
-  result_ = (ExecutionResult*)ctx.second.get();
-  finish_event_ = std::make_unique<ServerEvent>(ServerEvent::ExecutionPhase);
-  finish_event_->data = result_->data();
-  finish_event_->query_id = qid;
+  ExecutionPlanDriverBase::init(qid, query_ctx, ctx, task_queue);
+  plan_->getOperatorTree().setOutput(&result_->getOutputs());
 
-  plan_->getOutputs().init(ctx.first.getNumExecutors()).limit(query_ctx->query_config.limit);
   if (ctx.first.getNumExecutors() == 1) {
     // one task for single-thread execution
     task_counters_.push_back(1);
-    task_queue.putTask(new TraverseChainTask(
-        qid, 0, ctx.first.getBatchSize(), plan_->getOperatorTree(), (const Graph*)query_ctx->data_graph,
-        *dynamic_cast<CandidateResult*>(candidate_result.get())->getMergedCandidates(), plan_->getInputCandidateIndex(),
-        plan_->inputsAreKeys()));
+
+    // TODO(tatiana): replace plan_->getInputCandidateIndex() and plan_->inputsAreKeys() with an input operator
+    task_queue.putTask(new TraverseChainTask(qid, 0, ctx.first.getBatchSize(), plan_->getOperatorTree(),
+                                             (const Graph*)query_ctx->data_graph, candidate_result_->getCandidates(),
+                                             plan_->getInputCandidateIndex(), plan_->inputsAreKeys()));
     return;
   }
   // // init task counter for root and put tasks to task queue
@@ -92,7 +81,7 @@ void MatchingParallelExecutionPlanDriver::taskFinish(TaskBase* task, ThreadsafeT
                                                      ThreadsafeQueue<ServerEvent>* reply_queue) {
   if (--task_counters_[task->getTaskId()] == 0 && ++n_finished_tasks_ == task_counters_.size()) {
     // TODO(tatiana): now we only consider count as output
-    result_->setCount(plan_->getOutputs().getCount());
+    result_->setCount();
     reply_queue->push(std::move(*finish_event_));
     reset();
   }

@@ -83,7 +83,7 @@ class CircinusServer {
 
   inline void shutDown() { event_queue_.push(Event(Event::ShutDown)); }
   bool loadGraph(std::string&& gpath, std::string&& gname, std::string&& config = "", std::string&& client_addr = "");
-  bool query(std::string&& game, std::string&& qpath, std::string&& config, std::string&& client_addr = "");
+  bool query(std::string&& gname, std::string&& qpath, std::string&& config, std::string&& client_addr = "");
 
  protected:
   inline bool hasActiveQuery() const { return active_queries_.size() > reusable_indices_.size(); }
@@ -146,7 +146,7 @@ class CircinusServer {
 
   /** Handles query results.
    */
-  void finishQuery(uint32_t query_index, void* result, const std::string& error);
+  void finishQuery(uint32_t query_index, const void* result, const std::string& error);
 
   /**
    * Copy is incurred to copy data to zmq message buffer
