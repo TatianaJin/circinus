@@ -366,11 +366,11 @@ class FilterAndOrder
                          std::vector<std::vector<QueryVertexID>> &core_paths,
                          const TwoCoreSolver& tcs
                          ) {
-    TreeNode& node = tree_node[cur_vertex];
+    const TreeNode& node = tree_node[cur_vertex];
     cur_core_path.push_back(cur_vertex);
 
     bool is_core_leaf = true;
-    for(auto child:node.children_)
+    for(const auto& child:node.children_)
     {
       if (tcs.isInCore(child)) {
         generateCorePaths(query_graph, tree_node, child, cur_core_path, core_paths,tcs);
