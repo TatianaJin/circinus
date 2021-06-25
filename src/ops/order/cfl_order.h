@@ -26,15 +26,7 @@ namespace circinus {
 
 class CFLOrder : public OrderBase {
  public:
-  TwoCoreSolver two_core_solver_;
-  QueryVertexID getStartVertex(const GraphMetadata& metadata, const QueryGraph* query_graph,
-                               const std::vector<VertexID>& candidate_size) override;
 
-  std::vector<QueryVertexID> getTopThree(const GraphMetadata& metadata, const QueryGraph* q);
-
-  QueryVertexID getStartVertex(const std::vector<QueryVertexID>& query_vertices,
-                               const std::vector<VertexID>& cardinality, const QueryGraph& q,
-                               const GraphMetadata& metadata);
 };
 
 }  // namespace circinus

@@ -23,55 +23,6 @@
 
 namespace circinus {
 
-std::vector<QueryVertexID> CFLOrder::getTopThree(const GraphMetadata& metadata, const QueryGraph* q) {
-  auto rank_compare = [](std::pair<QueryVertexID, double> l, std::pair<QueryVertexID, double> r) {
-    return l.second < r.second;
-  };
-  std::priority_queue<std::pair<QueryVertexID, double>, std::vector<std::pair<QueryVertexID, double>>,
-                      decltype(rank_compare)>
-      rank_queue(rank_compare);
-  const auto& core_table = two_core_solver_.get2CoreTable();
-  uint32_t core_size = two_core_solver_.getCoreSize();
 
-  for (QueryVertexID query_vertex = 0; query_vertex < q->getNumVertices(); ++query_vertex) {
-    if (core_size == 0 || two_core_solver_.isInCore(core_table, query_vertex)) {
-      double degree = q->getVertexOutDegree(query_vertex);
-      uint32_t frequency = metadata.getLabelFrequency(q->getVertexLabel(query_vertex));
-      double rank = frequency / degree;
-      rank_queue.emplace(query_vertex, rank);
-    }
-  }
-  std::vector<QueryVertexID> ret(3);
-  // Keep the top-3.
-  while (rank_queue.size() > 3) {
-    rank_queue.pop();
-  }
-  for (uint32_t i = 0; i < 3; ++i) {
-    ret[i] = rank_queue.top().first;
-    rank_queue.pop();
-  }
-  return ret;
-}
-
-QueryVertexID CFLOrder::getStartVertex(const std::vector<QueryVertexID>& query_vertices,
-                                       const std::vector<VertexID>& candidate_size, const QueryGraph& query_graph,
-                                       const GraphMetadata& metadata) {
-  QueryVertexID start_vertex = 0;
-  double min_score = metadata.getNumVertices() + 1;
-  for (auto query_vertex : query_vertices) {
-    double cur_score = candidate_size[query_vertex] / (double)query_graph.getVertexOutDegree(query_vertex);
-    if (cur_score < min_score) {
-      start_vertex = query_vertex;
-      min_score = cur_score;
-    }
-  }
-  return start_vertex;
-}
-
-QueryVertexID CFLOrder::getStartVertex(const GraphMetadata& metadata, const QueryGraph* query_graph,
-                                       const std::vector<VertexID>& candidate_size) {
-  auto root_candidates = getTopThree(metadata, query_graph);
-  return getStartVertex(root_candidates, {candidate_size.begin(), candidate_size.end()}, *query_graph, metadata);
-}
 
 }  // namespace circinus

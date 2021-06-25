@@ -275,10 +275,10 @@ class FilterAndOrder
       }
     }
   QueryVertexID generateNoneTreeEdgesCount(
-    const QueryGraph *query_graph,
     const std::vector<TreeNode>& tree_node,
     std::vector<QueryVertexID> &path)
     {
+      const QueryGraph *query_graph=q_pointer_;
       auto non_tree_edge_count = query_graph->getVertexOutDegree(path[0]) - tree_node[path[0]].children_.size();
       for (size_t i = 1; i < path.size(); ++i) {
         auto vertex = path[i];
@@ -328,7 +328,7 @@ class FilterAndOrder
     for(auto& path:paths)
     {
       std::vector<size_t> estimated_embeddings_num;
-      VertexID non_tree_edges_count = generateNoneTreeEdgesCount(query_graph,tree,path);
+      QueryVertexID non_tree_edges_count = generateNoneTreeEdgesCount(tree,path);
       estimatePathEmbeddsingsNum(path, estimated_embeddings_num);
       double score = estimated_embeddings_num[0] / (double) (non_tree_edges_count + 1);
       path_orders.emplace_back(std::make_pair(score, &path));
@@ -364,7 +364,8 @@ class FilterAndOrder
                          const std::vector<TreeNode>&tree_node,
                          QueryVertexID cur_vertex,
                          std::vector<QueryVertexID> &cur_core_path,
-                         std::vector<std::vector<QueryVertexID>> &core_paths
+                         std::vector<std::vector<QueryVertexID>> &core_paths,
+                         const TwoCoreSolver& tcs
                          ) {
     TreeNode& node = tree_node[cur_vertex];
     cur_core_path.push_back(cur_vertex);
@@ -372,8 +373,8 @@ class FilterAndOrder
     bool is_core_leaf = true;
     for(auto child:node.children_)
     {
-      if (query_graph->getCoreValue(child) > 1) {
-        generateCorePaths(query_graph, tree_node, child, cur_core_path, core_paths);
+      if (tcs.isInCore(child)) {
+        generateCorePaths(query_graph, tree_node, child, cur_core_path, core_paths,tcs);
         is_core_leaf = false;
       }
     }
@@ -384,15 +385,45 @@ class FilterAndOrder
     cur_core_path.pop_back();
   }
 
+  void generateTreePaths(
+    const std::vector<TreeNode>& tree_node,
+    QueryVertexID cur_vertex,
+    std::vector<QueryVertexID> &cur_tree_path,
+    std::vector<std::vector<QueryVertexID>> &tree_paths
+  )
+  {
+    const QueryGraph* query_graph=q_pointer_;
+
+    TreeNode& node = tree_node[cur_vertex];
+    cur_tree_path.push_back(cur_vertex);
+
+    bool is_tree_leaf = true;
+    for( auto child:node.children_){
+        if (query_graph->getVertexOutDegree(child) > 1) {
+            generateTreePaths(tree_node, child, cur_tree_path, tree_paths);
+            is_tree_leaf = false;
+        }
+    }
+
+    if (is_tree_leaf && cur_tree_path.size() > 1) {
+        tree_paths.emplace_back(cur_tree_path);
+    }
+    cur_tree_path.pop_back();
+  }
+
+
   std::vector<QueryVertexID> getCFLOrder(
-    const Graph *data_graph, const QueryGraph *query_graph,
     const std::vector<TreeNode>& tree,
     const std::vector<QueryVertexID>& bfs_order
   )
   {
+    const auto& logical_filter=dynamic_cast<LogicalCFLFilter&>(*logical_filter_);
+    const Graph *data_graph=g_pointer_;
+    const QueryGraph *query_graph=q_pointer_;
+
     QueryVertexID qg_v_cnt= query_graph->getNumVertices();
     QueryVertexID root_vertex = bfs_order[0];
-    vector<QueryVertexID>order(qg_v_cnt);
+    std::vector<QueryVertexID>order(qg_v_cnt);
     std::vector<bool> visited_vertices(qg_v_cnt, false);
 
     std::vector<std::vector<QueryVertexID>> core_paths;
@@ -400,14 +431,182 @@ class FilterAndOrder
     std::vector<QueryVertexID> leaves;
 
     generateLeaves(query_graph,leaves);
-    const auto& core_table = TwoCoreSolver::get2CoreTable(query_graph);
-    if(core_table[root_vertex]>1)
+    
+    const auto& tcs=logical_filter.getTwoCoreSolver();
+    const auto& core_table = tcs.get2CoreTable();
+    if(tcs.isInCore(root_vertex))
     {
       std::vector<QueryVertexID> temp_core_path;
-      generateCorePaths(query_graph,tree,root_vertex, temp_core_path, core_paths);
-      
+      generateCorePaths(query_graph,tree,root_vertex, temp_core_path, core_paths,tcs);
+      for(QueryVertexID i=0;i<qg_v_cnt;++i)
+      {
+        QueryVertexID cur_vertex = i;
+        if(tcs.isInCore(cur_vertex))
+        {
+          std::vector<std::vector<QueryVertexID>> temp_tree_paths;
+          std::vector<QueryVertexID> temp_tree_path;
+          generateTreePaths( tree, cur_vertex, temp_tree_path, temp_tree_paths);
+          if (!temp_tree_paths.empty()) {
+              forests.emplace_back(temp_tree_paths);
+          }
+        }
+      }
+    }
+    else{
+      std::vector<std::vector<QueryVertexID>> temp_tree_paths;
+      std::vector<QueryVertexID> temp_tree_path;
+      generateTreePaths(tree, root_vertex, temp_tree_path, temp_tree_paths);
+      if (!temp_tree_paths.empty()) {
+          forests.emplace_back(temp_tree_paths);
+      }
     }
 
+    // Order core paths.
+    QueryVertexID selected_vertices_count = 0;
+    order[selected_vertices_count++] = root_vertex;
+    visited_vertices[root_vertex] = true;
+
+    if (!core_paths.empty()) {
+      std::vector<std::vector<size_t>> paths_embededdings_num;
+      std::vector<QueryVertexID> paths_non_tree_edge_num;
+      for (auto& path : core_paths) {
+          QueryVertexID non_tree_edge_num = generateNoneTreeEdgesCount( tree, path);
+          paths_non_tree_edge_num.push_back(non_tree_edge_num + 1);
+
+          std::vector<size_t> path_embeddings_num;
+          estimatePathEmbeddsingsNum(path, path_embeddings_num);
+          paths_embededdings_num.emplace_back(path_embeddings_num);
+      }
+
+      // Select the start path.
+      double min_value = std::numeric_limits<double>::max();
+      size_t selected_path_index = 0;
+
+      for (size_t i = 0; i < core_paths.size(); ++i) {
+          double cur_value = paths_embededdings_num[i][0] / (double) paths_non_tree_edge_num[i];
+
+          if (cur_value < min_value) {
+              min_value = cur_value;
+              selected_path_index = i;
+          }
+      }
+
+      for (QueryVertexID i = 1; i < core_paths[selected_path_index].size(); ++i) {
+          order[selected_vertices_count] = core_paths[selected_path_index][i];
+          selected_vertices_count += 1;
+          visited_vertices[core_paths[selected_path_index][i]] = true;
+      }
+
+      core_paths.erase(core_paths.begin() + selected_path_index);
+      paths_embededdings_num.erase(paths_embededdings_num.begin() + selected_path_index);
+      paths_non_tree_edge_num.erase(paths_non_tree_edge_num.begin() + selected_path_index);
+
+      while (!core_paths.empty()) {
+        min_value = std::numeric_limits<double>::max();
+        selected_path_index = 0;
+
+        for (size_t i = 0; i < core_paths.size(); ++i) {
+          QueryVertexID path_root_vertex_idx = 0;
+          for (QueryVertexID j = 0; j < core_paths[i].size(); ++j) {
+            QueryVertexID cur_vertex = core_paths[i][j];
+
+            if (visited_vertices[cur_vertex])
+              continue;
+
+            path_root_vertex_idx = j - 1;
+            break;
+          }
+
+          double cur_value = paths_embededdings_num[i][path_root_vertex_idx] / (double)candidates_count[core_paths[i][path_root_vertex_idx]];
+          if (cur_value < min_value) {
+              min_value = cur_value;
+              selected_path_index = i;
+          }
+        }
+
+        for (QueryVertexID i = 1; i < core_paths[selected_path_index].size(); ++i) {
+          if (visited_vertices[core_paths[selected_path_index][i]])
+              continue;
+
+          order[selected_vertices_count] = core_paths[selected_path_index][i];
+          selected_vertices_count += 1;
+          visited_vertices[core_paths[selected_path_index][i]] = true;
+        }
+
+        core_paths.erase(core_paths.begin() + selected_path_index);
+        paths_embededdings_num.erase(paths_embededdings_num.begin() + selected_path_index);
+      }
+    }
+
+    // Order tree paths.
+    for (auto& tree_paths : forests) {
+      std::vector<std::vector<size_t>> paths_embededdings_num;
+      for (auto& path : tree_paths) {
+          std::vector<size_t> path_embeddings_num;
+          estimatePathEmbeddsingsNum(path,  path_embeddings_num);
+          paths_embededdings_num.emplace_back(path_embeddings_num);
+      }
+
+      while (!tree_paths.empty()) {
+          double min_value = std::numeric_limits<double>::max();
+          QueryVertexID selected_path_index = 0;
+
+          for (size_t i = 0; i < tree_paths.size(); ++i) {
+              QueryVertexID path_root_vertex_idx = 0;
+              for (QueryVertexID j = 0; j < tree_paths[i].size(); ++j) {
+                  VertexID cur_vertex = tree_paths[i][j];
+
+                  if (visited_vertices[cur_vertex])
+                      continue;
+
+                  path_root_vertex_idx = j == 0 ? j : j - 1;
+                  break;
+              }
+
+              double cur_value = paths_embededdings_num[i][path_root_vertex_idx] / (double)candidates_count[tree_paths[i][path_root_vertex_idx]];
+              if (cur_value < min_value) {
+                  min_value = cur_value;
+                  selected_path_index = i;
+              }
+          }
+
+          for (QueryVertexID i = 0; i < tree_paths[selected_path_index].size(); ++i) {
+              if (visited_vertices[tree_paths[selected_path_index][i]])
+                  continue;
+
+              order[selected_vertices_count] = tree_paths[selected_path_index][i];
+              selected_vertices_count += 1;
+              visited_vertices[tree_paths[selected_path_index][i]] = true;
+          }
+
+          tree_paths.erase(tree_paths.begin() + selected_path_index);
+          paths_embededdings_num.erase(paths_embededdings_num.begin() + selected_path_index);
+      }
+    }
+
+    // Order the leaves.
+    while (!leaves.empty()) {
+        double min_value = std::numeric_limits<double>::max();
+        QueryVertexID selected_leaf_index = 0;
+
+        for (QueryVertexID i = 0; i < leaves.size(); ++i) {
+            QueryVertexID vertex = leaves[i];
+            double cur_value = candidates_count[vertex];
+
+            if (cur_value < min_value) {
+                min_value = cur_value;
+                selected_leaf_index = i;
+            }
+        }
+
+        if (!visited_vertices[leaves[selected_leaf_index]]) {
+            order[selected_vertices_count] = leaves[selected_leaf_index];
+            selected_vertices_count += 1;
+            visited_vertices[leaves[selected_leaf_index]] = true;
+        }
+        leaves.erase(leaves.begin() + selected_leaf_index);
+    }
+    return order;
   }
 
 };
