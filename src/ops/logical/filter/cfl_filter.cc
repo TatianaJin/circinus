@@ -27,8 +27,7 @@ namespace circinus {
 LogicalCFLFilter::LogicalCFLFilter(const GraphMetadata& metadata, const QueryGraph* query_graph,
                                    const std::vector<VertexID>& candidate_size)
     : LogicalNeighborhoodFilter(query_graph),two_core_solver_(query_graph) {
-  CFLOrder cfl_order;
-  start_vertex_ = cfl_order.getStartVertex(metadata, query_graph, candidate_size);
+  start_vertex_ = getStartVertex(metadata, query_graph, candidate_size);
   LOG(INFO) << "start_vertex " << start_vertex_;
   uint32_t query_vertices_num = query_graph->getNumVertices();
   bfs_tree_.resize(query_vertices_num);

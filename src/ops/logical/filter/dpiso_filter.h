@@ -35,6 +35,9 @@ class LogicalDPISOFilter : public LogicalNeighborhoodFilter {
   std::vector<QueryVertexID> bfs_order_;
 
  public:
+  QueryVertexID getStartVertex(const GraphMetadata& metadata, const QueryGraph* query_graph,
+                                  const std::vector<VertexID>& candidate_size);
+                                  
   LogicalDPISOFilter(const GraphMetadata& metadata, const QueryGraph* query_graph,
                      const std::vector<VertexID>& candidate_size);
 
