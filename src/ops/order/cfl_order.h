@@ -20,11 +20,13 @@
 #include "graph/graph_metadata.h"
 #include "graph/query_graph.h"
 #include "ops/order/order_base.h"
+#include "algorithms/k_core.h"
 
 namespace circinus {
 
 class CFLOrder : public OrderBase {
  public:
+  TwoCoreSolver two_core_solver_;
   QueryVertexID getStartVertex(const GraphMetadata& metadata, const QueryGraph* query_graph,
                                const std::vector<VertexID>& candidate_size) override;
 

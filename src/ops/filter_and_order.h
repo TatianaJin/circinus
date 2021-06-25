@@ -139,8 +139,9 @@ class FilterAndOrder
       filtered=1;
       return candidates_sets_;
     }
-  QueryVertexID selectGQLStartVertex(const QueryGraph *query_graph)
+  QueryVertexID selectGQLStartVertex()
   {
+    const QueryGraph *query_graph=q_pointer_;
     QueryVertexID start_vertex=0;
     QueryVertexID qg_v_cnt= query_graph->getNumVertices();
     for(QueryVertexID i=1;i<qg_v_cnt;++i)
@@ -171,15 +172,16 @@ class FilterAndOrder
   }
 
   std::vector<QueryVertexID> getGQLOrder(
-    const Graph *data_graph, const QueryGraph *query_graph
   )
   {
+    const Graph *data_graph=g_pointer_;
+    const QueryGraph *query_graph=q_pointer_;
     QueryVertexID qg_v_cnt= query_graph->getNumVertices();
     std::vector<bool> visited_vertices(qg_v_cnt, false);
     std::vector<bool> adjacent_vertices(qg_v_cnt, false);
     std::vector<QueryVertexID> order(qg_v_cnt);
 
-    QueryVertexID start_vertex= selectGQLStartVertex(query_graph);
+    QueryVertexID start_vertex= selectGQLStartVertex();
     order[0]=start_vertex;
     updateValidVertices(start_vertex,visited_vertices,adjacent_vertices);
 
@@ -347,7 +349,67 @@ class FilterAndOrder
     }
     return order;
   }
-  
+
+  void generateLeaves(const QueryGraph *query_graph, std::vector<QueryVertexID> &leaves)
+  {
+    for (QueryVertexID i = 0; i < query_graph->getNumVertices(); ++i) {
+        QueryVertexID cur_vertex = i;
+        if (query_graph->getVertexOutDegree(cur_vertex) == 1) {
+            leaves.push_back(cur_vertex);
+        }
+    }
+  }
+
+  void generateCorePaths(const QueryGraph *query_graph,
+                         const std::vector<TreeNode>&tree_node,
+                         QueryVertexID cur_vertex,
+                         std::vector<QueryVertexID> &cur_core_path,
+                         std::vector<std::vector<QueryVertexID>> &core_paths
+                         ) {
+    TreeNode& node = tree_node[cur_vertex];
+    cur_core_path.push_back(cur_vertex);
+
+    bool is_core_leaf = true;
+    for(auto child:node.children_)
+    {
+      if (query_graph->getCoreValue(child) > 1) {
+        generateCorePaths(query_graph, tree_node, child, cur_core_path, core_paths);
+        is_core_leaf = false;
+      }
+    }
+
+    if (is_core_leaf) {
+        core_paths.emplace_back(cur_core_path);
+    }
+    cur_core_path.pop_back();
+  }
+
+  std::vector<QueryVertexID> getCFLOrder(
+    const Graph *data_graph, const QueryGraph *query_graph,
+    const std::vector<TreeNode>& tree,
+    const std::vector<QueryVertexID>& bfs_order
+  )
+  {
+    QueryVertexID qg_v_cnt= query_graph->getNumVertices();
+    QueryVertexID root_vertex = bfs_order[0];
+    vector<QueryVertexID>order(qg_v_cnt);
+    std::vector<bool> visited_vertices(qg_v_cnt, false);
+
+    std::vector<std::vector<QueryVertexID>> core_paths;
+    std::vector<std::vector<std::vector<QueryVertexID>>> forests;
+    std::vector<QueryVertexID> leaves;
+
+    generateLeaves(query_graph,leaves);
+    const auto& core_table = TwoCoreSolver::get2CoreTable(query_graph);
+    if(core_table[root_vertex]>1)
+    {
+      std::vector<QueryVertexID> temp_core_path;
+      generateCorePaths(query_graph,tree,root_vertex, temp_core_path, core_paths);
+      
+    }
+
+  }
+
 };
 
 }

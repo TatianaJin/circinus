@@ -23,6 +23,7 @@ namespace circinus {
 class TwoCoreSolver {
  private:
   std::vector<int> core_table_;
+  bool generated=0;
 
  public:
   inline static bool isInCore(const std::vector<int>& core_table, QueryVertexID v) { return core_table[v] > 1; }

@@ -30,12 +30,11 @@ std::vector<QueryVertexID> CFLOrder::getTopThree(const GraphMetadata& metadata, 
   std::priority_queue<std::pair<QueryVertexID, double>, std::vector<std::pair<QueryVertexID, double>>,
                       decltype(rank_compare)>
       rank_queue(rank_compare);
-  TwoCoreSolver two_core_solver;
-  const auto& core_table = two_core_solver.get2CoreTable(q);
-  uint32_t core_size = two_core_solver.getCoreSize(core_table);
+  const auto& core_table = two_core_solver_.get2CoreTable(q);
+  uint32_t core_size = two_core_solver_.getCoreSize(core_table);
 
   for (QueryVertexID query_vertex = 0; query_vertex < q->getNumVertices(); ++query_vertex) {
-    if (core_size == 0 || two_core_solver.isInCore(core_table, query_vertex)) {
+    if (core_size == 0 || two_core_solver_.isInCore(core_table, query_vertex)) {
       double degree = q->getVertexOutDegree(query_vertex);
       uint32_t frequency = metadata.getLabelFrequency(q->getVertexLabel(query_vertex));
       double rank = frequency / degree;
