@@ -393,7 +393,7 @@ class FilterAndOrder
   {
     const QueryGraph* query_graph=q_pointer_;
 
-    TreeNode& node = tree_node[cur_vertex];
+    const TreeNode& node = tree_node[cur_vertex];
     cur_tree_path.push_back(cur_vertex);
 
     bool is_tree_leaf = true;
