@@ -55,6 +55,10 @@ class LogicalCFLFilter : public LogicalNeighborhoodFilter {
   
   const TwoCoreSolver& getTwoCoreSolver() const {return two_core_solver_;}
 
+  const std::vector<TreeNode>& getTree() const {return bfs_tree_;}
+
+  const std::vector<QueryVertexID>& getBfsOrder() const {return bfs_order_;}
+
 };
 
 }  // namespace circinus

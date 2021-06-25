@@ -90,7 +90,19 @@ class FilterAndOrder
       }
       return &(bg->second);
     }
-
+    std::vector<std::vector<VertexID>> getOrder()
+    {
+      if (filter_string_.compare("cfl")==0) {
+        return getCFLOrder();
+      } else if (filter_string_.compare("dpiso")==0) {
+        return getDPISOOrder();
+      } else if (filter_string_.compare("tso")==0) {
+        return getTSOOrder();
+      } else if (filter_string_.compare("gql")==0) {
+        return getGQLOrder();
+      }
+      assert( "wrong filter method!"&&false);
+    }
     std::vector<std::vector<VertexID>> getCandidateSets() { 
       if(filtered)return candidates_sets_;
       const Graph g=*g_pointer_;
@@ -138,6 +150,7 @@ class FilterAndOrder
       filtered=1;
       return candidates_sets_;
     }
+
   QueryVertexID selectGQLStartVertex()
   {
     const QueryGraph *query_graph=q_pointer_;
@@ -211,10 +224,11 @@ class FilterAndOrder
   }
   
   std::vector<QueryVertexID> getDPISOOrder(
-    const QueryGraph *query_graph,
-    std::vector<QueryVertexID> bfs_order
   )
   {
+    const auto& logical_filter=dynamic_cast<LogicalDPISOFilter&>(*logical_filter_);
+    const QueryGraph *query_graph=q_pointer_;
+    const std::vector<QueryVertexID>& bfs_order = logical_filter.getBfsOrder();
     QueryVertexID qg_v_cnt= query_graph->getNumVertices();
     std::vector<QueryVertexID> order(qg_v_cnt);
     for(QueryVertexID i=0;i<qg_v_cnt;++i)
@@ -273,6 +287,7 @@ class FilterAndOrder
         last_edge=edge;
       }
     }
+ 
   QueryVertexID generateNoneTreeEdgesCount(
     const std::vector<TreeNode>& tree_node,
     std::vector<QueryVertexID> &path)
@@ -308,13 +323,15 @@ class FilterAndOrder
     }
     cur_path.pop_back();
   }
+  
   std::vector<QueryVertexID> getTSOOrder(
-    const QueryGraph *query_graph,
-    std::map<std::pair<QueryVertexID,QueryVertexID>,BipartiteGraph> bg_map,
-    const std::vector<TreeNode>& tree,
-    std::vector<QueryVertexID> dfs_order
     )
   {
+    const auto& logical_filter=dynamic_cast<LogicalTSOFilter&>(*logical_filter_);
+    const QueryGraph *query_graph=q_pointer_;
+    const std::vector<TreeNode>& tree=logical_filter.getTree();
+    const std::vector<QueryVertexID>& dfs_order=logical_filter.getDfsOrder();
+
     QueryVertexID qg_v_cnt= query_graph->getNumVertices();
     std::vector<std::vector<QueryVertexID>>paths;
     paths.reserve(qg_v_cnt);
@@ -349,8 +366,9 @@ class FilterAndOrder
     return order;
   }
 
-  void generateLeaves(const QueryGraph *query_graph, std::vector<QueryVertexID> &leaves)
+  void generateLeaves(std::vector<QueryVertexID> &leaves)
   {
+    const QueryGraph *query_graph=q_pointer_;
     for (QueryVertexID i = 0; i < query_graph->getNumVertices(); ++i) {
         QueryVertexID cur_vertex = i;
         if (query_graph->getVertexOutDegree(cur_vertex) == 1) {
@@ -359,13 +377,14 @@ class FilterAndOrder
     }
   }
 
-  void generateCorePaths(const QueryGraph *query_graph,
+  void generateCorePaths(
                          const std::vector<TreeNode>&tree_node,
                          QueryVertexID cur_vertex,
                          std::vector<QueryVertexID> &cur_core_path,
                          std::vector<std::vector<QueryVertexID>> &core_paths,
                          const TwoCoreSolver& tcs
                          ) {
+    const QueryGraph *query_graph=q_pointer_;
     const TreeNode& node = tree_node[cur_vertex];
     cur_core_path.push_back(cur_vertex);
 
@@ -373,7 +392,7 @@ class FilterAndOrder
     for(const auto& child:node.children_)
     {
       if (tcs.isInCore(child)) {
-        generateCorePaths(query_graph, tree_node, child, cur_core_path, core_paths,tcs);
+        generateCorePaths( tree_node, child, cur_core_path, core_paths,tcs);
         is_core_leaf = false;
       }
     }
@@ -412,13 +431,13 @@ class FilterAndOrder
 
 
   std::vector<QueryVertexID> getCFLOrder(
-    const std::vector<TreeNode>& tree,
-    const std::vector<QueryVertexID>& bfs_order
   )
   {
     const auto& logical_filter=dynamic_cast<LogicalCFLFilter&>(*logical_filter_);
     const Graph *data_graph=g_pointer_;
     const QueryGraph *query_graph=q_pointer_;
+    const std::vector<TreeNode>& tree = logical_filter.getTree();
+    const std::vector<QueryVertexID>& bfs_order = logical_filter.getBfsOrder();
 
     QueryVertexID qg_v_cnt= query_graph->getNumVertices();
     QueryVertexID root_vertex = bfs_order[0];
@@ -429,14 +448,14 @@ class FilterAndOrder
     std::vector<std::vector<std::vector<QueryVertexID>>> forests;
     std::vector<QueryVertexID> leaves;
 
-    generateLeaves(query_graph,leaves);
+    generateLeaves(leaves);
     
     const auto& tcs=logical_filter.getTwoCoreSolver();
     const auto& core_table = tcs.get2CoreTable();
     if(tcs.isInCore(root_vertex))
     {
       std::vector<QueryVertexID> temp_core_path;
-      generateCorePaths(query_graph,tree,root_vertex, temp_core_path, core_paths,tcs);
+      generateCorePaths(tree,root_vertex, temp_core_path, core_paths,tcs);
       for(QueryVertexID i=0;i<qg_v_cnt;++i)
       {
         QueryVertexID cur_vertex = i;
