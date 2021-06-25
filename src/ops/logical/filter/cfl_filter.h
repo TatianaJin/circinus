@@ -22,6 +22,7 @@
 #include "graph/query_graph.h"
 #include "graph/tree_node.h"
 #include "ops/logical/filter/filter.h"
+#include "algorithms/k_core.h"
 
 namespace circinus {
 
@@ -44,7 +45,7 @@ class LogicalCFLFilter : public LogicalNeighborhoodFilter {
                                                                        ExecutionConfig& exec) override;
   
   QueryVertexID getStartVertex(const GraphMetadata& metadata, const QueryGraph* query_graph,
-                               const std::vector<VertexID>& candidate_size) override;
+                               const std::vector<VertexID>& candidate_size);
 
   std::vector<QueryVertexID> getTopThree(const GraphMetadata& metadata, const QueryGraph* q);
 

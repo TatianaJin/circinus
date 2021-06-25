@@ -24,7 +24,7 @@ std::vector<QueryVertexID> TwoCoreSolver::get2CoreVertices() {
   std::vector<QueryVertexID> ret;
   auto vertices_count = graph->getNumVertices();
   if (!generated) {
-    get2CoreTable(graph);
+    get2CoreTable();
   }
   for (QueryVertexID i = 0; i < vertices_count; ++i) {
     if (isInCore(core_table_, i)) {
