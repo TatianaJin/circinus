@@ -262,8 +262,8 @@ class FilterAndOrder
       estimated_embeddings_num[begin] = sum;
 
       for (int i = begin; i >= 1; --i) {
-        begin = path[i - 1];
-        end = path[i];
+        begin = i - 1;
+        end = i;
         auto edge = getBipartiteGraph(path[begin],path[end]);
         parent.resize(edge->getNumVertices());
 
@@ -349,7 +349,7 @@ class FilterAndOrder
       double score = estimated_embeddings_num[0] / (double) (non_tree_edges_count + 1);
       path_orders.emplace_back(std::make_pair(score, &path));
     }
-    std::sort(path_orders.begin(), path_orders.end());
+    std::sort(path_orders.begin(), path_orders.end(), [](std::pair<double, std::vector<QueryVertexID>*> l, std::pair<double, std::vector<QueryVertexID>*> r){ return l.first < r.first; });
     std::vector<bool> visited_vertices(qg_v_cnt, false);
     std::vector<QueryVertexID> order;
     order.reserve(qg_v_cnt);
