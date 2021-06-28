@@ -74,22 +74,22 @@ std::vector<std::unique_ptr<NeighborhoodFilter>> LogicalDPISOFilter::toPhysicalO
   return ret;
 }
 QueryVertexID LogicalDPISOFilter::getStartVertex(const GraphMetadata& metadata, const QueryGraph* query_graph,
-                                  const std::vector<VertexID>& candidate_size) {
-    double min_score = metadata.getNumVertices();
-    QueryVertexID start_vertex = 0;
+                                                 const std::vector<VertexID>& candidate_size) {
+  double min_score = metadata.getNumVertices();
+  QueryVertexID start_vertex = 0;
 
-    for (QueryVertexID v = 0; v < query_graph->getNumVertices(); ++v) {
-      uint32_t degree = query_graph->getVertexOutDegree(v);
+  for (QueryVertexID v = 0; v < query_graph->getNumVertices(); ++v) {
+    uint32_t degree = query_graph->getVertexOutDegree(v);
 
-      if (degree <= 1) continue;
+    if (degree <= 1) continue;
 
-      double cur_score = candidate_size[v] / (double)degree;
-      if (cur_score < min_score) {
-        min_score = cur_score;
-        start_vertex = v;
-      }
+    double cur_score = candidate_size[v] / (double)degree;
+    if (cur_score < min_score) {
+      min_score = cur_score;
+      start_vertex = v;
     }
-
-    return start_vertex;
   }
+
+  return start_vertex;
+}
 }  // namespace circinus

@@ -36,12 +36,12 @@ class LogicalDPISOFilter : public LogicalNeighborhoodFilter {
 
  public:
   QueryVertexID getStartVertex(const GraphMetadata& metadata, const QueryGraph* query_graph,
-                                  const std::vector<VertexID>& candidate_size);
-                                  
+                               const std::vector<VertexID>& candidate_size);
+
   LogicalDPISOFilter(const GraphMetadata& metadata, const QueryGraph* query_graph,
                      const std::vector<VertexID>& candidate_size);
 
-  const std::vector<QueryVertexID>& getBfsOrder() const {return bfs_order_;}
+  const std::vector<QueryVertexID>& getBfsOrder() const { return bfs_order_; }
 
   std::vector<std::unique_ptr<NeighborhoodFilter>> toPhysicalOperators(const GraphMetadata& metadata,
                                                                        ExecutionConfig& exec) override;

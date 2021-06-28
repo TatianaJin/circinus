@@ -14,11 +14,11 @@
 
 #pragma once
 
+#include <algorithm>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
-#include <algorithm>
 
 #include "glog/logging.h"
 
@@ -29,7 +29,8 @@
 namespace circinus {
 
 /** The projection of the data graph on two sets of vertices */
-class BipartiteGraph : public Graph {  // Overwrite variable:vlist_,elist_,n_vertices_  function:getVertexOutDegree,getOutNeighbors
+class BipartiteGraph
+    : public Graph {  // Overwrite variable:vlist_,elist_,n_vertices_  function:getVertexOutDegree,getOutNeighbors
  private:
   std::vector<VertexID> source_vertices_;
   bool populated_ = 0;
@@ -49,11 +50,11 @@ class BipartiteGraph : public Graph {  // Overwrite variable:vlist_,elist_,n_ver
                      const std::vector<VertexID>& candidate_set2) {
     if (populated_) return;
     populated_ = 1;
-    std::copy(candidate_set1.begin(),candidate_set1.end(),std::back_inserter(source_vertices_));
-    std::sort(source_vertices_.begin(),source_vertices_.end());
+    std::copy(candidate_set1.begin(), candidate_set1.end(), std::back_inserter(source_vertices_));
+    std::sort(source_vertices_.begin(), source_vertices_.end());
     unordered_set<VertexID> vset(candidate_set2.begin(), candidate_set2.end());
-    n_vertices_=candidate_set1.size();
-    vlist_.reserve(n_vertices_+1);
+    n_vertices_ = candidate_set1.size();
+    vlist_.reserve(n_vertices_ + 1);
     vlist_.emplace_back(0);
     for (size_t i = 0; i < n_vertices_; ++i) {
       VertexID v1Id = source_vertices_[i];
@@ -71,8 +72,8 @@ class BipartiteGraph : public Graph {  // Overwrite variable:vlist_,elist_,n_ver
   }
 
   inline int getOffset(VertexID id) const {
-    int offset=std::lower_bound(source_vertices_.begin(),source_vertices_.end(),id)-source_vertices_.begin();
-    DCHECK_LT(offset,n_vertices_);
+    int offset = std::lower_bound(source_vertices_.begin(), source_vertices_.end(), id) - source_vertices_.begin();
+    DCHECK_LT(offset, n_vertices_);
     DCHECK_EQ(source_vertices_[offset], id);
     return offset;
   }

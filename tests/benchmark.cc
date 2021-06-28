@@ -31,6 +31,7 @@
 #include "graph/compressed_subgraphs.h"
 #include "graph/graph.h"
 #include "graph/query_graph.h"
+#include "ops/filter_and_order.h"
 #include "ops/filters.h"
 #include "ops/logical_filters.h"
 #include "ops/operators.h"
@@ -42,7 +43,6 @@
 #include "utils/hashmap.h"
 #include "utils/profiler.h"
 #include "utils/utils.h"
-#include "ops/filter_and_order.h"
 
 using circinus::CompressedSubgraphs;
 using circinus::ExecutionConfig;
@@ -459,7 +459,7 @@ class Benchmark {
     QueryGraph q(FLAGS_data_dir + "/" + query_path);  // load query graph
     auto use_order = getOrder(FLAGS_match_order, q.getNumVertices());
     auto start_filter = std::chrono::steady_clock::now();
-    FilterAndOrder fao(&g,&q,FLAGS_filter);
+    FilterAndOrder fao(&g, &q, FLAGS_filter);
     auto candidates = fao.getCandidateSets();  // get candidates for each query vertex
     auto end_filter = std::chrono::steady_clock::now();
     std::vector<double> candidate_cardinality;

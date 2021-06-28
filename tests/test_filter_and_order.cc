@@ -31,6 +31,7 @@
 #include "graph/compressed_subgraphs.h"
 #include "graph/graph.h"
 #include "graph/query_graph.h"
+#include "ops/filter_and_order.h"
 #include "ops/filters.h"
 #include "ops/logical_filters.h"
 #include "ops/operators.h"
@@ -42,7 +43,6 @@
 #include "utils/hashmap.h"
 #include "utils/profiler.h"
 #include "utils/utils.h"
-#include "ops/filter_and_order.h"
 using circinus::FilterAndOrder;
 
 using circinus::CompressedSubgraphs;
@@ -88,8 +88,8 @@ const std::vector<int> query_size_list = {4, 8, 12, 16, 20, 24, 32};
 const std::vector<std::string> query_mode_list = {"dense", "sparse"};
 const std::pair<int, int> query_index_range = {1, 200};
 
-void run(const std::string& dataset, const std::string& filter,
-        std::vector<std::string>& CSAnswers,std::vector<std::string>& OAnswers) {
+void run(const std::string& dataset, const std::string& filter, std::vector<std::string>& CSAnswers,
+         std::vector<std::string>& OAnswers) {
   auto graph_path = dataset + "/data_graph/" + dataset + ".graph";
   auto data_dir_str = std::string(data_dir);
   Graph g(data_dir_str + "/" + graph_path);  // load data graph
@@ -105,19 +105,19 @@ void run(const std::string& dataset, const std::string& filter,
         std::ifstream infile(query_dir);
         if (!infile) continue;
         QueryGraph q(query_dir);  // load query graph
-        std::stringstream ss1,ss2;
+        std::stringstream ss1, ss2;
         ss1 << dataset << ',' << query_size << ',' << query_mode << ',' << i << ':';
         ss2 << dataset << ',' << query_size << ',' << query_mode << ',' << i << ':';
-        FilterAndOrder fao(&g, &q,filter);
+        FilterAndOrder fao(&g, &q, filter);
         auto candidates = fao.getCandidateSets();  // get candidates for each query vertex
         auto order = fao.getOrder();
         for (auto v : candidates) {
           ss1 << v.size() << ' ';
         }
-        for(auto v : order) {
-          ss2<<v<<' ';
+        for (auto v : order) {
+          ss2 << v << ' ';
         }
-        std::string result_str1 = ss1.str(),result_str2=ss2.str();
+        std::string result_str1 = ss1.str(), result_str2 = ss2.str();
         result_str1.pop_back();
         result_str2.pop_back();
         std::string expect_str1 = CSAnswers[index];
@@ -127,7 +127,7 @@ void run(const std::string& dataset, const std::string& filter,
         EXPECT_EQ(result_str2, expect_str2);
       }
 }
-bool getAnswers(const std::string& path,const std::string& dataset,std::vector<std::string>& answers) {
+bool getAnswers(const std::string& path, const std::string& dataset, std::vector<std::string>& answers) {
   std::ifstream in(path);
   if (in) {
     std::string line;
@@ -141,20 +141,20 @@ bool getAnswers(const std::string& path,const std::string& dataset,std::vector<s
 }
 bool getCSAnswers(const std::string& filter, const std::string& dataset, std::vector<std::string>& CSAnswers) {
   auto answer_path = std::string(cs_answer_dir) + filter;
-  return getAnswers(answer_path,dataset,CSAnswers);
+  return getAnswers(answer_path, dataset, CSAnswers);
 }
 bool getOrderAnswers(const std::string& filter, const std::string& dataset, std::vector<std::string>& OAnswers) {
   auto answer_path = std::string(order_answer_dir) + filter;
-  return getAnswers(answer_path,dataset,OAnswers);
+  return getAnswers(answer_path, dataset, OAnswers);
 }
 
 void filterTest(std::string filter, std::string dataset) {
-  std::vector<std::string> CSAnswers,OAnswers;
+  std::vector<std::string> CSAnswers, OAnswers;
   bool res = getCSAnswers(filter, dataset, CSAnswers);
   EXPECT_EQ(res, true);
-  res = getOrderAnswers(filter,dataset,OAnswers);
+  res = getOrderAnswers(filter, dataset, OAnswers);
   EXPECT_EQ(res, true);
-  run(dataset, filter, CSAnswers,OAnswers);
+  run(dataset, filter, CSAnswers, OAnswers);
 }
 
 TEST(TestCFLFAO, dblp) { filterTest("cfl", "dblp"); }

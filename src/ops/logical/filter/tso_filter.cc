@@ -15,8 +15,8 @@
 #include "ops/logical/filter/tso_filter.h"
 
 #include <memory>
-#include <utility>
 #include <queue>
+#include <utility>
 #include "ops/filters/filter.h"
 #include "utils/utils.h"
 
@@ -54,7 +54,7 @@ std::vector<std::unique_ptr<NeighborhoodFilter>> LogicalTSOFilter::toPhysicalOpe
   return ret;
 }
 QueryVertexID LogicalTSOFilter::getStartVertex(const GraphMetadata& metadata, const QueryGraph* query_graph,
-                                       const std::vector<VertexID>& candidate_size) {
+                                               const std::vector<VertexID>& candidate_size) {
   auto rank_compare = [](std::pair<VertexID, double> l, std::pair<VertexID, double> r) { return l.second < r.second; };
 
   std::priority_queue<std::pair<VertexID, double>, std::vector<std::pair<VertexID, double>>, decltype(rank_compare)>

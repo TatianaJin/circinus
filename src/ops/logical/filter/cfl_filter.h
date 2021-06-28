@@ -17,12 +17,12 @@
 #include <memory>
 #include <vector>
 
+#include "algorithms/k_core.h"
 #include "exec/execution_config.h"
 #include "graph/graph.h"
 #include "graph/query_graph.h"
 #include "graph/tree_node.h"
 #include "ops/logical/filter/filter.h"
-#include "algorithms/k_core.h"
 
 namespace circinus {
 
@@ -43,7 +43,7 @@ class LogicalCFLFilter : public LogicalNeighborhoodFilter {
 
   std::vector<std::unique_ptr<NeighborhoodFilter>> toPhysicalOperators(const GraphMetadata& metadata,
                                                                        ExecutionConfig& exec) override;
-  
+
   QueryVertexID getStartVertex(const GraphMetadata& metadata, const QueryGraph* query_graph,
                                const std::vector<VertexID>& candidate_size);
 
@@ -52,13 +52,12 @@ class LogicalCFLFilter : public LogicalNeighborhoodFilter {
   QueryVertexID getStartVertex(const std::vector<QueryVertexID>& query_vertices,
                                const std::vector<VertexID>& cardinality, const QueryGraph& q,
                                const GraphMetadata& metadata);
-  
-  const TwoCoreSolver& getTwoCoreSolver() const {return two_core_solver_;}
 
-  const std::vector<TreeNode>& getTree() const {return bfs_tree_;}
+  const TwoCoreSolver& getTwoCoreSolver() const { return two_core_solver_; }
 
-  const std::vector<QueryVertexID>& getBfsOrder() const {return bfs_order_;}
+  const std::vector<TreeNode>& getTree() const { return bfs_tree_; }
 
+  const std::vector<QueryVertexID>& getBfsOrder() const { return bfs_order_; }
 };
 
 }  // namespace circinus

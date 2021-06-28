@@ -40,13 +40,11 @@ class TwoCoreSolver {
     return count;
   }
 
-  const std::vector<int>& get2CoreTable() const {return core_table_;}
+  const std::vector<int>& get2CoreTable() const { return core_table_; }
 
   std::vector<QueryVertexID> get2CoreVertices();
 
-  inline QueryGraph extract2CoreSubgraph() {
-    return graph_->getInducedSubgraph(get2CoreVertices());
-  }
+  inline QueryGraph extract2CoreSubgraph() { return graph_->getInducedSubgraph(get2CoreVertices()); }
 };
 
 }  // namespace circinus

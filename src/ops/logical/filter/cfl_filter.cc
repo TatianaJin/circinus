@@ -14,9 +14,9 @@
 
 #include <algorithm>
 #include <memory>
-#include <vector>
-#include <utility>
 #include <queue>
+#include <utility>
+#include <vector>
 
 #include "exec/execution_config.h"
 #include "ops/filters/filter.h"
@@ -27,7 +27,7 @@ namespace circinus {
 
 LogicalCFLFilter::LogicalCFLFilter(const GraphMetadata& metadata, const QueryGraph* query_graph,
                                    const std::vector<VertexID>& candidate_size)
-    : LogicalNeighborhoodFilter(query_graph),two_core_solver_(query_graph) {
+    : LogicalNeighborhoodFilter(query_graph), two_core_solver_(query_graph) {
   start_vertex_ = getStartVertex(metadata, query_graph, candidate_size);
   LOG(INFO) << "start_vertex " << start_vertex_;
   uint32_t query_vertices_num = query_graph->getNumVertices();
@@ -150,8 +150,8 @@ std::vector<QueryVertexID> LogicalCFLFilter::getTopThree(const GraphMetadata& me
 }
 
 QueryVertexID LogicalCFLFilter::getStartVertex(const std::vector<QueryVertexID>& query_vertices,
-                                       const std::vector<VertexID>& candidate_size, const QueryGraph& query_graph,
-                                       const GraphMetadata& metadata) {
+                                               const std::vector<VertexID>& candidate_size,
+                                               const QueryGraph& query_graph, const GraphMetadata& metadata) {
   QueryVertexID start_vertex = 0;
   double min_score = metadata.getNumVertices() + 1;
   for (auto query_vertex : query_vertices) {
@@ -165,7 +165,7 @@ QueryVertexID LogicalCFLFilter::getStartVertex(const std::vector<QueryVertexID>&
 }
 
 QueryVertexID LogicalCFLFilter::getStartVertex(const GraphMetadata& metadata, const QueryGraph* query_graph,
-                                       const std::vector<VertexID>& candidate_size) {
+                                               const std::vector<VertexID>& candidate_size) {
   auto root_candidates = getTopThree(metadata, query_graph);
   return getStartVertex(root_candidates, {candidate_size.begin(), candidate_size.end()}, *query_graph, metadata);
 }
