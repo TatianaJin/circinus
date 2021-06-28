@@ -14,6 +14,8 @@
 
 #include "graph/graph_partition.h"
 
+#include <memory>
+
 namespace circinus {
 
 std::unique_ptr<GraphPartitionBase> GraphPartitionBase::createGraphPartition(const CandidateScope& src_scope,

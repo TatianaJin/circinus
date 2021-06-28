@@ -46,6 +46,10 @@ struct QueryState {
   Planner* planner = nullptr;
   std::string client_addr;
 
+  std::chrono::time_point<std::chrono::high_resolution_clock> filter_start_time;
+  double filter_time = 0;
+  double plan_time = 0;
+
   QueryState(QueryGraph&& q, QueryConfig&& config, GraphBase* g, GraphMetadata* m)
       : query_context(std::move(q), std::move(config), g, m) {}
 };
@@ -138,6 +142,7 @@ class CircinusServer {
   void prepareQuery(uint32_t query_index) {
     auto& query_state = active_queries_[query_index];
     query_state.planner = new Planner(query_state.query_context);
+    query_state.filter_start_time = std::chrono::high_resolution_clock::now();
     // phase 1: preprocessing
     auto plan = query_state.planner->generateCandidatePruningPlan();
     // asynchronous execution, a CandidatePhase event will be generated when preprocessing finish
@@ -146,7 +151,7 @@ class CircinusServer {
 
   /** Handles query results.
    */
-  void finishQuery(uint32_t query_index, const void* result, const std::string& error);
+  void finishQuery(uint32_t query_index, void* result, const std::string& error);
 
   /**
    * Copy is incurred to copy data to zmq message buffer

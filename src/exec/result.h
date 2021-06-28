@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <memory>
 #include <vector>
 
@@ -113,8 +114,7 @@ class ExecutionResult : public Result {
   Outputs outputs_;
 
  public:
-  // TODO(tatiana): set filter time and plan time in server
-  ExecutionResult(QueryResult&& res = {}) : result_(std::move(res)) {}
+  ExecutionResult() : result_() {}
   inline void setCount() { result_.embedding_count = outputs_.getCount(); }
   // TODO(tatiana): set the following in driver
   inline void setEnumerateTime(double time) { result_.enumerate_time = time; }

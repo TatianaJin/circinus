@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <vector>
+
 #include "exec/task.h"
 #include "graph/bipartite_graph.h"
 #include "graph/graph_view.h"

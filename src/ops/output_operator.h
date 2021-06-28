@@ -77,8 +77,7 @@ class OutputOperator : public Operator {
   uint64_t leftover_input_ = 0;
 
  public:
-  // TODO(tatiana): set SameLabelIndices in planner and set outputs in execution plan driver
-  OutputOperator(SameLabelIndices&& same_label_indices) : same_label_indices_(std::move(same_label_indices)) {}
+  explicit OutputOperator(SameLabelIndices&& same_label_indices) : same_label_indices_(std::move(same_label_indices)) {}
   virtual ~OutputOperator() {}
 
   /**

@@ -183,6 +183,8 @@ void CircinusServer::handleCandidatePhase(const Event& event) {
   auto plan = planner->updateCandidatePruningPlan(result);
   std::unique_ptr<PlanDriver> plan_driver = nullptr;
   if (plan->isFinished()) {
+    auto now = std::chrono::high_resolution_clock::now();
+    active_queries_[event.query_id].filter_time = toSeconds(active_queries_[event.query_id].filter_start_time, now);
     // backtracking phase
     LOG(INFO) << "Candidate generation finished. Start backtracking.";
     auto plan = planner->generateExecutionPlan(result);
@@ -191,6 +193,7 @@ void CircinusServer::handleCandidatePhase(const Event& event) {
     } else {
       plan_driver = std::make_unique<ExecutionPlanDriver>(plan);
     }
+    active_queries_[event.query_id].plan_time = toSeconds(now, std::chrono::high_resolution_clock::now());
   }
   executor_manager_.run(event.query_id, &active_queries_[event.query_id].query_context, std::move(plan_driver));
 }
@@ -300,14 +303,17 @@ inline uint32_t CircinusServer::newQuery(const std::string& graph_name, const st
   return idx;
 }
 
-void CircinusServer::finishQuery(uint32_t query_index, const void* result, const std::string& error) {
+void CircinusServer::finishQuery(uint32_t query_index, void* result, const std::string& error) {
   auto& query = active_queries_[query_index];
   delete query.planner;
   query.planner = nullptr;
   reusable_indices_.push_back(query_index);
   if (error.empty()) {
     if (query.query_context.query_config.output == "count") {
-      auto reply = reinterpret_cast<const QueryResult*>(result)->toString();
+      auto res = reinterpret_cast<QueryResult*>(result);
+      res->filter_time = query.filter_time;
+      res->plan_time = query.plan_time;
+      auto reply = res->toString();
       replyToClient(query.client_addr, reply.data(), reply.size(), true);
     } else {
       // TODO(tatiana): support other output option
@@ -316,6 +322,8 @@ void CircinusServer::finishQuery(uint32_t query_index, const void* result, const
   } else {
     replyToClient(query.client_addr, error);
   }
+  // make sure the pointer result is not needed before clearQuery
+  executor_manager_.clearQuery(query_index);
 }
 
 }  // namespace circinus
