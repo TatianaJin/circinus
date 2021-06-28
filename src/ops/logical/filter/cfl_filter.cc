@@ -15,6 +15,8 @@
 #include <algorithm>
 #include <memory>
 #include <vector>
+#include <utility>
+#include <queue>
 
 #include "exec/execution_config.h"
 #include "ops/filters/filter.h"

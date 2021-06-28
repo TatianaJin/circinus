@@ -15,7 +15,8 @@
 #include "ops/logical/filter/tso_filter.h"
 
 #include <memory>
-
+#include <utility>
+#include <queue>
 #include "ops/filters/filter.h"
 #include "utils/utils.h"
 

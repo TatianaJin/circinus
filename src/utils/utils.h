@@ -17,7 +17,8 @@
 #include <cstring>
 #include <queue>
 #include <vector>
-
+#include <memory>
+#include <string>
 #include "graph/compressed_subgraphs.h"
 #include "graph/graph.h"
 #include "graph/query_graph.h"

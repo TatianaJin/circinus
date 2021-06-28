@@ -18,6 +18,7 @@
 #include <unordered_set>
 #include <utility>
 #include <vector>
+#include <algorithm>
 
 #include "glog/logging.h"
 
