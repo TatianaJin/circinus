@@ -19,10 +19,10 @@
 #include <utility>
 #include <vector>
 
+#include "graph/types.h"
 #include "ops/order/order_base.h"
 #include "plan/backtracking_plan.h"
 #include "plan/candidate_pruning_plan.h"
-#include "plan/candidate_scope.h"
 #include "plan/execution_plan.h"
 #include "plan/naive_planner.h"
 #include "utils/query_utils.h"
@@ -45,6 +45,8 @@ class Planner {
 
  public:
   explicit Planner(QueryContext& query_context) : query_context_(&query_context) {}
+
+  virtual ~Planner() {}
 
   /** Generates a candidate pruning plan.
    * A candidate pruning plan has three phases, which are all optional.

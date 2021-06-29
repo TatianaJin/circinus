@@ -77,7 +77,7 @@ def unpack(data, mode='str'):
   if mode == "uint64_t":
     return struct.unpack('Q', data)[0]
   if mode == "str":
-    return struct.unpack('s', data).decode('utf-8')[0]
+    return struct.unpack('{0}s'.format(len(data)), data)[0].decode('utf-8')
 
 
 class CircinusCommandCompleter:
@@ -115,8 +115,13 @@ class CircinusCommandCompleter:
       if cmds[0] == "load":
         print("Loaded graph in {0} seconds".format(unpack(msgs[1], 'double')))
       if cmds[0] == "query":
-        # TODO(tatiana): query time and other info
-        print("Query finished in ? seconds. Count = {0}".format(unpack(msgs[1], 'uint64_t')))
+        title = ["elapsed_execution_time","filter_time","plan_time","enumerate_time","embedding_count","matching_order"]
+        format_str = ""
+        for i in range(len(title)):
+            format_str = "{0}{{{2}:>{1}}} ".format(format_str, len(title[i]), i)
+        splits = unpack(msgs[1], 'str').split(',')
+        print(' '.join(title))
+        print(format_str.format(*splits))
     else:
       print(unpack(msgs[1]))
 

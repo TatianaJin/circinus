@@ -19,8 +19,6 @@
 #include <utility>
 #include <vector>
 
-#include "glog/logging.h"
-
 #include "exec/task.h"
 #include "exec/task_queue.h"
 #include "graph/compressed_subgraphs.h"
@@ -30,37 +28,6 @@
 #include "utils/profiler.h"
 
 namespace circinus {
-
-bool OperatorTree::handleTask(Task* task, TaskQueue* queue, uint32_t thread_id) {
-  auto op = operators_[task->getLevel()];
-
-  auto traverse_op = dynamic_cast<TraverseOperator*>(op);
-  if (traverse_op == nullptr) {
-    auto output_op = dynamic_cast<OutputOperator*>(op);
-    DCHECK(output_op != nullptr);
-    return output_op->validateAndOutput(task->getInput(), thread_id);
-  }
-
-  // TODO(tatiana): data graph may change
-  uint32_t last_input_index = 0;
-  traverse_op->input(task->getInput(), task->getDataGraph());
-
-  while (true) {
-    std::vector<CompressedSubgraphs> outputs;
-    auto start_time = clock();
-    auto size = traverse_op->expand(&outputs, FLAGS_batch_size);
-    if (FLAGS_profile) {
-      std::string str(typeid(*traverse_op).name());
-      (*profiler_)
-          .addLog(task->getLevel(), str, traverse_op->getInputIndex() - last_input_index, size,
-                  ((double)clock() - start_time) / CLOCKS_PER_SEC);
-      last_input_index = traverse_op->getInputIndex();
-    }
-    if (size == 0) return false;
-    queue->putTask(task->getLevel() + 1, std::move(outputs), task->getDataGraph());
-  }
-  return false;
-}
 
 bool OperatorTree::execute(const Graph* g, const std::vector<CompressedSubgraphs>& inputs, uint32_t level) {
   std::vector<CompressedSubgraphs> outputs;

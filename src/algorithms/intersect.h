@@ -53,7 +53,7 @@ inline void intersect(const Set1& set1, const Set2& set2, std::vector<VertexID>*
 template <typename Set>
 inline void intersect(const unordered_set<VertexID>& set1, const Set& set2, std::vector<VertexID>* intersection,
                       const unordered_set<VertexID>& except = {}) {
-  intersection->reserve(std::min(set2.second, (uint32_t)set1.size()));
+  intersection->reserve(std::min((size_t)set2.size(), set1.size()));
   for (auto vid : set2) {
     if (set1.count(vid) && except.count(vid) == 0) intersection->emplace_back(vid);
   }

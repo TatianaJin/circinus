@@ -140,8 +140,16 @@ class ReorderedPartitionedGraph : public GraphBase {
    */
   VertexSetView getOutNeighborsWithHint(VertexID id, LabelID nbr_label, uint32_t partition = 0) const {
     auto nbrs = getOutNeighbors(id);
+    VertexID range_l, range_r;
     // get the range of vertex ids that satisfy the hint
-    auto[range_l, range_r] = label_ranges_per_part_[partition].at(nbr_label);
+    if (nbr_label == ALL_LABEL) {
+      range_l = partition_offsets_[partition];
+      range_r = partition_offsets_[partition];
+    } else {
+      auto& range = label_ranges_per_part_[partition].at(nbr_label);
+      range_l = range.first;
+      range_r = range.second;
+    }
     auto[start, end] = getVertexRange(nbrs.first, nbrs.first + nbrs.second, range_l, range_r);
     return VertexSetView(start, end);
   }

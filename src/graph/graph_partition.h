@@ -14,11 +14,24 @@
 
 #pragma once
 
+#include <memory>
 #include <utility>
 
 #include "graph/partitioned_graph.h"
 
 namespace circinus {
+
+class GraphPartitionBase {
+ public:
+  virtual bool containsDestination(VertexID vid) const = 0;
+  virtual VertexSetView getOutNeighborsWithHint(VertexID vid, LabelID nbr_label) const = 0;
+  virtual VertexSetView getInNeighborsWithHint(VertexID vid, LabelID nbr_label) const = 0;
+  virtual VertexID getVertexOutDegreeWithHint(VertexID vid, LabelID nbr_label) const = 0;
+  virtual VertexID getVertexInDegreeWithHint(VertexID vid, LabelID nbr_label) const = 0;
+  static std::unique_ptr<GraphPartitionBase> createGraphPartition(const CandidateScope& src_scope,
+                                                                  const CandidateScope& dst_scope,
+                                                                  const ReorderedPartitionedGraph* graph);
+};
 
 /**
  * A partition view of ReorderedPartitionedGraph.
@@ -41,7 +54,7 @@ namespace circinus {
  * VertexID getVertexInDegreeWithHint(VertexID vid, LabelID nbr_label) const;
  */
 template <bool limit_src, bool limit_dst>
-class SDGraphPartition {
+class SDGraphPartition : public GraphPartitionBase {
  protected:
   const ReorderedPartitionedGraph* const original_graph_ = nullptr;
   const uint32_t src_partition_;
@@ -50,6 +63,9 @@ class SDGraphPartition {
  public:
   SDGraphPartition(const ReorderedPartitionedGraph* original_graph, uint32_t src_partition, uint32_t dst_partition)
       : original_graph_(original_graph), src_partition_(src_partition), dst_partition_(dst_partition) {}
+
+  SDGraphPartition(const ReorderedPartitionedGraph* original_graph, uint32_t src_partition)
+      : SDGraphPartition(original_graph, src_partition, 0) {}
 
   inline VertexID getPartitionOffset() const { return original_graph_->getPartitionOffset(src_partition_); }
   inline VertexID getPartitionEnd() const { return original_graph_->getPartitionEnd(src_partition_); }
@@ -63,7 +79,7 @@ class SDGraphPartition {
     return original_graph_->getVertexRangeByLabel(lid, src_partition_);
   }
 
-  inline bool containsDestination(VertexID vid) const {
+  inline bool containsDestination(VertexID vid) const override {
     if
       constexpr(limit_dst) {
         return vid >= original_graph_->getPartitionOffset(dst_partition_) &&
@@ -72,25 +88,25 @@ class SDGraphPartition {
     return vid < original_graph_->getNumVertices();
   }
 
-  inline VertexSetView getOutNeighborsWithHint(VertexID vid, LabelID nbr_label) const {
+  inline VertexSetView getOutNeighborsWithHint(VertexID vid, LabelID nbr_label) const override {
     if
       constexpr(limit_dst) { return original_graph_->getOutNeighborsWithHint(vid, nbr_label, dst_partition_); }
     return original_graph_->getAllOutNeighborsWithHint(vid, nbr_label);
   }
 
-  inline VertexSetView getInNeighborsWithHint(VertexID vid, LabelID nbr_label) const {
+  inline VertexSetView getInNeighborsWithHint(VertexID vid, LabelID nbr_label) const override {
     if
       constexpr(limit_src) { return original_graph_->getOutNeighborsWithHint(vid, nbr_label, src_partition_); }
     return original_graph_->getAllOutNeighborsWithHint(vid, nbr_label);
   }
 
-  inline VertexID getVertexOutDegreeWithHint(VertexID vid, LabelID nbr_label) const {
+  inline VertexID getVertexOutDegreeWithHint(VertexID vid, LabelID nbr_label) const override {
     if
       constexpr(limit_dst) { return original_graph_->getVertexOutDegreeWithHint(vid, nbr_label, dst_partition_); }
     return original_graph_->getVertexOutDegree(vid);
   }
 
-  inline VertexID getVertexInDegreeWithHint(VertexID vid, LabelID nbr_label) const {
+  inline VertexID getVertexInDegreeWithHint(VertexID vid, LabelID nbr_label) const override {
     if
       constexpr(limit_src) { return original_graph_->getVertexOutDegreeWithHint(vid, nbr_label, src_partition_); }
     return original_graph_->getVertexOutDegree(vid);

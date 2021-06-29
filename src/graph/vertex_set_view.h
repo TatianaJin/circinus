@@ -27,7 +27,7 @@ namespace circinus {
 
 class VertexSetView {
   using RangeSize = uint32_t;
-  size_t size_;
+  size_t size_ = 0;
   std::vector<std::pair<const VertexID*, RangeSize>> ranges_;
 
  public:
@@ -108,11 +108,13 @@ class VertexSetView {
   VertexSetView(const VertexID* start, const VertexID* end) { addRange(start, end); }
 
   inline void addRange(const VertexID* start, const VertexID* end) {
-    if (start >= end) return;
+    if (start >= end || start == nullptr || end == nullptr) return;
     auto size = std::distance(start, end);
     size_ += size;
-    DCHECK_GE(start - ranges_.back().first, ranges_.back().second);
-    if (ranges_.back().first + ranges_.back().second == start) {
+    if (!ranges_.empty()) {
+      DCHECK_GE(start - ranges_.back().first, ranges_.back().second);
+    }
+    if (!ranges_.empty() && ranges_.back().first + ranges_.back().second == start) {
       ranges_.back().second += size;
     } else {
       ranges_.emplace_back(start, size);

@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
-
 #include "ops/logical/compressed_input.h"
 
 #include <utility>
@@ -83,7 +81,7 @@ LogicalCompressedInputOperator::LogicalCompressedInputOperator(const QueryGraph*
 }
 
 std::unique_ptr<InputOperator> LogicalCompressedInputOperator::toPhysicalOperators() {
-  return std::make_unique<InputOperator>(input_query_vertex_, inputs_are_keys_, &qv_pivots_);
+  return std::make_unique<PartitionedInputOperator>(input_query_vertex_, inputs_are_keys_, &qv_pivots_);
 }
 
 }  // namespace circinus

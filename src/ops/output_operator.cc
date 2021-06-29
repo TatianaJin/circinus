@@ -31,8 +31,7 @@ class CountOutputOperator : public OutputOperator {
   // all clones share the same Outputs instance
   Operator* clone() const override { return new CountOutputOperator(*this); }
 
-  explicit CountOutputOperator(Outputs* outputs, SameLabelIndices&& same_label_indices)
-      : OutputOperator(outputs, std::move(same_label_indices)) {}
+  explicit CountOutputOperator(SameLabelIndices&& same_label_indices) : OutputOperator(std::move(same_label_indices)) {}
 
   bool validateAndOutput(const std::vector<CompressedSubgraphs>& input, uint32_t output_index) override {
     auto count_acc = outputs_->getCount(output_index);
@@ -65,10 +64,9 @@ Outputs& Outputs::init(uint32_t n_threads, const std::string& path_prefix) {
   return *this;
 }
 
-OutputOperator* OutputOperator::newOutputOperator(OutputType type, Outputs* outputs,
-                                                  SameLabelIndices&& same_label_indices) {
+OutputOperator* OutputOperator::newOutputOperator(OutputType type, SameLabelIndices&& same_label_indices) {
   CHECK(type == OutputType::Count) << "unsupported output type " << ((uint32_t)type);
-  return new CountOutputOperator(outputs, std::move(same_label_indices));
+  return new CountOutputOperator(std::move(same_label_indices));
 }
 
 }  // namespace circinus

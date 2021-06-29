@@ -22,6 +22,7 @@
 #include <utility>
 #include <vector>
 
+#include "algorithms/intersect.h"
 #include "graph/query_graph.h"
 #include "ops/traverse_operator.h"
 #include "ops/types.h"
@@ -60,13 +61,24 @@ class ExpandIntoOperator : public TraverseOperator {
     }
   }
 
-  std::vector<BipartiteGraph*> computeBipartiteGraphs(
-      const Graph* g, const std::vector<std::vector<VertexID>>& candidate_sets) override {
-    std::vector<BipartiteGraph*> ret;
+  std::vector<std::unique_ptr<BipartiteGraph>> computeBipartiteGraphs(
+      const Graph* g, const std::vector<CandidateSetView>& candidate_sets) override {
+    std::vector<std::unique_ptr<BipartiteGraph>> ret;
     ret.reserve(parents_.size());
     for (auto parent_vertex : parents_) {
-      ret.emplace_back(new BipartiteGraph(parent_vertex, target_vertex_));
-      ret.back()->populateGraph(g, &candidate_sets);
+      ret.emplace_back(std::make_unique<BipartiteGraph>(parent_vertex, target_vertex_));
+      ret.back()->populateGraph(g, candidate_sets);
+    }
+    return ret;
+  }
+
+  std::vector<std::unique_ptr<GraphPartitionBase>> computeGraphPartitions(
+      const ReorderedPartitionedGraph* g, const std::vector<CandidateScope>& candidate_scopes) const override {
+    std::vector<std::unique_ptr<GraphPartitionBase>> ret;
+    ret.reserve(parents_.size());
+    for (auto parent_qv : parents_) {
+      ret.emplace_back(
+          GraphPartitionBase::createGraphPartition(candidate_scopes[parent_qv], candidate_scopes[target_vertex_], g));
     }
     return ret;
   }
@@ -104,7 +116,7 @@ class ExpandIntoOperator : public TraverseOperator {
     while (input_index_ < current_inputs_->size()) {
       auto input = (*current_inputs_)[input_index_];
       auto key_vertex_id = input.getKeyVal(query_vertex_indices_[target_vertex_]);
-      auto key_out_neighbors = ((G*)current_data_graph_)->getOutNeighborsWithHint(key_vertex_id, 0, 0);
+      auto key_neighbors = ((G*)current_data_graph_)->getInNeighborsWithHint(key_vertex_id, ALL_LABEL, 0);
       bool add = true;
       if
         constexpr(isProfileMode(profile)) {
@@ -168,12 +180,12 @@ class ExpandIntoOperator : public TraverseOperator {
         uint32_t id = query_vertex_indices_[vid];
         if
           constexpr(!std::is_same<G, Graph>::value) {
-            key_out_neighbors = ((G*)current_data_graph_)->getOutNeighborsWithHint(key_vertex_id, 0, parent_idx);
+            key_neighbors = ((G*)current_data_graph_)->getInNeighborsWithHint(key_vertex_id, ALL_LABEL, parent_idx);
           }
-        intersect(*(input.getSet(id)), key_out_neighbors, &new_set);
+        intersect(*(input.getSet(id)), key_neighbors, &new_set);
         if
           constexpr(isProfileMode(profile)) {
-            updateIntersectInfo(input.getSet(id)->size() + key_out_neighbors.second, new_set.size());
+            updateIntersectInfo(input.getSet(id)->size() + key_neighbors.size(), new_set.size());
           }
         if (new_set.size() == 0) {
           add = false;

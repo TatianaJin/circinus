@@ -27,7 +27,6 @@
 #endif
 #include "gtest/gtest.h"
 
-#include "exec/thread_pool.h"
 #include "graph/compressed_subgraphs.h"
 #include "graph/graph.h"
 #include "graph/query_graph.h"
@@ -54,7 +53,6 @@ using circinus::NaivePlanner;
 using circinus::QueryGraph;
 using circinus::QueryVertexID;
 using circinus::Task;
-using circinus::ThreadPool;
 using circinus::VertexID;
 using circinus::Profiler;
 using circinus::CoverNode;

@@ -345,7 +345,6 @@ TraverseOperator* ExecutionPlan::newExpandEdgeKeyToKeyOperator(
       parent_vertex, target_vertex, query_vertex_indices_, same_label_indices[1], same_label_indices[0],
       getSetPruningThreshold(target_vertex), filter, graph_type_ != GraphType::BipartiteGraphView, graph_type_);
   setMatchingOrderIndices(target_vertex, ret);
-  target_vertex_to_ops_[target_vertex] = ret;
   operators_.push_back(ret);
   return ret;
 }
@@ -370,7 +369,6 @@ TraverseOperator* ExecutionPlan::newExpandEdgeKeyToSetOperator(
       parent_vertex, target_vertex, query_vertex_indices_, same_label_indices[1], same_label_indices[0],
       getSetPruningThreshold(target_vertex), filter, graph_type_);
   setMatchingOrderIndices(target_vertex, ret);
-  target_vertex_to_ops_[target_vertex] = ret;
   operators_.push_back(ret);
   return ret;
 }
@@ -416,7 +414,6 @@ TraverseOperator* ExecutionPlan::newExpandEdgeSetToKeyOperator(
       getSetPruningThreshold(target_vertex), nullptr, graph_type_);
 #endif
   setMatchingOrderIndices(target_vertex, ret);
-  target_vertex_to_ops_[target_vertex] = ret;
   operators_.push_back(ret);
   return ret;
 }
@@ -476,7 +473,6 @@ TraverseOperator* ExecutionPlan::newExpandSetVertexOperator(
                                                                       getSetPruningThreshold(target_vertex), filter);
   }
   setMatchingOrderIndices(target_vertex, ret);
-  target_vertex_to_ops_[target_vertex] = ret;
   operators_.push_back(ret);
   return ret;
 }
@@ -522,7 +518,6 @@ TraverseOperator* ExecutionPlan::newExpandSetToKeyVertexOperator(
         getSetPruningThreshold(target_vertex), filter);
   }
   setMatchingOrderIndices(target_vertex, ret);
-  target_vertex_to_ops_[target_vertex] = ret;
   operators_.push_back(ret);
   return ret;
 }
@@ -552,14 +547,13 @@ TraverseOperator* ExecutionPlan::newExpandKeyKeyVertexOperator(
   }
 
   setMatchingOrderIndices(target_vertex, ret);
-  target_vertex_to_ops_[target_vertex] = ret;
   operators_.push_back(ret);
   return ret;
 }
 
 Operator* ExecutionPlan::newOutputOperator(
     std::vector<std::pair<std::vector<uint32_t>, std::vector<uint32_t>>>&& same_label_indices) {
-  auto ret = OutputOperator::newOutputOperator(OutputType::Count, &outputs_, std::move(same_label_indices));
+  auto ret = OutputOperator::newOutputOperator(OutputType::Count, std::move(same_label_indices));
   operators_.push_back(ret);
   return ret;
 }
@@ -617,7 +611,6 @@ TraverseOperator* ExecutionPlan::newEnumerateKeyExpandToSetOperator(
         same_label_indices, std::move(enumerated_key_pruning_indices), filter);
   }
   setMatchingOrderIndices(target_vertex, ret);
-  target_vertex_to_ops_[target_vertex] = ret;
   operators_.push_back(ret);
   return ret;
 }

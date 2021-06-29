@@ -40,7 +40,7 @@ class Operator {
 
   inline void setParallelism(uint32_t parallelism) { parallelism_ = parallelism; }
 
-  virtual Operator* clone() const { return nullptr; }
+  [[deprecated]] virtual Operator* clone() const { return nullptr; }
 };
 
 }  // namespace circinus

@@ -62,6 +62,25 @@ struct ServerEvent {
 enum class CandidatePruningStrategy : uint16_t { None = 0, Adaptive, LDF, NLF, CFL, DAF, GQL, TSO };
 enum class CompressionStrategy : uint16_t { None = 0, Static, Dynamic };
 
+// TODO(tatiana): this is workaround as we do not implement the order now
+inline std::vector<QueryVertexID> getOrder(const std::string& order_str, uint32_t size) {
+  std::vector<QueryVertexID> order;
+  if (order_str.empty()) return order;
+  order.reserve(size);
+  QueryVertexID v = 0;
+  for (auto c : order_str) {
+    if (c == ' ') {
+      order.push_back(v);
+      v = 0;
+    } else {
+      v = v * 10 + (c - '0');
+    }
+  }
+  order.push_back(v);
+  CHECK_EQ(order.size(), size);
+  return order;
+}
+
 class QueryConfig {
  public:
   static inline const unordered_map<std::string, CompressionStrategy> compression_strategies = {
@@ -130,25 +149,6 @@ class QueryConfig {
   }
 };
 
-// TODO(tatiana): this is workaround as we do not implement the order now
-inline std::vector<QueryVertexID> getOrder(const std::string& order_str, uint32_t size) {
-  std::vector<QueryVertexID> order;
-  if (order_str.empty()) return order;
-  order.reserve(size);
-  QueryVertexID v = 0;
-  for (auto c : order_str) {
-    if (c == ' ') {
-      order.push_back(v);
-      v = 0;
-    } else {
-      v = v * 10 + (c - '0');
-    }
-  }
-  order.push_back(v);
-  CHECK_EQ(order.size(), size);
-  return order;
-}
-
 struct QueryContext {
   QueryGraph query_graph;
   QueryConfig query_config;
@@ -163,6 +163,26 @@ struct QueryContext {
     query_config = std::move(context.query_config);
     data_graph = context.data_graph;
     graph_metadata = context.graph_metadata;
+  }
+};
+
+struct QueryResult {
+  double filter_time = 0;
+  double plan_time = 0;
+  double enumerate_time = 0;
+  double elapsed_execution_time = 0;
+  uint64_t embedding_count = 0;
+  std::string matching_order;
+
+  inline std::string toString() const {
+    std::stringstream ss;
+    ss << *this;
+    return ss.str();
+  }
+
+  friend std::ostream& operator<<(std::ostream& out, const QueryResult& res) {
+    return out << res.elapsed_execution_time << ',' << res.filter_time << ',' << res.plan_time << ','
+               << res.enumerate_time << ',' << res.embedding_count << ',' << res.matching_order;
   }
 };
 

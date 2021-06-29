@@ -68,7 +68,7 @@ class OutputOperator : public Operator {
  protected:
   using SameLabelIndices = std::vector<std::pair<std::vector<uint32_t>, std::vector<uint32_t>>>;  // {{keys}, {sets}}
 
-  Outputs* outputs_;
+  Outputs* outputs_ = nullptr;
   SameLabelIndices same_label_indices_;
 
   double total_time_in_milliseconds_ = 0;
@@ -77,17 +77,14 @@ class OutputOperator : public Operator {
   uint64_t leftover_input_ = 0;
 
  public:
-  // TODO(tatiana): set SameLabelIndices in planner and set outputs in execution plan driver
-  OutputOperator(Outputs* outputs, SameLabelIndices&& same_label_indices)
-      : outputs_(outputs), same_label_indices_(std::move(same_label_indices)) {}
+  explicit OutputOperator(SameLabelIndices&& same_label_indices) : same_label_indices_(std::move(same_label_indices)) {}
   virtual ~OutputOperator() {}
 
   /**
    * @param same_label_indices The indices of vertices of the same label {{keys}, {sets}}
    */
   static OutputOperator* newOutputOperator(
-      OutputType type, Outputs* outputs,
-      std::vector<std::pair<std::vector<uint32_t>, std::vector<uint32_t>>>&& same_label_indices);
+      OutputType type, std::vector<std::pair<std::vector<uint32_t>, std::vector<uint32_t>>>&& same_label_indices);
 
   void setOutput(Outputs* outputs) { outputs_ = outputs; }
 

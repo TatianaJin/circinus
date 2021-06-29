@@ -197,7 +197,7 @@ void Planner::newInputOperators(const QueryGraph& q, const GraphMetadata& metada
   for (auto logical_plan : backtracking_plan_->getPlans()) {
     // TODO(byli): use neighborhood filter corresponding to the candidate pruning strategy?
     backtracking_plan_->addInputOperator(std::make_unique<LogicalCompressedInputOperator>(
-        logical_plan->inputAreKeys(), logical_plan->getMatchingOrder(), partitioning_qvs));
+        &q, logical_plan->inputAreKeys(), logical_plan->getMatchingOrder(), partitioning_qvs));
   }
 }
 

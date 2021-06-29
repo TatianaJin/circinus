@@ -17,12 +17,14 @@
 #include <algorithm>
 #include <chrono>
 #include <fstream>
+#include <memory>
 #include <string>
 #include <unordered_set>
 #include <utility>
 #include <vector>
 
 #include "graph/bipartite_graph.h"
+#include "graph/candidate_set_view.h"
 #include "graph/compressed_subgraphs.h"
 #include "graph/graph.h"
 #include "graph/graph_partition.h"
@@ -36,17 +38,16 @@
 
 namespace circinus {
 
-inline void removeExceptions(const std::pair<const VertexID*, uint32_t>& setPair, std::vector<VertexID>* res,
+inline void removeExceptions(const VertexSetView& set, std::vector<VertexID>* res,
                              const unordered_set<VertexID>& except = {}) {
-  for (uint32_t i = 0; i < setPair.second; ++i) {
-    auto vid = setPair.first[i];
+  for (auto vid : set) {
     if (except.count(vid) == 0) res->emplace_back(vid);
   }
 }
 
 class TraverseOperator : public Operator {
  protected:
-  const std::vector<VertexID>* candidates_ = nullptr;
+  const CandidateSetView* candidates_ = nullptr;
   const QueryVertexID target_vertex_;
 
   /* for non-repeated-vertex check */
@@ -89,8 +90,8 @@ class TraverseOperator : public Operator {
         subgraph_filter_(filter) {}
   virtual ~TraverseOperator() {}
 
-  inline virtual void setCandidateSets(const std::vector<VertexID>* candidates) { candidates_ = candidates; }
-  inline const std::vector<VertexID>* getCandidateSet() const { return candidates_; }
+  inline virtual void setCandidateSets(const CandidateSetView* candidates) { candidates_ = candidates; }
+  inline const CandidateSetView* getCandidateSet() const { return candidates_; }
   inline const uint32_t getInputIndex() const { return input_index_; }
   inline const auto& getSameLabelKeyIndices() const { return same_label_key_indices_; }
   inline const auto& getSameLabelSetIndices() const { return same_label_set_indices_; }
@@ -113,15 +114,18 @@ class TraverseOperator : public Operator {
     return subgraph_filter_->filter(subgraphs, start, end);
   }
 
-  virtual std::vector<BipartiteGraph*> computeBipartiteGraphs(
-      const Graph* g, const std::vector<std::vector<VertexID>>& candidate_sets) = 0;
+  virtual std::vector<std::unique_ptr<BipartiteGraph>> computeBipartiteGraphs(
+      const Graph* g, const std::vector<CandidateSetView>& candidate_sets) = 0;
 
-  virtual std::vector<GraphPartition*> computeGraphPartitions(const ReorderedPartitionedGraph* g,
-                                                              const std::vector<CandidateScope>& candidate_scopes) {
-    std::vector<GraphPartition*> ret;
-    LOG(FATAL) << "Not implemented yet";
-    return {};
+  // for backward compabilitity of tests
+  inline std::vector<std::unique_ptr<BipartiteGraph>> computeBipartiteGraphs(
+      const Graph* g, const std::vector<std::vector<VertexID>>& candidate_sets) {
+    std::vector<CandidateSetView> views(candidate_sets.begin(), candidate_sets.end());
+    return computeBipartiteGraphs(g, views);
   }
+
+  virtual std::vector<std::unique_ptr<GraphPartitionBase>> computeGraphPartitions(
+      const ReorderedPartitionedGraph* g, const std::vector<CandidateScope>& candidate_scopes) const = 0;
 
   virtual void input(const std::vector<CompressedSubgraphs>& inputs, const void* data_graph) {
     current_inputs_ = &inputs;

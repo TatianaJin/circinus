@@ -24,6 +24,7 @@
 #include <utility>
 #include <vector>
 
+#include "algorithms/intersect.h"
 #include "graph/compressed_subgraphs.h"
 #include "graph/graph.h"
 #include "graph/graph_view.h"
@@ -55,7 +56,7 @@ class ExpandEdgeKeyToSetOperator : public ExpandEdgeOperator {
  public:
   CONSTRUCT(KeyToSet)
 
-  void setCandidateSets(const std::vector<VertexID>* candidates) override {
+  void setCandidateSets(const CandidateSetView* candidates) override {
     candidates_ = candidates;
     candidate_set_.insert(candidates->begin(), candidates->end());
   }
@@ -103,7 +104,8 @@ class ExpandEdgeKeyToSetOperator : public ExpandEdgeOperator {
   inline bool expandInner(std::vector<CompressedSubgraphs>* outputs, const CompressedSubgraphs& input) {
     std::vector<VertexID> targets;
     auto parent_match = input.getKeyVal(parent_index_);
-    intersect(candidate_set_, ((G*)current_data_graph_)->getOutNeighborsWithHint(parent_match, 0, 0), &targets,
+    auto neighbors = ((G*)current_data_graph_)->getOutNeighborsWithHint(parent_match, ALL_LABEL, 0);
+    intersect(candidate_set_, neighbors, &targets,
               input.getExceptions(same_label_key_indices_, same_label_set_indices_));
     if
       constexpr(isProfileMode(profile)) {
@@ -111,8 +113,7 @@ class ExpandEdgeKeyToSetOperator : public ExpandEdgeOperator {
           constexpr(isProfileWithMiniIntersectionMode(profile)) {
             distinct_intersection_count_ += parent_set_.insert(parent_match).second;
           }
-        total_intersection_input_size_ +=
-            candidate_set_.size() + ((G*)current_data_graph_)->getVertexOutDegreeWithHint(parent_match, 0, 0);
+        total_intersection_input_size_ += candidate_set_.size() + neighbors.size();
         total_intersection_output_size_ += targets.size();
       }
     if (targets.empty()) {
@@ -145,7 +146,7 @@ class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
  public:
   CONSTRUCT(KeyToKey)
 
-  void setCandidateSets(const std::vector<VertexID>* candidates) override {
+  void setCandidateSets(const CandidateSetView* candidates) override {
     candidates_ = candidates;
     candidate_set_.insert(candidates->begin(), candidates->end());
   }
@@ -229,25 +230,23 @@ class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
     current_targets_.clear();
     current_target_index_ = 0;
     auto parent_match = input.getKeyVal(parent_index_);
+    auto neighbors = ((const G*)current_data_graph_)->getOutNeighborsWithHint(parent_match, ALL_LABEL, 0);
     if (!intersect_candidates) {
-      removeExceptions(((const G*)current_data_graph_)->getOutNeighborsWithHint(parent_match, 0, 0), &current_targets_,
+      removeExceptions(neighbors, &current_targets_,
                        input.getExceptions(same_label_key_indices_, same_label_set_indices_));
     } else {
-      intersect(candidate_set_, ((const G*)current_data_graph_)->getOutNeighborsWithHint(parent_match, 0, 0),
-                &current_targets_, input.getExceptions(same_label_key_indices_, same_label_set_indices_));
+      intersect(candidate_set_, neighbors, &current_targets_,
+                input.getExceptions(same_label_key_indices_, same_label_set_indices_));
       if
         constexpr(isProfileMode(profile)) {
           if
             constexpr(isProfileWithMiniIntersectionMode(profile)) {
               distinct_intersection_count_ += parent_set_.insert(parent_match).second;
             }
-          total_intersection_input_size_ +=
-              candidate_set_.size() + ((const G*)current_data_graph_)->getVertexOutDegreeWithHint(parent_match, 0, 0);
+          total_intersection_input_size_ += candidate_set_.size() + neighbors.size();
           total_intersection_output_size_ += current_targets_.size();
         }
     }
-    // intersect(*candidates_, current_data_graph_->getOutNeighbors(parent_match), &current_targets_,
-    // input.getKeyMap());
   }
 };
 
@@ -269,11 +268,11 @@ class CurrentResults {
 template <QueryType profile, typename G>
 class CurrentResultsByCandidate : public CurrentResults {
  private:
-  uint32_t candidate_index_ = 0;
+  CandidateSetView::ConstIterator candidate_iter_;
 
  public:
   CurrentResultsByCandidate(const CompressedSubgraphs* input, uint32_t parent_index, TraverseOperator* owner)
-      : CurrentResults(input, parent_index, owner) {}
+      : CurrentResults(input, parent_index, owner), candidate_iter_(owner->getCandidateSet()->begin()) {}
 
   uint32_t getResults(std::vector<CompressedSubgraphs>* outputs, uint32_t cap) override {
     uint32_t n = 0;
@@ -281,17 +280,17 @@ class CurrentResultsByCandidate : public CurrentResults {
 
     auto exceptions = input_->getExceptions(owner_->getSameLabelKeyIndices(), owner_->getSameLabelSetIndices());
     auto data_graph = ((G*)owner_->getCurrentDataGraph());
-    for (; n < cap && candidate_index_ < owner_->getCandidateSet()->size(); ++candidate_index_) {
+    for (; n < cap && candidate_iter_ != owner_->getCandidateSet()->end(); ++candidate_iter_) {
       std::vector<VertexID> parents;
-      auto candidate = (*owner_->getCandidateSet())[candidate_index_];
+      VertexID candidate = *candidate_iter_;
       if (exceptions.count(candidate)) {
         continue;
       }
-      intersect(*parent_set, data_graph->getOutNeighborsWithHint(candidate, 0, 0), &parents);  // No need for exceptions
+      auto neighbors = data_graph->getInNeighborsWithHint(candidate, ALL_LABEL, 0);
+      intersect(*parent_set, neighbors, &parents);  // No need for exceptions
       if
         constexpr(isProfileMode(profile)) {
-          owner_->updateIntersectInfo(parent_set->size() + data_graph->getVertexOutDegreeWithHint(candidate, 0, 0),
-                                      parents.size());
+          owner_->updateIntersectInfo(parent_set->size() + neighbors.size(), parents.size());
         }
       if (parents.empty()) {
         continue;
@@ -327,15 +326,11 @@ class CurrentResultsByParent : public CurrentResults {
       auto parent_match = parent_set[i];
       if (exceptions_.count(parent_match)) continue;
       std::vector<VertexID> targets;
-      intersect(*owner_->getCandidateSet(),
-                ((G*)owner_->getCurrentDataGraph())->getOutNeighborsWithHint(parent_match, 0, 0), &targets,
-                exceptions_);
+      auto neighbors = ((G*)owner_->getCurrentDataGraph())->getOutNeighborsWithHint(parent_match, ALL_LABEL, 0);
+      intersect(*owner_->getCandidateSet(), neighbors, &targets, exceptions_);
       if
         constexpr(isProfileMode(profile)) {
-          owner_->updateIntersectInfo(
-              owner_->getCandidateSet()->size() +
-                  ((G*)owner_->getCurrentDataGraph())->getVertexOutDegreeWithHint(parent_match, 0, 0),
-              targets.size());
+          owner_->updateIntersectInfo(owner_->getCandidateSet()->size() + neighbors.size(), targets.size());
         }
       for (auto target : targets) {
         auto pos = group_index.find(target);
@@ -383,13 +378,11 @@ class CurrentResultsByExtension : public CurrentResults {
         auto candidate = extensions_.front();
         extensions_.pop();
         std::vector<VertexID> parents;  // valid parents for current candidate
-        intersect(parent_set, ((G*)owner_->getCurrentDataGraph())->getOutNeighborsWithHint(candidate, 0, 0),
-                  &parents);  // no need for exceptions
+        auto neighbors = ((G*)owner_->getCurrentDataGraph())->getInNeighborsWithHint(candidate, ALL_LABEL, 0);
+        intersect(parent_set, neighbors, &parents);  // no need for exceptions
         if
           constexpr(isProfileMode(profile)) {
-            owner_->updateIntersectInfo(
-                parent_set.size() + ((G*)owner_->getCurrentDataGraph())->getVertexOutDegreeWithHint(candidate, 0, 0),
-                parents.size());
+            owner_->updateIntersectInfo(parent_set.size() + neighbors.size(), parents.size());
           }
         CompressedSubgraphs output(*input_, parent_index_, std::make_shared<std::vector<VertexID>>(std::move(parents)),
                                    candidate, owner_->getSameLabelSetIndices(), owner_->getSetPruningThreshold(), true);
@@ -418,15 +411,11 @@ class CurrentResultsByExtension : public CurrentResults {
       return;
     }
     std::vector<VertexID> current_extensions;
-    intersect(*owner_->getCandidateSet(),
-              ((G*)owner_->getCurrentDataGraph())->getOutNeighborsWithHint(parent_match, 0, 0), &current_extensions,
-              current_exceptions_);
+    auto neighbors = ((G*)owner_->getCurrentDataGraph())->getOutNeighborsWithHint(parent_match, ALL_LABEL, 0);
+    intersect(*owner_->getCandidateSet(), neighbors, &current_extensions, current_exceptions_);
     if
       constexpr(isProfileMode(profile)) {
-        owner_->updateIntersectInfo(
-            owner_->getCandidateSet()->size() +
-                ((G*)owner_->getCurrentDataGraph())->getVertexOutDegreeWithHint(parent_match, 0, 0),
-            current_extensions.size());
+        owner_->updateIntersectInfo(owner_->getCandidateSet()->size() + neighbors.size(), current_extensions.size());
       }
     for (VertexID neighbor : current_extensions) {
       if (seen_extensions_.insert(neighbor).second) {
@@ -461,7 +450,7 @@ class ExpandEdgeSetToKeyOperator : public ExpandEdgeOperator {
     if (data_graph != current_data_graph_) {
       candidates_neighbor_size_ = 0;
       for (auto candidate : *candidates_) {
-        candidates_neighbor_size_ += ((G*)data_graph)->getVertexOutDegreeWithHint(candidate, 0, 0);
+        candidates_neighbor_size_ += ((G*)data_graph)->getVertexInDegreeWithHint(candidate, ALL_LABEL, 0);
       }
     }
     TraverseOperator::input(inputs, data_graph);
@@ -506,7 +495,7 @@ class ExpandEdgeSetToKeyOperator : public ExpandEdgeOperator {
     DCHECK_NE(candidates_neighbor_size_, 0);
     uint64_t set_neighbor_size = 0;
     for (auto v : *parent_set) {
-      set_neighbor_size += ((G*)current_data_graph_)->getVertexOutDegreeWithHint(v, 0, 0);
+      set_neighbor_size += ((G*)current_data_graph_)->getVertexOutDegreeWithHint(v, ALL_LABEL, 0);
     }
     auto enumerating_candidate_cost = 2 * candidates_neighbor_size_;
     auto enumerating_parent_cost =

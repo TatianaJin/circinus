@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
-
 #include <algorithm>
 #include <random>
 #include <string>
@@ -68,6 +66,7 @@ TEST_F(TestCandidateSetView, Iterable) {
                                        << toString(partition_offsets);
       ++idx;
     }
+    EXPECT_EQ(view.size(), 1000);
     ASSERT_EQ(idx, 1000);
   }
   {
@@ -80,6 +79,7 @@ TEST_F(TestCandidateSetView, Iterable) {
                                        << toString(partition_offsets);
       ++idx;
     }
+    EXPECT_EQ(view.size(), 300);
     ASSERT_EQ(idx, 500);
   }
   {
@@ -87,6 +87,7 @@ TEST_F(TestCandidateSetView, Iterable) {
     scope.usePartition(2);
     CandidateSetView view(&candidate_set, scope, partition_offsets);
     EXPECT_TRUE(view.empty());
+    EXPECT_EQ(view.size(), 0);
     for (auto v : view) {
       ASSERT_TRUE(false) << "The view should be empty";
     }
@@ -101,17 +102,21 @@ TEST_F(TestCandidateSetView, Iterable) {
                                        << toString(partition_offsets);
       ++idx;
     }
+    EXPECT_EQ(view.size(), 800);
     ASSERT_EQ(idx, 1000);
   }
   {
     // scope: exclude non-empty partition
-    scope.excludePartition(0);
+    scope.excludePartition(1);
     CandidateSetView view(&candidate_set, scope, partition_offsets);
-    uint32_t idx = 200;
+    uint32_t idx = 0;
+    EXPECT_EQ(view.size(), 700);
     for (auto v : view) {
       ASSERT_EQ(candidate_set[idx], v) << idx << " candidate " << toString(candidate_set) << "\n partition "
                                        << toString(partition_offsets);
-      ++idx;
+      if (++idx == 200) {
+        idx = 500;
+      }
     }
     ASSERT_EQ(idx, 1000);
   }
@@ -120,6 +125,7 @@ TEST_F(TestCandidateSetView, Iterable) {
     scope.excludePartition(2);
     CandidateSetView view(&candidate_set, scope, partition_offsets);
     uint32_t idx = 0;
+    EXPECT_EQ(view.size(), 1000);
     for (auto v : view) {
       ASSERT_EQ(candidate_set[idx], v) << idx << " candidate " << toString(candidate_set) << "\n partition "
                                        << toString(partition_offsets);

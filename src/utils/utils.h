@@ -28,9 +28,10 @@
 
 namespace circinus {
 
-const uint64_t INVALID_VERTEX_ID = 0xffffffffffffffff;
+#define toSeconds(start, end) \
+  (((double)std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count()) / 1e9)
 
-using circinus::QueryGraph;
+const uint64_t INVALID_VERTEX_ID = 0xffffffffffffffff;
 
 static void dfs(QueryVertexID cur_vertex, const std::vector<TreeNode>& dfs_tree,
                 std::vector<QueryVertexID>& dfs_order) {

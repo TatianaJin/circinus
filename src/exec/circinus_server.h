@@ -46,6 +46,10 @@ struct QueryState {
   Planner* planner = nullptr;
   std::string client_addr;
 
+  std::chrono::time_point<std::chrono::high_resolution_clock> filter_start_time;
+  double filter_time = 0;
+  double plan_time = 0;
+
   QueryState(QueryGraph&& q, QueryConfig&& config, GraphBase* g, GraphMetadata* m)
       : query_context(std::move(q), std::move(config), g, m) {}
 };
@@ -83,7 +87,7 @@ class CircinusServer {
 
   inline void shutDown() { event_queue_.push(Event(Event::ShutDown)); }
   bool loadGraph(std::string&& gpath, std::string&& gname, std::string&& config = "", std::string&& client_addr = "");
-  bool query(std::string&& game, std::string&& qpath, std::string&& config, std::string&& client_addr = "");
+  bool query(std::string&& gname, std::string&& qpath, std::string&& config, std::string&& client_addr = "");
 
  protected:
   inline bool hasActiveQuery() const { return active_queries_.size() > reusable_indices_.size(); }
@@ -138,6 +142,7 @@ class CircinusServer {
   void prepareQuery(uint32_t query_index) {
     auto& query_state = active_queries_[query_index];
     query_state.planner = new Planner(query_state.query_context);
+    query_state.filter_start_time = std::chrono::high_resolution_clock::now();
     // phase 1: preprocessing
     auto plan = query_state.planner->generateCandidatePruningPlan();
     // asynchronous execution, a CandidatePhase event will be generated when preprocessing finish

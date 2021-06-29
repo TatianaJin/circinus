@@ -26,7 +26,7 @@ class HasLowerBound {
  private:
   template <typename U>
   static constexpr auto check(int) -> typename std::is_same<
-      decltype(std::declval<U>().getLowerBound(std::declval<U::value_type>(), std::declval<U::value_type>())), U>::type;
+      decltype(std::declval<U>().getLowerBound(std::declval<U>(), std::declval<typename U::value_type>())), U>::type;
 
   template <typename>
   static constexpr std::false_type check(...);
@@ -48,7 +48,7 @@ template <typename ForwardIt, typename T>
 inline constexpr typename std::enable_if<HasLowerBound<ForwardIt>::value, ForwardIt>::type lowerBound(ForwardIt first,
                                                                                                       ForwardIt last,
                                                                                                       const T& value) {
-  return first.lowerBound(last, value);
+  return first.getLowerBound(last, value);
 }
 
 template <typename ForwardIt, typename T>

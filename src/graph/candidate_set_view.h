@@ -26,6 +26,12 @@ namespace circinus {
 
 class CandidateSetView : public VertexSetView {
  public:
+  CandidateSetView() {}
+
+  explicit CandidateSetView(const std::vector<VertexID>& candidates) {
+    addRange(candidates.data(), candidates.data() + candidates.size());
+  }
+
   CandidateSetView(const std::vector<VertexID>* candidates, const CandidateScope& scope,
                    const std::vector<VertexID>& partition_offsets);
 };

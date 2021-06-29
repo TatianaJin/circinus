@@ -27,6 +27,8 @@ using VertexID = uint64_t;
 
 using VertexSet = std::shared_ptr<std::vector<VertexID>>;
 
+const LabelID ALL_LABEL = ~0u;
+
 enum class GraphType : uint32_t { Normal, GraphView, BipartiteGraphView };
 
 enum class CandidateScopeType : uint8_t { All, Partition, Inverse };

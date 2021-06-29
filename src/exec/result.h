@@ -14,10 +14,12 @@
 
 #pragma once
 
+#include <algorithm>
 #include <memory>
 #include <vector>
 
 #include "exec/task.h"
+#include "graph/candidate_set_view.h"
 #include "graph/types.h"
 #include "ops/output_operator.h"
 #include "utils/query_utils.h"
@@ -52,6 +54,25 @@ class CandidateResult : public Result {
 
   virtual void removeInvalid(QueryVertexID query_vertex);
 
+  inline std::vector<CandidateSetView> getCandidates() const {
+    std::vector<CandidateSetView> res(candidates_.size());
+    for (uint32_t i = 0; i < res.size(); ++i) {
+      if (!merged_candidates_[i].empty()) {
+        res[i].addRange(merged_candidates_[i].data(), merged_candidates_[i].data() + merged_candidates_[i].size());
+      } else {
+        std::vector<uint32_t> order(candidates_[i].size());
+        std::iota(order.begin(), order.end(), 0);
+        sort(order.begin(), order.end(),
+             [&](uint32_t l, uint32_t r) { return candidates_[i][l].front() <= candidates_[i][r].front(); });
+        for (auto j : order) {
+          auto& shard = candidates_[i][j];
+          res[i].addRange(shard.data(), shard.data() + shard.size());
+        }
+      }
+    }
+    return res;
+  }
+
   std::vector<std::vector<VertexID>>* getMergedCandidates() { return &merged_candidates_; }
 
   const std::vector<VertexID>& getMergedCandidates(uint32_t idx) const { return merged_candidates_[idx]; }
@@ -63,9 +84,9 @@ class PartitionedCandidateResult : public CandidateResult {
 
  public:
   explicit PartitionedCandidateResult(uint32_t n_qvs, uint32_t n_partitions)
-      : candidate_partition_offsets_(n_qvs),
-        per_partition_candidate_cardinality_(n_partitions, std::vector<VertexID>(n_qvs)),
-        CandidateResult(n_qvs) {
+      : CandidateResult(n_qvs),
+        candidate_partition_offsets_(n_qvs),
+        per_partition_candidate_cardinality_(n_partitions, std::vector<VertexID>(n_qvs)) {
     for (auto& shards : candidates_) {
       shards.resize(n_partitions);
     }
@@ -88,18 +109,21 @@ class PartitionedCandidateResult : public CandidateResult {
 };
 
 class ExecutionResult : public Result {
-  uint64_t count_ = 0;  // FIXME(tatiana): remove
+  QueryResult result_;
   std::vector<std::vector<CompressedSubgraphs>> inputs_;
   Outputs outputs_;
 
  public:
-  // FIXME(tatiana): remove
-  void setCount(uint64_t count) { count_ = count; }
+  ExecutionResult() : result_() {}
+  inline void setCount() { result_.embedding_count = outputs_.getCount(); }
+  // TODO(tatiana): set the following in driver
+  inline void setEnumerateTime(double time) { result_.enumerate_time = time; }
+  inline void setElapsedExecutionTime(double time) { result_.elapsed_execution_time = time; }
 
-  Outputs& getOutputs() { return outputs_; }
+  inline Outputs& getOutputs() { return outputs_; }
 
   // TODO(tatiana): now we only consider count as output
-  void* data() { return &count_; }
+  void* data() { return &result_; }
 };
 
 }  // namespace circinus

@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
-
 #include "graph/candidate_set_view.h"
 
 #include <vector>
@@ -26,6 +24,7 @@ namespace circinus {
 
 CandidateSetView::CandidateSetView(const std::vector<VertexID>* candidates, const CandidateScope& scope,
                                    const std::vector<VertexID>& partition_offsets) {
+  DCHECK(candidates != nullptr);
   CHECK_EQ(0, partition_offsets.front());
   CHECK_EQ(candidates->size(), partition_offsets.back());
   switch (scope.getType()) {
