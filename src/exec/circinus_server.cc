@@ -33,16 +33,16 @@ namespace circinus {
 void CircinusServer::Listen() {
   client_server_thread_ = std::thread([this]() {
     zmq::socket_t socket(zmq_ctx_, ZMQ_PULL);
+    // default port 55954, repeatedly try next if not available
     auto port = GetAvailablePort(DEFAULT_PORT, NUM_TRY_PORT);
     LOG(INFO) << "Circinus Server listening on port " << port;
-    // TODO(tatiana): default port 55954, repeatedly try next if not available
     socket.bind("tcp://*:" + std::to_string(port));
     while (true) {
       zmq::multipart_t msg;
       msg.recv(socket);
       auto event_str = msg.popstr();
       if (event_str == "exit") {
-        CHECK(msg.empty());
+        CHECK(msg.empty()) << msg.size();
         shutDown();
         break;
       } else if (event_str == "query") {

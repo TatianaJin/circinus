@@ -101,10 +101,12 @@ class CircinusCommandCompleter:
         cmds = [cmds[0], osp.join(cmds[1], "data_graph", "{0}.graph.bin".format(cmds[1])), cmds[1], '']
       elif len(cmds) == 3:
         cmds.append('')  # empty config
-    if cmds[0] == "query":
+    elif cmds[0] == "query":
       pass
+    elif cmds[0] == "exit":
+      self.send_sock.send_multipart([pack(x, mode='str') for x in cmds])
+      return True
     cmds.append(self.client_addr)  # print(cmds)
-
     # send query to server
     self.send_sock.send_multipart([pack(x, mode='str') for x in cmds])
 
@@ -125,7 +127,7 @@ class CircinusCommandCompleter:
     else:
       print(unpack(msgs[1]))
 
-    return cmds
+    return False
 
   def init_history(self, histfile, history_length):
     readline.parse_and_bind("tab: complete")
@@ -172,7 +174,8 @@ class CircinusCommandCompleter:
           continue
 
         cmds = [x for x in cmd.split(" ") if x != ""]
-        self.process_cmds(cmds)
+        if self.process_cmds(cmds):
+            return
         last_cmd = ""
 
 

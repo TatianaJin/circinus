@@ -126,10 +126,12 @@ class NeighborhoodFilter : public Operator {
     auto chunk_size = filter_size_ / parallelism_;
     CHECK_NE(chunk_size, 0) << "scan_size=" << filter_size_ << ", parallelism=" << parallelism_;
     if (task_idx < filter_size_ % parallelism_) {
-      return FilterContext((chunk_size + 1) * task_idx, chunk_size + 1);
+      auto offset = (chunk_size + 1) * task_idx;
+      return FilterContext(offset, offset + chunk_size + 1);
     }
     LOG(INFO) << filter_size_;
-    return FilterContext(chunk_size * task_idx + (filter_size_ % parallelism_), chunk_size);
+    auto offset = chunk_size * task_idx + (filter_size_ % parallelism_);
+    return FilterContext(offset, offset + chunk_size);
   }
 
   virtual void filter(const GraphBase* g, std::vector<std::vector<VertexID>>* candidates, FilterContext* ctx) const {

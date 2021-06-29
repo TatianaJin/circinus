@@ -118,6 +118,11 @@ void CandidatePruningPlanDriver::taskFinish(TaskBase* task, ThreadsafeTaskQueue*
   }
   // TODO(BYLI) package merge operation and remove_invalid operation into tasks, determine the parallelism
   if (--task_counters_[task->getTaskId()] == 0) {
+    if (plan_->getPhase() == 1) {
+      if (!plan_->toPartitionResult()) {
+        result_->merge(task);
+      }
+    }
     if (++n_finished_tasks_ == task_counters_.size()) {
       if (plan_->getPhase() == 1) {
         candidate_cardinality_ = result_->getCandidateCardinality();
@@ -132,15 +137,12 @@ void CandidatePruningPlanDriver::taskFinish(TaskBase* task, ThreadsafeTaskQueue*
       return;
     }
 
-    if (plan_->getPhase() == 1) {
-      if (!plan_->toPartitionResult()) {
-        result_->merge(task);
-      }
-    } else if (plan_->getPhase() == 3) {
+    if (plan_->getPhase() == 3) {
       result_->removeInvalid(dynamic_cast<NeighborhoodFilterTask*>(task)->getFilter()->getQueryVertex());
       auto filter = dynamic_cast<NeighborhoodFilter*>(operators_[n_finished_tasks_].get());
       QueryVertexID query_vertex = filter->getQueryVertex();
       uint64_t input_size = (*result_->getMergedCandidates())[query_vertex].size();
+      CHECK_NE(input_size, 0) << "query vertex " << query_vertex << " has empty candidate set, not handled yet";
       filter->setInputSize(input_size);
       filter->setParallelism((input_size + FLAGS_batch_size - 1) / FLAGS_batch_size);
       task_counters_[n_finished_tasks_] = filter->getParallelism();
