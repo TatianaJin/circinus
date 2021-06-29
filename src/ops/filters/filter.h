@@ -132,7 +132,7 @@ class NeighborhoodFilter : public Operator {
     return FilterContext(chunk_size * task_idx + (filter_size_ % parallelism_), chunk_size);
   }
 
-  virtual void filter(const Graph* g, std::vector<std::vector<VertexID>>* candidates, FilterContext* ctx) const {
+  virtual void filter(const GraphBase* g, std::vector<std::vector<VertexID>>* candidates, FilterContext* ctx) const {
     CHECK_LE(ctx->end, (*candidates)[query_vertex_].size()) << ctx->end << "  " << (*candidates)[query_vertex_].size();
     for (uint32_t i = ctx->offset; i < ctx->end; ++i) {
       VertexID& candidate = (*candidates)[query_vertex_][i];

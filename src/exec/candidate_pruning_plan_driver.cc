@@ -146,8 +146,7 @@ void CandidatePruningPlanDriver::taskFinish(TaskBase* task, ThreadsafeTaskQueue*
       task_counters_[n_finished_tasks_] = filter->getParallelism();
       for (uint32_t i = 0; i < filter->getParallelism(); ++i) {
         task_queue->putTask(new NeighborhoodFilterTask(task->getQueryId(), n_finished_tasks_, i, filter,
-                                                       (const Graph*)task->getDataGraph(),
-                                                       result_->getMergedCandidates()));
+                                                       task->getDataGraph(), result_->getMergedCandidates()));
       }
     }
   }

@@ -28,14 +28,14 @@ namespace circinus {
 
 class GQLFilter : public NeighborhoodFilter {
  private:
-  bool verify(const Graph* data_graph, const VertexID data_vertex,
+  bool verify(const GraphBase* data_graph, const VertexID data_vertex,
               std::vector<std::vector<VertexID>>* candidates) const;
 
  public:
   GQLFilter(ExecutionConfig& conf, const QueryGraph* query_graph, QueryVertexID query_vertex)
       : NeighborhoodFilter(conf, query_graph, query_vertex) {}
 
-  void filter(const Graph* data_graph, std::vector<std::vector<VertexID>>* candidates,
+  void filter(const GraphBase* data_graph, std::vector<std::vector<VertexID>>* candidates,
               FilterContext* ctx) const override;
 };
 
