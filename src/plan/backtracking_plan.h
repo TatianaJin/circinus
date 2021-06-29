@@ -24,7 +24,6 @@
 #include "ops/input_operator.h"
 #include "ops/logical/compressed_input.h"
 #include "plan/execution_plan.h"
-#include "plan/operator_tree.h"
 
 namespace circinus {
 
@@ -34,11 +33,12 @@ class BacktrackingPlan {
   std::vector<std::unique_ptr<LogicalCompressedInputOperator>> input_operators_;  // size = plans_.size();
 
  public:
-  OperatorTree& getOperatorTree(uint32_t plan_idx = 0) { return plans_[plan_idx]->getOperators(); }
+  std::vector<Operator*>& getOperators(uint32_t plan_idx = 0) { return plans_[plan_idx]->getOperators(); }
 
-  std::unique_ptr<InputOperator> getInputOperator(uint32_t plan_idx, const GraphMetadata& metadata,
-                                                  ExecutionConfig& exec_conf) {
-    return nullptr;  // TODO(byli)
+  inline auto& getOutputOperator(uint32_t plan_idx = 0) { return plans_[plan_idx]->getOperators().back(); }
+
+  std::unique_ptr<InputOperator> getInputOperator(uint32_t plan_idx) {
+    return input_operators_[plan_idx]->toPhysicalOperators();
   }
 
   inline const auto& getPlans() const { return plans_; }

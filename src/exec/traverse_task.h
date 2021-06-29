@@ -33,20 +33,21 @@ namespace circinus {
 
 class TraverseTask : public TaskBase {
  private:
+  std::vector<TraverseContext> traverse_context_;
   std::unique_ptr<InputOperator> input_op_;
-  OperatorTree* op_tree_;  // not owned
+  std::vector<Operator*> operators_;
   const ReorderedPartitionedGraph* graph_;
   const uint32_t batch_size_;
   std::vector<CandidateSetView> candidates_;
   std::vector<GraphView<GraphPartitionBase>> graph_views_;
 
  public:
-  TraverseTask(QueryId query_id, TaskId task_id, uint32_t batch_size, OperatorTree& op_tree,
+  TraverseTask(QueryId query_id, TaskId task_id, uint32_t batch_size, std::vector<Operator*>& operators,
                std::unique_ptr<InputOperator>&& input_op, const std::vector<CandidateScope>& scopes,
                const GraphBase* graph, CandidateResult* candidates)
       : TaskBase(query_id, task_id),
         input_op_(std::move(input_op)),
-        op_tree_(&op_tree),
+        operators_(operators),
         graph_(dynamic_cast<const ReorderedPartitionedGraph*>(graph)),
         batch_size_(batch_size) {
     CHECK(graph_ != nullptr);
@@ -59,17 +60,14 @@ class TraverseTask : public TaskBase {
       candidates_.emplace_back(&partitioned_candidates->getMergedCandidates(i), scopes[i],
                                partitioned_candidates->getCandidatePartitionOffsets(i));
     }
-    graph_views_ = setupGraphView(graph_, op_tree, scopes);
+    graph_views_ = setupGraphView(graph_, operators, scopes);
   }
 
   const GraphBase* getDataGraph() const override { return graph_; }
 
   void run() override {
-    auto inputs = input_op_->getInputs(graph_, candidates_);
-    // op_tree_->execute()
-    // TODO(tatiana)
-    // traverse_->input();
-    // traverse_->expand();
+    const auto& inputs = input_op_->getInputs(graph_, candidates_);
+    execute(inputs);
   }
 
   void profile() override {
@@ -79,14 +77,37 @@ class TraverseTask : public TaskBase {
   }
 
  protected:
-  static std::vector<GraphView<GraphPartitionBase>> setupGraphView(const ReorderedPartitionedGraph* g,
-                                                                   const OperatorTree& op_tree,
-                                                                   const std::vector<CandidateScope>& scopes) {
-    std::vector<GraphView<GraphPartitionBase>> data_graphs_for_operators;
-    size_t len = op_tree.getOperatorSize() - 1;
+  bool execute(const std::vector<CompressedSubgraphs>& inputs, uint32_t level = 0) {
+    std::vector<CompressedSubgraphs> outputs;
+    auto op = operators_[level];
+    if (level == operators_.size() - 1) {
+      auto output_op = dynamic_cast<OutputOperator*>(op);
+      return output_op->validateAndOutput(inputs, 0);
+    }
+    auto traverse_op = dynamic_cast<TraverseOperator*>(op);
+    traverse_op->input(inputs, graph_);
+    while (true) {
+      outputs.clear();
+      // TraverseContext
+      auto size = traverse_op->expand(&outputs, FLAGS_batch_size);
+      if (size == 0) {
+        break;
+      }
+      if (execute(outputs, level + 1)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  static std::vector<GraphView<GraphPartition*>> setupGraphView(const ReorderedPartitionedGraph* g,
+                                                                const std::vector<Operator*>& operators,
+                                                                const std::vector<CandidateScope>& scopes) {
+    std::vector<GraphView<GraphPartition*>> data_graphs_for_operators;
+    size_t len = operators.size() - 1;
     data_graphs_for_operators.reserve(len);
     for (size_t i = 0; i < len; ++i) {
-      auto op = op_tree.getOperator(i);
+      auto op = operators[i];
       auto traverse_op = dynamic_cast<TraverseOperator*>(op);
       CHECK(traverse_op != nullptr);
       data_graphs_for_operators.emplace_back(traverse_op->computeGraphPartitions(g, scopes));
@@ -101,26 +122,26 @@ class TraverseTask : public TaskBase {
 class TraverseChainTask : public TaskBase {
   const Graph* graph_;
   const uint32_t batch_size_;
-  OperatorTree* const op_tree_;  // not owned
-  std::vector<CandidateSetView> candidates_;
+  std::vector<Operator*> operators_;
+  std::vector<std::vector<VertexID>> candidates_;
   const uint32_t input_candidate_index_;
   const bool inputs_are_keys_;
 
  public:
-  TraverseChainTask(QueryId qid, TaskId tid, uint32_t batch_size, OperatorTree& ops, const Graph* graph,
-                    std::vector<CandidateSetView>&& candidates, uint32_t input_candidate_index, bool inputs_are_keys)
+  TraverseChainTask(QueryId qid, TaskId tid, uint32_t batch_size, std::vector<Operator*>& ops, const Graph* graph,
+                    std::vector<std::vector<VertexID>>& candidates, uint32_t input_candidate_index,
+                    bool inputs_are_keys)
       : TaskBase(qid, tid),
         graph_(graph),
         batch_size_(batch_size),
-        op_tree_(&ops),
-        candidates_(std::move(candidates)),
+        operators_(ops),
         input_candidate_index_(input_candidate_index),
         inputs_are_keys_(inputs_are_keys) {}
 
   const GraphBase* getDataGraph() const override { return graph_; }
 
   void run() override {
-    auto op = op_tree_->root();
+    auto op = operators_[0];
     auto traverse = dynamic_cast<TraverseOperator*>(op);
     while (traverse != nullptr) {
       DCHECK_LT(traverse->getTargetQueryVertex(), candidates_.size());
@@ -131,14 +152,36 @@ class TraverseChainTask : public TaskBase {
       traverse = dynamic_cast<TraverseOperator*>(op);
     }
     if (inputs_are_keys_) {
-      op_tree_->execute(graph_, std::vector<CompressedSubgraphs>(candidates_[input_candidate_index_].begin(),
-                                                                 candidates_[input_candidate_index_].end()));
+      execute(std::vector<CompressedSubgraphs>(candidates_[input_candidate_index_].begin(),
+                                               candidates_[input_candidate_index_].end()));
     } else {
       std::vector<CompressedSubgraphs> input;
-      input.emplace_back(std::make_shared<std::vector<VertexID>>(candidates_[input_candidate_index_].begin(),
-                                                                 candidates_[input_candidate_index_].end()));
-      op_tree_->execute(graph_, input);
+      input.emplace_back(std::make_shared<std::vector<VertexID>>(std::move(candidates_[input_candidate_index_])));
+      execute(input);
     }
+  }
+
+ protected:
+  bool execute(const std::vector<CompressedSubgraphs>& inputs, uint32_t level = 0) {
+    std::vector<CompressedSubgraphs> outputs;
+    auto op = operators_[level];
+    if (level == operators_.size() - 1) {
+      auto output_op = dynamic_cast<OutputOperator*>(op);
+      return output_op->validateAndOutput(inputs, 0);
+    }
+    auto traverse_op = dynamic_cast<TraverseOperator*>(op);
+    traverse_op->input(inputs, graph_);
+    while (true) {
+      outputs.clear();
+      auto size = traverse_op->expand(&outputs, FLAGS_batch_size);
+      if (size == 0) {
+        break;
+      }
+      if (execute(outputs, level + 1)) {
+        return true;
+      }
+    }
+    return false;
   }
 };
 

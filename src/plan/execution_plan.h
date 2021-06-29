@@ -26,10 +26,8 @@
 #include "ops/operator.h"
 #include "ops/output_operator.h"
 #include "ops/traverse_operator.h"
-#include "plan/operator_tree.h"
 #include "utils/flags.h"
 #include "utils/hashmap.h"
-#include "utils/profiler.h"
 
 namespace circinus {
 
@@ -38,7 +36,7 @@ class ExecutionPlan {
   const GraphType graph_type_;
   const QueryGraph* query_graph_;
 
-  OperatorTree operators_;
+  std::vector<Operator*> operators_;
   // TODO(tatiana): change to use unique_ptr
   std::vector<SubgraphFilter*> subgraph_filters_;  // owned, need to delete upon destruction
 
@@ -84,14 +82,12 @@ class ExecutionPlan {
                             const std::vector<int>& cover_table,
                             const unordered_map<QueryVertexID, uint32_t>& level_become_key);
 
-  [[deprecated]] void setProfiler(Profiler* profiler) { operators_.setProfiler(profiler); }
-
   void setInputAreKeys(bool flag) { inputs_are_keys_ = flag; }
   bool inputAreKeys() const { return inputs_are_keys_; }
 
   void printPhysicalPlan() const {
     if (operators_.empty()) return;
-    printOperatorChain(operators_.root());
+    printOperatorChain(operators_[0]);
   }
 
   void printPhysicalPlan(std::ostream& oss) const {
@@ -108,7 +104,7 @@ class ExecutionPlan {
   void printProfiledPlan(std::ostream& oss) const {
     if (operators_.empty()) return;
     uint32_t op_idx = 0;
-    auto op = operators_.root();
+    auto op = operators_[0];
     while (op != nullptr) {
       oss << op_idx << "," << op->toProfileString() << std::endl;
       ++op_idx;
@@ -133,8 +129,8 @@ class ExecutionPlan {
     LOG(INFO) << n_keys << " keys " << (query_graph_->getNumVertices() - n_keys) << " sets";
   }
 
-  inline const OperatorTree& getOperators() const { return operators_; }
-  inline OperatorTree& getOperators() { return operators_; }
+  inline const std::vector<Operator*>& getOperators() const { return operators_; }
+  inline std::vector<Operator*>& getOperators() { return operators_; }
 
   inline QueryVertexID getRootQueryVertexID() const { return matching_order_.front(); }
   inline const auto& getMatchingOrder() const { return matching_order_; }

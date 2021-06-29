@@ -35,14 +35,15 @@ void ExecutionPlanDriver::init(QueryId qid, QueryContext* query_ctx, ExecutionCo
   task_counters_.resize(plan_->getPlans().size(), 1);  // one task per partition
   for (uint32_t i = 0; i < n_plans; ++i) {
     auto plan_idx = plan_->getPartitionedPlan(i).first;
-    plan_->getOperatorTree(plan_idx).setOutput(&result_->getOutputs());  // all plans share the same output
+    dynamic_cast<OutputOperator*>(plan_->getOutputOperator(plan_idx))
+        ->setOutput(&result_->getOutputs());  // all plans share the same output
     auto input_operator = plan_->getInputOperator(plan_idx, *query_ctx->graph_metadata, ctx.first);
     if (query_ctx->query_config.mode == QueryMode::Profile) {
       task_queue.putTask(new ProfileTask<TraverseTask>(
-          qid, i, ctx.first.getBatchSize(), plan_->getOperatorTree(plan_idx), std::move(input_operator),
+          qid, i, ctx.first.getBatchSize(), plan_->getOperators(plan_idx), std::move(input_operator),
           plan_->getPartitionedPlan(i).second, query_ctx->data_graph, candidate_result_.get()));
     } else {
-      task_queue.putTask(new TraverseTask(qid, i, ctx.first.getBatchSize(), plan_->getOperatorTree(plan_idx),
+      task_queue.putTask(new TraverseTask(qid, i, ctx.first.getBatchSize(), plan_->getOperators(plan_idx),
                                           std::move(input_operator), plan_->getPartitionedPlan(i).second,
                                           query_ctx->data_graph, candidate_result_.get()));
     }
@@ -63,6 +64,7 @@ void MatchingParallelExecutionPlanDriver::init(QueryId qid, QueryContext* query_
   ExecutionPlanDriverBase::init(qid, query_ctx, ctx, task_queue);
   plan_->getOperatorTree().setOutput(&result_->getOutputs());
 
+  result_->getOutputs().init(ctx.first.getNumExecutors()).limit(query_ctx->query_config.limit);
   if (ctx.first.getNumExecutors() == 1) {
     // one task for single-thread execution
     task_counters_.push_back(1);
@@ -70,10 +72,10 @@ void MatchingParallelExecutionPlanDriver::init(QueryId qid, QueryContext* query_
     // TODO(tatiana): replace plan_->getInputCandidateIndex() and plan_->inputsAreKeys() with an input operator
     if (query_ctx->query_config.mode == QueryMode::Profile) {
       task_queue.putTask(new ProfileTask<TraverseChainTask>(
-          qid, 0, ctx.first.getBatchSize(), plan_->getOperatorTree(), (const Graph*)query_ctx->data_graph,
+          qid, 0, ctx.first.getBatchSize(), plan_->getOperators(), (const Graph*)query_ctx->data_graph,
           candidate_result_->getCandidates(), plan_->getInputCandidateIndex(), plan_->inputsAreKeys()));
     } else {
-      task_queue.putTask(new TraverseChainTask(qid, 0, ctx.first.getBatchSize(), plan_->getOperatorTree(),
+      task_queue.putTask(new TraverseChainTask(qid, 0, ctx.first.getBatchSize(), plan_->getOperators(),
                                                (const Graph*)query_ctx->data_graph, candidate_result_->getCandidates(),
                                                plan_->getInputCandidateIndex(), plan_->inputsAreKeys()));
     }

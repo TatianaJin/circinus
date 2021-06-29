@@ -40,7 +40,7 @@ class TraverseContext : public ProfileInfo {
   uint32_t input_index_ = 0;
   uint32_t input_end_index_ = 0;
   const std::vector<CompressedSubgraphs>* current_inputs_ = nullptr;
-
+ 
  public:
   const void* current_data_graph = nullptr;
   std::vector<CompressedSubgraphs>* outputs;

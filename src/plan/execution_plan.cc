@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "graph/bipartite_graph.h"
+#include "graph/graph_view.h"
 #include "ops/operators.h"
 #include "utils/hashmap.h"
 
