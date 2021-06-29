@@ -16,6 +16,8 @@
 
 #include <algorithm>
 #include <memory>
+#include <string>
+#include <utility>
 #include <vector>
 
 #include "exec/task.h"
@@ -116,9 +118,9 @@ class ExecutionResult : public Result {
  public:
   ExecutionResult() : result_() {}
   inline void setCount() { result_.embedding_count = outputs_.getCount(); }
-  // TODO(tatiana): set the following in driver
-  inline void setEnumerateTime(double time) { result_.enumerate_time = time; }
+  inline void addEnumerateTime(double time) { result_.enumerate_time += time; }
   inline void setElapsedExecutionTime(double time) { result_.elapsed_execution_time = time; }
+  inline void setMatchingOrder(std::string&& order) { result_.matching_order = std::move(order); }
 
   inline Outputs& getOutputs() { return outputs_; }
 
