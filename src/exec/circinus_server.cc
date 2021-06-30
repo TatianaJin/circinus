@@ -198,7 +198,7 @@ void CircinusServer::handleCandidatePhase(const Event& event) {
   executor_manager_.run(event.query_id, &active_queries_[event.query_id].query_context, std::move(plan_driver));
 }
 
-bool CircinusServer::replyToClient(const std::string& client_addr, const void* data, size_t size, bool success) {
+bool CircinusServer::replyToClient(const std::string& client_addr, zmq::multipart_t& msg) {
   if (client_addr.empty()) return true;
   auto pos = sockets_to_clients_.find(client_addr);
   if (pos == sockets_to_clients_.end()) {
@@ -207,9 +207,6 @@ bool CircinusServer::replyToClient(const std::string& client_addr, const void* d
     pos->second.connect(client_addr);
   }
   try {
-    zmq::multipart_t msg;
-    msg.pushtyp<bool>(success);
-    msg.addmem(data, size);
     msg.send(pos->second);
     return true;
   } catch (zmq::error_t& e) {
@@ -218,25 +215,19 @@ bool CircinusServer::replyToClient(const std::string& client_addr, const void* d
   return false;
 }
 
+bool CircinusServer::replyToClient(const std::string& client_addr, const void* data, size_t size, bool success) {
+  zmq::multipart_t msg;
+  msg.pushtyp<bool>(success);
+  msg.addmem(data, size);
+  return replyToClient(client_addr, msg);
+}
+
 bool CircinusServer::replyToClient(const std::string& client_addr, std::vector<char>* data) {
-  if (client_addr.empty()) return true;
-  auto pos = sockets_to_clients_.find(client_addr);
-  if (pos == sockets_to_clients_.end()) {
-    pos = sockets_to_clients_.insert({client_addr, zmq::socket_t(zmq_ctx_, ZMQ_PUSH)}).first;
-    pos->second.setsockopt(ZMQ_LINGER, 0);  // do not linger after socket is closed
-    pos->second.connect(client_addr);
-  }
-  try {
-    zmq::multipart_t reply;
-    reply.pushtyp<bool>(true);
-    zmq::message_t msg(data->data(), data->size(), [](void*, void* hint) { delete (std::vector<char>*)hint; }, data);
-    reply.add(std::move(msg));
-    reply.send(pos->second);
-    return true;
-  } catch (zmq::error_t& e) {
-    LOG(WARNING) << e.what();
-  }
-  return false;
+  zmq::multipart_t reply;
+  reply.pushtyp<bool>(true);
+  zmq::message_t msg(data->data(), data->size(), [](void*, void* hint) { delete (std::vector<char>*)hint; }, data);
+  reply.add(std::move(msg));
+  return replyToClient(client_addr, reply);
 }
 
 double CircinusServer::loadGraphFromBinary(const std::string& graph_path, const std::string& name) {
@@ -315,6 +306,20 @@ void CircinusServer::finishQuery(uint32_t query_index, void* result, const std::
       res->plan_time = query.plan_time;
       auto reply = res->toString();
       replyToClient(query.client_addr, reply.data(), reply.size(), true);
+    } else if (query.query_context.query_config.output == "plan") {
+      auto& reply = *reinterpret_cast<std::string*>(result);
+      replyToClient(query.client_addr, reply.data(), reply.size(), true);
+    } else if (query.query_context.query_config.output == "profile_count") {
+      auto& reply = *reinterpret_cast<ProfiledExecutionResult*>(result);
+      reply.getQueryResult().filter_time = query.filter_time;
+      reply.getQueryResult().plan_time = query.plan_time;
+      zmq::multipart_t msg;
+      msg.pushtyp<bool>(true);
+      msg.pushstr(reply.getQueryResult().toString());
+      for (auto& str : reply.getProfiledPlanStrings()) {
+        msg.pushstr(str);
+      }
+      replyToClient(query.client_addr, msg);
     } else {
       // TODO(tatiana): support other output option
       LOG(WARNING) << "Output option not implemented yet: " << query.query_context.query_config.output;

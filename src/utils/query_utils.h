@@ -61,6 +61,7 @@ struct ServerEvent {
 
 enum class CandidatePruningStrategy : uint16_t { None = 0, Adaptive, LDF, NLF, CFL, DAF, GQL, TSO };
 enum class CompressionStrategy : uint16_t { None = 0, Static, Dynamic };
+enum class QueryMode : uint16_t { Execute = 0, Profile, Explain };
 
 // TODO(tatiana): this is workaround as we do not implement the order now
 inline std::vector<QueryVertexID> getOrder(const std::string& order_str, uint32_t size) {
@@ -92,6 +93,8 @@ class QueryConfig {
       {"ldf", CandidatePruningStrategy::LDF},   {"nlf", CandidatePruningStrategy::NLF},
       {"cfl", CandidatePruningStrategy::CFL},   {"daf", CandidatePruningStrategy::DAF},
       {"gql", CandidatePruningStrategy::GQL}};
+  static inline const unordered_map<std::string, QueryMode> modes = {
+      {"execute", QueryMode::Execute}, {"profile", QueryMode::Profile}, {"explain", QueryMode::Explain}};
 
   std::string matching_order;
   CandidatePruningStrategy candidate_pruning_strategy = CandidatePruningStrategy::CFL;
@@ -100,6 +103,7 @@ class QueryConfig {
   bool use_partitioned_graph = true;
   std::string output = "count";
   uint64_t limit = ~0ull;
+  QueryMode mode = QueryMode::Execute;
 
   explicit QueryConfig(const std::string& config_str = "") {
     uint32_t tok_start = 0;
@@ -125,10 +129,17 @@ class QueryConfig {
         // TODO(tatiana): use strategy name instead of actual matching order
       } else if (key == "cs" || key == "compression_strategy") {
         validateConfig(compression_strategy, value, compression_strategies, "compression strategy");
+      } else if (key == "mode") {
+        validateConfig(mode, value, modes, "query mode");
       } else if (key == "limit") {
         limit = std::stoull(value);
+      } else if (key == "use_partitioned_graph" || key == "upg") {
+        use_partitioned_graph = value == "true" || value == "1";
+      } else if (key == "use_auxiliary_index" || key == "uai") {
+        use_auxiliary_index = value == "true" || value == "1";
+      } else if (key == "output") {
+        output = value;
       }
-      // TODO(tatiana): parse configs
     }
   }
 
@@ -185,6 +196,18 @@ struct QueryResult {
     return out << res.elapsed_execution_time << ',' << res.filter_time << ',' << res.plan_time << ','
                << res.enumerate_time << ',' << res.embedding_count << ',' << res.matching_order;
   }
+};
+
+struct ProfileInfo {
+  uint64_t total_input_size = 0;
+  uint64_t total_output_size = 0;
+  uint64_t total_num_input_subgraphs = 0;
+  uint64_t total_num_output_subgraphs = 0;
+  double total_time_in_milliseconds = 0;
+  uint64_t intersection_count = 0;
+  uint64_t total_intersection_input_size = 0;
+  uint64_t total_intersection_output_size = 0;
+  uint64_t distinct_intersection_count;
 };
 
 }  // namespace circinus

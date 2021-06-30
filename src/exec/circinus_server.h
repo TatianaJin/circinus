@@ -26,6 +26,7 @@
 
 #include "glog/logging.h"
 #include "zmq.hpp"
+#include "zmq_addon.hpp"
 
 #include "exec/candidate_pruning_plan_driver.h"
 #include "exec/executor_manager.h"
@@ -142,11 +143,23 @@ class CircinusServer {
   void prepareQuery(uint32_t query_index) {
     auto& query_state = active_queries_[query_index];
     query_state.planner = new Planner(query_state.query_context);
-    query_state.filter_start_time = std::chrono::high_resolution_clock::now();
-    // phase 1: preprocessing
-    auto plan = query_state.planner->generateCandidatePruningPlan();
-    // asynchronous execution, a CandidatePhase event will be generated when preprocessing finish
-    executor_manager_.run(query_index, &query_state.query_context, std::make_unique<CandidatePruningPlanDriver>(plan));
+    if (query_state.query_context.query_config.mode == QueryMode::Explain) {  // dry run
+      auto cardinality = query_state.planner->estimateCardinality();
+      auto plan = query_state.planner->generateExecutionPlan(&cardinality);
+      auto str = plan->toString();
+      query_state.query_context.query_config.output = "plan";
+      finishQuery(query_index, &str, "");
+    } else {  // enter actual execution phases
+      if (query_state.query_context.query_config.mode == QueryMode::Profile) {
+        query_state.query_context.query_config.output = "profile_count";
+      }
+      query_state.filter_start_time = std::chrono::high_resolution_clock::now();
+      // phase 1: preprocessing
+      auto plan = query_state.planner->generateCandidatePruningPlan();
+      // asynchronous execution, a CandidatePhase event will be generated when preprocessing finish
+      executor_manager_.run(query_index, &query_state.query_context,
+                            std::make_unique<CandidatePruningPlanDriver>(plan));
+    }
   }
 
   /** Handles query results.
@@ -156,7 +169,9 @@ class CircinusServer {
   /**
    * Copy is incurred to copy data to zmq message buffer
    */
+  bool replyToClient(const std::string& client_addr, zmq::multipart_t& msg);
   bool replyToClient(const std::string& client_addr, const void* data, size_t size, bool success = true);
+
   inline bool replyToClient(const std::string& client_addr, const std::string& error_str) {
     if (!FLAGS_standalone || client_addr.empty()) LOG(WARNING) << error_str;
     return replyToClient(client_addr, error_str.data(), error_str.size(), false);

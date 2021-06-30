@@ -140,6 +140,20 @@ CandidatePruningPlan* Planner::updateCandidatePruningPlan(const std::vector<std:
   return &candidate_pruning_plan_;
 }
 
+std::vector<std::vector<VertexID>> Planner::estimateCardinality() const {
+  auto metadata = query_context_->graph_metadata;
+  std::vector<std::vector<VertexID>> ret;
+  ret.reserve(metadata->numPartitions());
+  if (metadata->numPartitions() > 1) {
+    for (uint32_t i = 0; i < metadata->numPartitions(); ++i) {
+      ret.emplace_back(estimateCardinalityInner(&metadata->getPartition(i)));
+    }
+  } else {
+    ret.emplace_back(estimateCardinalityInner(metadata));
+  }
+  return ret;
+}
+
 std::vector<QueryVertexID> Planner::getPartitioningQueryVertices() {
   auto& q = query_context_->query_graph;
 

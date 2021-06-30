@@ -89,26 +89,31 @@ class CircinusCommandCompleter:
     self.usage = {
       "load": ["load <pre_installed_graph_name>", "load <graph_path> <graph_name> [<load_config>]"],
       "query": ["query <graph_name> <query_path> <query_config_kvs>"],
+      "profile": ["query <graph_name> <query_path> <query_config_kvs>"],
+      "explain": ["query <graph_name> <query_path> <query_config_kvs>"],
       "shutdown": ["shutdown"]
     }
     self.recv_sock = zmq.Socket(context, zmq.PULL)
     self.client_addr = "tcp://{0}:{1}".format(socket.gethostname(), self.recv_sock.bind_to_random_port("tcp://*"))
 
   def process_cmds(self, cmds):
+    original_cmd = cmds[0]
     # complete the command
     if cmds[0] == "load":
       if len(cmds) == 2:
         cmds = [cmds[0], osp.join(cmds[1], "data_graph", "{0}.graph.bin".format(cmds[1])), cmds[1], '']
       elif len(cmds) == 3:
         cmds.append('')  # empty config
-    elif cmds[0] == "query":
-      pass
+    elif cmds[0] in ["profile","explain"]:
+      cmds[3] = "{0},mode={1}".format(cmds[3],cmds[0]) if len(cmds[3]) > 0 else "mode={0}".format(cmds[0])
+      cmds[0] = "query"
     elif cmds[0] == "exit":
       self.send_sock.send_multipart([pack(x, mode='str') for x in cmds])
       return True
     cmds.append(self.client_addr)  # print(cmds)
     # send query to server
     self.send_sock.send_multipart([pack(x, mode='str') for x in cmds])
+    cmds[0] = original_cmd
 
     # recv result
     msgs = self.recv_sock.recv_multipart()
@@ -116,7 +121,7 @@ class CircinusCommandCompleter:
     if flag:
       if cmds[0] == "load":
         print("Loaded graph in {0} seconds".format(unpack(msgs[1], 'double')))
-      if cmds[0] == "query":
+      elif cmds[0] in ["query","profile"]:
         title = ["elapsed_execution_time","filter_time","plan_time","enumerate_time","embedding_count","matching_order"]
         format_str = ""
         for i in range(len(title)):
@@ -124,6 +129,11 @@ class CircinusCommandCompleter:
         splits = unpack(msgs[1], 'str').split(',')
         print(' '.join(title))
         print(format_str.format(*splits))
+        if cmds[0] == "profile":
+          for i in range(2, len(msgs)):
+            print(unpack(msgs[i], 'str'))
+      elif cmds[0] == "explain":
+        print(unpack(msgs[1], 'str'))
     else:
       print(unpack(msgs[1]))
 

@@ -24,6 +24,7 @@
 #include "graph/candidate_set_view.h"
 #include "graph/types.h"
 #include "ops/output_operator.h"
+#include "plan/operator_tree.h"
 #include "utils/query_utils.h"
 #include "utils/utils.h"
 
@@ -33,7 +34,7 @@ class Result {
  public:
   static std::unique_ptr<Result> newCandidateResult(TaskId n_tasks);
   static std::unique_ptr<Result> newPartitionedCandidateResult(TaskId n_tasks, uint32_t n_partitions);
-  static std::unique_ptr<Result> newExecutionResult();
+  static std::unique_ptr<Result> newExecutionResult(bool profile = false);
 
   virtual ~Result() {}
 };
@@ -116,16 +117,41 @@ class ExecutionResult : public Result {
   Outputs outputs_;
 
  public:
-  ExecutionResult() : result_() {}
+  virtual ~ExecutionResult() {}
+
   inline void setCount() { result_.embedding_count = outputs_.getCount(); }
   inline void addEnumerateTime(double time) { result_.enumerate_time += time; }
   inline void setElapsedExecutionTime(double time) { result_.elapsed_execution_time = time; }
   inline void setMatchingOrder(std::string&& order) { result_.matching_order = std::move(order); }
 
   inline Outputs& getOutputs() { return outputs_; }
+  inline QueryResult& getQueryResult() { return result_; }
 
-  // TODO(tatiana): now we only consider count as output
-  void* data() { return &result_; }
+  virtual void collect(TaskBase* task) {}
+};
+
+class ProfiledExecutionResult : public ExecutionResult {
+  std::vector<ProfileInfo> profiles_;
+  std::vector<std::string> profiled_plan_str_;
+
+ public:
+  ProfiledExecutionResult(uint32_t n_profiles) : profiles_(n_profiles) {}
+
+  void setProfiledPlan(const std::vector<OperatorTree*>& op_trees) {
+    CHECK_EQ(op_trees.size(), profiles_.size());
+    auto size = op_trees.size();
+    profiled_plan_str_.resize(size);
+    for (uint32_t i = 0; i < size; ++i) {
+      // FIXME(tatiana): populate profiled_plan_str_
+    }
+  }
+
+  const auto& getProfiledPlanStrings() const { return profiled_plan_str_; }
+
+  void collect(TaskBase* task) override {
+    // FIXME(tatiana)
+    // dynamic_cast<ProfileTaskBase*>(task)
+  }
 };
 
 }  // namespace circinus

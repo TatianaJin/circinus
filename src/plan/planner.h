@@ -59,6 +59,8 @@ class Planner {
 
   CandidatePruningPlan* updateCandidatePruningPlan(const std::vector<std::vector<VertexID>>* cardinality);
 
+  std::vector<std::vector<VertexID>> estimateCardinality() const;
+
   /** Generates a subgraph matching backtracking plan.
    *
    * First, for each graph partition, an execution plan containing a matching order and a compression strategy is
@@ -79,6 +81,21 @@ class Planner {
   BacktrackingPlan* generateExecutionPlan(const std::vector<std::vector<VertexID>>*, bool multithread = true);
 
  private:
+  inline std::vector<VertexID> estimateCardinalityInner(const GraphMetadata* metadata) const {
+    std::vector<VertexID> ret;
+    ret.resize(query_context_->query_graph.getNumVertices(), metadata->getNumVertices());
+    for (uint32_t i = 0; i < query_context_->query_graph.getNumVertices(); ++i) {
+      if (metadata->hasLabelFrequency()) {
+        ret[i] = std::min(ret[i], metadata->getLabelFrequency(query_context_->query_graph.getVertexLabel(i)));
+      }
+      if (metadata->hasOutDegreeFrequency()) {
+        ret[i] = std::min(ret[i],
+                          metadata->getNumVerticesWithOutDegreeGE(query_context_->query_graph.getVertexOutDegree(i)));
+      }
+    }
+    return ret;
+  }
+
   ExecutionPlan* generateExecutionPlan(const std::vector<VertexID>& cardinality, bool multithread);
 
   /* start of interface for specifying partitioning strategy */

@@ -41,7 +41,7 @@ class ExecutionPlanDriverBase : public PlanDriver {
   void init(QueryId qid, QueryContext* query_ctx, ExecutionContext& ctx, ThreadsafeTaskQueue& task_queue) override {
     start_time_ = std::chrono::high_resolution_clock::now();
     candidate_result_.reset(dynamic_cast<CandidateResult*>(ctx.second.release()));
-    ctx.second = Result::newExecutionResult();
+    ctx.second = Result::newExecutionResult(query_ctx->query_config.mode == QueryMode::Profile);
     result_ = (ExecutionResult*)ctx.second.get();
     result_->getOutputs().init(ctx.first.getNumExecutors()).limit(query_ctx->query_config.limit);
     if (plan_->getPlans().size() == 1) {
@@ -66,7 +66,10 @@ class ExecutionPlanDriverBase : public PlanDriver {
     reset();
   }
 
-  inline void collectTaskTime(TaskBase* task) const { result_->addEnumerateTime(task->getExecutionTime()); }
+  inline void collectTaskInfo(TaskBase* task) const {
+    result_->addEnumerateTime(task->getExecutionTime());
+    result_->collect(task);
+  }
 };
 
 /** Supports partition-parallel execution.

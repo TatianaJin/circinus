@@ -15,6 +15,7 @@
 #pragma once
 
 #include <cinttypes>
+#include <iostream>
 #include <memory>
 #include <vector>
 
@@ -51,6 +52,17 @@ class CandidateScope {
 
   inline auto getType() const { return type_; }
   inline uint32_t getPartition() const { return partition_; }
+
+  void print(std::ostream& oss) const {
+    if (type_ == CandidateScopeType::All) {
+      oss << "all";
+    } else {
+      if (type_ == CandidateScopeType::Inverse) {
+        oss << '-';
+      }
+      oss << partition_;
+    }
+  }
 };
 
 }  // namespace circinus

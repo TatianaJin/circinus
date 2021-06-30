@@ -33,7 +33,10 @@ std::unique_ptr<Result> Result::newPartitionedCandidateResult(TaskId n_tasks, ui
   return std::make_unique<PartitionedCandidateResult>(n_tasks, n_partitions);
 }
 
-std::unique_ptr<Result> Result::newExecutionResult() { return std::make_unique<ExecutionResult>(); }
+std::unique_ptr<Result> Result::newExecutionResult(bool profile) {
+  if (profile) return std::make_unique<ProfiledExecutionResult>();
+  return std::make_unique<ExecutionResult>();
+}
 
 void CandidateResult::collect(TaskBase* task) {
   auto scan = dynamic_cast<ScanTask*>(task);

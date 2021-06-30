@@ -62,6 +62,46 @@ class BacktrackingPlan {
     input_operators_.push_back(std::move(op));
   }
 
+  std::string toString() const {
+    std::stringstream ss;
+    for (uint32_t i = 0; i < plans_.size(); ++i) {
+      ss << "[ Plan " << i << " ]\n";
+      plans_[i]->printPhysicalPlan(ss);
+    }
+    if (!partitioned_plans_.empty()) {
+      ss << "[ Partitions ]\n";
+    }
+    for (auto& plan : partitioned_plans_) {
+      ss << "Plan " << plan.first;
+      for (auto& scope : plan.second) {
+        ss << ' ';
+        scope.print(ss);
+      }
+      ss << '\n';
+    }
+    return ss.str();
+  }
+
+  std::string toProfileString() const {
+    std::stringstream ss;
+    for (uint32_t i = 0; i < plans_.size(); ++i) {
+      ss << "[ Plan " << i << " ]\n";
+      plans_[i]->printProfiledPlan(ss);
+    }
+    if (!partitioned_plans_.empty()) {
+      ss << "[ Partitions ]\n";
+    }
+    for (auto& plan : partitioned_plans_) {
+      ss << "Plan " << plan.first;
+      for (auto& scope : plan.second) {
+        ss << ' ';
+        scope.print(ss);
+      }
+      ss << '\n';
+    }
+    return ss.str();
+  }
+
   // TODO(tatiana): deprecate the function
   inline bool inputsAreKeys(uint32_t plan_idx = 0) const { return plans_[plan_idx]->inputAreKeys(); }
 

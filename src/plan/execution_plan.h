@@ -94,6 +94,17 @@ class ExecutionPlan {
     printOperatorChain(operators_.root());
   }
 
+  void printPhysicalPlan(std::ostream& oss) const {
+    if (operators_.empty()) return;
+    uint32_t op_idx = 0;
+    auto op = operators_.root();
+    while (op != nullptr) {
+      oss << op_idx << "," << op->toString() << std::endl;
+      ++op_idx;
+      op = op->getNext();
+    }
+  }
+
   void printProfiledPlan(std::ostream& oss) const {
     if (operators_.empty()) return;
     uint32_t op_idx = 0;

@@ -18,6 +18,7 @@
 #include <utility>
 
 #include "exec/plan_driver.h"
+#include "exec/profile_task.h"
 #include "exec/result.h"
 #include "exec/traverse_task.h"
 #include "plan/execution_plan.h"
@@ -35,16 +36,22 @@ void ExecutionPlanDriver::init(QueryId qid, QueryContext* query_ctx, ExecutionCo
   for (uint32_t i = 0; i < n_plans; ++i) {
     auto plan_idx = plan_->getPartitionedPlan(i).first;
     plan_->getOperatorTree(plan_idx).setOutput(&result_->getOutputs());  // all plans share the same output
-    task_queue.putTask(new TraverseTask(qid, i, ctx.first.getBatchSize(), plan_->getOperatorTree(plan_idx),
-                                        plan_->getInputOperator(plan_idx, *query_ctx->graph_metadata, ctx.first),
-                                        plan_->getPartitionedPlan(i).second, query_ctx->data_graph,
-                                        candidate_result_.get()));
+    auto input_operator = plan_->getInputOperator(plan_idx, *query_ctx->graph_metadata, ctx.first);
+    if (query_ctx->query_config.mode == QueryMode::Profile) {
+      task_queue.putTask(new ProfileTask<TraverseTask>(
+          qid, i, ctx.first.getBatchSize(), plan_->getOperatorTree(plan_idx), std::move(input_operator),
+          plan_->getPartitionedPlan(i).second, query_ctx->data_graph, candidate_result_.get()));
+    } else {
+      task_queue.putTask(new TraverseTask(qid, i, ctx.first.getBatchSize(), plan_->getOperatorTree(plan_idx),
+                                          std::move(input_operator), plan_->getPartitionedPlan(i).second,
+                                          query_ctx->data_graph, candidate_result_.get()));
+    }
   }
 }
 
 void ExecutionPlanDriver::taskFinish(TaskBase* task, ThreadsafeTaskQueue* task_queue,
                                      ThreadsafeQueue<ServerEvent>* reply_queue) {
-  collectTaskTime(task);
+  collectTaskInfo(task);
   if (--task_counters_[task->getTaskId()] == 0 && ++n_finished_tasks_ == task_counters_.size()) {
     // TODO(tatiana): now we only consider count as output
     finishPlan(reply_queue);
@@ -61,9 +68,15 @@ void MatchingParallelExecutionPlanDriver::init(QueryId qid, QueryContext* query_
     task_counters_.push_back(1);
 
     // TODO(tatiana): replace plan_->getInputCandidateIndex() and plan_->inputsAreKeys() with an input operator
-    task_queue.putTask(new TraverseChainTask(qid, 0, ctx.first.getBatchSize(), plan_->getOperatorTree(),
-                                             (const Graph*)query_ctx->data_graph, candidate_result_->getCandidates(),
-                                             plan_->getInputCandidateIndex(), plan_->inputsAreKeys()));
+    if (query_ctx->query_config.mode == QueryMode::Profile) {
+      task_queue.putTask(new ProfileTask<TraverseChainTask>(
+          qid, 0, ctx.first.getBatchSize(), plan_->getOperatorTree(), (const Graph*)query_ctx->data_graph,
+          candidate_result_->getCandidates(), plan_->getInputCandidateIndex(), plan_->inputsAreKeys()));
+    } else {
+      task_queue.putTask(new TraverseChainTask(qid, 0, ctx.first.getBatchSize(), plan_->getOperatorTree(),
+                                               (const Graph*)query_ctx->data_graph, candidate_result_->getCandidates(),
+                                               plan_->getInputCandidateIndex(), plan_->inputsAreKeys()));
+    }
     return;
   }
   // init task counter for root and put tasks to task queue
@@ -84,7 +97,7 @@ void MatchingParallelExecutionPlanDriver::init(QueryId qid, QueryContext* query_
 
 void MatchingParallelExecutionPlanDriver::taskFinish(TaskBase* task, ThreadsafeTaskQueue* task_queue,
                                                      ThreadsafeQueue<ServerEvent>* reply_queue) {
-  collectTaskTime(task);
+  collectTaskInfo(task);
   if (--task_counters_[task->getTaskId()] == 0 && ++n_finished_tasks_ == task_counters_.size()) {
     // TODO(tatiana): now we only consider count as output
     finishPlan(reply_queue);
