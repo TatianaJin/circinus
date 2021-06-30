@@ -60,6 +60,10 @@ class ExecutionPlanDriver : public ExecutionPlanDriverBase {
 /** Alternative to ExecutionPlanDriver, supports matching-parallel execution.
  */
 class MatchingParallelExecutionPlanDriver : public ExecutionPlanDriverBase {
+
+ private:
+  uint32_t batch_size_;
+
  public:
   explicit MatchingParallelExecutionPlanDriver(BacktrackingPlan* plan) : ExecutionPlanDriverBase(plan) {}
 

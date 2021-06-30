@@ -47,17 +47,16 @@ class ExpandIntoOperator : public TraverseOperator {
         query_vertex_indices_(query_vertex_indices),
         key_parents_(prev_key_parents) {}
 
-  uint32_t expand(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size) override {
-    return expandInner<QueryType::Execute>(outputs, batch_size);
+  uint32_t expand(uint32_t batch_size, TraverseContext* ctx) const override {
+    return expandInner<QueryType::Execute>(batch_size, ctx);
   }
 
-  uint32_t expandAndProfileInner(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size,
-                                 uint32_t query_type) override {
+  uint32_t expandAndProfileInner(uint32_t batch_size, uint32_t query_type, TraverseContext* ctx) const override {
     if (query_type == 1) {
-      return expandInner<QueryType::Profile>(outputs, batch_size);
+      return expandInner<QueryType::Profile>(batch_size, ctx);
     } else {
       CHECK_EQ(query_type, 2) << "unknown query type " << query_type;
-      return expandInner<QueryType::ProfileWithMiniIntersection>(outputs, batch_size);
+      return expandInner<QueryType::ProfileWithMiniIntersection>(batch_size, ctx);
     }
   }
 
@@ -103,7 +102,7 @@ class ExpandIntoOperator : public TraverseOperator {
 
  protected:
   template <QueryType profile>
-  inline uint32_t expandInner(std::vector<CompressedSubgraphs>* outputs, uint32_t batch_size) {
+  inline uint32_t expandInner(uint32_t batch_size, TraverseContext* ctx) const {
     uint32_t output_num = 0;
     // for profiling distinct si count, consider the cost as expanding from all parents of the current target without
     // compression
@@ -113,14 +112,14 @@ class ExpandIntoOperator : public TraverseOperator {
         parent_tuple.resize(key_parents_.size() + parents_.size());
         parent_tuple_sets_.resize(parents_.size());
       }
-    while (input_index_ < current_inputs_->size()) {
-      auto input = (*current_inputs_)[input_index_];
+    while (ctx->hasNextInput()) {
+      auto input = ctx->getCurrentInput();
       auto key_vertex_id = input.getKeyVal(query_vertex_indices_[target_vertex_]);
-      auto key_neighbors = ((G*)current_data_graph_)->getInNeighborsWithHint(key_vertex_id, ALL_LABEL, 0);
+      auto key_out_neighbors = ((G*)(ctx->current_data_graph))->getOutNeighborsWithHint(key_vertex_id, 0, 0);
       bool add = true;
       if
         constexpr(isProfileMode(profile)) {
-          total_num_input_subgraphs_ += (*current_inputs_)[input_index_].getNumSubgraphs();
+          ctx->total_num_input_subgraphs += ctx->getCurrentInput().getNumSubgraphs();
           if
             constexpr(isProfileWithMiniIntersectionMode(profile)) {
               unordered_set<VertexID> prefix_set;
@@ -144,7 +143,7 @@ class ExpandIntoOperator : public TraverseOperator {
                   }
                   auto pidx = depth + key_parents_.size();
                   parent_tuple[pidx] = parent_vid;
-                  distinct_intersection_count_ +=
+                  ctx->distinct_intersection_count +=
                       parent_tuple_sets_[depth]
                           .emplace((char*)parent_tuple.data(), (pidx + 1) * sizeof(VertexID))
                           .second;
@@ -180,7 +179,7 @@ class ExpandIntoOperator : public TraverseOperator {
         uint32_t id = query_vertex_indices_[vid];
         if
           constexpr(!std::is_same<G, Graph>::value) {
-            key_neighbors = ((G*)current_data_graph_)->getInNeighborsWithHint(key_vertex_id, ALL_LABEL, parent_idx);
+            key_out_neighbors = ((G*)(ctx->current_data_graph))->getOutNeighborsWithHint(key_vertex_id, 0, parent_idx);
           }
         intersect(*(input.getSet(id)), key_neighbors, &new_set);
         if
@@ -216,7 +215,7 @@ class ExpandIntoOperator : public TraverseOperator {
         outputs->emplace_back(std::move(input));
         output_num++;
       }
-      input_index_++;
+      ctx->getInputIndex()++;
 
       if (output_num >= batch_size) {
         break;
