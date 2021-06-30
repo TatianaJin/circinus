@@ -71,7 +71,7 @@ void ExecutorManager::ExecutorPool::start(ThreadsafeTaskQueue* task_queue,
         if (task == nullptr) {
           break;
         }
-        task->run();
+        task->runWithTiming();
         finished_task->push(std::move(task));
       }
     }));

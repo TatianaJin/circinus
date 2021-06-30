@@ -16,6 +16,8 @@
 
 #include <string>
 
+#include "utils/utils.h"
+
 namespace circinus {
 
 class Operator {
@@ -32,7 +34,7 @@ class Operator {
   inline void setNext(Operator* next) { next_ = next; }
   inline Operator* getNext() const { return next_; }
 
-  virtual std::string toString() const { return "Operator"; }
+  virtual std::string toString() const { return getTypename(*this); }
 
   virtual std::string toProfileString() const { return toString(); }
 

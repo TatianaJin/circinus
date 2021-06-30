@@ -49,8 +49,7 @@ class ScanTask : public TaskBase {
   inline ScanContext& getScanContext() { return scan_context_; }
   inline uint32_t getPartition() const { return partition_; }
 
-  // FIXME(tatiana)
-  const Graph* getDataGraph() const override { return dynamic_cast<const Graph*>(graph_); }
+  const GraphBase* getDataGraph() const override { return graph_; }
 
   void run() override {
     if (partition_ == ~0u) {

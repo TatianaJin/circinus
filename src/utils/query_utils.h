@@ -117,6 +117,7 @@ class QueryConfig {
         ++i;
       }
       std::string value(config_str.data() + tok_start, i - tok_start);
+      tok_start = i + 1;
       if (key == "cps" || key == "candidate_pruning_strategy") {
         validateConfig(candidate_pruning_strategy, value, candidate_pruning_strategies, "candidate pruning strategy");
       } else if (key == "mo" || key == "matching_order") {

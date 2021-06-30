@@ -44,11 +44,10 @@ void ExecutionPlanDriver::init(QueryId qid, QueryContext* query_ctx, ExecutionCo
 
 void ExecutionPlanDriver::taskFinish(TaskBase* task, ThreadsafeTaskQueue* task_queue,
                                      ThreadsafeQueue<ServerEvent>* reply_queue) {
+  collectTaskTime(task);
   if (--task_counters_[task->getTaskId()] == 0 && ++n_finished_tasks_ == task_counters_.size()) {
     // TODO(tatiana): now we only consider count as output
-    result_->setCount();
-    reply_queue->push(std::move(*finish_event_));
-    reset();
+    finishPlan(reply_queue);
   }
 }
 
@@ -85,11 +84,10 @@ void MatchingParallelExecutionPlanDriver::init(QueryId qid, QueryContext* query_
 
 void MatchingParallelExecutionPlanDriver::taskFinish(TaskBase* task, ThreadsafeTaskQueue* task_queue,
                                                      ThreadsafeQueue<ServerEvent>* reply_queue) {
+  collectTaskTime(task);
   if (--task_counters_[task->getTaskId()] == 0 && ++n_finished_tasks_ == task_counters_.size()) {
     // TODO(tatiana): now we only consider count as output
-    result_->setCount();
-    reply_queue->push(std::move(*finish_event_));
-    reset();
+    finishPlan(reply_queue);
   }
   // TODO(tatiana)
   auto matching_parallel_task = dynamic_cast<MatchingParallelTask*>(task);

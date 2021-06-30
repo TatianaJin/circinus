@@ -20,6 +20,7 @@
 #include "graph/compressed_subgraphs.h"
 #include "graph/graph.h"
 #include "utils/query_utils.h"
+#include "utils/utils.h"
 
 namespace circinus {
 
@@ -27,6 +28,7 @@ class TaskBase {
  private:
   uint16_t query_id_;
   uint16_t task_id_;
+  double time_ = 0;
 
  public:
   TaskBase(QueryId query_id, TaskId task_id) : query_id_(query_id), task_id_(task_id) {}
@@ -43,6 +45,14 @@ class TaskBase {
   virtual const GraphBase* getDataGraph() const = 0;
   virtual void run() = 0;
   virtual void profile() { run(); }
+
+  inline void runWithTiming() {
+    auto start = std::chrono::high_resolution_clock::now();
+    run();
+    time_ += toSeconds(start, std::chrono::high_resolution_clock::now());
+  }
+
+  inline double getExecutionTime() const { return time_; }
 };
 
 }  // namespace circinus
