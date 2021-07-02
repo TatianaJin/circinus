@@ -55,7 +55,7 @@ class ExecutionPlanDriverBase : public PlanDriver {
     }
 
     finish_event_ = std::make_unique<ServerEvent>(ServerEvent::ExecutionPhase);
-    finish_event_->data = result_->data();
+    finish_event_->data = &result_->getQueryResult();
     finish_event_->query_id = qid;
   }
 
@@ -86,7 +86,6 @@ class ExecutionPlanDriver : public ExecutionPlanDriverBase {
 /** Alternative to ExecutionPlanDriver, supports matching-parallel execution.
  */
 class MatchingParallelExecutionPlanDriver : public ExecutionPlanDriverBase {
-
  private:
   uint32_t batch_size_;
 

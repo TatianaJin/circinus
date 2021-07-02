@@ -207,7 +207,14 @@ struct ProfileInfo {
   uint64_t intersection_count = 0;
   uint64_t total_intersection_input_size = 0;
   uint64_t total_intersection_output_size = 0;
-  uint64_t distinct_intersection_count;
+  /** The minimal number of intersection needed if all intersection function call results can be cached */
+  uint64_t distinct_intersection_count = 0;
+
+  void updateIntersectInfo(uint32_t input_size, uint32_t output_size) {
+    ++intersection_count;
+    total_intersection_input_size += input_size;
+    total_intersection_output_size += output_size;
+  }
 };
 
 }  // namespace circinus

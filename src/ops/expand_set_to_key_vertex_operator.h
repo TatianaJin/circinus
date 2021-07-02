@@ -24,6 +24,7 @@
 
 #include "graph/query_graph.h"
 #include "ops/expand_vertex_operator.h"
+#include "ops/expand_vertex_traverse_context.h"
 #include "ops/types.h"
 #include "utils/hashmap.h"
 
@@ -31,8 +32,6 @@ namespace circinus {
 
 template <typename G>
 class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
-  std::vector<unordered_set<std::string>> parent_tuple_sets_;
-
  public:
   ExpandSetToKeyVertexOperator(const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
                                const unordered_map<QueryVertexID, uint32_t>& query_vertex_indices,
@@ -59,11 +58,6 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
     ss << "ExpandSetToKeyVertexOperator";
     toStringInner(ss);
     return ss.str();
-  }
-
-  Operator* clone() const override {
-    // TODO(tatiana): for now next_ is not handled because it is only used for printing plan
-    return new ExpandSetToKeyVertexOperator(*this);
   }
 
  protected:
@@ -95,8 +89,6 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
   // TODO(tatiana): see if hard limit on output size is needed
   template <QueryType profile>
   inline uint32_t expandInner(uint32_t batch_size, TraverseContext* ctx) const {
-    if
-      constexpr(isProfileWithMiniIntersectionMode(profile)) { parent_tuple_sets_.resize(parents_.size()); }
     uint32_t output_num = 0;
     while (ctx->hasNextInput()) {
       auto[min_parent_set_size, min_parent_vertex, min_parent_idx] = getMinimumParent();
@@ -113,7 +105,7 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
         constexpr(isProfileMode(profile)) {
           ctx->total_num_input_subgraphs += ctx->getCurrentInput().getNumSubgraphs();
         }
-      ctx->getInputIndex()++;
+      ctx->nextInput();
       if (output_num >= batch_size) {
         break;
       }
@@ -122,7 +114,7 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
   }
 
   template <QueryType profile>
-   uint32_t fromCandidateStrategy(TraverseContext* ctx) const {
+  uint32_t fromCandidateStrategy(TraverseContext* ctx) const {
     auto& input = ctx->getCurrentInput();
     uint32_t output_num = 0;
     auto exceptions = input.getExceptions(same_label_key_indices_, same_label_set_indices_);
@@ -152,7 +144,8 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
         if
           constexpr(
               !std::is_same<G, Graph>::value) {  // if using graph view, select neighbors from the right graph part
-            key_out_neighbors = ((G*)(ctx->current_data_graph))->getOutNeighborsWithHint(key_vertex_id, ALL_LABEL, parent_idx);
+            key_out_neighbors =
+                ((G*)(ctx->current_data_graph))->getOutNeighborsWithHint(key_vertex_id, ALL_LABEL, parent_idx);
           }
         intersect(*input.getSet(id), key_out_neighbors, &new_set);  // No need for exceptions
         if
@@ -191,7 +184,7 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
   }
 
   template <QueryType profile>
-   uint32_t fromSetNeighborStrategy(QueryVertexID min_parent, uint32_t min_parent_idx, TraverseContext* ctx) const {
+  uint32_t fromSetNeighborStrategy(QueryVertexID min_parent, uint32_t min_parent_idx, TraverseContext* ctx) const {
     unordered_set<VertexID> visited;
     auto& input = ctx->getCurrentInput();
     uint32_t output_num = 0;
@@ -276,7 +269,7 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
 
   /** Calculate the ideal si count as if we expand parent 1, 2, ... n for n = parents_.size() in normal backtracing
    * implementation. */
-  void updateDistinctSICount(TraverseContext* ctx) const {
+  void updateDistinctSICount(ExpandVertexTraverseContext* ctx) const {
     auto& input = ctx->getCurrentInput();
     std::vector<std::vector<VertexID>*> parent_set_ptrs;
     parent_set_ptrs.reserve(parents_.size());
@@ -295,8 +288,7 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
           continue;
         }
         parent_tuple[depth] = parent_vid;
-        ctx->distinct_intersection_count +=
-            parent_tuple_sets_[depth].emplace((char*)parent_tuple.data(), (depth + 1) * sizeof(VertexID)).second;
+        ctx->updateDistinctSICount(depth, parent_tuple, depth);
         if (depth == last_depth) {
           ++set_index[depth];
         } else {

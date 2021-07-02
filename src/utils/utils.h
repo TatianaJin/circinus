@@ -130,6 +130,13 @@ static inline uint64_t getNumSubgraphs(const std::vector<CompressedSubgraphs>& g
   return count;
 }
 
+inline void removeExceptions(const VertexSetView& set, std::vector<VertexID>* res,
+                             const unordered_set<VertexID>& except = {}) {
+  for (auto vid : set) {
+    if (except.count(vid) == 0) res->emplace_back(vid);
+  }
+}
+
 #ifdef __GNUG__
 #include <cxxabi.h>
 #include <cstdlib>

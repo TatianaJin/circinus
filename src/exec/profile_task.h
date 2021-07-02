@@ -14,33 +14,27 @@
 
 #pragma once
 
-#include <string>
-
-#include "utils/utils.h"
+#include "exec/task.h"
 
 namespace circinus {
 
-class Operator {
- private:
-  Operator* next_ = nullptr;
+class ProfileTaskBase {
+ public:
+  // FIXME(tatiana)
+};
 
- protected:
-  uint32_t parallelism_;
+template <typename T>
+class ProfileTask : public TaskBase, public ProfileTaskBase {
+  static_assert(std::is_base_of<TaskBase, T>::value, "T should inherit from TaskBase");
+  T task_;
 
  public:
-  explicit Operator(uint32_t parallelism = 1) : parallelism_(parallelism) {}
-  virtual ~Operator() {}
+  template <typename... Args>
+  ProfileTask(Args... args) : task_(args...) {}
 
-  inline void setNext(Operator* next) { next_ = next; }
-  inline Operator* getNext() const { return next_; }
+  void run() override { task_.profile(); }
 
-  virtual std::string toString() const { return getTypename(*this); }
-
-  virtual std::string toProfileString() const { return toString(); }
-
-  inline uint32_t getParallelism() const { return parallelism_; }
-
-  inline void setParallelism(uint32_t parallelism) { parallelism_ = parallelism; }
+  const GraphBase* getDataGraph() const override { return task_.getDataGraph(); }
 };
 
 }  // namespace circinus

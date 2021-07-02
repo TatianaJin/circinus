@@ -6,7 +6,7 @@
 //
 // http://www.apache.org/licenses/LICENSE-2.0
 //
-// Unless required by applicable law or agetCurrentInput()cgreed to in writing, software
+// Unless required by applicable law or agreed to in writing, software
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
@@ -21,9 +21,30 @@
 #include "graph/types.h"
 #include "ops/filters/subgraph_filter.h"
 #include "ops/traverse_operator.h"
+#include "ops/types.h"
 #include "utils/hashmap.h"
 
 namespace circinus {
+
+class ExpandEdgeTraverseContext : public TraverseContext {
+  unordered_set<VertexID> parent_set_;  // for profile
+
+ public:
+  template <QueryType profile>
+  inline void updateIntersection(uint32_t input_size, uint32_t output_size, VertexID parent) {
+    if
+      constexpr(isProfileMode(profile)) {
+        if
+          constexpr(isProfileWithMiniIntersectionMode(profile)) {
+            distinct_intersection_count += parent_set_.insert(parent).second;
+          }
+        total_intersection_input_size += input_size;
+        total_intersection_output_size += output_size;
+      }
+  }
+
+  inline bool hasIntersectionParent(VertexID parent_match) { return parent_set_.insert(parent_match).second; }
+};
 
 class ExpandEdgeOperator : public TraverseOperator {
  protected:

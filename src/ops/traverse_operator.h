@@ -14,12 +14,10 @@
 
 #pragma once
 
-#include <algorithm>
 #include <chrono>
 #include <fstream>
 #include <memory>
 #include <string>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -32,54 +30,44 @@
 #include "graph/types.h"
 #include "ops/filters/subgraph_filter.h"
 #include "ops/operator.h"
-#include "ops/types.h"
-#include "utils/hashmap.h"
+#include "utils/query_utils.h"
 #include "utils/utils.h"
 
 namespace circinus {
 
-inline void removeExceptions(const VertexSetView& set, std::vector<VertexID>* res,
-                             const unordered_set<VertexID>& except = {}) {
-  for (auto vid : set) {
-    if (except.count(vid) == 0) res->emplace_back(vid);
-  }
-}
+class TraverseContext : public ProfileInfo {
+ private:
+  uint32_t input_index_ = 0;
+  uint32_t input_end_index_ = 0;
+  const std::vector<CompressedSubgraphs>* current_inputs_ = nullptr;
 
-struct TraverseContext {
-  /* transient variables for recording the current inputs */
+ public:
   const void* current_data_graph = nullptr;
-
-  uint32_t current_inputs_size = 0;
   std::vector<CompressedSubgraphs>* outputs;
 
-  /* for profiling */
-  uint64_t total_input_size = 0;
-  uint64_t total_output_size = 0;
-  uint64_t total_num_input_subgraphs = 0;
-  uint64_t total_num_output_subgraphs = 0;
-  double total_time_in_milliseconds = 0;
+  TraverseContext(uint32_t input_index, uint32_t input_end_index, const std::vector<CompressedSubgraphs>* inputs,
+                  const void* data_graph)
+      : input_index_(input_index),
+        input_end_index_(input_end_index),
+        current_inputs_(inputs),
+        current_data_graph(data_graph) {}
 
-  // to be updated in derived class
-  uint64_t intersection_count = 0;
-  uint64_t total_intersection_input_size = 0;
-  uint64_t total_intersection_output_size = 0;
-  uint64_t distinct_intersection_count =
-      0;  // the minimal number of intersection needed if all intersection function call results can be cached
+  virtual ~TraverseContext() {}
 
-  inline CompressedSubgraphs const& getCurrentInput() {return (*current_inputs_)[input_index_];}
-  inline CompressedSubgraphs const& getPreviousInput() {return (*current_inputs_)[input_index_-1];}
-  inline bool hasNextInput() {return input_index_ < input_end_index_;}
-  inline uint32_t& getInputIndex() {input_index_;}
-  inline setInputIndex(uint32_t input_index) {input_index_ = input_index;}
-  inline setInputEndIndex(uint32_t input_end_index) {input_end_index_ = input_end_index;}
-  inline setCurrentInputs(td::vector<CompressedSubgraphs>* current_inputs) {current_inputs_ = current_inputs;}
-  inline uint32_t getTotalInputSize() {return total_input_size_ - (current_inputs_size - input_index_);}
-  
-  private:
-    uint32_t input_index_;
-    uint32_t input_end_index_;
-    const std::vector<CompressedSubgraphs>* current_inputs_ = nullptr;
-}
+  inline const CompressedSubgraphs& getCurrentInput() const { return (*current_inputs_)[input_index_]; }
+  inline const CompressedSubgraphs& getPreviousInput() const { return (*current_inputs_)[input_index_ - 1]; }
+  inline bool hasNextInput() const { return input_index_ < input_end_index_; }
+  inline uint32_t getInputIndex() const { return input_index_; }
+  inline uint32_t getTotalInputSize() const { return total_input_size - (input_end_index_ - input_index_); }
+
+  inline void nextInput() { ++input_index_; }
+  // FIXME(tatiana): replace with initialization in constructor
+  inline void setInputIndex(uint32_t input_index) { input_index_ = input_index; }
+  inline void setInputEndIndex(uint32_t input_end_index) { input_end_index_ = input_end_index; }
+  inline void setCurrentInputs(const std::vector<CompressedSubgraphs>* current_inputs) {
+    current_inputs_ = current_inputs;
+  }
+};
 
 class TraverseOperator : public Operator {
  protected:
@@ -107,31 +95,29 @@ class TraverseOperator : public Operator {
         subgraph_filter_(filter) {}
   virtual ~TraverseOperator() {}
 
+  /* setters */
   inline virtual void setCandidateSets(const CandidateSetView* candidates) { candidates_ = candidates; }
-  inline const CandidateSetView* getCandidateSet() const { return candidates_; }
-  inline const uint32_t getInputIndex() const { return input_index_; }
-  inline const auto& getSameLabelKeyIndices() const { return same_label_key_indices_; }
-  inline const auto& getSameLabelSetIndices() const { return same_label_set_indices_; }
-  inline auto getSetPruningThreshold() const { return set_pruning_threshold_; }
-  inline QueryVertexID getTargetQueryVertex() const { return target_vertex_; }
-
-  inline const auto& getMatchingOrderIndices() const { return matching_order_indices_; }
   inline void setMatchingOrderIndices(std::vector<std::pair<bool, uint32_t>>&& matching_order_indices) {
     matching_order_indices_ = std::move(matching_order_indices);
   }
 
-  inline bool filter(const CompressedSubgraphs& subgraphs) {
+  /* getters */
+  inline const CandidateSetView* getCandidateSet() const { return candidates_; }
+  inline const auto& getSameLabelKeyIndices() const { return same_label_key_indices_; }
+  inline const auto& getSameLabelSetIndices() const { return same_label_set_indices_; }
+  inline auto getSetPruningThreshold() const { return set_pruning_threshold_; }
+  inline QueryVertexID getTargetQueryVertex() const { return target_vertex_; }
+  inline const auto& getMatchingOrderIndices() const { return matching_order_indices_; }
+
+  inline bool filter(const CompressedSubgraphs& subgraphs) const {
     DCHECK(subgraph_filter_ != nullptr);
     return subgraph_filter_->filter(subgraphs);
   }
 
-  inline uint32_t filter(std::vector<CompressedSubgraphs>& subgraphs, uint32_t start, uint32_t end) {
+  inline uint32_t filter(std::vector<CompressedSubgraphs>& subgraphs, uint32_t start, uint32_t end) const {
     DCHECK(subgraph_filter_ != nullptr);
     return subgraph_filter_->filter(subgraphs, start, end);
   }
-
-  virtual std::vector<std::unique_ptr<BipartiteGraph>> computeBipartiteGraphs(
-      const Graph* g, const std::vector<CandidateSetView>& candidate_sets) = 0;
 
   // for backward compabilitity of tests
   inline std::vector<std::unique_ptr<BipartiteGraph>> computeBipartiteGraphs(
@@ -140,31 +126,34 @@ class TraverseOperator : public Operator {
     return computeBipartiteGraphs(g, views);
   }
 
+  virtual std::vector<std::unique_ptr<BipartiteGraph>> computeBipartiteGraphs(
+      const Graph* g, const std::vector<CandidateSetView>& candidate_sets) = 0;
+
   virtual std::vector<std::unique_ptr<GraphPartitionBase>> computeGraphPartitions(
       const ReorderedPartitionedGraph* g, const std::vector<CandidateScope>& candidate_scopes) const = 0;
 
-  virtual void input(const std::vector<CompressedSubgraphs>& inputs, uint32_t input_index, 
-                      uint32_t input_end_index, const void* data_graph, TraverseContext* ctx) const {
+  virtual void input(const std::vector<CompressedSubgraphs>& inputs, uint32_t input_index, uint32_t input_end_index,
+                     const void* data_graph, TraverseContext* ctx) const {
     ctx->setCurrentInputs(&inputs);
     ctx->setInputIndex(input_index);
     ctx->setInputEndIndex(input_end_index);
-    ctx->setCurrentInputs(data_graph); 
+    ctx->current_data_graph =
+        data_graph;  // FIXME(tatiana): directly set in context instead of repeatedly set in input()?
   }
 
   virtual uint32_t expand(uint32_t cap, TraverseContext* ctx) const = 0;
 
-  virtual void inputAndProfile(const std::vector<CompressedSubgraphs>& inputs, uint32_t input_index, 
-                      uint32_t input_end_index, const void* data_graph, TraverseContext* ctx) const {
+  virtual void inputAndProfile(const std::vector<CompressedSubgraphs>& inputs, uint32_t input_index,
+                               uint32_t input_end_index, const void* data_graph, TraverseContext* ctx) const {
     input(inputs, input_index, input_end_index, data_graph, ctx);
-    ctx->current_inputs_size = (input_end_index - input_index));
-    ctx->total_input_size += ctx->current_inputs_size;
+    ctx->total_input_size += (input_end_index - input_index);
   }
 
   uint32_t expandAndProfile(uint32_t cap, uint32_t query_type, TraverseContext* ctx) const {
     auto start = std::chrono::high_resolution_clock::now();
     auto n = expandAndProfileInner(cap, query_type, ctx);
     auto stop = std::chrono::high_resolution_clock::now();
-    total_time_in_milliseconds_ +=
+    ctx->total_time_in_milliseconds +=
         (std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start).count() / 1000000.0);
     {
       uint32_t size = 0;
@@ -193,24 +182,18 @@ class TraverseOperator : public Operator {
     return n;
   }
 
-  void updateIntersectInfo(uint32_t input_size, uint32_t output_size, TraverseContext* ctx) const {
-    ++ctx->intersection_count;
-    ctx->total_intersection_input_size += input_size;
-    ctx->total_intersection_output_size += output_size;
-  }
-
-  std::string toProfileString(TraverseContext* ctx) const override {
+  // FIXME(tatiana): profile info interface
+  std::string toProfileString(TraverseContext* ctx) const {
     std::stringstream ss;
-    ss << toString() << ',' << ctx->total_time_in_milliseconds << ',' << getTotalInputSize() << ',' << ctx->total_output_size
-       << ',' << ctx->total_num_input_subgraphs << ',' << ctx->total_num_output_subgraphs << ',' << ctx->intersection_count << ','
-       << ctx->total_intersection_input_size << ',' << ctx->total_intersection_output_size << ','
-       << ctx->distinct_intersection_count;
+    ss << toString() << ',' << ctx->total_time_in_milliseconds << ',' << ctx->getTotalInputSize() << ','
+       << ctx->total_output_size << ',' << ctx->total_num_input_subgraphs << ',' << ctx->total_num_output_subgraphs
+       << ',' << ctx->intersection_count << ',' << ctx->total_intersection_input_size << ','
+       << ctx->total_intersection_output_size << ',' << ctx->distinct_intersection_count;
     return ss.str();
   }
 
  protected:
   virtual uint32_t expandAndProfileInner(uint32_t cap, uint32_t query_type, TraverseContext* ctx) const = 0;
-  inline uint32_t getTotalInputSize(TraverseContext* ctx) const {return ctx->getTotalInputSize();}
 };
 
 }  // namespace circinus

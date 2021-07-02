@@ -22,6 +22,7 @@
 
 #include "graph/types.h"
 #include "ops/expand_vertex_operator.h"
+#include "ops/expand_vertex_traverse_context.h"
 #include "ops/types.h"
 #include "utils/hashmap.h"
 
@@ -29,8 +30,6 @@ namespace circinus {
 
 template <typename G, bool intersect_candidates = true>
 class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
-  std::vector<unordered_set<std::string>> parent_tuple_sets_;
-
  public:
   ExpandKeyToKeyVertexOperator(const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
                                const unordered_map<QueryVertexID, uint32_t>& query_vertex_indices,
@@ -41,15 +40,15 @@ class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
                              same_label_set_indices, set_pruning_threshold, filter) {}
 
   uint32_t expand(uint32_t batch_size, TraverseContext* ctx) const override {
-    return expandInner<QueryType::Execute>(batch_size, ctx);
+    return expandInner<QueryType::Execute>(batch_size, (ExpandVertexTraverseContext*)ctx);
   }
 
   uint32_t expandAndProfileInner(uint32_t batch_size, uint32_t query_type, TraverseContext* ctx) const override {
     if (query_type == 1) {
-      return expandInner<QueryType::Profile>(batch_size, ctx);
+      return expandInner<QueryType::Profile>(batch_size, (ExpandVertexTraverseContext*)ctx);
     }
     CHECK_EQ(query_type, 2) << "unknown query type " << query_type;
-    return expandInner<QueryType::ProfileWithMiniIntersection>(batch_size, ctx);
+    return expandInner<QueryType::ProfileWithMiniIntersection>(batch_size, (ExpandVertexTraverseContext*)ctx);
   }
 
   std::string toString() const override {
@@ -59,16 +58,9 @@ class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
     return ss.str();
   }
 
-  Operator* clone() const override {
-    // TODO(tatiana): for now next_ is not handled because it is only used for printing plan
-    return new ExpandKeyToKeyVertexOperator(*this);
-  }
-
  protected:
   template <QueryType profile>
-  inline uint32_t expandInner(uint32_t batch_size, TraverseContext* ctx) const {
-    if
-      constexpr(isProfileWithMiniIntersectionMode(profile)) { parent_tuple_sets_.resize(parents_.size()); }
+  inline uint32_t expandInner(uint32_t batch_size, ExpandVertexTraverseContext* ctx) const {
     auto data_graph = (G*)(ctx->current_data_graph);
     uint32_t output_num = 0;
     while (ctx->hasNextInput()) {
@@ -113,8 +105,7 @@ class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
               for (uint32_t i = 0; i < parents_.size(); ++i) {
                 uint32_t key_vid = input.getKeyVal(query_vertex_indices_[parents_[i]]);
                 parent_tuple[i] = key_vid;
-                ctx->distinct_intersection_count +=
-                    parent_tuple_sets_[i].emplace((char*)parent_tuple.data(), (i + 1) * sizeof(VertexID)).second;
+                ctx->updateDistinctSICount(i, parent_tuple, i);
               }
             }
         }
@@ -131,7 +122,7 @@ class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
           ++output_num;
         }
       }
-      ++ctx->getInputIndex();
+      ctx->nextInput();
       if (output_num >= batch_size) {
         break;
       }
