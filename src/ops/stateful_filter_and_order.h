@@ -81,7 +81,7 @@ using circinus::NeighborhoodFilter;
 using circinus::NLFFilter;
 using circinus::GQLFilter;
 namespace circinus {
-class FilterAndOrder {
+class StatefulFilterAndOrder {
  private:
   std::unique_ptr<LogicalNeighborhoodFilter> logical_filter_;
   std::map<std::pair<QueryVertexID, QueryVertexID>, BipartiteGraph> bg_map_;
@@ -92,7 +92,7 @@ class FilterAndOrder {
   std::string filter_string_;
 
  public:
-  FilterAndOrder(const Graph* g_pointer, const QueryGraph* q_pointer, std::string filter_string)
+  StatefulFilterAndOrder(const Graph* g_pointer, const QueryGraph* q_pointer, std::string filter_string)
       : g_pointer_(g_pointer), q_pointer_(q_pointer), filter_string_(filter_string) {}
 
   const BipartiteGraph* getBipartiteGraph(QueryVertexID v1, QueryVertexID v2) {

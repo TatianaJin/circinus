@@ -31,7 +31,7 @@
 #include "graph/compressed_subgraphs.h"
 #include "graph/graph.h"
 #include "graph/query_graph.h"
-#include "ops/filter_and_order.h"
+#include "ops/stateful_filter_and_order.h"
 #include "ops/filters.h"
 #include "ops/logical_filters.h"
 #include "ops/operators.h"
@@ -43,7 +43,7 @@
 #include "utils/hashmap.h"
 #include "utils/profiler.h"
 #include "utils/utils.h"
-using circinus::FilterAndOrder;
+using circinus::StatefulFilterAndOrder;
 
 using circinus::CompressedSubgraphs;
 using circinus::ExecutionConfig;
@@ -105,7 +105,7 @@ void run(const std::string& dataset, const std::string& filter, std::vector<std:
         QueryGraph q(query_dir);  // load query graph
         std::stringstream ss;
         ss << dataset << ',' << query_size << ',' << query_mode << ',' << i << ':';
-        FilterAndOrder fao(&g, &q, filter);
+        StatefulFilterAndOrder fao(&g, &q, filter);
         auto candidates = fao.getCandidateSets();  // get candidates for each query vertex
         for (auto v : candidates) {
           ss << v.size() << ' ';
