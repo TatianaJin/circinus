@@ -23,12 +23,15 @@
 #include "graph/graph_metadata.h"
 #include "graph/query_graph.h"
 #include "graph/types.h"
+
 #include "utils/hashmap.h"
 
 namespace circinus {
 
 using QueryId = uint16_t;
 using TaskId = uint16_t;
+
+enum class QueryType : uint8_t { Execute = 0, Profile, ProfileWithMiniIntersection, SampleExecute };
 
 struct ServerEvent {
   enum Type : uint32_t {
@@ -199,6 +202,7 @@ struct QueryResult {
 };
 
 struct ProfileInfo {
+  QueryType type = QueryType::Profile;
   uint64_t total_input_size = 0;
   uint64_t total_output_size = 0;
   uint64_t total_num_input_subgraphs = 0;

@@ -205,14 +205,18 @@ std::vector<std::pair<uint32_t, std::vector<CandidateScope>>> Planner::generateP
   return ret;
 }
 
-void Planner::newInputOperators(const QueryGraph& q, const GraphMetadata& metadata,
-                                const std::vector<std::vector<VertexID>>* candidate_cardinality,
-                                const std::vector<QueryVertexID>& partitioning_qvs) {
+void Planner::newInputOperators(const QueryGraph& q, const std::vector<QueryVertexID>& partitioning_qvs) {
   for (auto logical_plan : backtracking_plan_->getPlans()) {
     // TODO(byli): use neighborhood filter corresponding to the candidate pruning strategy?
-    backtracking_plan_->addInputOperator(std::make_unique<LogicalCompressedInputOperator>(
+    backtracking_plan_->addInputOperator(std::make_unique<PartitionedLogicalCompressedInputOperator>(
         &q, logical_plan->inputAreKeys(), logical_plan->getMatchingOrder(), partitioning_qvs));
   }
+}
+
+void Planner::newInputOperators() {
+  auto& logical_plan = backtracking_plan_->getPlans().front();
+  backtracking_plan_->addInputOperator(std::make_unique<LogicalCompressedInputOperator>(
+      logical_plan->getMatchingOrder().front(), logical_plan->inputAreKeys()));
 }
 
 BacktrackingPlan* Planner::generateExecutionPlan(const std::vector<std::vector<VertexID>>* candidate_cardinality,
@@ -220,6 +224,8 @@ BacktrackingPlan* Planner::generateExecutionPlan(const std::vector<std::vector<V
   if (candidate_cardinality->size() == 1) {  // no partition, generate one execution plan
     backtracking_plan_ = std::make_unique<BacktrackingPlan>();
     backtracking_plan_->addPlan(generateExecutionPlan(candidate_cardinality->front(), multithread));
+    // one logical input operator
+    newInputOperators();
     return backtracking_plan_.get();
   }
 
@@ -233,8 +239,7 @@ BacktrackingPlan* Planner::generateExecutionPlan(const std::vector<std::vector<V
   backtracking_plan_->addPartitionedPlans(generatePartitionedPlans(partitioning_qv));
 
   // one logical input operator for each logical plan
-  newInputOperators(query_context_->query_graph, *query_context_->graph_metadata, candidate_cardinality,
-                    partitioning_qv);
+  newInputOperators(query_context_->query_graph, partitioning_qv);
   LOG(INFO) << "Generated plan";
   return backtracking_plan_.get();
 }

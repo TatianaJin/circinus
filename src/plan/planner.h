@@ -102,9 +102,9 @@ class Planner {
   virtual std::vector<QueryVertexID> getPartitioningQueryVertices();  // based on query vertex occurence in covers
   virtual std::vector<std::pair<uint32_t, std::vector<CandidateScope>>> generatePartitionedPlans(
       const std::vector<QueryVertexID>& partitioning_qv);  // based on indicator partition only
-  virtual void newInputOperators(const QueryGraph& q, const GraphMetadata& metadata,
-                                 const std::vector<std::vector<VertexID>>* candidate_cardinality,
-                                 const std::vector<QueryVertexID>& partitioning_qvs);
+  virtual void newInputOperators(const QueryGraph& q, const std::vector<QueryVertexID>& partitioning_qvs);
+
+  virtual void newInputOperators();
   /* end of interface for specifying partitioning strategy */
 };
 

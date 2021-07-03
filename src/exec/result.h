@@ -24,7 +24,6 @@
 #include "graph/candidate_set_view.h"
 #include "graph/types.h"
 #include "ops/output_operator.h"
-#include "plan/operator_tree.h"
 #include "utils/query_utils.h"
 #include "utils/utils.h"
 
@@ -137,9 +136,9 @@ class ProfiledExecutionResult : public ExecutionResult {
  public:
   ProfiledExecutionResult(uint32_t n_profiles) : profiles_(n_profiles) {}
 
-  void setProfiledPlan(const std::vector<OperatorTree*>& op_trees) {
-    CHECK_EQ(op_trees.size(), profiles_.size());
-    auto size = op_trees.size();
+  void setProfiledPlan(const std::vector<Operator*>& ops) {
+    CHECK_EQ(ops.size(), profiles_.size());
+    auto size = ops.size();
     profiled_plan_str_.resize(size);
     for (uint32_t i = 0; i < size; ++i) {
       // FIXME(tatiana): populate profiled_plan_str_

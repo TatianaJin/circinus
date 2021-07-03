@@ -25,7 +25,7 @@
 namespace circinus {
 
 class TaskBase {
- private:
+ protected:
   uint16_t query_id_;
   uint16_t task_id_;
   double time_ = 0;

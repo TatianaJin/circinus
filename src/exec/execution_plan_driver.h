@@ -88,6 +88,8 @@ class ExecutionPlanDriver : public ExecutionPlanDriverBase {
 class MatchingParallelExecutionPlanDriver : public ExecutionPlanDriverBase {
  private:
   uint32_t batch_size_;
+  std::vector<CompressedSubgraphs> inputs_;
+  std::vector<TraverseContext> traverse_context_;
 
  public:
   explicit MatchingParallelExecutionPlanDriver(BacktrackingPlan* plan) : ExecutionPlanDriverBase(plan) {}

@@ -40,10 +40,13 @@ class TraverseContext : public ProfileInfo {
   uint32_t input_index_ = 0;
   uint32_t input_end_index_ = 0;
   const std::vector<CompressedSubgraphs>* current_inputs_ = nullptr;
- 
+
  public:
   const void* current_data_graph = nullptr;
   std::vector<CompressedSubgraphs>* outputs;
+
+  TraverseContext(uint32_t input_index, const std::vector<CompressedSubgraphs>* inputs, const void* data_graph)
+      : input_index_(input_index), current_inputs_(inputs), current_data_graph(data_graph) {}
 
   TraverseContext(uint32_t input_index, uint32_t input_end_index, const std::vector<CompressedSubgraphs>* inputs,
                   const void* data_graph)
@@ -59,11 +62,14 @@ class TraverseContext : public ProfileInfo {
   inline bool hasNextInput() const { return input_index_ < input_end_index_; }
   inline uint32_t getInputIndex() const { return input_index_; }
   inline uint32_t getTotalInputSize() const { return total_input_size - (input_end_index_ - input_index_); }
+  inline const auto getOutputs() const { return outputs; }
 
   inline void nextInput() { ++input_index_; }
+  inline void clearOutputs() { (*outputs).clear(); }
   // FIXME(tatiana): replace with initialization in constructor
   inline void setInputIndex(uint32_t input_index) { input_index_ = input_index; }
   inline void setInputEndIndex(uint32_t input_end_index) { input_end_index_ = input_end_index; }
+  inline void setInputEndIndex() { input_end_index_ = current_inputs_->size(); }
   inline void setCurrentInputs(const std::vector<CompressedSubgraphs>* current_inputs) {
     current_inputs_ = current_inputs;
   }
@@ -149,9 +155,9 @@ class TraverseOperator : public Operator {
     ctx->total_input_size += (input_end_index - input_index);
   }
 
-  uint32_t expandAndProfile(uint32_t cap, uint32_t query_type, TraverseContext* ctx) const {
+  uint32_t expandAndProfile(uint32_t cap, TraverseContext* ctx) const {
     auto start = std::chrono::high_resolution_clock::now();
-    auto n = expandAndProfileInner(cap, query_type, ctx);
+    auto n = expandAndProfileInner(cap, ctx);
     auto stop = std::chrono::high_resolution_clock::now();
     ctx->total_time_in_milliseconds +=
         (std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start).count() / 1000000.0);
@@ -193,7 +199,7 @@ class TraverseOperator : public Operator {
   }
 
  protected:
-  virtual uint32_t expandAndProfileInner(uint32_t cap, uint32_t query_type, TraverseContext* ctx) const = 0;
+  virtual uint32_t expandAndProfileInner(uint32_t cap, TraverseContext* ctx) const = 0;
 };
 
 }  // namespace circinus

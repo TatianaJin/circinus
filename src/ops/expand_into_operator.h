@@ -51,13 +51,8 @@ class ExpandIntoOperator : public TraverseOperator {
     return expandInner<QueryType::Execute>(batch_size, ctx);
   }
 
-  uint32_t expandAndProfileInner(uint32_t batch_size, uint32_t query_type, TraverseContext* ctx) const override {
-    if (query_type == 1) {
-      return expandInner<QueryType::Profile>(batch_size, ctx);
-    } else {
-      CHECK_EQ(query_type, 2) << "unknown query type " << query_type;
-      return expandInner<QueryType::ProfileWithMiniIntersection>(batch_size, ctx);
-    }
+  uint32_t expandAndProfileInner(uint32_t batch_size, TraverseContext* ctx) const override {
+      return expandInner<ctx->type>(batch_size, ctx);
   }
 
   std::vector<std::unique_ptr<BipartiteGraph>> computeBipartiteGraphs(

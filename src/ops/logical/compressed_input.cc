@@ -27,10 +27,10 @@
 
 namespace circinus {
 
-LogicalCompressedInputOperator::LogicalCompressedInputOperator(const QueryGraph* query_graph, bool inputs_are_keys,
+PartitionedLogicalCompressedInputOperator::PartitionedLogicalCompressedInputOperator(const QueryGraph* query_graph, bool inputs_are_keys,
                                                                const std::vector<QueryVertexID>& matching_order,
                                                                const std::vector<QueryVertexID>& partitioning_qvs)
-    : input_query_vertex_(matching_order.front()), inputs_are_keys_(inputs_are_keys) {
+    : LogicalCompressedInputOperator(matching_order.front(), inputs_are_keys) {
   // find the last partitioning query vertex in order
   unordered_set<QueryVertexID> partitioning_qv_set(partitioning_qvs.begin(), partitioning_qvs.end());
 
@@ -80,8 +80,13 @@ LogicalCompressedInputOperator::LogicalCompressedInputOperator(const QueryGraph*
   }
 }
 
-std::unique_ptr<InputOperator> LogicalCompressedInputOperator::toPhysicalOperators() {
+std::unique_ptr<InputOperator> PartitionedLogicalCompressedInputOperator::toPhysicalOperators() {
   return std::make_unique<PartitionedInputOperator>(input_query_vertex_, inputs_are_keys_, &qv_pivots_);
 }
+
+std::unique_ptr<InputOperator> LogicalCompressedInputOperator::toPhysicalOperators() {
+  return std::make_unique<InputOperator>(input_query_vertex_, inputs_are_keys_);
+}
+
 
 }  // namespace circinus

@@ -16,9 +16,9 @@
 
 #include <cinttypes>
 
-namespace circinus {
+#include "utils/query_utils.h"
 
-enum class QueryType : uint8_t { Execute = 0, Profile, ProfileWithMiniIntersection, SampleExecute };
+namespace circinus {
 
 inline constexpr bool isProfileMode(QueryType profile) {
   return profile == QueryType::Profile || profile == QueryType::ProfileWithMiniIntersection;

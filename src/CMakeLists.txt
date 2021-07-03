@@ -58,7 +58,6 @@ set(circinus_ops_sources
 set(circinus_plan_sources
   ${PROJECT_SOURCE_DIR}/src/plan/execution_plan.cc
   ${PROJECT_SOURCE_DIR}/src/plan/naive_planner.cc
-  ${PROJECT_SOURCE_DIR}/src/plan/operator_tree.cc
   ${PROJECT_SOURCE_DIR}/src/plan/planner.cc
 )
 set(circinus_utils_sources

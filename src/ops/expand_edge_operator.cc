@@ -68,16 +68,11 @@ class ExpandEdgeKeyToSetOperator : public ExpandEdgeOperator {
     return n;
   }
 
-  uint32_t expandAndProfileInner(uint32_t cap, uint32_t query_type, TraverseContext* ctx) const override {
+  uint32_t expandAndProfileInner(uint32_t cap, TraverseContext* ctx) const override {
     uint32_t old_input_index = ctx->getInputIndex();
     uint32_t n = 0;
     for (; n < cap && ctx->hasNextInput(); ctx->nextInput()) {
-      if (query_type == 1) {
-        n += expandInner<QueryType::Profile>(ctx->getCurrentInput(), ctx);
-      } else {
-        CHECK_EQ(query_type, 2) << "unknown query type " << query_type;
-        n += expandInner<QueryType::ProfileWithMiniIntersection>(ctx->getCurrentInput(), ctx);
-      }
+      n += expandInner<ctx->type>(ctx->getCurrentInput(), ctx);
       ctx->total_num_input_subgraphs += ctx->getCurrentInput().getNumSubgraphs();
     }
     ctx->intersection_count += ctx->getInputIndex() - old_input_index;
@@ -158,15 +153,10 @@ class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
     return expandInner<QueryType::Execute>(cap, ctx);
   }
 
-  uint32_t expandAndProfileInner(uint32_t cap, uint32_t query_type, TraverseContext* ctx) const override {
+  uint32_t expandAndProfileInner(uint32_t cap, TraverseContext* ctx) const override {
     auto old_input_index = ctx->getInputIndex();
     uint32_t n = 0;
-    if (query_type == 1) {
-      n = expandInner<QueryType::Profile>(cap, ctx);
-    } else {
-      CHECK_EQ(query_type, 2) << "unknown query type " << query_type;
-      n = expandInner<QueryType::ProfileWithMiniIntersection>(cap, ctx);
-    }
+    n = expandInner<ctx->type>(cap, ctx);
     ctx->intersection_count += (ctx->getInputIndex() - old_input_index) * (intersect_candidates);
     return n;
   }
@@ -194,7 +184,7 @@ class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
           CompressedSubgraphs output(input, ctx->currentTarget(), same_label_set_indices_, set_pruning_threshold_,
                                      false);
 #else
-          CompressedSubgraphs output(input, current_targets_[current_target_index_], same_label_set_indices_,
+          CompressedSubgraphs output(input, ctx->currentTarget(), same_label_set_indices_,
                                      set_pruning_threshold_);
 #endif
           ctx->nextTarget();
@@ -460,12 +450,8 @@ class ExpandEdgeSetToKeyOperator : public ExpandEdgeOperator {
     return expandInner<QueryType::Execute>(cap, ctx);
   }
 
-  uint32_t expandAndProfileInner(uint32_t cap, uint32_t query_type, TraverseContext* ctx) const override {
-    if (query_type == 1) {
-      return expandInner<QueryType::Profile>(cap, ctx);
-    }
-    CHECK_EQ(query_type, 2) << "unknown query type " << query_type;
-    return expandInner<QueryType::ProfileWithMiniIntersection>(cap, ctx);
+  uint32_t expandAndProfileInner(uint32_t cap, TraverseContext* ctx) const override {
+    return expandInner<ctx->type>(cap, ctx);
   }
 
   std::string toString() const override {

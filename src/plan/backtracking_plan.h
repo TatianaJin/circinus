@@ -35,9 +35,9 @@ class BacktrackingPlan {
  public:
   std::vector<Operator*>& getOperators(uint32_t plan_idx = 0) { return plans_[plan_idx]->getOperators(); }
 
-  inline auto& getOutputOperator(uint32_t plan_idx = 0) { return plans_[plan_idx]->getOperators().back(); }
+  inline Operator* getOutputOperator(uint32_t plan_idx = 0) { return plans_[plan_idx]->getOperators().back(); }
 
-  std::unique_ptr<InputOperator> getInputOperator(uint32_t plan_idx) {
+  std::unique_ptr<InputOperator> getInputOperator(uint32_t plan_idx = 0) {
     return input_operators_[plan_idx]->toPhysicalOperators();
   }
 

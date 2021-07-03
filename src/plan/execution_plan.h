@@ -93,7 +93,7 @@ class ExecutionPlan {
   void printPhysicalPlan(std::ostream& oss) const {
     if (operators_.empty()) return;
     uint32_t op_idx = 0;
-    auto op = operators_.root();
+    auto op = operators_.front();
     while (op != nullptr) {
       oss << op_idx << "," << op->toString() << std::endl;
       ++op_idx;
