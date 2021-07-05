@@ -87,6 +87,7 @@ class ExecutorManager {
   void run(QueryId qid, QueryContext* query_ctx, std::unique_ptr<PlanDriver>&& plan_driver);
   inline void clearQuery(QueryId qid) {
     std::lock_guard<std::mutex> lock(execution_ctx_mu_);
+    LOG(INFO) << "Query " << qid << " Finished.";
     execution_ctx_.erase(qid);
   }
 

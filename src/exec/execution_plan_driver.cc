@@ -16,6 +16,7 @@
 
 #include <memory>
 #include <utility>
+#include <vector>
 
 #include "exec/plan_driver.h"
 #include "exec/profile_task.h"
@@ -97,7 +98,7 @@ void MatchingParallelExecutionPlanDriver::init(QueryId qid, QueryContext* query_
   dynamic_cast<OutputOperator*>(plan_->getOutputOperator())->setOutput(&result_->getOutputs());
 
   result_->getOutputs().init(ctx.first.getNumExecutors()).limit(query_ctx->query_config.limit);
-  if (ctx.first.getNumExecutors() == 1) {
+  if (false && ctx.first.getNumExecutors() == 1) {
     // one task for single-thread execution
     task_counters_.push_back(1);
 
@@ -115,6 +116,7 @@ void MatchingParallelExecutionPlanDriver::init(QueryId qid, QueryContext* query_
 
   {  // TODO(tatiana): wrap with a task?
     candidates_ = candidate_result_->getCandidates();
+
     for (auto op : plan_->getOperators()) {
       auto traverse = dynamic_cast<TraverseOperator*>(op);
       if (traverse == nullptr) break;
@@ -125,10 +127,10 @@ void MatchingParallelExecutionPlanDriver::init(QueryId qid, QueryContext* query_
   batch_size_ = ctx.first.getBatchSize();
   task_counters_.resize(plan_->getOperators().size() + 1, 0);  // input + traverse + output operator chain
   task_depleted_.resize(plan_->getOperators().size() + 1, false);
-  task_counters_[0] = input_op_->getParallelism();
-  CHECK_EQ(task_counters_[0], 1);  // TODO(tatiana): parallel input tasks
-
   input_op_ = plan_->getInputOperator();
+  task_counters_[0] = input_op_->getParallelism();
+  CHECK_EQ(task_counters_[0], 1) << " input task counter is not equal to 1 ";  // TODO(tatiana): parallel input tasks
+
   input_op_->setNext(plan_->getOperators().front());
 
   task_queue.putTask(new MatchingParallelInputTask(qid, 0, (const GraphBase*)query_ctx->data_graph, input_op_.get(),
@@ -143,6 +145,7 @@ void MatchingParallelExecutionPlanDriver::taskFinish(TaskBase* task, ThreadsafeT
     finishPlan(reply_queue);
     return;
   }
+
   auto op = matching_parallel_task->getNextOperator();
   if (op != nullptr) {
     auto inputs = std::make_shared<std::vector<CompressedSubgraphs>>(std::move(matching_parallel_task->getOutputs()));
@@ -154,43 +157,41 @@ void MatchingParallelExecutionPlanDriver::taskFinish(TaskBase* task, ThreadsafeT
     if (task->getTaskId() == plan_->getOperators().size() - 1) {
       uint32_t input_index = 0;
       for (; input_index + batch_size_ < input_size; input_index += batch_size_) {
-        MatchingParallelOutputTask(task->getQueryId(), level, dynamic_cast<OutputOperator*>(op), inputs, input_index,
-                                   input_index + batch_size_);
+        task_queue->putTask(new MatchingParallelOutputTask(task->getQueryId(), level, dynamic_cast<OutputOperator*>(op),
+                                                           inputs, input_index, input_index + batch_size_));
       }
       if (input_index < input_size) {
-        MatchingParallelOutputTask(task->getQueryId(), level, dynamic_cast<OutputOperator*>(op), inputs, input_index,
-                                   input_size);
+        task_queue->putTask(new MatchingParallelOutputTask(task->getQueryId(), level, dynamic_cast<OutputOperator*>(op),
+                                                           inputs, input_index, input_size));
       }
-      return;
-    }
-
-    uint32_t input_index = 0;
-    for (; input_index + batch_size_ < input_size; input_index += batch_size_) {
-      task_queue->putTask(new MatchingParallelTraverseTask(
-          task->getQueryId(), level, dynamic_cast<TraverseOperator*>(op),
-          dynamic_cast<TraverseOperator*>(op)->initTraverseContext(inputs.get(), task->getDataGraph(), input_index,
-                                                                   input_index + batch_size_, query_type_),
-          inputs));
-    }
-    if (input_index < input_size) {
-      task_queue->putTask(new MatchingParallelTraverseTask(
-          task->getQueryId(), level, dynamic_cast<TraverseOperator*>(op),
-          dynamic_cast<TraverseOperator*>(op)->initTraverseContext(inputs.get(), task->getDataGraph(), input_index,
-                                                                   input_size, query_type_),
-          inputs));
+    } else {
+      uint32_t input_index = 0;
+      for (; input_index + batch_size_ < input_size; input_index += batch_size_) {
+        task_queue->putTask(new MatchingParallelTraverseTask(
+            task->getQueryId(), level, dynamic_cast<TraverseOperator*>(op),
+            dynamic_cast<TraverseOperator*>(op)->initTraverseContext(inputs.get(), task->getDataGraph(), input_index,
+                                                                     input_index + batch_size_, query_type_),
+            inputs));
+      }
+      if (input_index < input_size) {
+        task_queue->putTask(new MatchingParallelTraverseTask(
+            task->getQueryId(), level, dynamic_cast<TraverseOperator*>(op),
+            dynamic_cast<TraverseOperator*>(op)->initTraverseContext(inputs.get(), task->getDataGraph(), input_index,
+                                                                     input_size, query_type_),
+            inputs));
+      }
     }
   }
 
   if (--task_counters_[task->getTaskId()] == 0) {
-    if (task->getTaskId() == 0 || task_depleted_[task->getTaskId() - 1]) {
-      for (uint32_t i = task->getTaskId(); i < task_depleted_.size(); ++i) {
-        task_depleted_[i] = (task_counters_[i] == 0);
-        // TODO(tatiana); support match limit
-        if (task_depleted_[i] && ++n_finished_tasks_ == task_counters_.size()) {
-          finishPlan(reply_queue);
-          break;
-        }
-      }
+    if (task->getTaskId() == 0) {
+      task_depleted_[task->getTaskId()] = true;
+    } else {
+      task_depleted_[task->getTaskId()] = task_depleted_[task->getTaskId() - 1];
+      // TODO(tatiana) support match limit
+    }
+    if (task_depleted_[task->getTaskId()] && ++n_finished_tasks_ == task_counters_.size()) {
+      finishPlan(reply_queue);
     }
   }
 }

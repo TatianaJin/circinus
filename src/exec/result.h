@@ -148,7 +148,7 @@ class ProfiledExecutionResult : public ExecutionResult {
   std::vector<std::string> profiled_plan_str_;
 
  public:
-  ProfiledExecutionResult(uint32_t n_profiles) : profiles_(n_profiles) {}
+  explicit ProfiledExecutionResult(uint32_t n_profiles) : profiles_(n_profiles) {}
 
   void setProfiledPlan(const std::vector<Operator*>& ops) {
     CHECK_EQ(ops.size(), profiles_.size());

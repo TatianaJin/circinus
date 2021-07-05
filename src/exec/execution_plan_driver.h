@@ -16,6 +16,7 @@
 
 #include <memory>
 #include <utility>
+#include <vector>
 
 #include "exec/plan_driver.h"
 #include "exec/result.h"

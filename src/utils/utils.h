@@ -18,6 +18,7 @@
 #include <memory>
 #include <queue>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #include "graph/compressed_subgraphs.h"

@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <utility>
+
 #include "exec/task.h"
 
 namespace circinus {

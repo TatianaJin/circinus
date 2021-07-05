@@ -129,7 +129,6 @@ class NeighborhoodFilter : public Operator {
       auto offset = (chunk_size + 1) * task_idx;
       return FilterContext(offset, offset + chunk_size + 1);
     }
-    LOG(INFO) << filter_size_;
     auto offset = chunk_size * task_idx + (filter_size_ % parallelism_);
     return FilterContext(offset, offset + chunk_size);
   }

@@ -14,6 +14,10 @@
 
 #pragma once
 
+#include <string>
+#include <unordered_set>
+#include <vector>
+
 #include "ops/traverse_operator.h"
 
 namespace circinus {
