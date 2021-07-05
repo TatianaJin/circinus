@@ -137,8 +137,10 @@ class TraverseOperator : public Operator {
 
   virtual std::unique_ptr<TraverseContext> initTraverseContext(const std::vector<CompressedSubgraphs>* inputs,
                                                                const void* graph, uint32_t input_start,
-                                                               uint32_t input_end) const {
-    return std::make_unique<TraverseContext>(inputs, graph, input_start, input_end);
+                                                               uint32_t input_end, QueryType profile) const {
+    auto ret = std::make_unique<TraverseContext>(inputs, graph, input_start, input_end);
+    ret->query_type = profile;
+    return ret;
   }
 
   virtual uint32_t expand(uint32_t cap, TraverseContext* ctx) const = 0;

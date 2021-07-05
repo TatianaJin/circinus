@@ -49,8 +49,11 @@ class ExpandVertexOperator : public TraverseOperator {
   const auto& getQueryVertexIndices() const { return query_vertex_indices_; }
 
   std::unique_ptr<TraverseContext> initTraverseContext(const std::vector<CompressedSubgraphs>* inputs,
-                                                       const void* graph, uint32_t start, uint32_t end) const override {
-    return std::make_unique<ExpandVertexTraverseContext>(inputs, graph, start, end, parents_.size());
+                                                       const void* graph, uint32_t start, uint32_t end,
+                                                       QueryType profile) const override {
+    auto ret = std::make_unique<ExpandVertexTraverseContext>(inputs, graph, start, end, parents_.size());
+    ret->query_type = profile;
+    return ret;
   }
 
   std::vector<std::unique_ptr<BipartiteGraph>> computeBipartiteGraphs(

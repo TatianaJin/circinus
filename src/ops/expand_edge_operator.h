@@ -96,8 +96,11 @@ class ExpandEdgeOperator : public TraverseOperator {
   virtual ~ExpandEdgeOperator() {}
 
   std::unique_ptr<TraverseContext> initTraverseContext(const std::vector<CompressedSubgraphs>* inputs,
-                                                       const void* graph, uint32_t start, uint32_t end) const override {
-    return std::make_unique<ExpandEdgeTraverseContext>(inputs, graph, start, end);
+                                                       const void* graph, uint32_t start, uint32_t end,
+                                                       QueryType profile) const override {
+    auto ret = std::make_unique<ExpandEdgeTraverseContext>(inputs, graph, start, end);
+    ret->query_type = profile;
+    return ret;
   }
 
   std::vector<std::unique_ptr<BipartiteGraph>> computeBipartiteGraphs(

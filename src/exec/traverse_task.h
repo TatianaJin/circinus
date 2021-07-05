@@ -86,8 +86,9 @@ class TraverseChainTask : public TaskBase {
 
   virtual std::unique_ptr<TraverseContext> createTraverseContext(const std::vector<CompressedSubgraphs>& inputs,
                                                                  std::vector<CompressedSubgraphs>& outputs,
-                                                                 uint32_t level, const TraverseOperator* op) {
-    auto ctx = op->initTraverseContext(&inputs, graph_, 0, inputs.size());
+                                                                 uint32_t level, const TraverseOperator* op,
+                                                                 QueryType profile) {
+    auto ctx = op->initTraverseContext(&inputs, graph_, 0, inputs.size(), profile);
     ctx->outputs = &outputs;
     return ctx;
   }
@@ -105,7 +106,7 @@ class TraverseChainTask : public TaskBase {
       return output_op->validateAndOutput(inputs, 0);
     }
     auto traverse_op = dynamic_cast<TraverseOperator*>(op);
-    auto ctx = createTraverseContext(inputs, outputs, level, traverse_op);
+    auto ctx = createTraverseContext(inputs, outputs, level, traverse_op, profile);
     bool finished = false;
     while (true) {
       outputs.clear();
@@ -146,8 +147,8 @@ class TraverseTask : public TraverseChainTask {
  protected:
   std::unique_ptr<TraverseContext> createTraverseContext(const std::vector<CompressedSubgraphs>& inputs,
                                                          std::vector<CompressedSubgraphs>& outputs, uint32_t level,
-                                                         const TraverseOperator* op) override {
-    auto ctx = op->initTraverseContext(&inputs, &graph_views_[level], 0, inputs.size());
+                                                         const TraverseOperator* op, QueryType profile) override {
+    auto ctx = op->initTraverseContext(&inputs, &graph_views_[level], 0, inputs.size(), profile);
     ctx->outputs = &outputs;
     return ctx;
   }
@@ -206,29 +207,30 @@ class MatchingParallelInputTask : public MatchingParallelTask {
  */
 class MatchingParallelTraverseTask : public MatchingParallelTask {
   const TraverseOperator* traverse_op_;
-  TraverseContext traverse_ctx_;
+  std::unique_ptr<TraverseContext> traverse_ctx_;
   std::vector<CandidateSetView> candidates_;
   std::shared_ptr<std::vector<CompressedSubgraphs>> inputs_;
 
  public:
-  MatchingParallelTraverseTask(QueryId qid, TaskId tid, TraverseOperator* traverse_op, TraverseContext&& traverse_ctx,
+  MatchingParallelTraverseTask(QueryId qid, TaskId tid, TraverseOperator* traverse_op,
+                               std::unique_ptr<TraverseContext>&& traverse_ctx,
                                const std::shared_ptr<std::vector<CompressedSubgraphs>>& inputs)
       : MatchingParallelTask(qid, tid),
         traverse_op_(std::move(traverse_op)),
-        traverse_ctx_(traverse_ctx),
+        traverse_ctx_(std::move(traverse_ctx)),
         inputs_(inputs) {
     DCHECK(traverse_op_ != nullptr);
-    traverse_ctx_.outputs = &outputs_;
+    traverse_ctx_->outputs = &outputs_;
   }
 
   const GraphBase* getDataGraph() const override {
-    return reinterpret_cast<const GraphBase*>(traverse_ctx_.current_data_graph);
+    return reinterpret_cast<const GraphBase*>(traverse_ctx_->current_data_graph);
   }
 
-  void run(uint32_t executor_idx) override { traverse_op_->expand(UINT32_MAX, &traverse_ctx_); }
+  void run(uint32_t executor_idx) override { traverse_op_->expand(UINT32_MAX, traverse_ctx_.get()); }
   void profile(uint32_t executor_idx) override {
-    traverse_op_->expandAndProfile(UINT32_MAX, &traverse_ctx_);
-    traverse_ctx_.total_input_size = traverse_ctx_.getTotalInputSize();
+    traverse_op_->expandAndProfile(UINT32_MAX, traverse_ctx_.get());
+    traverse_ctx_->total_input_size = traverse_ctx_->getTotalInputSize();
   }
 
   Operator* getNextOperator() override { return traverse_op_->getNext(); }

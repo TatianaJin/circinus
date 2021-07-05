@@ -33,6 +33,7 @@ class ExecutionPlanDriverBase : public PlanDriver {
   std::unique_ptr<CandidateResult> candidate_result_ = nullptr;
   ExecutionResult* result_;  // owned by ExecutorManager
   std::chrono::time_point<std::chrono::high_resolution_clock> start_time_;
+  QueryType query_type_;
 
  public:
   explicit ExecutionPlanDriverBase(BacktrackingPlan* plan) : plan_(plan) {}

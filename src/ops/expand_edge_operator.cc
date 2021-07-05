@@ -181,9 +181,11 @@ class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
   }
 
   std::unique_ptr<TraverseContext> initTraverseContext(const std::vector<CompressedSubgraphs>* inputs,
-                                                       const void* graph, uint32_t input_start,
-                                                       uint32_t input_end) const override {
-    return std::make_unique<ExpandEdgeKeyToKeyTraverseContext>(inputs, graph, input_start, input_end);
+                                                       const void* graph, uint32_t input_start, uint32_t input_end,
+                                                       QueryType profile) const override {
+    auto ret = std::make_unique<ExpandEdgeKeyToKeyTraverseContext>(inputs, graph, input_start, input_end);
+    ret->query_type = profile;
+    return ret;
   }
 
  private:
@@ -488,9 +490,11 @@ class ExpandEdgeSetToKeyOperator : public ExpandEdgeOperator {
   }
 
   std::unique_ptr<TraverseContext> initTraverseContext(const std::vector<CompressedSubgraphs>* inputs,
-                                                       const void* graph, uint32_t input_start,
-                                                       uint32_t input_end) const override {
-    return std::make_unique<ExpandEdgeSetToKeyTraverseContext>(inputs, graph, input_start, input_end);
+                                                       const void* graph, uint32_t input_start, uint32_t input_end,
+                                                       QueryType profile) const override {
+    auto ret = std::make_unique<ExpandEdgeSetToKeyTraverseContext>(inputs, graph, input_start, input_end);
+    ret->query_type = profile;
+    return ret;
   }
 
  private:

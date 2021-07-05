@@ -47,14 +47,9 @@ class EnumerateTraverseContext : public TraverseContext {
   std::vector<std::vector<VertexID>> target_sets;  // now we store and reuse the intermediate intersection results
   unordered_set<VertexID> existing_vertices;
 
-  // FIXME(tatiana) : initialize
-  // output_query_vertex_indices.size(), output_query_vertex_indices.size() - 1 -
-  // output_query_vertex_indices.at(target_vertex)
-  // set n_parent_qvs if isProfileWithMiniIntersectionMode(profile) is true
-  EnumerateTraverseContext(uint32_t input_index, uint32_t input_end_index,
-                           const std::vector<CompressedSubgraphs>* inputs, const void* data_graph,
-                           uint32_t n_keys_to_enumerate, QueryVertexID output_graph_size, QueryVertexID output_key_size,
-                           uint32_t n_parent_qvs = 0)
+  EnumerateTraverseContext(const std::vector<CompressedSubgraphs>* inputs, const void* data_graph, uint32_t input_index,
+                           uint32_t input_end_index, uint32_t n_keys_to_enumerate, QueryVertexID output_graph_size,
+                           QueryVertexID output_key_size, uint32_t n_parent_qvs = 0)
       : TraverseContext(inputs, data_graph, input_index, input_end_index),
         enumerate_key_idx_(n_keys_to_enumerate, 0),
         enumerate_key_pos_sets_(n_keys_to_enumerate),
@@ -142,6 +137,17 @@ class EnumerateKeyExpandToSetOperator : public ExpandVertexOperator {
     CHECK(ctx->query_type == QueryType::ProfileWithMiniIntersection) << "unknown query type "
                                                                      << (uint32_t)ctx->query_type;
     return expandInner<QueryType::ProfileWithMiniIntersection>(batch_size, ctx);
+  }
+
+  std::unique_ptr<TraverseContext> initTraverseContext(const std::vector<CompressedSubgraphs>* inputs,
+                                                       const void* graph, uint32_t input_start, uint32_t input_end,
+                                                       QueryType profile) const override {
+    auto ret = std::make_unique<EnumerateTraverseContext>(
+        inputs, graph, input_start, input_end, keys_to_enumerate_.size(), query_vertex_indices_.size(),
+        query_vertex_indices_.size() - 1 - query_vertex_indices_.at(target_vertex_),
+        isProfileWithMiniIntersectionMode(profile) ? parents_.size() : 0);
+    ret->query_type = profile;
+    return ret;
   }
 
   std::vector<std::unique_ptr<GraphPartitionBase>> computeGraphPartitions(
@@ -255,7 +261,8 @@ std::vector<std::unique_ptr<GraphPartitionBase>> EnumerateKeyExpandToSetOperator
 template <typename G>
 template <QueryType profile>
 uint32_t EnumerateKeyExpandToSetOperator<G>::expandInner(uint32_t batch_size, TraverseContext* base_ctx) const {
-  auto ctx = (EnumerateTraverseContext*)base_ctx;
+  auto ctx = dynamic_cast<EnumerateTraverseContext*>(base_ctx);
+  DCHECK(ctx != nullptr) << "Expect pointer to EnumerateTraverseContext but got " << getTypename(*ctx);
   uint32_t n_outputs = 0;
   while (ctx->hasNextInput()) {
     if (ctx->need_new_input) {

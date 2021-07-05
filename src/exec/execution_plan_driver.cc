@@ -43,6 +43,13 @@ void ExecutionPlanDriverBase::init(QueryId qid, QueryContext* query_ctx, Executi
     result_->setMatchingOrder("mixed");
   }
 
+  // TODO(tatiana): add profile mode ProfileWithMiniIntersection
+  query_type_ = (query_ctx->query_config.mode == QueryMode::Profile)
+                    ? QueryType::Profile
+                    : (/*(query_ctx->query_config.mode == QueryMode::ProfileWithMiniIntersection) ?
+                          QueryType::ProfileWithMiniIntersection :*/
+                       QueryType::Execute);
+
   finish_event_ = std::make_unique<ServerEvent>(ServerEvent::ExecutionPhase);
   finish_event_->data = &result_->getQueryResult();
   finish_event_->query_id = qid;
@@ -132,6 +139,10 @@ void MatchingParallelExecutionPlanDriver::taskFinish(TaskBase* task, ThreadsafeT
                                                      ThreadsafeQueue<ServerEvent>* reply_queue) {
   collectTaskInfo(task);
   auto matching_parallel_task = dynamic_cast<MatchingParallelTask*>(task);
+  if (matching_parallel_task == nullptr) {  // single-thread execution
+    finishPlan(reply_queue);
+    return;
+  }
   auto op = matching_parallel_task->getNextOperator();
   if (op != nullptr) {
     auto inputs = std::make_shared<std::vector<CompressedSubgraphs>>(std::move(matching_parallel_task->getOutputs()));
@@ -157,12 +168,16 @@ void MatchingParallelExecutionPlanDriver::taskFinish(TaskBase* task, ThreadsafeT
     for (; input_index + batch_size_ < input_size; input_index += batch_size_) {
       task_queue->putTask(new MatchingParallelTraverseTask(
           task->getQueryId(), level, dynamic_cast<TraverseOperator*>(op),
-          TraverseContext(inputs.get(), task->getDataGraph(), input_index, input_index + batch_size_), inputs));
+          dynamic_cast<TraverseOperator*>(op)->initTraverseContext(inputs.get(), task->getDataGraph(), input_index,
+                                                                   input_index + batch_size_, query_type_),
+          inputs));
     }
     if (input_index < input_size) {
       task_queue->putTask(new MatchingParallelTraverseTask(
           task->getQueryId(), level, dynamic_cast<TraverseOperator*>(op),
-          TraverseContext(inputs.get(), task->getDataGraph(), input_index, input_size), inputs));
+          dynamic_cast<TraverseOperator*>(op)->initTraverseContext(inputs.get(), task->getDataGraph(), input_index,
+                                                                   input_size, query_type_),
+          inputs));
     }
   }
 
