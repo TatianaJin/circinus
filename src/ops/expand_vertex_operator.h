@@ -22,6 +22,7 @@
 #include "algorithms/intersect.h"
 #include "graph/compressed_subgraphs.h"
 #include "graph/query_graph.h"
+#include "ops/expand_vertex_traverse_context.h"
 #include "ops/traverse_operator.h"
 #include "utils/hashmap.h"
 
@@ -46,6 +47,11 @@ class ExpandVertexOperator : public TraverseOperator {
   virtual ~ExpandVertexOperator() {}
 
   const auto& getQueryVertexIndices() const { return query_vertex_indices_; }
+
+  std::unique_ptr<TraverseContext> initTraverseContext(const std::vector<CompressedSubgraphs>* inputs,
+                                                       const void* graph, uint32_t start, uint32_t end) const override {
+    return std::make_unique<ExpandVertexTraverseContext>(inputs, graph, start, end, parents_.size());
+  }
 
   std::vector<std::unique_ptr<BipartiteGraph>> computeBipartiteGraphs(
       const Graph* g, const std::vector<CandidateSetView>& candidate_sets) override {

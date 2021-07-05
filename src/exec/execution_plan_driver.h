@@ -38,26 +38,7 @@ class ExecutionPlanDriverBase : public PlanDriver {
   explicit ExecutionPlanDriverBase(BacktrackingPlan* plan) : plan_(plan) {}
   virtual ~ExecutionPlanDriverBase() {}
 
-  void init(QueryId qid, QueryContext* query_ctx, ExecutionContext& ctx, ThreadsafeTaskQueue& task_queue) override {
-    start_time_ = std::chrono::high_resolution_clock::now();
-    candidate_result_.reset(dynamic_cast<CandidateResult*>(ctx.second.release()));
-    ctx.second = Result::newExecutionResult(query_ctx->query_config.mode == QueryMode::Profile);
-    result_ = (ExecutionResult*)ctx.second.get();
-    result_->getOutputs().init(ctx.first.getNumExecutors()).limit(query_ctx->query_config.limit);
-    if (plan_->getPlans().size() == 1) {
-      std::stringstream ss;
-      for (auto qv : plan_->getPlans().front()->getMatchingOrder()) {
-        ss << qv << ' ';
-      }
-      result_->setMatchingOrder(ss.str());
-    } else if (plan_->getPlans().size() > 1) {
-      result_->setMatchingOrder("mixed");
-    }
-
-    finish_event_ = std::make_unique<ServerEvent>(ServerEvent::ExecutionPhase);
-    finish_event_->data = &result_->getQueryResult();
-    finish_event_->query_id = qid;
-  }
+  void init(QueryId qid, QueryContext* query_ctx, ExecutionContext& ctx, ThreadsafeTaskQueue& task_queue) override;
 
   void finishPlan(ThreadsafeQueue<ServerEvent>* reply_queue) {
     result_->setElapsedExecutionTime(toSeconds(start_time_, std::chrono::high_resolution_clock::now()));
@@ -88,8 +69,9 @@ class ExecutionPlanDriver : public ExecutionPlanDriverBase {
 class MatchingParallelExecutionPlanDriver : public ExecutionPlanDriverBase {
  private:
   uint32_t batch_size_;
-  std::vector<CompressedSubgraphs> inputs_;
-  std::vector<TraverseContext> traverse_context_;
+  std::unique_ptr<InputOperator> input_op_ = nullptr;
+  std::vector<bool> task_depleted_;
+  std::vector<CandidateSetView> candidates_;
 
  public:
   explicit MatchingParallelExecutionPlanDriver(BacktrackingPlan* plan) : ExecutionPlanDriverBase(plan) {}

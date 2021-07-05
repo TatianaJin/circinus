@@ -27,19 +27,16 @@ namespace circinus {
 
 class CountOutputOperator : public OutputOperator {
  public:
-  std::string toString() const override { return "CountOutputOperator"; }
-  // all clones share the same Outputs instance
-  Operator* clone() const override { return new CountOutputOperator(*this); }
-
   explicit CountOutputOperator(SameLabelIndices&& same_label_indices) : OutputOperator(std::move(same_label_indices)) {}
 
-  bool validateAndOutput(const std::vector<CompressedSubgraphs>& input, uint32_t output_index) override {
+  bool validateAndOutput(const std::vector<CompressedSubgraphs>& input, uint32_t& input_start, uint32_t input_end,
+                         uint32_t output_index) const override {
     auto count_acc = outputs_->getCount(output_index);
-    leftover_input_ = input.size();
-    for (auto& group : input) {
-      --leftover_input_;
+    while (input_start < input_end) {
+      auto& group = input[input_start];
       auto update = group.getNumIsomorphicSubgraphs(same_label_indices_, outputs_->getLimitPerThread() - count_acc);
       count_acc = outputs_->updateCount(update, output_index);
+      ++input_start;
       if (count_acc >= outputs_->getLimitPerThread()) {
         DLOG(INFO) << "last input num subgraphs " << group.getNumSubgraphs() << " isomorphic " << update << " total "
                    << count_acc;
@@ -48,6 +45,8 @@ class CountOutputOperator : public OutputOperator {
     }
     return false;
   }
+
+  std::string toString() const override { return "CountOutputOperator"; }
 };
 
 Outputs& Outputs::init(uint32_t n_threads, const std::string& path_prefix) {

@@ -44,7 +44,7 @@ class NeighborhoodFilterTask : public TaskBase {
 
   const GraphBase* getDataGraph() const override { return graph_; }
 
-  void run() override { filter_->filter(graph_, candidates_, &filter_context_); }
+  void run(uint32_t executor_idx) override { filter_->filter(graph_, candidates_, &filter_context_); }
 };
 
 }  // namespace circinus

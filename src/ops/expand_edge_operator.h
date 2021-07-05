@@ -30,6 +30,10 @@ class ExpandEdgeTraverseContext : public TraverseContext {
   unordered_set<VertexID> parent_set_;  // for profile
 
  public:
+  ExpandEdgeTraverseContext(const std::vector<CompressedSubgraphs>* inputs, const void* data_graph,
+                            uint32_t input_index, uint32_t input_end_index)
+      : TraverseContext(inputs, data_graph, input_index, input_end_index) {}
+
   template <QueryType profile>
   inline void updateIntersection(uint32_t input_size, uint32_t output_size, VertexID parent) {
     if
@@ -90,6 +94,11 @@ class ExpandEdgeOperator : public TraverseOperator {
         parent_id_(parent) {}
 
   virtual ~ExpandEdgeOperator() {}
+
+  std::unique_ptr<TraverseContext> initTraverseContext(const std::vector<CompressedSubgraphs>* inputs,
+                                                       const void* graph, uint32_t start, uint32_t end) const override {
+    return std::make_unique<ExpandEdgeTraverseContext>(inputs, graph, start, end);
+  }
 
   std::vector<std::unique_ptr<BipartiteGraph>> computeBipartiteGraphs(
       const Graph* g, const std::vector<CandidateSetView>& candidate_sets) override {

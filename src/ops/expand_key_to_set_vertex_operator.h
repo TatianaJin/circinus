@@ -45,7 +45,10 @@ class ExpandKeyToSetVertexOperator : public ExpandVertexOperator {
   }
 
   uint32_t expandAndProfileInner(uint32_t batch_size, TraverseContext* ctx) const override {
-    return expandInner<ctx->type>(batch_size, ctx);
+    if (ctx->query_type == QueryType::Profile) return expandInner<QueryType::Profile>(batch_size, ctx);
+    CHECK(ctx->query_type == QueryType::ProfileWithMiniIntersection) << "Unknown query type "
+                                                                     << (uint32_t)ctx->query_type;
+    return expandInner<QueryType::ProfileWithMiniIntersection>(batch_size, ctx);
   }
 
   std::string toString() const override {
@@ -65,21 +68,23 @@ class ExpandKeyToSetVertexOperator : public ExpandVertexOperator {
       auto exceptions = input.getExceptions(same_label_key_indices_, same_label_set_indices_);
       std::vector<VertexID> new_set;
       for (uint32_t i = 0; i < parents_.size(); ++i) {
-        uint32_t key = query_vertex_indices_[parents_[i]];
+        uint32_t key = query_vertex_indices_.at(parents_[i]);
         uint32_t key_vid = input.getKeyVal(key);
         auto neighbors = ((G*)ctx->current_data_graph)->getOutNeighborsWithHint(key_vid, ALL_LABEL, i);
         if (i == 0) {
           intersect(*candidates_, neighbors, &new_set, exceptions);
           if
             constexpr(isProfileMode(profile)) {
-              updateIntersectInfo(candidates_->size() + neighbors.size(), new_set.size());
+              ctx->updateIntersectInfo(candidates_->size() + neighbors.size(), new_set.size());
             }
         } else {
           auto new_set_size = new_set.size();
           (void)new_set_size;
           intersectInplace(new_set, neighbors, &new_set);
           if
-            constexpr(isProfileMode(profile)) { updateIntersectInfo(new_set_size + neighbors.size(), new_set.size()); }
+            constexpr(isProfileMode(profile)) {
+              ctx->updateIntersectInfo(new_set_size + neighbors.size(), new_set.size());
+            }
         }
         if (new_set.size() == 0) {
           break;
@@ -91,10 +96,10 @@ class ExpandKeyToSetVertexOperator : public ExpandVertexOperator {
           // consider reuse of partial intersection results at each parent
           if (isProfileWithMiniIntersectionMode(profile)) {
             std::vector<VertexID> parent_tuple(parents_.size());
-            for (uint32_t i = 0; i < parents_.size(); ++i) {
-              uint32_t key_vid = input.getKeyVal(query_vertex_indices_[parents_[i]]);
-              parent_tuple[i] = key_vid;
-              ctx->updateDistinctSICount(i, parent_tuple, i);
+            for (uint32_t j = 0; j < parents_.size(); ++j) {
+              uint32_t key_vid = input.getKeyVal(query_vertex_indices_.at(parents_[j]));
+              parent_tuple[j] = key_vid;
+              ctx->updateDistinctSICount(j, parent_tuple, j);
             }
           }
         }

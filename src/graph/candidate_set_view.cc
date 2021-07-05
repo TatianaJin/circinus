@@ -54,4 +54,29 @@ CandidateSetView::CandidateSetView(const std::vector<VertexID>* candidates, cons
   }
 }
 
+CandidateSetView::CandidateSetView(const std::vector<std::vector<VertexID>>& partitioned_candidates,
+                                   const CandidateScope& scope) {
+  switch (scope.getType()) {
+  case CandidateScopeType::All: {
+    for (auto range : partitioned_candidates) {
+      addRange(range.data(), range.data() + range.size());
+    }
+    return;
+  }
+  case CandidateScopeType::Partition: {
+    DCHECK_LT(scope.getPartition(), partitioned_candidates.size());
+    addRange(partitioned_candidates[scope.getPartition()].data(),
+             partitioned_candidates[scope.getPartition()].data() + partitioned_candidates[scope.getPartition()].size());
+    return;
+  }
+  case CandidateScopeType::Inverse: {
+    for (uint32_t partition = 0; partition < partitioned_candidates.size(); ++partition) {
+      if (partition == scope.getPartition()) continue;
+      addRange(partitioned_candidates[partition].data(),
+               partitioned_candidates[partition].data() + partitioned_candidates[partition].size());
+    }
+  }
+  }
+}
+
 }  // namespace circinus

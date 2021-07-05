@@ -56,7 +56,7 @@ class PartitionedLogicalCompressedInputOperator : public LogicalCompressedInputO
 
   virtual ~PartitionedLogicalCompressedInputOperator() {}
 
-  virtual std::unique_ptr<InputOperator> toPhysicalOperators() override;
+  std::unique_ptr<InputOperator> toPhysicalOperators() override;
 };
 
 }  // namespace circinus

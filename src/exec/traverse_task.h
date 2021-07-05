@@ -28,122 +28,134 @@
 #include "graph/graph_view.h"
 #include "ops/input_operator.h"
 #include "ops/traverse_operator.h"
+#include "ops/types.h"
 
 namespace circinus {
 
-class TraverseTask : public TaskBase {
- private:
+/**
+ * For single-thread query execution
+ */
+class TraverseChainTask : public TaskBase {
+ protected:
+  const GraphBase* graph_ = nullptr;
   const uint32_t batch_size_;
-  std::unique_ptr<InputOperator> input_op_;
-  const ReorderedPartitionedGraph* graph_;
   std::vector<Operator*> operators_;
+  std::unique_ptr<InputOperator> input_op_ = nullptr;
   std::vector<CandidateSetView> candidates_;
-  std::vector<TraverseContext> traverse_context_;
-  std::vector<GraphView<GraphPartition*>> graph_views_;
-  QueryType query_type;
+
+  std::vector<ProfileInfo> profile_info_;
 
  public:
-  TraverseTask(QueryId query_id, TaskId task_id, uint32_t batch_size, std::vector<Operator*>& operators,
-               std::unique_ptr<InputOperator>&& input_op, const std::vector<CandidateScope>& scopes,
-               const GraphBase* graph, CandidateResult* candidates)
-      : TaskBase(query_id, task_id),
+  TraverseChainTask(QueryId qid, TaskId tid, uint32_t batch_size, const std::vector<Operator*>& ops,
+                    std::unique_ptr<InputOperator>&& input_op, const GraphBase* graph,
+                    std::vector<CandidateSetView>&& candidates)
+      : TaskBase(qid, tid),
+        graph_(graph),
+        batch_size_(batch_size),
+        operators_(ops),
         input_op_(std::move(input_op)),
-        operators_(operators),
-        graph_(dynamic_cast<const ReorderedPartitionedGraph*>(graph)),
-        batch_size_(batch_size) {
-    CHECK(graph_ != nullptr);
-    CHECK_EQ(candidates->getMergedCandidates()->size(), scopes.size());
-    auto partitioned_candidates = dynamic_cast<PartitionedCandidateResult*>(candidates);
-    CHECK(partitioned_candidates != nullptr);
-
-    candidates_.reserve(scopes.size());
-    for (uint32_t i = 0; i < scopes.size(); ++i) {
-      candidates_.emplace_back(&partitioned_candidates->getMergedCandidates(i), scopes[i],
-                               partitioned_candidates->getCandidatePartitionOffsets(i));
-    }
-    graph_views_ = setupGraphView(graph_, operators, scopes);
-  }
+        candidates_(std::move(candidates)) {}
 
   const GraphBase* getDataGraph() const override { return graph_; }
 
-  void run() override {
-    const auto& inputs = input_op_->getInputs(graph_, candidates_);
-    uint32_t len = operators_.size() - 1;
-    traverse_context_.reserve(len);
-    for (uint32_t i = 0; i < len; ++i) {
-      if (i == 0) {
-        traverse_context_.emplace_back(TraverseContext(0, &inputs, &graph_views_[i]));
-      } else {
-        const auto& last_output = traverse_context_.back().getOutputs();
-        traverse_context_.emplace_back(TraverseContext(0, last_output, &graph_views_[i]));
-      }
-    }
-    execute();
+  void run(uint32_t executor_idx) override {
+    setupCandidateSets();
+    profile_info_.resize(operators_.size());
+    execute<QueryType::Execute>(input_op_->getInputs(graph_, candidates_), 0);
   }
 
-  void profile() override {
-    const auto& inputs = input_op_->getInputs(graph_, candidates_);
-    uint32_t len = operators_.size() - 1;
-    traverse_context_.reserve(len);
-    for (uint32_t i = 0; i < len; ++i) {
-      if (i == 0) {
-        traverse_context_.emplace_back(TraverseContext(0, &inputs, &graph_views_[i]));
-      } else {
-        const auto& last_output = traverse_context_.back().getOutputs();
-        traverse_context_.emplace_back(TraverseContext(0, last_output, &graph_views_[i]));
-      }
-      traverse_context_.back().type = query_type;
-    }
-    profile_execute();
+  void profile(uint32_t executor_idx) override {
+    setupCandidateSets();
+    profile_info_.resize(operators_.size());
+    execute<QueryType::Profile>(input_op_->getInputs(graph_, candidates_), 0);
   }
 
  protected:
-  bool profile_execute(uint32_t level = 0) {
+  void setupCandidateSets() const {
+    auto op = operators_[0];
+    auto traverse = dynamic_cast<TraverseOperator*>(op);
+    while (traverse != nullptr) {
+      DCHECK_LT(traverse->getTargetQueryVertex(), candidates_.size());
+      // now assume all query vertices have candidate sets
+      traverse->setCandidateSets(&candidates_[traverse->getTargetQueryVertex()]);
+      LOG(INFO) << "set candidates for " << traverse->getTargetQueryVertex() << " " << traverse->toString();
+      op = op->getNext();
+      traverse = dynamic_cast<TraverseOperator*>(op);
+    }
+  }
+
+  virtual std::unique_ptr<TraverseContext> createTraverseContext(const std::vector<CompressedSubgraphs>& inputs,
+                                                                 std::vector<CompressedSubgraphs>& outputs,
+                                                                 uint32_t level, const TraverseOperator* op) {
+    auto ctx = op->initTraverseContext(&inputs, graph_, 0, inputs.size());
+    ctx->outputs = &outputs;
+    return ctx;
+  }
+
+  template <QueryType profile>
+  bool execute(const std::vector<CompressedSubgraphs>& inputs, uint32_t level = 0) {
+    std::vector<CompressedSubgraphs> outputs;
     auto op = operators_[level];
     if (level == operators_.size() - 1) {
       auto output_op = dynamic_cast<OutputOperator*>(op);
-      return output_op->validateAndOutputAndProfile(*traverse_context_[level - 1].getOutputs(), 0);
+      if
+        constexpr(isProfileMode(profile)) {
+          return output_op->validateAndOutputAndProfile(inputs, 0, inputs.size(), 0, &profile_info_[level]);
+        }
+      return output_op->validateAndOutput(inputs, 0);
     }
     auto traverse_op = dynamic_cast<TraverseOperator*>(op);
-    traverse_context_[level].setInputEndIndex();
+    auto ctx = createTraverseContext(inputs, outputs, level, traverse_op);
+    bool finished = false;
     while (true) {
-      traverse_context_[level].clearOutputs();
-      auto size = traverse_op->expandAndProfile(batch_size_, &traverse_context_[level]);
+      outputs.clear();
+      uint32_t size = 0;
+      if
+        constexpr(isProfileMode(profile)) { size = traverse_op->expandAndProfile(batch_size_, ctx.get()); }
+      else {
+        size = traverse_op->expand(batch_size_, ctx.get());
+      }
       if (size == 0) {
         break;
       }
-      if (profile_execute(level + 1)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  bool execute(uint32_t level = 0) {
-    auto op = operators_[level];
-    if (level == operators_.size() - 1) {
-      auto output_op = dynamic_cast<OutputOperator*>(op);
-      return output_op->validateAndOutput(*traverse_context_[level - 1].getOutputs(), 0);
-    }
-    auto traverse_op = dynamic_cast<TraverseOperator*>(op);
-    traverse_context_[level].setInputEndIndex();
-    while (true) {
-      traverse_context_[level].clearOutputs();
-      auto size = traverse_op->expand(batch_size_, &traverse_context_[level]);
-      if (size == 0) {
+      if (execute<profile>(outputs, level + 1)) {
+        finished = true;
         break;
       }
-      if (execute(level + 1)) {
-        return true;
-      }
     }
-    return false;
+    profile_info_[level] = std::move(*ctx);
+    return finished;
+  }
+};
+
+class TraverseTask : public TraverseChainTask {
+ private:
+  const ReorderedPartitionedGraph* partitioned_graph_;
+  std::vector<GraphView<GraphPartitionBase>> graph_views_;
+
+ public:
+  TraverseTask(QueryId query_id, TaskId task_id, uint32_t batch_size, const std::vector<Operator*>& operators,
+               std::unique_ptr<InputOperator>&& input_op, const std::vector<CandidateScope>& scopes,
+               const GraphBase* graph, std::vector<CandidateSetView>&& candidates)
+      : TraverseChainTask(query_id, task_id, batch_size, operators, std::move(input_op), graph, std::move(candidates)),
+        partitioned_graph_(dynamic_cast<const ReorderedPartitionedGraph*>(graph)) {
+    CHECK(partitioned_graph_ != nullptr);
+    graph_views_ = setupGraphView(partitioned_graph_, operators, scopes);
   }
 
-  static std::vector<GraphView<GraphPartition*>> setupGraphView(const ReorderedPartitionedGraph* g,
-                                                                const std::vector<Operator*>& operators,
-                                                                const std::vector<CandidateScope>& scopes) {
-    std::vector<GraphView<GraphPartition*>> data_graphs_for_operators;
+ protected:
+  std::unique_ptr<TraverseContext> createTraverseContext(const std::vector<CompressedSubgraphs>& inputs,
+                                                         std::vector<CompressedSubgraphs>& outputs, uint32_t level,
+                                                         const TraverseOperator* op) override {
+    auto ctx = op->initTraverseContext(&inputs, &graph_views_[level], 0, inputs.size());
+    ctx->outputs = &outputs;
+    return ctx;
+  }
+
+  static std::vector<GraphView<GraphPartitionBase>> setupGraphView(const ReorderedPartitionedGraph* g,
+                                                                   const std::vector<Operator*>& operators,
+                                                                   const std::vector<CandidateScope>& scopes) {
+    std::vector<GraphView<GraphPartitionBase>> data_graphs_for_operators;
     CHECK_GT(operators.size(), 0);
     size_t len = operators.size() - 1;
     data_graphs_for_operators.reserve(len);
@@ -158,138 +170,100 @@ class TraverseTask : public TaskBase {
 };
 
 /**
- * For single-thread query execution
- */
-class TraverseChainTask : public TaskBase {
-  const Graph* graph_;
-  const uint32_t batch_size_;
-  std::vector<Operator*> operators_;
-  std::vector<CandidateSetView> candidates_;
-  const uint32_t input_candidate_index_;
-  const bool inputs_are_keys_;
-
- public:
-  TraverseChainTask(QueryId qid, TaskId tid, uint32_t batch_size, std::vector<Operator*>& ops, const Graph* graph,
-                    std::vector<CandidateSetView>&& candidates, uint32_t input_candidate_index, bool inputs_are_keys)
-      : TaskBase(qid, tid),
-        graph_(graph),
-        batch_size_(batch_size),
-        operators_(ops),
-        candidates_(std::move(candidates)),
-        input_candidate_index_(input_candidate_index),
-        inputs_are_keys_(inputs_are_keys) {}
-
-  const GraphBase* getDataGraph() const override { return graph_; }
-
-  void run() override {
-    auto op = operators_[0];
-    auto traverse = dynamic_cast<TraverseOperator*>(op);
-    while (traverse != nullptr) {
-      DCHECK_LT(traverse->getTargetQueryVertex(), candidates_.size());
-      // now assume all query vertices have candidate sets
-      //
-      traverse->setCandidateSets(&candidates_[traverse->getTargetQueryVertex()]);
-      LOG(INFO) << "set candidates for " << traverse->getTargetQueryVertex() << " " << traverse->toString();
-      op = op->getNext();
-      traverse = dynamic_cast<TraverseOperator*>(op);
-    }
-    if (inputs_are_keys_) {
-      execute(std::vector<CompressedSubgraphs>(candidates_[input_candidate_index_].begin(),
-                                               candidates_[input_candidate_index_].end()));
-    } else {
-      std::vector<CompressedSubgraphs> input;
-      input.emplace_back(std::make_shared<std::vector<VertexID>>(std::move(candidates_[input_candidate_index_])));
-      execute(input);
-    }
-  }
-
- protected:
-  bool execute(const std::vector<CompressedSubgraphs>& inputs, uint32_t level = 0) {
-    std::vector<CompressedSubgraphs> outputs;
-    auto op = operators_[level];
-    if (level == operators_.size() - 1) {
-      auto output_op = dynamic_cast<OutputOperator*>(op);
-      return output_op->validateAndOutput(inputs, 0);
-    }
-    auto traverse_op = dynamic_cast<TraverseOperator*>(op);
-
-    while (true) {
-      outputs.clear();
-      auto size = traverse_op->expand(&outputs, FLAGS_batch_size);
-      if (size == 0) {
-        break;
-      }
-      if (execute(outputs, level + 1)) {
-        return true;
-      }
-    }
-    return false;
-  }
-};
-
-/**
  * For multi-thread query execution
  */
 class MatchingParallelTask : public TaskBase {
+ protected:
+  std::vector<CompressedSubgraphs> outputs_;
+
  public:
   MatchingParallelTask(QueryId qid, TaskId tid) : TaskBase(qid, tid) {}
 
-  uint32_t getNextLevel() { return task_id_ + 1; }
-  virtual TraverseOperator* getNextOperator();
-  virtual std::vector<CompressedSubgraphs>& getOutputs();
+  inline uint32_t getNextLevel() const { return getTaskId() + 1; }
+  virtual Operator* getNextOperator() = 0;
+  std::vector<CompressedSubgraphs>& getOutputs() { return outputs_; }
 };
 
 class MatchingParallelInputTask : public MatchingParallelTask {
-  const Graph* graph_;
-  std::unique_ptr<InputOperator> input_op_;
-  std::vector<CompressedSubgraphs> outputs_;
+  const GraphBase* graph_ = nullptr;
+  const InputOperator* input_op_ = nullptr;
   std::vector<CandidateSetView> candidates_;
 
  public:
-  MatchingParallelInputTask(QueryId qid, TaskId tid, const Graph* graph, std::unique_ptr<InputOperator>&& input_op,
+  MatchingParallelInputTask(QueryId qid, TaskId tid, const GraphBase* graph, const InputOperator* input_op,
                             std::vector<CandidateSetView>&& candidates)
-      : MatchingParallelTask(qid, tid),
-        graph_(graph),
-        input_op_(std::move(input_op)),
-        candidates_(std::move(candidates)) {}
+      : MatchingParallelTask(qid, tid), graph_(graph), input_op_(input_op), candidates_(std::move(candidates)) {}
 
   const GraphBase* getDataGraph() const override { return graph_; }
 
-  void run() override { outputs_ = std::move(input_op_->getInputs(graph_, candidates_)); }
+  void run(uint32_t executor_idx) override { outputs_ = input_op_->getInputs(graph_, candidates_); }
 
-  std::vector<CompressedSubgraphs>& getOutputs() override { return outputs_; }
+  Operator* getNextOperator() override { return input_op_->getNext(); }
 };
 
 /**
  * For multi-thread query execution
  */
 class MatchingParallelTraverseTask : public MatchingParallelTask {
-  const Graph* graph_;
-  TraverseOperator* traverse_op_;
-  TraverseContext* traverse_ctx_;
+  const TraverseOperator* traverse_op_;
+  TraverseContext traverse_ctx_;
   std::vector<CandidateSetView> candidates_;
+  std::shared_ptr<std::vector<CompressedSubgraphs>> inputs_;
 
  public:
-  MatchingParallelTraverseTask(QueryId qid, TaskId tid, const Graph* graph, TraverseOperator* traverse_op,
-                               std::vector<CandidateSetView>&& candidates, TraverseContext* traverse_ctx,
-                               const std::vector<CompressedSubgraphs>& inputs, uint32_t input_index,
-                               uint32_t input_end_index)
+  MatchingParallelTraverseTask(QueryId qid, TaskId tid, TraverseOperator* traverse_op, TraverseContext&& traverse_ctx,
+                               const std::shared_ptr<std::vector<CompressedSubgraphs>>& inputs)
       : MatchingParallelTask(qid, tid),
-        graph_(graph),
-        traverse_op_(traverse_op),
-        candidates_(std::move(candidates)),
-        traverse_ctx_(traverse_ctx) {}
+        traverse_op_(std::move(traverse_op)),
+        traverse_ctx_(traverse_ctx),
+        inputs_(inputs) {
+    DCHECK(traverse_op_ != nullptr);
+    traverse_ctx_.outputs = &outputs_;
+  }
 
-  const GraphBase* getDataGraph() const override { return graph_; }
+  const GraphBase* getDataGraph() const override {
+    return reinterpret_cast<const GraphBase*>(traverse_ctx_.current_data_graph);
+  }
 
-  void run() override { traverse_op_.expand(UINT32_MAX, traverse_ctx_); }
+  void run(uint32_t executor_idx) override { traverse_op_->expand(UINT32_MAX, &traverse_ctx_); }
+  void profile(uint32_t executor_idx) override {
+    traverse_op_->expandAndProfile(UINT32_MAX, &traverse_ctx_);
+    traverse_ctx_.total_input_size = traverse_ctx_.getTotalInputSize();
+  }
 
-  std::vector<CompressedSubgraphs>& getOutputs() override { return *(traverse_ctx_->outputs); }
-
-  TraverseOperator* getNextOperator() override { return traverse_op_->getNext(); }
+  Operator* getNextOperator() override { return traverse_op_->getNext(); }
 };
 
-// TODO(byli) output task
-class MatchingParallelOutputTask : public MatchingParallelTask {};
+class MatchingParallelOutputTask : public MatchingParallelTask {
+  const OutputOperator* output_op_;
+  ProfileInfo info_;
+  std::shared_ptr<std::vector<CompressedSubgraphs>> inputs_;
+  uint32_t input_index_ = 0;
+  uint32_t input_end_index_ = 0;
+
+ public:
+  MatchingParallelOutputTask(QueryId qid, TaskId tid, OutputOperator* op,
+                             const std::shared_ptr<std::vector<CompressedSubgraphs>>& inputs, uint32_t input_index,
+                             uint32_t input_end_index)
+      : MatchingParallelTask(qid, tid),
+        output_op_(op),
+        inputs_(inputs),
+        input_index_(input_index),
+        input_end_index_(input_end_index) {
+    DCHECK(output_op_ != nullptr);
+  }
+
+  const GraphBase* getDataGraph() const override { return nullptr; }
+
+  void run(uint32_t executor_idx) override {
+    output_op_->validateAndOutput(*inputs_, input_index_, input_end_index_, executor_idx);
+  }
+
+  void profile(uint32_t executor_idx) override {
+    output_op_->validateAndOutputAndProfile(*inputs_, input_index_, input_end_index_, executor_idx, &info_);
+  }
+
+  Operator* getNextOperator() override { return nullptr; }
+};
 
 }  // namespace circinus

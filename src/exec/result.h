@@ -33,7 +33,7 @@ class Result {
  public:
   static std::unique_ptr<Result> newCandidateResult(TaskId n_tasks);
   static std::unique_ptr<Result> newPartitionedCandidateResult(TaskId n_tasks, uint32_t n_partitions);
-  static std::unique_ptr<Result> newExecutionResult(bool profile = false);
+  static std::unique_ptr<Result> newExecutionResult(bool profile = false, uint32_t n_plans = 1);
 
   virtual ~Result() {}
 };
@@ -105,8 +105,22 @@ class PartitionedCandidateResult : public CandidateResult {
   }
 
   inline const auto& getCandidatePartitionOffsets(uint32_t idx) const {
-    CHECK(!candidate_partition_offsets_.empty()) << "merge() must be called before getCandidatePartitionOffsets";
+    CHECK(!candidate_partition_offsets_[idx].empty()) << "merge() must be called before getCandidatePartitionOffsets";
     return candidate_partition_offsets_[idx];
+  }
+
+  inline std::vector<CandidateSetView> getCandidatesByScopes(const std::vector<CandidateScope>& scopes) const {
+    CHECK_EQ(candidates_.size(), scopes.size());
+    std::vector<CandidateSetView> res;
+    res.reserve(candidates_.size());
+    for (uint32_t i = 0; i < res.size(); ++i) {
+      if (!merged_candidates_[i].empty()) {
+        res.emplace_back(&merged_candidates_[i], scopes[i], candidate_partition_offsets_[i]);
+      } else {
+        res.emplace_back(candidates_[i], scopes[i]);
+      }
+    }
+    return res;
   }
 };
 
@@ -130,7 +144,7 @@ class ExecutionResult : public Result {
 };
 
 class ProfiledExecutionResult : public ExecutionResult {
-  std::vector<ProfileInfo> profiles_;
+  std::vector<std::vector<ProfileInfo>> profiles_;
   std::vector<std::string> profiled_plan_str_;
 
  public:

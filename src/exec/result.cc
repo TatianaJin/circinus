@@ -33,8 +33,8 @@ std::unique_ptr<Result> Result::newPartitionedCandidateResult(TaskId n_tasks, ui
   return std::make_unique<PartitionedCandidateResult>(n_tasks, n_partitions);
 }
 
-std::unique_ptr<Result> Result::newExecutionResult(bool profile) {
-  if (profile) return std::make_unique<ProfiledExecutionResult>();
+std::unique_ptr<Result> Result::newExecutionResult(bool profile, uint32_t n_plans) {
+  if (profile) return std::make_unique<ProfiledExecutionResult>(n_plans);
   return std::make_unique<ExecutionResult>();
 }
 

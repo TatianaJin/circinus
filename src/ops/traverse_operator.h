@@ -38,19 +38,23 @@ namespace circinus {
 class TraverseContext : public ProfileInfo {
  private:
   uint32_t input_index_ = 0;
+  uint32_t input_start_index_ = 0;
   uint32_t input_end_index_ = 0;
   const std::vector<CompressedSubgraphs>* current_inputs_ = nullptr;
 
  public:
   const void* current_data_graph = nullptr;
   std::vector<CompressedSubgraphs>* outputs;
+  QueryType query_type;
 
-  TraverseContext(uint32_t input_index, const std::vector<CompressedSubgraphs>* inputs, const void* data_graph)
-      : input_index_(input_index), current_inputs_(inputs), current_data_graph(data_graph) {}
+  TraverseContext() {}
+  TraverseContext(const std::vector<CompressedSubgraphs>* inputs, const void* data_graph)
+      : TraverseContext(inputs, data_graph, 0, inputs->size()) {}
 
-  TraverseContext(uint32_t input_index, uint32_t input_end_index, const std::vector<CompressedSubgraphs>* inputs,
-                  const void* data_graph)
+  TraverseContext(const std::vector<CompressedSubgraphs>* inputs, const void* data_graph, uint32_t input_index,
+                  uint32_t input_end_index)
       : input_index_(input_index),
+        input_start_index_(input_index),
         input_end_index_(input_end_index),
         current_inputs_(inputs),
         current_data_graph(data_graph) {}
@@ -61,18 +65,11 @@ class TraverseContext : public ProfileInfo {
   inline const CompressedSubgraphs& getPreviousInput() const { return (*current_inputs_)[input_index_ - 1]; }
   inline bool hasNextInput() const { return input_index_ < input_end_index_; }
   inline uint32_t getInputIndex() const { return input_index_; }
-  inline uint32_t getTotalInputSize() const { return total_input_size - (input_end_index_ - input_index_); }
+  inline uint32_t getTotalInputSize() const { return input_index_ - input_start_index_; }
   inline const auto getOutputs() const { return outputs; }
 
   inline void nextInput() { ++input_index_; }
-  inline void clearOutputs() { (*outputs).clear(); }
-  // FIXME(tatiana): replace with initialization in constructor
-  inline void setInputIndex(uint32_t input_index) { input_index_ = input_index; }
-  inline void setInputEndIndex(uint32_t input_end_index) { input_end_index_ = input_end_index; }
-  inline void setInputEndIndex() { input_end_index_ = current_inputs_->size(); }
-  inline void setCurrentInputs(const std::vector<CompressedSubgraphs>* current_inputs) {
-    current_inputs_ = current_inputs;
-  }
+  inline void clearOutputs() { outputs->clear(); }
 };
 
 class TraverseOperator : public Operator {
@@ -138,22 +135,13 @@ class TraverseOperator : public Operator {
   virtual std::vector<std::unique_ptr<GraphPartitionBase>> computeGraphPartitions(
       const ReorderedPartitionedGraph* g, const std::vector<CandidateScope>& candidate_scopes) const = 0;
 
-  virtual void input(const std::vector<CompressedSubgraphs>& inputs, uint32_t input_index, uint32_t input_end_index,
-                     const void* data_graph, TraverseContext* ctx) const {
-    ctx->setCurrentInputs(&inputs);
-    ctx->setInputIndex(input_index);
-    ctx->setInputEndIndex(input_end_index);
-    ctx->current_data_graph =
-        data_graph;  // FIXME(tatiana): directly set in context instead of repeatedly set in input()?
+  virtual std::unique_ptr<TraverseContext> initTraverseContext(const std::vector<CompressedSubgraphs>* inputs,
+                                                               const void* graph, uint32_t input_start,
+                                                               uint32_t input_end) const {
+    return std::make_unique<TraverseContext>(inputs, graph, input_start, input_end);
   }
 
   virtual uint32_t expand(uint32_t cap, TraverseContext* ctx) const = 0;
-
-  virtual void inputAndProfile(const std::vector<CompressedSubgraphs>& inputs, uint32_t input_index,
-                               uint32_t input_end_index, const void* data_graph, TraverseContext* ctx) const {
-    input(inputs, input_index, input_end_index, data_graph, ctx);
-    ctx->total_input_size += (input_end_index - input_index);
-  }
 
   uint32_t expandAndProfile(uint32_t cap, TraverseContext* ctx) const {
     auto start = std::chrono::high_resolution_clock::now();

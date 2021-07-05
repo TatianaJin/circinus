@@ -51,7 +51,7 @@ class ScanTask : public TaskBase {
 
   const GraphBase* getDataGraph() const override { return graph_; }
 
-  void run() override {
+  void run(uint32_t executor_idx) override {
     if (partition_ == ~0u) {
       scan_->scan(dynamic_cast<const Graph*>(graph_), &scan_context_);
     } else {

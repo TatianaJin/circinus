@@ -34,6 +34,8 @@ class CandidateSetView : public VertexSetView {
 
   CandidateSetView(const std::vector<VertexID>* candidates, const CandidateScope& scope,
                    const std::vector<VertexID>& partition_offsets);
+
+  CandidateSetView(const std::vector<std::vector<VertexID>>& partitioned_candidates, const CandidateScope& scope);
 };
 
 }  // namespace circinus

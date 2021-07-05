@@ -202,7 +202,6 @@ struct QueryResult {
 };
 
 struct ProfileInfo {
-  QueryType type = QueryType::Profile;
   uint64_t total_input_size = 0;
   uint64_t total_output_size = 0;
   uint64_t total_num_input_subgraphs = 0;

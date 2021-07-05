@@ -46,7 +46,10 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
   }
 
   uint32_t expandAndProfileInner(uint32_t batch_size, TraverseContext* ctx) const override {
-      return expandInner<ctx->type>(batch_size, ctx);
+    if (ctx->query_type == QueryType::Profile) return expandInner<QueryType::Profile>(batch_size, ctx);
+    CHECK(ctx->query_type == QueryType::ProfileWithMiniIntersection) << "Unknown query type "
+                                                                     << (uint32_t)ctx->query_type;
+    return expandInner<QueryType::ProfileWithMiniIntersection>(batch_size, ctx);
   }
 
   std::string toString() const override {
@@ -57,7 +60,7 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
   }
 
  protected:
-  bool isInCandidates(VertexID key) {
+  bool isInCandidates(VertexID key) const {
     auto lb = std::lower_bound(candidates_->begin(), candidates_->end(), key);
     return lb != candidates_->end() && *lb == key;
   }
@@ -67,7 +70,7 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
     auto& input = ctx->getCurrentInput();
     uint32_t idx = 0;
     for (auto par : parents_) {
-      auto current_set = input.getSet(query_vertex_indices_[par]);
+      auto current_set = input.getSet(query_vertex_indices_.at(par));
       uint32_t current_size = 0;
       for (auto set_vertex_id : *current_set) {
         current_size += ((G*)(ctx->current_data_graph))->getVertexOutDegreeWithHint(set_vertex_id, ALL_LABEL, idx);
@@ -87,9 +90,11 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
   inline uint32_t expandInner(uint32_t batch_size, TraverseContext* ctx) const {
     uint32_t output_num = 0;
     while (ctx->hasNextInput()) {
-      auto[min_parent_set_size, min_parent_vertex, min_parent_idx] = getMinimumParent();
+      auto[min_parent_set_size, min_parent_vertex, min_parent_idx] = getMinimumParent(ctx);
       if
-        constexpr(isProfileWithMiniIntersectionMode(profile)) { updateDistinctSICount(); }
+        constexpr(isProfileWithMiniIntersectionMode(profile)) {
+          updateDistinctSICount((ExpandVertexTraverseContext*)ctx);
+        }
       if (min_parent_set_size < candidates_->size()) {
         DLOG(INFO) << "fromSetNeighborStrategy";
         output_num += fromSetNeighborStrategy<profile>(min_parent_vertex, min_parent_idx, ctx);
@@ -136,7 +141,7 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
       uint32_t parent_idx = 0;
       for (uint32_t set_vid : parents_) {
         std::vector<VertexID> new_set;
-        uint32_t id = query_vertex_indices_[set_vid];
+        uint32_t id = query_vertex_indices_.at(set_vid);
         if
           constexpr(
               !std::is_same<G, Graph>::value) {  // if using graph view, select neighbors from the right graph part
@@ -146,7 +151,7 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
         intersect(*input.getSet(id), key_out_neighbors, &new_set);  // No need for exceptions
         if
           constexpr(isProfileMode(profile)) {
-            updateIntersectInfo(input.getSet(id)->size() + key_out_neighbors.size(), new_set.size());
+            ctx->updateIntersectInfo(input.getSet(id)->size() + key_out_neighbors.size(), new_set.size());
           }
         if (new_set.empty()) {
           add = false;
@@ -184,7 +189,7 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
     unordered_set<VertexID> visited;
     auto& input = ctx->getCurrentInput();
     uint32_t output_num = 0;
-    const auto& parent_match = input.getSet(query_vertex_indices_[min_parent]);
+    const auto& parent_match = input.getSet(query_vertex_indices_.at(min_parent));
     auto exceptions = input.getExceptions(same_label_key_indices_, same_label_set_indices_);
 
     for (VertexID vid : *parent_match) {
@@ -217,7 +222,7 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
           uint32_t parent_idx = 0;
           for (uint32_t set_vid : parents_) {
             std::vector<VertexID> new_set;
-            uint32_t id = query_vertex_indices_[set_vid];
+            uint32_t id = query_vertex_indices_.at(set_vid);
             if
               constexpr(
                   !std::is_same<G, Graph>::value) {  // if using graph view, select neighbors from the right graph part
@@ -227,7 +232,7 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
             intersect(*input.getSet(id), key_out_neighbors, &new_set);
             if
               constexpr(isProfileMode(profile)) {
-                updateIntersectInfo(input.getSet(id)->size() + key_out_neighbors.size(), new_set.size());
+                ctx->updateIntersectInfo(input.getSet(id)->size() + key_out_neighbors.size(), new_set.size());
               }
             if (new_set.empty()) {
               add = false;
@@ -270,7 +275,7 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
     std::vector<std::vector<VertexID>*> parent_set_ptrs;
     parent_set_ptrs.reserve(parents_.size());
     for (auto parent : parents_) {
-      parent_set_ptrs.push_back(input.getSet(query_vertex_indices_[parent]).get());
+      parent_set_ptrs.push_back(input.getSet(query_vertex_indices_.at(parent)).get());
     }
     uint32_t depth = 0, last_depth = parents_.size() - 1;
     std::vector<uint32_t> set_index(parents_.size(), 0);

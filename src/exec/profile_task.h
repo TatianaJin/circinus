@@ -21,20 +21,20 @@ namespace circinus {
 class ProfileTaskBase {
  public:
   // FIXME(tatiana)
+  virtual ProfileInfo* getProfileInfo() const { return nullptr; }
 };
 
 template <typename T>
-class ProfileTask : public TaskBase, public ProfileTaskBase {
+class ProfileTask : public T, public ProfileTaskBase {
   static_assert(std::is_base_of<TaskBase, T>::value, "T should inherit from TaskBase");
-  T task_;
 
  public:
   template <typename... Args>
-  ProfileTask(Args... args) : task_(args...) {}
+  ProfileTask(QueryId qid, TaskId tid, Args... args) : T(qid, tid, std::move(args)...) {}
 
-  void run() override { task_.profile(); }
+  void run(uint32_t executor_idx) override { T::profile(executor_idx); }
 
-  const GraphBase* getDataGraph() const override { return task_.getDataGraph(); }
+  const GraphBase* getDataGraph() const override { return T::getDataGraph(); }
 };
 
 }  // namespace circinus

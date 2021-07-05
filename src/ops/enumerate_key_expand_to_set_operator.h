@@ -55,7 +55,7 @@ class EnumerateTraverseContext : public TraverseContext {
                            const std::vector<CompressedSubgraphs>* inputs, const void* data_graph,
                            uint32_t n_keys_to_enumerate, QueryVertexID output_graph_size, QueryVertexID output_key_size,
                            uint32_t n_parent_qvs = 0)
-      : TraverseContext(input_index, input_end_index, inputs, data_graph),
+      : TraverseContext(inputs, data_graph, input_index, input_end_index),
         enumerate_key_idx_(n_keys_to_enumerate, 0),
         enumerate_key_pos_sets_(n_keys_to_enumerate),
         output_(output_key_size, output_graph_size),
@@ -138,7 +138,10 @@ class EnumerateKeyExpandToSetOperator : public ExpandVertexOperator {
   }
 
   uint32_t expandAndProfileInner(uint32_t batch_size, TraverseContext* ctx) const override {
-    return expandInner<ctx->type>(batch_size, ctx);
+    if (ctx->query_type == QueryType::Profile) return expandInner<QueryType::Profile>(batch_size, ctx);
+    CHECK(ctx->query_type == QueryType::ProfileWithMiniIntersection) << "unknown query type "
+                                                                     << (uint32_t)ctx->query_type;
+    return expandInner<QueryType::ProfileWithMiniIntersection>(batch_size, ctx);
   }
 
   std::vector<std::unique_ptr<GraphPartitionBase>> computeGraphPartitions(
@@ -257,7 +260,7 @@ uint32_t EnumerateKeyExpandToSetOperator<G>::expandInner(uint32_t batch_size, Tr
   while (ctx->hasNextInput()) {
     if (ctx->need_new_input) {
       // find next input with non-empty candidate target set
-      while (ctx->hasNextInput() && expandInner<profile>()) {
+      while (ctx->hasNextInput() && expandInner<profile>(ctx)) {
         if
           constexpr(isProfileMode(profile)) {
             ctx->total_num_input_subgraphs += ctx->getCurrentInput().getNumSubgraphs();

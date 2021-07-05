@@ -43,12 +43,12 @@ class TaskBase {
   inline auto getTaskId() const { return task_id_; }
 
   virtual const GraphBase* getDataGraph() const = 0;
-  virtual void run() = 0;
-  virtual void profile() { run(); }
+  virtual void run(uint32_t executor_idx) = 0;
+  virtual void profile(uint32_t executor_idx) { run(executor_idx); }
 
-  inline void runWithTiming() {
+  inline void runWithTiming(uint32_t executor_idx) {
     auto start = std::chrono::high_resolution_clock::now();
-    run();
+    run(executor_idx);
     time_ += toSeconds(start, std::chrono::high_resolution_clock::now());
   }
 

@@ -23,10 +23,13 @@ class ExpandVertexTraverseContext : public TraverseContext {
   std::vector<unordered_set<std::string>> parent_tuple_sets_;
 
  public:
-  explicit ExpandVertexTraverseContext(uint32_t input_index, uint32_t input_end_index,
-                                       const std::vector<CompressedSubgraphs>* inputs, const void* data_graph,
-                                       uint32_t parent_size)
-      : TraverseContext(input_index, input_end_index, inputs, data_graph), parent_tuple_sets_(parent_size) {}
+  ExpandVertexTraverseContext(const std::vector<CompressedSubgraphs>* inputs, const void* data_graph,
+                              uint32_t input_index, uint32_t input_end_index, uint32_t parent_size)
+      : TraverseContext(inputs, data_graph, input_index, input_end_index), parent_tuple_sets_(parent_size) {}
+
+  ExpandVertexTraverseContext(const std::vector<CompressedSubgraphs>* inputs, const void* data_graph,
+                              uint32_t parent_size)
+      : TraverseContext(inputs, data_graph), parent_tuple_sets_(parent_size) {}
 
   inline void updateDistinctSICount(uint32_t depth, std::vector<VertexID>& parent_tuple, uint32_t pidx) {
     distinct_intersection_count +=

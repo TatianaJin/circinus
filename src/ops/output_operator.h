@@ -24,6 +24,7 @@
 
 #include "graph/compressed_subgraphs.h"
 #include "ops/operator.h"
+#include "utils/query_utils.h"
 #include "utils/utils.h"
 
 namespace circinus {
@@ -71,11 +72,6 @@ class OutputOperator : public Operator {
   Outputs* outputs_ = nullptr;
   SameLabelIndices same_label_indices_;
 
-  double total_time_in_milliseconds_ = 0;
-  uint64_t total_input_size_ = 0;
-  uint64_t total_num_input_subgraphs_ = 0;
-  uint64_t leftover_input_ = 0;
-
  public:
   explicit OutputOperator(SameLabelIndices&& same_label_indices) : same_label_indices_(std::move(same_label_indices)) {}
   virtual ~OutputOperator() {}
@@ -88,25 +84,34 @@ class OutputOperator : public Operator {
 
   void setOutput(Outputs* outputs) { outputs_ = outputs; }
 
-  virtual bool validateAndOutput(const std::vector<CompressedSubgraphs>& input, uint32_t output_index) = 0;
+  inline bool validateAndOutput(const std::vector<CompressedSubgraphs>& input, uint32_t output_index) const {
+    uint32_t start = 0;
+    return validateAndOutput(input, start, input.size(), output_index);
+  }
 
-  inline bool validateAndOutputAndProfile(const std::vector<CompressedSubgraphs>& input, uint32_t output_index) {
+  virtual bool validateAndOutput(const std::vector<CompressedSubgraphs>& input, uint32_t& input_start,
+                                 uint32_t input_end, uint32_t output_index) const = 0;
+
+  inline bool validateAndOutputAndProfile(const std::vector<CompressedSubgraphs>& input, uint32_t input_start,
+                                          uint32_t input_end, uint32_t output_index, ProfileInfo* info) const {
     auto start = std::chrono::high_resolution_clock::now();
-    auto ret = validateAndOutput(input, output_index);
+    uint32_t old_start = input_start;
+    auto ret = validateAndOutput(input, input_start, input_end, output_index);
     auto stop = std::chrono::high_resolution_clock::now();
-    total_time_in_milliseconds_ +=
+    info->total_time_in_milliseconds +=
         (std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start).count() / 1000000.0);
-    total_num_input_subgraphs_ += getNumSubgraphs(input, 0, input.size() - leftover_input_);
-    total_input_size_ += input.size() - leftover_input_;
+    info->total_num_input_subgraphs += getNumSubgraphs(input, old_start, input_start);
+    info->total_input_size += input_start - old_start;
     return ret;
   }
 
-  std::string toProfileString() const override {
-    std::stringstream ss;
-    ss << toString() << ',' << total_time_in_milliseconds_ << ',' << total_input_size_ << ",,"
-       << total_num_input_subgraphs_;
-    return ss.str();
-  }
+  // FIXME(tatiana)
+  // std::string toProfileString() const override {
+  //   std::stringstream ss;
+  //   ss << toString() << ',' << total_time_in_milliseconds_ << ',' << total_input_size_ << ",,"
+  //      << total_num_input_subgraphs_;
+  //   return ss.str();
+  // }
 };
 
 }  // namespace circinus
