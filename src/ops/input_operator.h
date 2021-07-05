@@ -37,7 +37,8 @@ class InputOperator : public Operator {
   InputOperator(const QueryVertexID starting_vertex, const bool inputs_are_keys)
       : starting_vertex_(starting_vertex), inputs_are_keys_(inputs_are_keys) {}
 
-  virtual std::vector<CompressedSubgraphs> getInputs(const void* g, const std::vector<CandidateSetView>& candidates) {
+  virtual std::vector<CompressedSubgraphs> getInputs(const void* g,
+                                                     const std::vector<CandidateSetView>& candidates) const {
     if (inputs_are_keys_) {
       return std::vector<CompressedSubgraphs>(candidates[starting_vertex_].begin(), candidates[starting_vertex_].end());
     }
@@ -62,7 +63,7 @@ class PartitionedInputOperator : public InputOperator {
       : InputOperator(starting_vertex, inputs_are_keys), qv_pivots_(qv_pivots) {}
 
   std::vector<CompressedSubgraphs> getInputs(const void* data_graph,
-                                             const std::vector<CandidateSetView>& candidates) override {
+                                             const std::vector<CandidateSetView>& candidates) const override {
     if (!qv_pivots_->empty()) {
       auto g = reinterpret_cast<const ReorderedPartitionedGraph*>(data_graph);
       std::vector<VertexID> candidate[2];

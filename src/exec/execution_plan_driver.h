@@ -88,6 +88,7 @@ class ExecutionPlanDriver : public ExecutionPlanDriverBase {
 class MatchingParallelExecutionPlanDriver : public ExecutionPlanDriverBase {
  private:
   uint32_t batch_size_;
+  std::unique_ptr<InputOperator> input_op_ = nullptr;
 
  public:
   explicit MatchingParallelExecutionPlanDriver(BacktrackingPlan* plan) : ExecutionPlanDriverBase(plan) {}

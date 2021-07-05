@@ -90,9 +90,11 @@ void MatchingParallelExecutionPlanDriver::init(QueryId qid, QueryContext* query_
   batch_size_ = ctx.first.getBatchSize();
   task_counters_.resize(plan_->getOperatorTree().getOperatorSize(), 0);
   task_counters_[0] = 1;
-  task_queue.putTask(new MatchingParallelInputTask(qid, 0, query_ctx->data_graph,
-                                        plan_->getInputOperator(0, *query_ctx->graph_metadata, ctx.first),
-                                        candidate_result_.get()));
+
+  input_op_ = plan_->getInputOperator(0, *query_ctx->graph_metadata, ctx.first);
+  input_op_->setNext(plan_->getOperatorTree().root());
+  task_queue.putTask(new MatchingParallelInputTask(qid, 0, (const GraphBase*)query_ctx->data_graph, input_op_.get(),
+                                                   candidate_result_->getCandidates()));
 }
 
 void MatchingParallelExecutionPlanDriver::taskFinish(TaskBase* task, ThreadsafeTaskQueue* task_queue,
@@ -109,18 +111,19 @@ void MatchingParallelExecutionPlanDriver::taskFinish(TaskBase* task, ThreadsafeT
     return;
   }
 
-  auto &inputs = matching_parallel_task->getOutputs();
+  auto& inputs = matching_parallel_task->getOutputs();
   uint32_t level = matching_parallel_task->getNextLevel();
 
-  task_counters_[level] += inputs.size()/batch_size_ + (inputs.size()%size != 0);
+  task_counters_[level] += inputs.size() / batch_size_ + (inputs.size() % size != 0);
   uint32_t input_index = 0;
-  for (input_index; input_index + batch_size_ < inputs.size(); input_index += batch_size_){
-    task_queue.putTask(new MatchingParallelTraverseTask(qid, level, task->getDataGraph(),
-                                        op, candidate_result_.get(), new TraverseContext(), inputs, input_index, input_index + batch_size_));
+  for (input_index; input_index + batch_size_ < inputs.size(); input_index += batch_size_) {
+    task_queue.putTask(new MatchingParallelTraverseTask(qid, level, task->getDataGraph(), op, candidate_result_.get(),
+                                                        new TraverseContext(), inputs, input_index,
+                                                        input_index + batch_size_));
   }
   if (input_index < inputs.size()) {
-    task_queue.putTask(new MatchingParallelTraverseTask(qid, level, task->getDataGraph(),
-                                    op, candidate_result_.get(), new TraverseContext(), inputs, input_index, inputs.size()));
+    task_queue.putTask(new MatchingParallelTraverseTask(qid, level, task->getDataGraph(), op, candidate_result_.get(),
+                                                        new TraverseContext(), inputs, input_index, inputs.size()));
   }
 }
 

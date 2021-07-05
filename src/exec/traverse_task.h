@@ -14,10 +14,10 @@
 
 #pragma once
 
+#include <stdint.h>
 #include <memory>
 #include <utility>
 #include <vector>
-#include <stdint.h>
 
 #include "glog/logging.h"
 
@@ -146,43 +146,32 @@ class TraverseChainTask : public TaskBase {
  * For multi-thread query execution
  */
 class MatchingParallelTask : public TaskBase {
+ public:
+  MatchingParallelTask(QueryId qid, TaskId tid) : TaskBase(qid, tid) {}
 
-  public:
-    MatchingParallelTask(QueryId qid, TaskId tid) : TaskBase(qid, tid){}
-
-    uint32_t getNextLevel() {return tid + 1;}
-    virtual TraverseOperator* getNextOperator();
-    virtual std::vector<CompressedSubgraphs>& getOutputs();
-}
+  uint32_t getNextLevel() const { return getTaskId() + 1; }
+  virtual TraverseOperator* getNextOperator() = 0;
+  virtual std::vector<CompressedSubgraphs>& getOutputs() = 0;
+};
 
 class MatchingParallelInputTask : public MatchingParallelTask {
-  const Graph* graph_;
-  std::unique_ptr<InputOperator> input_op_;
+  const GraphBase* graph_ = nullptr;
+  const InputOperator* input_op_ = nullptr;
   std::vector<CompressedSubgraphs> outputs_;
-
   std::vector<CandidateSetView> candidates_;
 
-  public:
-  MatchingParallelInputTask(QueryId qid, TaskId tid, const Graph* graph,
-                    std::unique_ptr<InputOperator>&& input_op, CandidateResult* candidates)
-      : MatchingParallelTask(qid, tid),
-        graph_(graph),
-        input_op_(std::move(input_op)),
-        candidates_(std::move(candidates)){}
+ public:
+  MatchingParallelInputTask(QueryId qid, TaskId tid, const GraphBase* graph, const InputOperator* input_op,
+                            std::vector<CandidateSetView>&& candidates)
+      : MatchingParallelTask(qid, tid), graph_(graph), input_op_(input_op), candidates_(std::move(candidates)) {}
 
   const GraphBase* getDataGraph() const override { return graph_; }
 
-  void run() override {
-    outputs_ = input_op_->getInputs(graph_, candidates_);
-  }
+  void run() override { outputs_ = input_op_->getInputs(graph_, candidates_); }
 
-  std::vector<CompressedSubgraphs>& getOutputs() override {
-    return outputs_;
-  }
+  std::vector<CompressedSubgraphs>& getOutputs() override { return outputs_; }
 
-  TraverseOperator* getNextOperator() override{
-    return input_op_->getNext();
-  }
+  TraverseOperator* getNextOperator() override { return dynamic_cast<TraverseOperator*>(input_op_->getNext()); }
 };
 
 /**
@@ -194,32 +183,26 @@ class MatchingParallelTraverseTask : public MatchingParallelTask {
   TraverseContext* traverse_ctx_;
   std::vector<CandidateSetView> candidates_;
 
-  public:
-  MatchingParallelTraverseTask(QueryId qid, TaskId tid, const Graph* graph,
-                    TraverseOperator* traverse_op, CandidateResult* candidates, TraverseContext* traverse_ctx,
-                    const std::vector<CompressedSubgraphs>& inputs, uint32_t input_index, 
-                      uint32_t input_end_index)
+ public:
+  MatchingParallelTraverseTask(QueryId qid, TaskId tid, const Graph* graph, TraverseOperator* traverse_op,
+                               std::vector<CandidateSetView>&& candidates, TraverseContext* traverse_ctx,
+                               const std::vector<CompressedSubgraphs>& inputs, uint32_t input_index,
+                               uint32_t input_end_index)
       : MatchingParallelTask(qid, tid),
         graph_(graph),
         traverse_op_(traverse_op),
         candidates_(std::move(candidates)),
-        traverse_ctx_(traverse_ctx){
-                      traverse_op_.input(inputs, input_index, input_end_index, graph_, traverse_ctx_);
+        traverse_ctx_(traverse_ctx) {
+    traverse_op_->input(inputs, input_index, input_end_index, graph_, traverse_ctx_);
   }
 
   const GraphBase* getDataGraph() const override { return graph_; }
 
-  void run() override {
-    traverse_op_.expand(UINT32_MAX, traverse_ctx_);
-  }
+  void run() override { traverse_op_->expand(UINT32_MAX, traverse_ctx_); }
 
-  std::vector<CompressedSubgraphs>& getOutputs() override {
-    return *(traverse_ctx_->outputs);
-  }
+  std::vector<CompressedSubgraphs>& getOutputs() override { return *(traverse_ctx_->outputs); }
 
-  TraverseOperator* getNextOperator() override{
-    return traverse_op_->getNext();
-  }
+  TraverseOperator* getNextOperator() override { return dynamic_cast<TraverseOperator*>(traverse_op_->getNext()); }
 };
 
 }  // namespace circinus
