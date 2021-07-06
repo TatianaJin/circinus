@@ -146,6 +146,7 @@ void MatchingParallelExecutionPlanDriver::taskFinish(TaskBase* task, ThreadsafeT
     return;
   }
 
+  LOG(INFO) << "Task " << task->getTaskId() << " Finish.";
   auto op = matching_parallel_task->getNextOperator();
   if (op != nullptr) {
     auto inputs = std::make_shared<std::vector<CompressedSubgraphs>>(std::move(matching_parallel_task->getOutputs()));

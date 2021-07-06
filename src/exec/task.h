@@ -36,7 +36,7 @@ class TaskBase {
   virtual ~TaskBase() {}
 
   bool isBefore(TaskBase* other) const {
-    return (query_id_ == other->query_id_) ? task_id_ < other->task_id_ : query_id_ < other->query_id_;
+    return (query_id_ == other->query_id_) ? task_id_ > other->task_id_ : query_id_ < other->query_id_;
   }
 
   inline auto getQueryId() const { return query_id_; }

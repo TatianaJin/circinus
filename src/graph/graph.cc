@@ -62,7 +62,10 @@ void Graph::dumpToFile(const std::string& path) const {
 
 void Graph::loadUndirectedGraphFromBinary(std::istream& input) {
   GraphBase::loadUndirectedGraphFromBinary(input);
+  LOG(INFO) << "Graph";
+  google::FlushLogFiles(google::INFO);
   binaryStreamToVector(input, labels_);
+  LOG(INFO) << "Graph";
   CHECK_EQ(labels_.size(), n_vertices_);
 }
 

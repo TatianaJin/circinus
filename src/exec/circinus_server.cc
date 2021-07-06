@@ -255,6 +255,7 @@ double CircinusServer::loadGraphFromBinary(const std::string& graph_path, const 
 
 double CircinusServer::loadPartitionedGraphFromBinary(const std::string& graph_path, const std::string& name,
                                                       uint32_t n_partitions) {
+  LOG(INFO) << graph_path;
   std::ifstream input(graph_path, std::ios::binary);
   if (!input.is_open()) {                // cannot open file
     if (Path::isRelative(graph_path)) {  // if relative path, try search under FLAGS_data_dir
@@ -266,7 +267,9 @@ double CircinusServer::loadPartitionedGraphFromBinary(const std::string& graph_p
   }
   auto start_loading = std::chrono::steady_clock::now();
   auto data_graph = std::make_unique<ReorderedPartitionedGraph>();
+  LOG(INFO) << "-------- load loadUndirectedGraphFromBinary";
   data_graph->loadUndirectedGraphFromBinary(input);
+  LOG(INFO) << "---------";
 
   GraphMetadata meta(*data_graph);
   auto end_loading = std::chrono::steady_clock::now();
