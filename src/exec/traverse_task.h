@@ -54,20 +54,28 @@ class TraverseChainTask : public TaskBase {
         batch_size_(batch_size),
         operators_(ops),
         input_op_(std::move(input_op)),
-        candidates_(std::move(candidates)) {}
+        candidates_(std::move(candidates)) {
+    CHECK(!candidates_.empty());
+  }
 
   const GraphBase* getDataGraph() const override { return graph_; }
 
   void run(uint32_t executor_idx) override {
     setupCandidateSets();
     profile_info_.resize(operators_.size());
-    execute<QueryType::Execute>(input_op_->getInputs(graph_, candidates_), 0);
+
+    auto old_count = dynamic_cast<OutputOperator*>(operators_.back())->getOutput()->getCount(executor_idx);
+    // TODO(tatiana): support match limit
+    execute<QueryType::Execute>(input_op_->getInputs(graph_, candidates_), 0, executor_idx);
+    auto new_count = dynamic_cast<OutputOperator*>(operators_.back())->getOutput()->getCount(executor_idx);
+    LOG(INFO) << "Task " << task_id_ << " count " << (new_count - old_count);
   }
 
   void profile(uint32_t executor_idx) override {
     setupCandidateSets();
     profile_info_.resize(operators_.size());
-    execute<QueryType::Profile>(input_op_->getInputs(graph_, candidates_), 0);
+    // TODO(tatiana): support match limit
+    execute<QueryType::Profile>(input_op_->getInputs(graph_, candidates_), 0, executor_idx);
   }
 
  protected:
@@ -94,16 +102,16 @@ class TraverseChainTask : public TaskBase {
   }
 
   template <QueryType profile>
-  bool execute(const std::vector<CompressedSubgraphs>& inputs, uint32_t level = 0) {
+  bool execute(const std::vector<CompressedSubgraphs>& inputs, uint32_t level = 0, uint32_t executor_idx = 0) {
     std::vector<CompressedSubgraphs> outputs;
     auto op = operators_[level];
     if (level == operators_.size() - 1) {
       auto output_op = dynamic_cast<OutputOperator*>(op);
       if
         constexpr(isProfileMode(profile)) {
-          return output_op->validateAndOutputAndProfile(inputs, 0, inputs.size(), 0, &profile_info_[level]);
+          return output_op->validateAndOutputAndProfile(inputs, 0, inputs.size(), executor_idx, &profile_info_[level]);
         }
-      return output_op->validateAndOutput(inputs, 0);
+      return output_op->validateAndOutput(inputs, executor_idx);
     }
     auto traverse_op = dynamic_cast<TraverseOperator*>(op);
     auto ctx = createTraverseContext(inputs, outputs, level, traverse_op, profile);

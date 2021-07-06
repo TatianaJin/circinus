@@ -111,9 +111,6 @@ class VertexSetView {
     if (start >= end || start == nullptr || end == nullptr) return;
     auto size = std::distance(start, end);
     size_ += size;
-    if (!ranges_.empty()) {
-      DCHECK_GE(start - ranges_.back().first, ranges_.back().second);
-    }
     if (!ranges_.empty() && ranges_.back().first + ranges_.back().second == start) {
       ranges_.back().second += size;
     } else {

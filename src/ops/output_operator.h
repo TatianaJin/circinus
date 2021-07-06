@@ -83,6 +83,7 @@ class OutputOperator : public Operator {
       OutputType type, std::vector<std::pair<std::vector<uint32_t>, std::vector<uint32_t>>>&& same_label_indices);
 
   void setOutput(Outputs* outputs) { outputs_ = outputs; }
+  Outputs* getOutput() const { return outputs_; }
 
   inline bool validateAndOutput(const std::vector<CompressedSubgraphs>& input, uint32_t output_index) const {
     uint32_t start = 0;

@@ -161,6 +161,10 @@ class ReorderedPartitionedGraph : public GraphBase {
   VertexSetView getAllOutNeighborsWithHint(VertexID id, LabelID nbr_label) const {
     VertexSetView view;
     auto nbrs = getOutNeighbors(id);
+    if (nbr_label == ALL_LABEL) {
+      view.addRange(nbrs.first, nbrs.first + nbrs.second);
+      return view;
+    }
     const VertexID* search_start = nbrs.first;
     const VertexID* const search_end = nbrs.first + nbrs.second;
     for (uint32_t partition = 0; partition < getNumPartitions(); ++partition) {

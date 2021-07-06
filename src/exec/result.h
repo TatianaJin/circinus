@@ -113,7 +113,7 @@ class PartitionedCandidateResult : public CandidateResult {
     CHECK_EQ(candidates_.size(), scopes.size());
     std::vector<CandidateSetView> res;
     res.reserve(candidates_.size());
-    for (uint32_t i = 0; i < res.size(); ++i) {
+    for (uint32_t i = 0; i < candidates_.size(); ++i) {
       if (!merged_candidates_[i].empty()) {
         res.emplace_back(&merged_candidates_[i], scopes[i], candidate_partition_offsets_[i]);
       } else {

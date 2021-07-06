@@ -23,6 +23,7 @@ namespace circinus {
 
 class GraphPartitionBase {
  public:
+  virtual ~GraphPartitionBase() {}
   virtual bool containsDestination(VertexID vid) const = 0;
   virtual VertexSetView getOutNeighborsWithHint(VertexID vid, LabelID nbr_label) const = 0;
   virtual VertexSetView getInNeighborsWithHint(VertexID vid, LabelID nbr_label) const = 0;

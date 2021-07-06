@@ -58,7 +58,7 @@ CandidateSetView::CandidateSetView(const std::vector<std::vector<VertexID>>& par
                                    const CandidateScope& scope) {
   switch (scope.getType()) {
   case CandidateScopeType::All: {
-    for (auto range : partitioned_candidates) {
+    for (auto& range : partitioned_candidates) {
       addRange(range.data(), range.data() + range.size());
     }
     return;

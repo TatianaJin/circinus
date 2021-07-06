@@ -284,16 +284,13 @@ class ExpandEdgeSetToKeyTraverseContext : public ExpandEdgeTraverseContext {
   }
   inline void setResults(CurrentResults* ptr) { current_results_.reset(ptr); }
 
-  // FIXME(tatiana): the data graph should not change for a task? so that the candidate info can be calculated in
-  // traverse context instead of in input()
   template <typename G>
-  void init(const G* data_graph, const CandidateSetView& candidates) {
+  void init(const CandidateSetView& candidates) {
+    auto data_graph = reinterpret_cast<const G*>(current_data_graph);
     // if a different data graph is given, recompute the candidates' neighbor size
-    if (data_graph != current_data_graph) {
-      candidates_neighbor_size_ = 0;
-      for (auto candidate : candidates) {
-        candidates_neighbor_size_ += data_graph->getVertexInDegreeWithHint(candidate, ALL_LABEL, 0);
-      }
+    candidates_neighbor_size_ = 0;
+    for (auto candidate : candidates) {
+      candidates_neighbor_size_ += data_graph->getVertexInDegreeWithHint(candidate, ALL_LABEL, 0);
     }
   }
 };
@@ -493,6 +490,8 @@ class ExpandEdgeSetToKeyOperator : public ExpandEdgeOperator {
                                                        const void* graph, uint32_t input_start, uint32_t input_end,
                                                        QueryType profile) const override {
     auto ret = std::make_unique<ExpandEdgeSetToKeyTraverseContext>(inputs, graph, input_start, input_end);
+    CHECK(candidates_ != nullptr) << "need to call setCandidateSets() first";
+    ret->init<G>(*candidates_);
     ret->query_type = profile;
     return ret;
   }
@@ -601,9 +600,9 @@ TraverseOperator* ExpandEdgeOperator::newExpandEdgeKeyToSetOperator(
                                                  set_pruning_threshold, filter);
   }
   if (graph_type == GraphType::GraphView) {
-    return new ExpandEdgeKeyToSetOperator<GraphView<Graph>>(indices.at(parent_vertex), indices.at(target_vertex),
-                                                            parent_vertex, target_vertex, same_label_key_indices,
-                                                            same_label_set_indices, set_pruning_threshold, filter);
+    return new ExpandEdgeKeyToSetOperator<GraphView<GraphPartitionBase>>(
+        indices.at(parent_vertex), indices.at(target_vertex), parent_vertex, target_vertex, same_label_key_indices,
+        same_label_set_indices, set_pruning_threshold, filter);
   }
   CHECK(graph_type == GraphType::BipartiteGraphView) << "unknown graph type " << ((uint32_t)graph_type);
   return new ExpandEdgeKeyToSetOperator<GraphView<BipartiteGraph>>(
@@ -629,11 +628,11 @@ TraverseOperator* ExpandEdgeOperator::newExpandEdgeKeyToKeyOperator(
   }
   if (graph_type == GraphType::GraphView) {
     if (intersect_candidates) {
-      return new ExpandEdgeKeyToKeyOperator<GraphView<Graph>, true>(
+      return new ExpandEdgeKeyToKeyOperator<GraphView<GraphPartitionBase>, true>(
           indices.at(parent_vertex), indices.at(target_vertex), parent_vertex, target_vertex, same_label_key_indices,
           same_label_set_indices, set_pruning_threshold, filter);
     }
-    return new ExpandEdgeKeyToKeyOperator<GraphView<Graph>, false>(
+    return new ExpandEdgeKeyToKeyOperator<GraphView<GraphPartitionBase>, false>(
         indices.at(parent_vertex), indices.at(target_vertex), parent_vertex, target_vertex, same_label_key_indices,
         same_label_set_indices, set_pruning_threshold, filter);
   }
@@ -665,9 +664,9 @@ TraverseOperator* ExpandEdgeOperator::newExpandEdgeSetToKeyOperator(
                                                  set_pruning_threshold, filter);
   }
   if (graph_type == GraphType::GraphView) {
-    return new ExpandEdgeSetToKeyOperator<GraphView<Graph>>(indices.at(parent_vertex), indices.at(target_vertex),
-                                                            parent_vertex, target_vertex, same_label_key_indices,
-                                                            same_label_set_indices, set_pruning_threshold, filter);
+    return new ExpandEdgeSetToKeyOperator<GraphView<GraphPartitionBase>>(
+        indices.at(parent_vertex), indices.at(target_vertex), parent_vertex, target_vertex, same_label_key_indices,
+        same_label_set_indices, set_pruning_threshold, filter);
   }
   CHECK(graph_type == GraphType::BipartiteGraphView) << "unknown graph type " << ((uint32_t)graph_type);
   return new ExpandEdgeSetToKeyOperator<GraphView<BipartiteGraph>>(

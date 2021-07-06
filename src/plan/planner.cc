@@ -221,7 +221,8 @@ void Planner::newInputOperators() {
 
 BacktrackingPlan* Planner::generateExecutionPlan(const std::vector<std::vector<VertexID>>* candidate_cardinality,
                                                  bool multithread) {
-  if (candidate_cardinality->size() == 1) {  // no partition, generate one execution plan
+  if (candidate_cardinality->size() == 1 ||
+      !query_context_->query_config.use_partitioned_graph) {  // no partition, generate one execution plan
     backtracking_plan_ = std::make_unique<BacktrackingPlan>();
     backtracking_plan_->addPlan(generateExecutionPlan(candidate_cardinality->front(), multithread));
     // one logical input operator
@@ -255,7 +256,7 @@ ExecutionPlan* Planner::generateExecutionPlan(const std::vector<VertexID>& candi
    * For query execution with partitioned graphs, use GraphView. For query on normal graphs, use Normal;
    * For query using an auxiliary bipartite-graph-based index, use BipartiteGraphView. */
   GraphType graph_type =
-      query_context_->graph_metadata->numPartitions() > 1
+      (query_context_->graph_metadata->numPartitions() > 1 && query_context_->query_config.use_partitioned_graph)
           ? GraphType::GraphView
           : (query_context_->query_config.use_auxiliary_index ? GraphType::BipartiteGraphView : GraphType::Normal);
   planners_.push_back(std::make_unique<NaivePlanner>(&query_context_->query_graph, &cardinality, graph_type));

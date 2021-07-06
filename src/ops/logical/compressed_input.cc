@@ -40,7 +40,7 @@ PartitionedLogicalCompressedInputOperator::PartitionedLogicalCompressedInputOper
 
   std::queue<QueryVertexID> bfs_queue;
   std::vector<bool> visited(matching_order.size(), false);
-  std::vector<QueryVertexID> father;
+  std::vector<QueryVertexID> father(matching_order.size(), ~0u);
   std::vector<QueryVertexID> distance(matching_order.size(), 0);
 
   bfs_queue.push(input_query_vertex_);

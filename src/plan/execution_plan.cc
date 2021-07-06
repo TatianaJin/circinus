@@ -431,8 +431,8 @@ TraverseOperator* ExecutionPlan::newExpandIntoOperator(const std::vector<QueryVe
   if (graph_type_ == GraphType::Normal) {
     ret = new ExpandIntoOperator<Graph>(parents, target_vertex, query_vertex_indices_, prev_key_parents, filter);
   } else if (graph_type_ == GraphType::GraphView) {
-    ret = new ExpandIntoOperator<GraphView<Graph>>(parents, target_vertex, query_vertex_indices_, prev_key_parents,
-                                                   filter);
+    ret = new ExpandIntoOperator<GraphView<GraphPartitionBase>>(parents, target_vertex, query_vertex_indices_,
+                                                                prev_key_parents, filter);
   } else {
     CHECK(graph_type_ == GraphType::BipartiteGraphView) << "unknown graph type " << ((uint32_t)graph_type_);
     ret = new ExpandIntoOperator<GraphView<BipartiteGraph>>(parents, target_vertex, query_vertex_indices_,
@@ -464,9 +464,9 @@ TraverseOperator* ExecutionPlan::newExpandSetVertexOperator(
     ret = new ExpandKeyToSetVertexOperator<Graph>(parents, target_vertex, query_vertex_indices_, same_label_indices[1],
                                                   same_label_indices[0], getSetPruningThreshold(target_vertex), filter);
   } else if (graph_type_ == GraphType::GraphView) {
-    ret = new ExpandKeyToSetVertexOperator<GraphView<Graph>>(parents, target_vertex, query_vertex_indices_,
-                                                             same_label_indices[1], same_label_indices[0],
-                                                             getSetPruningThreshold(target_vertex), filter);
+    ret = new ExpandKeyToSetVertexOperator<GraphView<GraphPartitionBase>>(
+        parents, target_vertex, query_vertex_indices_, same_label_indices[1], same_label_indices[0],
+        getSetPruningThreshold(target_vertex), filter);
   } else {
     CHECK(graph_type_ == GraphType::BipartiteGraphView) << "unknown graph type " << ((uint32_t)graph_type_);
     ret = new ExpandKeyToSetVertexOperator<GraphView<BipartiteGraph>>(parents, target_vertex, query_vertex_indices_,
@@ -509,9 +509,9 @@ TraverseOperator* ExecutionPlan::newExpandSetToKeyVertexOperator(
                                                   target_same_label_set_indices, getSetPruningThreshold(target_vertex),
                                                   filter);
   } else if (graph_type_ == GraphType::GraphView) {
-    ret = new ExpandSetToKeyVertexOperator<GraphView<Graph>>(parents, target_vertex, query_vertex_indices_,
-                                                             same_label_indices[1], target_same_label_set_indices,
-                                                             getSetPruningThreshold(target_vertex), filter);
+    ret = new ExpandSetToKeyVertexOperator<GraphView<GraphPartitionBase>>(
+        parents, target_vertex, query_vertex_indices_, same_label_indices[1], target_same_label_set_indices,
+        getSetPruningThreshold(target_vertex), filter);
   } else {
     CHECK(graph_type_ == GraphType::BipartiteGraphView) << "unknown graph type " << ((uint32_t)graph_type_);
     ret = new ExpandSetToKeyVertexOperator<GraphView<BipartiteGraph>>(
@@ -537,9 +537,9 @@ TraverseOperator* ExecutionPlan::newExpandKeyKeyVertexOperator(
                                                         same_label_indices[1], same_label_indices[0],
                                                         getSetPruningThreshold(target_vertex), filter);
   } else if (graph_type_ == GraphType::GraphView) {
-    ret = new ExpandKeyToKeyVertexOperator<GraphView<Graph>, true>(parents, target_vertex, query_vertex_indices_,
-                                                                   same_label_indices[1], same_label_indices[0],
-                                                                   getSetPruningThreshold(target_vertex), filter);
+    ret = new ExpandKeyToKeyVertexOperator<GraphView<GraphPartitionBase>, true>(
+        parents, target_vertex, query_vertex_indices_, same_label_indices[1], same_label_indices[0],
+        getSetPruningThreshold(target_vertex), filter);
   } else {
     CHECK(graph_type_ == GraphType::BipartiteGraphView) << "unknown graph type " << ((uint32_t)graph_type_);
     ret = new ExpandKeyToKeyVertexOperator<GraphView<BipartiteGraph>, false>(
@@ -602,7 +602,7 @@ TraverseOperator* ExecutionPlan::newEnumerateKeyExpandToSetOperator(
         parents, target_vertex, input_query_vertex_indices, query_vertex_indices_, keys_to_enumerate, cover_table_,
         same_label_indices, std::move(enumerated_key_pruning_indices), filter);
   } else if (graph_type_ == GraphType::GraphView) {
-    ret = new EnumerateKeyExpandToSetOperator<GraphView<Graph>>(
+    ret = new EnumerateKeyExpandToSetOperator<GraphView<GraphPartitionBase>>(
         parents, target_vertex, input_query_vertex_indices, query_vertex_indices_, keys_to_enumerate, cover_table_,
         same_label_indices, std::move(enumerated_key_pruning_indices), filter);
   } else {

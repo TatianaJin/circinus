@@ -188,7 +188,8 @@ void CircinusServer::handleCandidatePhase(const Event& event) {
     // backtracking phase
     LOG(INFO) << "Candidate generation finished. Start backtracking.";
     auto plan = planner->generateExecutionPlan(result);
-    if (active_queries_[event.query_id].query_context.graph_metadata->numPartitions() == 1) {
+    if (active_queries_[event.query_id].query_context.graph_metadata->numPartitions() == 1 ||
+        !active_queries_[event.query_id].query_context.query_config.use_partitioned_graph) {
       plan_driver = std::make_unique<MatchingParallelExecutionPlanDriver>(plan);
     } else {
       plan_driver = std::make_unique<ExecutionPlanDriver>(plan);
