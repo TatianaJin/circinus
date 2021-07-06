@@ -267,9 +267,7 @@ double CircinusServer::loadPartitionedGraphFromBinary(const std::string& graph_p
   }
   auto start_loading = std::chrono::steady_clock::now();
   auto data_graph = std::make_unique<ReorderedPartitionedGraph>();
-  LOG(INFO) << "-------- load loadUndirectedGraphFromBinary";
   data_graph->loadUndirectedGraphFromBinary(input);
-  LOG(INFO) << "---------";
 
   GraphMetadata meta(*data_graph);
   auto end_loading = std::chrono::steady_clock::now();

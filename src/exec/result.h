@@ -101,6 +101,13 @@ class PartitionedCandidateResult : public CandidateResult {
   void removeInvalid(QueryVertexID query_vertex) override;
 
   std::vector<std::vector<VertexID>> getCandidateCardinality() const override {
+    std::stringstream ss;
+    ss << "MergedCandidates ";
+    for (auto value : merged_candidates_) {
+      ss << value.size() << "  ";
+    }
+    ss << "\n";
+    LOG(INFO) << ss.str();
     return per_partition_candidate_cardinality_;
   }
 

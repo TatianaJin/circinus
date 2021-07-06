@@ -101,7 +101,7 @@ void CandidatePruningPlanDriver::init(QueryId qid, QueryContext* query_ctx, Exec
     filter->setParallelism((input_size + FLAGS_batch_size - 1) / FLAGS_batch_size);
     task_counters_[task_id] = filter->getParallelism();
     for (uint32_t i = 0; i < filter->getParallelism(); ++i) {
-      task_queue.putTask(new NeighborhoodFilterTask(qid, task_id, i, filter.get(), (const Graph*)query_ctx->data_graph,
+      task_queue.putTask(new NeighborhoodFilterTask(qid, task_id, i, filter.get(), query_ctx->data_graph,
                                                     result_->getMergedCandidates()));
     }
     for (auto& filter : filters) {
@@ -123,6 +123,7 @@ void CandidatePruningPlanDriver::taskFinish(TaskBase* task, ThreadsafeTaskQueue*
         result_->merge(task);
       }
     }
+
     if (++n_finished_tasks_ == task_counters_.size()) {
       if (plan_->getPhase() == 1) {
         candidate_cardinality_ = result_->getCandidateCardinality();

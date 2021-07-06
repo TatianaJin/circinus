@@ -38,6 +38,8 @@ std::vector<QueryVertexID> CFLOrder::getTopThree(const GraphMetadata& metadata, 
     if (core_size == 0 || two_core_solver.isInCore(core_table, query_vertex)) {
       double degree = q->getVertexOutDegree(query_vertex);
       uint32_t frequency = metadata.getLabelFrequency(q->getVertexLabel(query_vertex));
+      LOG(INFO) << "query_vertex " << query_vertex << " label " << q->getVertexLabel(query_vertex) << " frequency "
+                << frequency;
       double rank = frequency / degree;
       rank_queue.emplace(query_vertex, rank);
     }

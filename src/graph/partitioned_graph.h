@@ -72,6 +72,9 @@ class ReorderedPartitionedGraph : public GraphBase {
     auto first_neighbor = nbrs.first[0];
     auto last_neighbor = nbrs.first[nbrs.second - 1];
     // get the range of vertex ids that satisfy the hint
+    if (label_ranges_per_part_[partition].find(nbr_label) == label_ranges_per_part_[partition].end()) {
+      LOG(INFO) << "error";
+    }
     auto[range_l, range_r] = label_ranges_per_part_[partition].at(nbr_label);
     if (first_neighbor >= range_r || last_neighbor < range_l) {
       return 0;

@@ -100,7 +100,12 @@ void PartitionedCandidateResult::merge(TaskBase* task) {
     candidate_partition_offsets_[task_id][j + 1] =
         candidate_partition_offsets_[task_id][j] + candidates_[task_id][j].size();
   }
-  CandidateResult::merge(task);
+
+  for (uint32_t j = 0; j < candidates_[task_id].size(); ++j) {
+    merged_candidates_[task_id].insert(merged_candidates_[task_id].end(), candidates_[task_id][j].begin(),
+                                       candidates_[task_id][j].end());
+    candidates_[task_id][j].clear();
+  }
 }
 
 void PartitionedCandidateResult::removeInvalid(QueryVertexID query_vertex) {

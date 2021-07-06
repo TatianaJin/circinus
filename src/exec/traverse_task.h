@@ -65,6 +65,7 @@ class TraverseChainTask : public TaskBase {
     profile_info_.resize(operators_.size());
 
     auto old_count = dynamic_cast<OutputOperator*>(operators_.back())->getOutput()->getCount(executor_idx);
+    LOG(INFO) << "Task " << task_id_;
     // TODO(tatiana): support match limit
     execute<QueryType::Execute>(input_op_->getInputs(graph_, candidates_), 0, executor_idx);
     auto new_count = dynamic_cast<OutputOperator*>(operators_.back())->getOutput()->getCount(executor_idx);
@@ -156,6 +157,7 @@ class TraverseTask : public TraverseChainTask {
   std::unique_ptr<TraverseContext> createTraverseContext(const std::vector<CompressedSubgraphs>& inputs,
                                                          std::vector<CompressedSubgraphs>& outputs, uint32_t level,
                                                          const TraverseOperator* op, QueryType profile) override {
+    // BUG
     auto ctx = op->initTraverseContext(&inputs, &graph_views_[level], 0, inputs.size(), profile);
     ctx->outputs = &outputs;
     return ctx;
