@@ -157,7 +157,6 @@ class TraverseTask : public TraverseChainTask {
   std::unique_ptr<TraverseContext> createTraverseContext(const std::vector<CompressedSubgraphs>& inputs,
                                                          std::vector<CompressedSubgraphs>& outputs, uint32_t level,
                                                          const TraverseOperator* op, QueryType profile) override {
-    // BUG
     auto ctx = op->initTraverseContext(&inputs, &graph_views_[level], 0, inputs.size(), profile);
     ctx->outputs = &outputs;
     return ctx;

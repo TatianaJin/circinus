@@ -238,7 +238,7 @@ class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
   inline void expandInner(const CompressedSubgraphs& input, ExpandEdgeKeyToKeyTraverseContext* ctx) const {
     auto& current_targets = ctx->resetTargets();
     auto parent_match = input.getKeyVal(parent_index_);
-    auto neighbors = getDataGraph(ctx)->getOutNeighborsWithHint(parent_match, 0, 0);
+    auto neighbors = getDataGraph(ctx)->getOutNeighborsWithHint(parent_match, ALL_LABEL, 0);
     if (!intersect_candidates) {
       removeExceptions(neighbors, &current_targets,
                        input.getExceptions(same_label_key_indices_, same_label_set_indices_));

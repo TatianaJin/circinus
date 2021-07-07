@@ -265,7 +265,7 @@ ExecutionPlan* Planner::generateExecutionPlan(const std::vector<VertexID>& candi
 
   // now order is directly configured
   auto use_order = getOrder(query_context_->query_config.matching_order, query_context_->query_graph.getNumVertices());
-
+  
   ExecutionPlan* plan = nullptr;
   // TODO(tatiana): consider make the first vertex in the matching order to be a key if multithread?
   switch (query_context_->query_config.compression_strategy) {

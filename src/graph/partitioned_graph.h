@@ -121,9 +121,10 @@ class ReorderedPartitionedGraph : public GraphBase {
       return {search_end, search_end};
     }
     // linear scan
-    end = start = search_end;
+    end = search_end;
+    start = search_start;
     for (auto ptr = search_start; ptr < search_end; ++ptr) {
-      if (*ptr >= range_l) {
+      if (*ptr < range_l) {
         start = ptr;
       }
       if (*ptr >= range_r) {
@@ -131,6 +132,7 @@ class ReorderedPartitionedGraph : public GraphBase {
         break;
       }
     }
+    ++start;
     return {start, end};
   }
 
@@ -147,7 +149,9 @@ class ReorderedPartitionedGraph : public GraphBase {
     } else {
       std::tie(range_l, range_r) = label_ranges_per_part_[partition].at(nbr_label);
     }
+    
     auto[start, end] = getVertexRange(nbrs.first, nbrs.first + nbrs.second, range_l, range_r);
+    
     return VertexSetView(start, end);
   }
 

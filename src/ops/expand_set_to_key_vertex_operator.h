@@ -123,7 +123,7 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
       if (exceptions.count(key_vertex_id)) {
         continue;
       }
-      auto key_out_neighbors = ((G*)(ctx->current_data_graph))->getOutNeighborsWithHint(key_vertex_id, ALL_LABEL, 0);
+      auto key_out_neighbors = ((G*)(ctx->current_data_graph))->getInNeighborsWithHint(key_vertex_id, ALL_LABEL, 0);
       // TODO(by) hash key_out_neighbors
       CompressedSubgraphs new_output(input, key_vertex_id, same_label_set_indices_, set_pruning_threshold_);
       if (new_output.empty()) {
@@ -146,7 +146,7 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
           constexpr(
               !std::is_same<G, Graph>::value) {  // if using graph view, select neighbors from the right graph part
             key_out_neighbors =
-                ((G*)(ctx->current_data_graph))->getOutNeighborsWithHint(key_vertex_id, ALL_LABEL, parent_idx);
+                ((G*)(ctx->current_data_graph))->getInNeighborsWithHint(key_vertex_id, ALL_LABEL, parent_idx);
           }
         intersect(*input.getSet(id), key_out_neighbors, &new_set);  // No need for exceptions
         if
