@@ -194,6 +194,7 @@ std::vector<QueryVertexID> Planner::getPartitioningQueryVertices() {
 std::vector<std::pair<uint32_t, std::vector<CandidateScope>>> Planner::generatePartitionedPlans(
     const std::vector<QueryVertexID>& partitioning_qv) {
   CHECK_EQ(partitioning_qv.size(), 1);  // consider the locality indicator only, no. tasks equal to no. partitions
+  DLOG(INFO) << "partitioning_qv = " << partitioning_qv.front();
   std::vector<std::pair<uint32_t, std::vector<CandidateScope>>> ret;
   ret.reserve(backtracking_plan_->getPlans().size());
 

@@ -65,11 +65,11 @@ class TraverseChainTask : public TaskBase {
     profile_info_.resize(operators_.size());
 
     auto old_count = dynamic_cast<OutputOperator*>(operators_.back())->getOutput()->getCount(executor_idx);
-    LOG(INFO) << "Task " << task_id_;
     // TODO(tatiana): support match limit
-    execute<QueryType::Execute>(input_op_->getInputs(graph_, candidates_), 0, executor_idx);
+    auto inputs = input_op_->getInputs(graph_, candidates_);
+    execute<QueryType::Execute>(inputs, 0, executor_idx);
     auto new_count = dynamic_cast<OutputOperator*>(operators_.back())->getOutput()->getCount(executor_idx);
-    LOG(INFO) << "Task " << task_id_ << " count " << (new_count - old_count);
+    LOG(INFO) << "Task " << task_id_ << " input " << inputs.size() << " count " << (new_count - old_count);
   }
 
   void profile(uint32_t executor_idx) override {
@@ -87,7 +87,7 @@ class TraverseChainTask : public TaskBase {
       DCHECK_LT(traverse->getTargetQueryVertex(), candidates_.size());
       // now assume all query vertices have candidate sets
       traverse->setCandidateSets(&candidates_[traverse->getTargetQueryVertex()]);
-      LOG(INFO) << "set candidates for " << traverse->getTargetQueryVertex() << " " << traverse->toString();
+      // LOG(INFO) << "set candidates for " << traverse->getTargetQueryVertex() << " " << traverse->toString();
       op = op->getNext();
       traverse = dynamic_cast<TraverseOperator*>(op);
     }

@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <numeric>
 #include <string>
+#include <tuple>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -72,10 +73,13 @@ class ReorderedPartitionedGraph : public GraphBase {
     auto first_neighbor = nbrs.first[0];
     auto last_neighbor = nbrs.first[nbrs.second - 1];
     // get the range of vertex ids that satisfy the hint
-    if (label_ranges_per_part_[partition].find(nbr_label) == label_ranges_per_part_[partition].end()) {
-      LOG(INFO) << "error";
+    VertexID range_l, range_r;
+    if (nbr_label == ALL_LABEL) {
+      range_l = partition_offsets_[partition];
+      range_r = partition_offsets_[partition + 1];
+    } else {
+      std::tie(range_l, range_r) = label_ranges_per_part_[partition].at(nbr_label);
     }
-    auto[range_l, range_r] = label_ranges_per_part_[partition].at(nbr_label);
     if (first_neighbor >= range_r || last_neighbor < range_l) {
       return 0;
     }
@@ -90,15 +94,7 @@ class ReorderedPartitionedGraph : public GraphBase {
   }
 
   // do we need to consider an O(1) time implementation?
-  inline LabelID getVertexLabel(VertexID id) const {
-    uint32_t partition = 0;
-    for (; partition < n_partitions_; ++partition) {
-      if (partition_offsets_[partition] > id) {
-        break;
-      }
-    }
-    return getVertexLabelInPartition(id, --partition);
-  }
+  inline LabelID getVertexLabel(VertexID id) const { return getVertexLabelInPartition(id, getVertexPartition(id)); }
 
   LabelID getVertexLabelInPartition(VertexID id, uint32_t partition) const {
     auto& label_ranges = label_ranges_per_part_[partition];
@@ -147,11 +143,9 @@ class ReorderedPartitionedGraph : public GraphBase {
     // get the range of vertex ids that satisfy the hint
     if (nbr_label == ALL_LABEL) {
       range_l = partition_offsets_[partition];
-      range_r = partition_offsets_[partition];
+      range_r = partition_offsets_[partition + 1];
     } else {
-      auto& range = label_ranges_per_part_[partition].at(nbr_label);
-      range_l = range.first;
-      range_r = range.second;
+      std::tie(range_l, range_r) = label_ranges_per_part_[partition].at(nbr_label);
     }
     auto[start, end] = getVertexRange(nbrs.first, nbrs.first + nbrs.second, range_l, range_r);
     return VertexSetView(start, end);
@@ -182,6 +176,16 @@ class ReorderedPartitionedGraph : public GraphBase {
       search_start = end;
     }
     return view;
+  }
+
+  uint32_t getVertexPartition(VertexID id) const {
+    uint32_t partition = 0;
+    for (; partition < n_partitions_; ++partition) {
+      if (partition_offsets_[partition] > id) {
+        break;
+      }
+    }
+    return --partition;
   }
 
   void clear() override {

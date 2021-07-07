@@ -146,7 +146,7 @@ void MatchingParallelExecutionPlanDriver::taskFinish(TaskBase* task, ThreadsafeT
     return;
   }
 
-  LOG(INFO) << "Task " << task->getTaskId() << " Finish.";
+  // LOG(INFO) << "Task " << task->getTaskId() << " Finish.";
   auto op = matching_parallel_task->getNextOperator();
   if (op != nullptr) {
     auto inputs = std::make_shared<std::vector<CompressedSubgraphs>>(std::move(matching_parallel_task->getOutputs()));
@@ -185,13 +185,14 @@ void MatchingParallelExecutionPlanDriver::taskFinish(TaskBase* task, ThreadsafeT
   }
 
   if (--task_counters_[task->getTaskId()] == 0) {
-    if (task->getTaskId() == 0) {
-      task_depleted_[task->getTaskId()] = true;
-    } else {
-      task_depleted_[task->getTaskId()] = task_depleted_[task->getTaskId() - 1];
-      // TODO(tatiana) support match limit
+    // TODO(tatiana) support match limit
+    if (task->getTaskId() == 0 || task_depleted_[task->getTaskId() - 1]) {
+      for (uint32_t i = task->getTaskId(); task_counters_[i] == 0 && i < task_counters_.size(); ++i) {
+        task_depleted_[i] = true;
+        ++n_finished_tasks_;
+      }
     }
-    if (task_depleted_[task->getTaskId()] && ++n_finished_tasks_ == task_counters_.size()) {
+    if (n_finished_tasks_ == task_counters_.size()) {
       finishPlan(reply_queue);
     }
   }
