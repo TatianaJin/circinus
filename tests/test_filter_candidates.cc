@@ -105,7 +105,8 @@ void run(const std::string& dataset, const std::string& filter, std::vector<std:
         QueryGraph q(query_dir);  // load query graph
         std::stringstream ss;
         ss << dataset << ',' << query_size << ',' << query_mode << ',' << i << ':';
-        auto [lf,candidates]=StatefulFilterAndOrder::getCandidateSets(g,q,filter);  // get candidates for each query vertex
+        auto[lf, candidates] =
+            StatefulFilterAndOrder::getCandidateSets(g, q, filter);  // get candidates for each query vertex
         for (auto v : candidates) {
           ss << v.size() << ' ';
         }

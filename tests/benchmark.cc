@@ -459,7 +459,7 @@ class Benchmark {
     QueryGraph q(FLAGS_data_dir + "/" + query_path);  // load query graph
     auto use_order = getOrder(FLAGS_match_order, q.getNumVertices());
     auto start_filter = std::chrono::steady_clock::now();
-    auto [lf,candidates]=StatefulFilterAndOrder::getCandidateSets(g,q,FLAGS_filter);
+    auto[lf, candidates] = StatefulFilterAndOrder::getCandidateSets(g, q, FLAGS_filter);
     auto end_filter = std::chrono::steady_clock::now();
     std::vector<double> candidate_cardinality;
     candidate_cardinality.reserve(candidates.size());

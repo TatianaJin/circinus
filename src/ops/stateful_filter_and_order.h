@@ -83,9 +83,8 @@ using circinus::GQLFilter;
 namespace circinus {
 class StatefulFilterAndOrder {
  private:
-  
   std::map<std::pair<QueryVertexID, QueryVertexID>, BipartiteGraph> bg_map_;
-  
+
   const Graph* g_pointer_;
   const QueryGraph* q_pointer_;
   std::string filter_string_;
@@ -93,11 +92,14 @@ class StatefulFilterAndOrder {
   const std::vector<std::vector<VertexID>>& candidates_sets_;
 
  public:
-  StatefulFilterAndOrder(const Graph* g_pointer, const QueryGraph* q_pointer,
-                         std::string filter_string, const LogicalNeighborhoodFilter* logical_filter,
+  StatefulFilterAndOrder(const Graph* g_pointer, const QueryGraph* q_pointer, std::string filter_string,
+                         const LogicalNeighborhoodFilter* logical_filter,
                          const std::vector<std::vector<VertexID>>& candidates_sets)
-      : g_pointer_(g_pointer), q_pointer_(q_pointer), filter_string_(filter_string),
-        logical_filter_(logical_filter),candidates_sets_(candidates_sets) {}
+      : g_pointer_(g_pointer),
+        q_pointer_(q_pointer),
+        filter_string_(filter_string),
+        logical_filter_(logical_filter),
+        candidates_sets_(candidates_sets) {}
 
   const BipartiteGraph* getBipartiteGraph(QueryVertexID v1, QueryVertexID v2) {
     std::pair<QueryVertexID, QueryVertexID> p(v1, v2);
@@ -123,9 +125,10 @@ class StatefulFilterAndOrder {
     assert("wrong filter method!" && false);
   }
 
-  static std::pair<LogicalNeighborhoodFilter*,std::vector<std::vector<VertexID>> > getCandidateSets(const Graph& g,const QueryGraph& q,std::string filter_string) { //only for test
+  static std::pair<LogicalNeighborhoodFilter*, std::vector<std::vector<VertexID>>> getCandidateSets(
+      const Graph& g, const QueryGraph& q, std::string filter_string) {  // only for test
     std::vector<std::vector<VertexID>> candidates_sets(q.getNumVertices());
-    LogicalNeighborhoodFilter* logical_filter=NULL;
+    LogicalNeighborhoodFilter* logical_filter = NULL;
     std::vector<VertexID> candidate_size(q.getNumVertices());
     ExecutionConfig config;
     for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
@@ -166,7 +169,7 @@ class StatefulFilterAndOrder {
         candidate_size[query_vertex] = candidates_sets[query_vertex].size();
       }
     }
-    return candidates_sets;
+    return {logical_filter, candidates_sets};
   }
 
   QueryVertexID selectGQLStartVertex() {
