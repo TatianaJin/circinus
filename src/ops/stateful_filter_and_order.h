@@ -49,37 +49,6 @@
 #include "utils/profiler.h"
 #include "utils/utils.h"
 
-using circinus::CompressedSubgraphs;
-using circinus::ExecutionConfig;
-using circinus::ExecutionPlan;
-using circinus::Graph;
-using circinus::BipartiteGraph;
-using circinus::GraphType;
-using circinus::GraphMetadata;
-using circinus::NaivePlanner;
-using circinus::QueryGraph;
-using circinus::QueryVertexID;
-using circinus::Task;
-using circinus::ThreadPool;
-using circinus::VertexID;
-using circinus::Profiler;
-using circinus::CoverNode;
-using circinus::QueryType;
-using circinus::TraverseOperator;
-using circinus::INVALID_VERTEX_ID;
-
-// logical filter
-using circinus::LogicalCFLFilter;
-using circinus::LogicalGQLFilter;
-using circinus::LogicalNLFFilter;
-using circinus::LogicalTSOFilter;
-using circinus::LogicalDPISOFilter;
-using circinus::LogicalNeighborhoodFilter;
-
-// physical filter
-using circinus::NeighborhoodFilter;
-using circinus::NLFFilter;
-using circinus::GQLFilter;
 namespace circinus {
 class StatefulFilterAndOrder {
  private:
