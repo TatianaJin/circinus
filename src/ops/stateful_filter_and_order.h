@@ -123,7 +123,7 @@ class StatefulFilterAndOrder {
     assert("wrong filter method!" && false);
   }
 
-  static pair<LogicalNeighborhoodFilter*,std::vector<std::vector<VertexID>> > getCandidateSets(const Graph& g,const QueryGraph& q,std::string filter_string) { //only for test
+  static std::pair<LogicalNeighborhoodFilter*,std::vector<std::vector<VertexID>> > getCandidateSets(const Graph& g,const QueryGraph& q,std::string filter_string) { //only for test
     std::vector<std::vector<VertexID>> candidates_sets(q.getNumVertices());
     LogicalNeighborhoodFilter* logical_filter=NULL;
     std::vector<VertexID> candidate_size(q.getNumVertices());
@@ -229,7 +229,7 @@ class StatefulFilterAndOrder {
   }
 
   std::vector<QueryVertexID> getDPISOOrder() {
-    const auto& logical_filter = dynamic_cast<LogicalDPISOFilter&>(*logical_filter_);
+    const auto& logical_filter = dynamic_cast<const LogicalDPISOFilter&>(*logical_filter_);
     const QueryGraph* query_graph = q_pointer_;
     const std::vector<QueryVertexID>& bfs_order = logical_filter.getBfsOrder();
     QueryVertexID qg_v_cnt = query_graph->getNumVertices();
@@ -311,7 +311,7 @@ class StatefulFilterAndOrder {
   }
 
   std::vector<QueryVertexID> getTSOOrder() {
-    const auto& logical_filter = dynamic_cast<LogicalTSOFilter&>(*logical_filter_);
+    const auto& logical_filter = dynamic_cast<const LogicalTSOFilter&>(*logical_filter_);
     const QueryGraph* query_graph = q_pointer_;
     const std::vector<TreeNode>& tree = logical_filter.getTree();
     const std::vector<QueryVertexID>& dfs_order = logical_filter.getDfsOrder();
@@ -404,7 +404,7 @@ class StatefulFilterAndOrder {
   }
 
   std::vector<QueryVertexID> getCFLOrder() {
-    const auto& logical_filter = dynamic_cast<LogicalCFLFilter&>(*logical_filter_);
+    const auto& logical_filter = dynamic_cast<const LogicalCFLFilter&>(*logical_filter_);
     const Graph* data_graph = g_pointer_;
     const QueryGraph* query_graph = q_pointer_;
     const std::vector<TreeNode>& tree = logical_filter.getTree();
