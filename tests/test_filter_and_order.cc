@@ -108,8 +108,8 @@ void run(const std::string& dataset, const std::string& filter, std::vector<std:
         std::stringstream ss1, ss2;
         ss1 << dataset << ',' << query_size << ',' << query_mode << ',' << i << ':';
         ss2 << dataset << ',' << query_size << ',' << query_mode << ',' << i << ':';
-        StatefulFilterAndOrder fao(&g, &q, filter);
-        auto candidates = fao.getCandidateSets();  // get candidates for each query vertex
+        auto [lf,candidates]=StatefulFilterAndOrder::getCandidateSets(g,q,filter);
+        StatefulFilterAndOrder fao(&g, &q, filter,lf,candidates);
         auto order = fao.getOrder();
         for (auto v : candidates) {
           ss1 << v.size() << ' ';
