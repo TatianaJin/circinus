@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "exec/plan_driver.h"
+#include "exec/profile_task.h"
 #include "exec/result.h"
 #include "exec/task.h"
 #include "exec/traverse_task.h"
@@ -35,6 +36,7 @@ class ExecutionPlanDriverBase : public PlanDriver {
   ExecutionResult* result_;  // owned by ExecutorManager
   std::chrono::time_point<std::chrono::high_resolution_clock> start_time_;
   QueryType query_type_;
+  std::vector<std::vector<CandidateSetView>> candidates_;
 
  public:
   explicit ExecutionPlanDriverBase(BacktrackingPlan* plan) : plan_(plan) {}
@@ -42,16 +44,22 @@ class ExecutionPlanDriverBase : public PlanDriver {
 
   void init(QueryId qid, QueryContext* query_ctx, ExecutionContext& ctx, ThreadsafeTaskQueue& task_queue) override;
 
-  void finishPlan(ThreadsafeQueue<ServerEvent>* reply_queue) {
-    result_->setElapsedExecutionTime(toSeconds(start_time_, std::chrono::high_resolution_clock::now()));
-    result_->setCount();
-    reply_queue->push(std::move(*finish_event_));
-    reset();
-  }
+  void finishPlan(ThreadsafeQueue<ServerEvent>* reply_queue);
 
   inline void collectTaskInfo(TaskBase* task) const {
     result_->addEnumerateTime(task->getExecutionTime());
     result_->collect(task);
+  }
+
+  template <typename TaskType, typename... Args>
+  inline void addTaskToQueue(ThreadsafeTaskQueue* task_queue, Args... args) {
+    TaskBase* task = nullptr;
+    if (isProfileMode(query_type_)) {
+      task = new ProfileTask<TaskType>(std::forward<Args>(args)...);
+    } else {
+      task = new TaskType(std::forward<Args>(args)...);
+    }
+    task_queue->putTask(task);
   }
 };
 

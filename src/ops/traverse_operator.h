@@ -178,13 +178,12 @@ class TraverseOperator : public Operator {
     return n;
   }
 
-  // FIXME(tatiana): profile info interface
-  std::string toProfileString(TraverseContext* ctx) const {
+  std::string toProfileString(const ProfileInfo& info) const override {
     std::stringstream ss;
-    ss << toString() << ',' << ctx->total_time_in_milliseconds << ',' << ctx->getTotalInputSize() << ','
-       << ctx->total_output_size << ',' << ctx->total_num_input_subgraphs << ',' << ctx->total_num_output_subgraphs
-       << ',' << ctx->intersection_count << ',' << ctx->total_intersection_input_size << ','
-       << ctx->total_intersection_output_size << ',' << ctx->distinct_intersection_count;
+    ss << toString() << ',' << info.total_time_in_milliseconds << ',' << info.total_input_size << ','
+       << info.total_output_size << ',' << info.total_num_input_subgraphs << ',' << info.total_num_output_subgraphs
+       << ',' << info.intersection_count << ',' << info.total_intersection_input_size << ','
+       << info.total_intersection_output_size << ',' << info.distinct_intersection_count;
     return ss.str();
   }
 

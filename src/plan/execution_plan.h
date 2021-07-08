@@ -36,7 +36,7 @@ class ExecutionPlan {
   const GraphType graph_type_;
   const QueryGraph* query_graph_;
 
-  std::vector<Operator*> operators_;
+  std::vector<Operator*> operators_;  // FIXME(tatiana): use unique_ptr?
   // TODO(tatiana): change to use unique_ptr
   std::vector<SubgraphFilter*> subgraph_filters_;  // owned, need to delete upon destruction
 
@@ -95,19 +95,7 @@ class ExecutionPlan {
     uint32_t op_idx = 0;
     auto op = operators_.front();
     while (op != nullptr) {
-      oss << op_idx << "," << op->toString() << std::endl;
-      ++op_idx;
-      op = op->getNext();
-    }
-  }
-
-  void printProfiledPlan(std::ostream& oss) const {
-    if (operators_.empty()) return;
-    uint32_t op_idx = 0;
-    auto op = operators_[0];
-    while (op != nullptr) {
-      oss << op_idx << "," << op->toProfileString() << std::endl;
-      ++op_idx;
+      oss << ++op_idx << "," << op->toString() << std::endl;
       op = op->getNext();
     }
   }

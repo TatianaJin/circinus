@@ -21,6 +21,7 @@
 #include "exec/scan_task.h"
 #include "exec/task.h"
 #include "exec/traverse_task.h"
+#include "plan/execution_plan.h"
 #include "utils/utils.h"
 
 namespace circinus {
@@ -33,8 +34,15 @@ std::unique_ptr<Result> Result::newPartitionedCandidateResult(TaskId n_tasks, ui
   return std::make_unique<PartitionedCandidateResult>(n_tasks, n_partitions);
 }
 
-std::unique_ptr<Result> Result::newExecutionResult(bool profile, uint32_t n_plans) {
-  if (profile) return std::make_unique<ProfiledExecutionResult>(n_plans);
+std::unique_ptr<Result> Result::newExecutionResult(bool profile, const std::vector<ExecutionPlan*>& plans) {
+  if (profile) {
+    std::vector<uint32_t> plan_sizes;
+    plan_sizes.reserve(plans.size());
+    for (auto& plan : plans) {
+      plan_sizes.push_back(plan->getOperators().size());
+    }
+    return std::make_unique<ProfiledExecutionResult>(plan_sizes);
+  }
   return std::make_unique<ExecutionResult>();
 }
 
@@ -131,6 +139,28 @@ void PartitionedCandidateResult::removeInvalid(QueryVertexID query_vertex) {
     last_invalid_sum = invalid_sum;
   }
   merged_candidates_[query_vertex].resize(valid_idx);
+}
+
+void ProfiledExecutionResult::collect(TaskBase* task) {
+  auto traverse_task = dynamic_cast<TraverseChainTask*>(task);
+  if (traverse_task != nullptr) {
+    // assume one plan has only one task here! use += if there are parallel tasks for one plan
+    profiles_[traverse_task->getTaskId()] = traverse_task->getProfileInfo();
+  } else {
+    auto matching_parallel_task = dynamic_cast<MatchingParallelTask*>(task);
+    CHECK(matching_parallel_task != nullptr);
+    // TODO(profile): record intersection count in input op? now skip input task
+    matching_parallel_task->collectProfileInfo(profiles_.front()[matching_parallel_task->getTaskId() - 1]);
+  }
+}
+
+void ProfiledExecutionResult::setProfiledPlan(uint32_t profile_idx, const std::vector<Operator*>& ops) {
+  CHECK_EQ(ops.size(), profiles_[profile_idx].size());
+  auto size = ops.size();
+  profiled_plan_str_[profile_idx].reserve(size);
+  for (uint32_t i = 0; i < size; ++i) {
+    profiled_plan_str_[profile_idx].push_back(ops[i]->toProfileString(profiles_[profile_idx][i]));
+  }
 }
 
 }  // namespace circinus

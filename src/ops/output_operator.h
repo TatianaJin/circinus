@@ -106,13 +106,12 @@ class OutputOperator : public Operator {
     return ret;
   }
 
-  // FIXME(tatiana)
-  // std::string toProfileString() const override {
-  //   std::stringstream ss;
-  //   ss << toString() << ',' << total_time_in_milliseconds_ << ',' << total_input_size_ << ",,"
-  //      << total_num_input_subgraphs_;
-  //   return ss.str();
-  // }
+  std::string toProfileString(const ProfileInfo& info) const override {
+    std::stringstream ss;
+    ss << toString() << ',' << info.total_time_in_milliseconds << ',' << info.total_input_size << ",,"
+       << info.total_num_input_subgraphs;
+    return ss.str();
+  }
 };
 
 }  // namespace circinus

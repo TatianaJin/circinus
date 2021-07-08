@@ -21,12 +21,12 @@
 
 #include "glog/logging.h"
 
-#include "exec/result.h"
 #include "exec/task.h"
 #include "graph/graph.h"
 #include "graph/graph_partition.h"
 #include "graph/graph_view.h"
 #include "ops/input_operator.h"
+#include "ops/output_operator.h"
 #include "ops/traverse_operator.h"
 #include "ops/types.h"
 
@@ -41,32 +41,32 @@ class TraverseChainTask : public TaskBase {
   const uint32_t batch_size_;
   std::vector<Operator*> operators_;
   std::unique_ptr<InputOperator> input_op_ = nullptr;
-  std::vector<CandidateSetView> candidates_;
+  const std::vector<CandidateSetView>* candidates_;
 
   std::vector<ProfileInfo> profile_info_;
 
  public:
   TraverseChainTask(QueryId qid, TaskId tid, uint32_t batch_size, const std::vector<Operator*>& ops,
                     std::unique_ptr<InputOperator>&& input_op, const GraphBase* graph,
-                    std::vector<CandidateSetView>&& candidates)
+                    const std::vector<CandidateSetView>* candidates)
       : TaskBase(qid, tid),
         graph_(graph),
         batch_size_(batch_size),
         operators_(ops),
         input_op_(std::move(input_op)),
-        candidates_(std::move(candidates)) {
-    CHECK(!candidates_.empty());
+        candidates_(candidates) {
+    CHECK(!candidates_->empty());
   }
 
   const GraphBase* getDataGraph() const override { return graph_; }
+  const auto& getProfileInfo() const { return profile_info_; }
 
   void run(uint32_t executor_idx) override {
     setupCandidateSets();
-    profile_info_.resize(operators_.size());
 
     auto old_count = dynamic_cast<OutputOperator*>(operators_.back())->getOutput()->getCount(executor_idx);
     // TODO(tatiana): support match limit
-    auto inputs = input_op_->getInputs(graph_, candidates_);
+    auto inputs = input_op_->getInputs(graph_, *candidates_);
     execute<QueryType::Execute>(inputs, 0, executor_idx);
     auto new_count = dynamic_cast<OutputOperator*>(operators_.back())->getOutput()->getCount(executor_idx);
     LOG(INFO) << "Task " << task_id_ << " input " << inputs.size() << " count " << (new_count - old_count);
@@ -74,9 +74,10 @@ class TraverseChainTask : public TaskBase {
 
   void profile(uint32_t executor_idx) override {
     setupCandidateSets();
+    // TODO(profile): record intersection count in input op?
     profile_info_.resize(operators_.size());
     // TODO(tatiana): support match limit
-    execute<QueryType::Profile>(input_op_->getInputs(graph_, candidates_), 0, executor_idx);
+    execute<QueryType::Profile>(input_op_->getInputs(graph_, *candidates_), 0, executor_idx);
   }
 
  protected:
@@ -84,9 +85,9 @@ class TraverseChainTask : public TaskBase {
     auto op = operators_[0];
     auto traverse = dynamic_cast<TraverseOperator*>(op);
     while (traverse != nullptr) {
-      DCHECK_LT(traverse->getTargetQueryVertex(), candidates_.size());
+      DCHECK_LT(traverse->getTargetQueryVertex(), candidates_->size());
       // now assume all query vertices have candidate sets
-      traverse->setCandidateSets(&candidates_[traverse->getTargetQueryVertex()]);
+      traverse->setCandidateSets(&(*candidates_)[traverse->getTargetQueryVertex()]);
       // LOG(INFO) << "set candidates for " << traverse->getTargetQueryVertex() << " " << traverse->toString();
       op = op->getNext();
       traverse = dynamic_cast<TraverseOperator*>(op);
@@ -133,7 +134,11 @@ class TraverseChainTask : public TaskBase {
         break;
       }
     }
-    profile_info_[level] = std::move(*ctx);
+    if
+      constexpr(isProfileMode(profile)) {
+        ctx->total_input_size = ctx->getTotalInputSize();
+        profile_info_[level] = std::move(*ctx);
+      }
     return finished;
   }
 };
@@ -146,8 +151,8 @@ class TraverseTask : public TraverseChainTask {
  public:
   TraverseTask(QueryId query_id, TaskId task_id, uint32_t batch_size, const std::vector<Operator*>& operators,
                std::unique_ptr<InputOperator>&& input_op, const std::vector<CandidateScope>& scopes,
-               const GraphBase* graph, std::vector<CandidateSetView>&& candidates)
-      : TraverseChainTask(query_id, task_id, batch_size, operators, std::move(input_op), graph, std::move(candidates)),
+               const GraphBase* graph, const std::vector<CandidateSetView>* candidates)
+      : TraverseChainTask(query_id, task_id, batch_size, operators, std::move(input_op), graph, candidates),
         partitioned_graph_(dynamic_cast<const ReorderedPartitionedGraph*>(graph)) {
     CHECK(partitioned_graph_ != nullptr);
     graph_views_ = setupGraphView(partitioned_graph_, operators, scopes);
@@ -190,8 +195,10 @@ class MatchingParallelTask : public TaskBase {
   MatchingParallelTask(QueryId qid, TaskId tid) : TaskBase(qid, tid) {}
 
   inline uint32_t getNextLevel() const { return getTaskId() + 1; }
+  inline std::vector<CompressedSubgraphs>& getOutputs() { return outputs_; }
+
   virtual Operator* getNextOperator() = 0;
-  std::vector<CompressedSubgraphs>& getOutputs() { return outputs_; }
+  virtual void collectProfileInfo(ProfileInfo& agg) const {}
 };
 
 class MatchingParallelInputTask : public MatchingParallelTask {
@@ -207,6 +214,8 @@ class MatchingParallelInputTask : public MatchingParallelTask {
   const GraphBase* getDataGraph() const override { return graph_; }
 
   void run(uint32_t executor_idx) override { outputs_ = input_op_->getInputs(graph_, candidates_); }
+  // TODO(profile): record intersection count in input op?
+  void profile(uint32_t executor_idx) override { outputs_ = input_op_->getInputs(graph_, candidates_); }
 
   Operator* getNextOperator() override { return input_op_->getNext(); }
 };
@@ -234,6 +243,11 @@ class MatchingParallelTraverseTask : public MatchingParallelTask {
 
   const GraphBase* getDataGraph() const override {
     return reinterpret_cast<const GraphBase*>(traverse_ctx_->current_data_graph);
+  }
+
+  void collectProfileInfo(ProfileInfo& agg) const override {
+    traverse_ctx_->total_input_size = traverse_ctx_->getTotalInputSize();
+    agg += *traverse_ctx_;
   }
 
   void run(uint32_t executor_idx) override { traverse_op_->expand(UINT32_MAX, traverse_ctx_.get()); }
@@ -265,6 +279,8 @@ class MatchingParallelOutputTask : public MatchingParallelTask {
   }
 
   const GraphBase* getDataGraph() const override { return nullptr; }
+
+  void collectProfileInfo(ProfileInfo& agg) const override { agg += info_; }
 
   void run(uint32_t executor_idx) override {
     output_op_->validateAndOutput(*inputs_, input_index_, input_end_index_, executor_idx);

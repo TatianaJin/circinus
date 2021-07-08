@@ -24,6 +24,7 @@
 #include "graph/candidate_set_view.h"
 #include "graph/types.h"
 #include "ops/output_operator.h"
+#include "plan/execution_plan.h"
 #include "utils/query_utils.h"
 #include "utils/utils.h"
 
@@ -33,7 +34,7 @@ class Result {
  public:
   static std::unique_ptr<Result> newCandidateResult(TaskId n_tasks);
   static std::unique_ptr<Result> newPartitionedCandidateResult(TaskId n_tasks, uint32_t n_partitions);
-  static std::unique_ptr<Result> newExecutionResult(bool profile = false, uint32_t n_plans = 1);
+  static std::unique_ptr<Result> newExecutionResult(bool profile, const std::vector<ExecutionPlan*>& plans);
 
   virtual ~Result() {}
 };
@@ -152,26 +153,21 @@ class ExecutionResult : public Result {
 
 class ProfiledExecutionResult : public ExecutionResult {
   std::vector<std::vector<ProfileInfo>> profiles_;
-  std::vector<std::string> profiled_plan_str_;
+  std::vector<std::vector<std::string>> profiled_plan_str_;
 
  public:
-  explicit ProfiledExecutionResult(uint32_t n_profiles) : profiles_(n_profiles) {}
-
-  void setProfiledPlan(const std::vector<Operator*>& ops) {
-    CHECK_EQ(ops.size(), profiles_.size());
-    auto size = ops.size();
-    profiled_plan_str_.resize(size);
-    for (uint32_t i = 0; i < size; ++i) {
-      // FIXME(tatiana): populate profiled_plan_str_
+  explicit ProfiledExecutionResult(std::vector<uint32_t> profile_sizes)
+      : profiles_(profile_sizes.size()), profiled_plan_str_(profile_sizes.size()) {
+    for (uint32_t i = 0; i < profiles_.size(); ++i) {
+      profiles_[i].resize(profile_sizes[i]);
     }
   }
 
+  void setProfiledPlan(uint32_t profile_idx, const std::vector<Operator*>& ops);
+
   const auto& getProfiledPlanStrings() const { return profiled_plan_str_; }
 
-  void collect(TaskBase* task) override {
-    // FIXME(tatiana)
-    // dynamic_cast<ProfileTaskBase*>(task)
-  }
+  void collect(TaskBase* task) override;
 };
 
 }  // namespace circinus

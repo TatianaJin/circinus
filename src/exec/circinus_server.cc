@@ -103,7 +103,6 @@ void CircinusServer::Serve(bool listen) {
         break;
       }
       default:
-        // TODO(tatiana): explain and profile mode
         LOG(FATAL) << "Unknown event type " << event;
       }
     } catch (const std::exception& e) {
@@ -147,6 +146,7 @@ void CircinusServer::handleNewQuery(const Event& event) {
     std::stringstream error;
     error << "Graph '" << event.args[0] << "' does not exist";
     replyToClient(event.client_addr, error.str());
+    return;
   }
   auto query_idx = newQuery(event.args[0], event.args[1], event.args[2]);
   active_queries_[query_idx].client_addr = event.client_addr;
@@ -312,15 +312,13 @@ void CircinusServer::finishQuery(uint32_t query_index, void* result, const std::
       auto& reply = *reinterpret_cast<std::string*>(result);
       replyToClient(query.client_addr, reply.data(), reply.size(), true);
     } else if (query.query_context.query_config.output == "profile_count") {
-      auto& reply = *reinterpret_cast<ProfiledExecutionResult*>(result);
-      reply.getQueryResult().filter_time = query.filter_time;
-      reply.getQueryResult().plan_time = query.plan_time;
+      auto& reply = *reinterpret_cast<QueryResult*>(result);
+      reply.filter_time = query.filter_time;
+      reply.plan_time = query.plan_time;
       zmq::multipart_t msg;
       msg.pushtyp<bool>(true);
-      msg.pushstr(reply.getQueryResult().toString());
-      for (auto& str : reply.getProfiledPlanStrings()) {
-        msg.pushstr(str);
-      }
+      msg.addstr(reply.profile_info);
+      msg.addstr(reply.toString());
       replyToClient(query.client_addr, msg);
     } else {
       // TODO(tatiana): support other output option

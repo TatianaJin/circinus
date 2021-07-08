@@ -67,27 +67,8 @@ class BacktrackingPlan {
     std::stringstream ss;
     for (uint32_t i = 0; i < plans_.size(); ++i) {
       ss << "[ Plan " << i << " ]\n";
+      ss << "0," << input_operators_[i]->toPhysicalOperators()->toString() << std::endl;
       plans_[i]->printPhysicalPlan(ss);
-    }
-    if (!partitioned_plans_.empty()) {
-      ss << "[ Partitions ]\n";
-    }
-    for (auto& plan : partitioned_plans_) {
-      ss << "Plan " << plan.first;
-      for (auto& scope : plan.second) {
-        ss << ' ';
-        scope.print(ss);
-      }
-      ss << '\n';
-    }
-    return ss.str();
-  }
-
-  std::string toProfileString() const {
-    std::stringstream ss;
-    for (uint32_t i = 0; i < plans_.size(); ++i) {
-      ss << "[ Plan " << i << " ]\n";
-      plans_[i]->printProfiledPlan(ss);
     }
     if (!partitioned_plans_.empty()) {
       ss << "[ Partitions ]\n";

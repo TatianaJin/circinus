@@ -188,6 +188,7 @@ struct QueryResult {
   double elapsed_execution_time = 0;
   uint64_t embedding_count = 0;
   std::string matching_order;
+  std::string profile_info;
 
   inline std::string toString() const {
     std::stringstream ss;
@@ -217,6 +218,17 @@ struct ProfileInfo {
     ++intersection_count;
     total_intersection_input_size += input_size;
     total_intersection_output_size += output_size;
+  }
+  void operator+=(const ProfileInfo& update) {
+    total_input_size += update.total_input_size;
+    total_output_size += update.total_output_size;
+    total_num_input_subgraphs += update.total_num_input_subgraphs;
+    total_num_output_subgraphs += update.total_num_output_subgraphs;
+    total_time_in_milliseconds += update.total_time_in_milliseconds;
+    intersection_count += update.intersection_count;
+    total_intersection_input_size += update.total_intersection_input_size;
+    total_intersection_output_size += update.total_intersection_output_size;
+    distinct_intersection_count += update.distinct_intersection_count;
   }
 };
 

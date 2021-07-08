@@ -31,7 +31,7 @@ void ExecutionPlanDriverBase::init(QueryId qid, QueryContext* query_ctx, Executi
                                    ThreadsafeTaskQueue& task_queue) {
   start_time_ = std::chrono::high_resolution_clock::now();
   candidate_result_.reset(dynamic_cast<CandidateResult*>(ctx.second.release()));
-  ctx.second = Result::newExecutionResult(query_ctx->query_config.mode == QueryMode::Profile, plan_->getPlans().size());
+  ctx.second = Result::newExecutionResult(query_ctx->query_config.mode == QueryMode::Profile, plan_->getPlans());
   result_ = (ExecutionResult*)ctx.second.get();
   result_->getOutputs().init(ctx.first.getNumExecutors()).limit(query_ctx->query_config.limit);
   if (plan_->getPlans().size() == 1) {
@@ -56,6 +56,41 @@ void ExecutionPlanDriverBase::init(QueryId qid, QueryContext* query_ctx, Executi
   finish_event_->query_id = qid;
 }
 
+void ExecutionPlanDriverBase::finishPlan(ThreadsafeQueue<ServerEvent>* reply_queue) {
+  result_->setElapsedExecutionTime(toSeconds(start_time_, std::chrono::high_resolution_clock::now()));
+  result_->setCount();
+  auto profiled = dynamic_cast<ProfiledExecutionResult*>(result_);
+  if (profiled != nullptr) {
+    auto size = plan_->getPlans().size();
+    std::stringstream ss;
+    for (uint32_t i = 0; i < size; ++i) {
+      ss << "[ Plan " << i << " ]\n";
+      ss << "0," << plan_->getInputOperator(i)->toString() << std::endl;
+      profiled->setProfiledPlan(i, plan_->getOperators(i));
+      uint32_t op_idx = 1;
+      for (auto& op_profile : profiled->getProfiledPlanStrings()[i]) {
+        ss << op_idx << ',' << op_profile << std::endl;
+        ++op_idx;
+      }
+    }
+    if (plan_->getNumPartitionedPlans() != 0) {
+      ss << "[ Partitions ]\n";
+    }
+    for (uint32_t i = 0; i < plan_->getNumPartitionedPlans(); ++i) {
+      auto& plan = plan_->getPartitionedPlan(i);
+      ss << "Plan " << plan.first;
+      for (auto& scope : plan.second) {
+        ss << ' ';
+        scope.print(ss);
+      }
+      ss << '\n';
+    }
+    result_->getQueryResult().profile_info = ss.str();
+  }
+  reply_queue->push(std::move(*finish_event_));
+  reset();
+}
+
 void ExecutionPlanDriver::init(QueryId qid, QueryContext* query_ctx, ExecutionContext& ctx,
                                ThreadsafeTaskQueue& task_queue) {
   ExecutionPlanDriverBase::init(qid, query_ctx, ctx, task_queue);
@@ -63,6 +98,7 @@ void ExecutionPlanDriver::init(QueryId qid, QueryContext* query_ctx, ExecutionCo
   auto n_plans = plan_->getNumPartitionedPlans();
   CHECK_EQ(plan_->getPlans().size(), n_plans) << "now one partitioned plan per graph partition";
   task_counters_.resize(plan_->getPlans().size(), 1);  // one task per partition
+  candidates_.resize(n_plans);
   for (uint32_t i = 0; i < n_plans; ++i) {
     auto plan_idx = plan_->getPartitionedPlan(i).first;
     dynamic_cast<OutputOperator*>(plan_->getOutputOperator(plan_idx))
@@ -71,15 +107,9 @@ void ExecutionPlanDriver::init(QueryId qid, QueryContext* query_ctx, ExecutionCo
 
     auto& scopes = plan_->getPartitionedPlan(i).second;
     auto partitioned_result = dynamic_cast<PartitionedCandidateResult*>(candidate_result_.get());
-    if (query_ctx->query_config.mode == QueryMode::Profile) {
-      task_queue.putTask(new ProfileTask<TraverseTask>(qid, i, ctx.first.getBatchSize(), plan_->getOperators(plan_idx),
-                                                       std::move(input_operator), scopes, query_ctx->data_graph,
-                                                       partitioned_result->getCandidatesByScopes(scopes)));
-    } else {
-      task_queue.putTask(new TraverseTask(qid, i, ctx.first.getBatchSize(), plan_->getOperators(plan_idx),
-                                          std::move(input_operator), scopes, query_ctx->data_graph,
-                                          partitioned_result->getCandidatesByScopes(scopes)));
-    }
+    candidates_[i] = partitioned_result->getCandidatesByScopes(scopes);
+    addTaskToQueue<TraverseTask>(&task_queue, qid, i, ctx.first.getBatchSize(), plan_->getOperators(plan_idx),
+                                 std::move(input_operator), scopes, query_ctx->data_graph, &candidates_[i]);
   }
 }
 
@@ -98,25 +128,18 @@ void MatchingParallelExecutionPlanDriver::init(QueryId qid, QueryContext* query_
   dynamic_cast<OutputOperator*>(plan_->getOutputOperator())->setOutput(&result_->getOutputs());
 
   result_->getOutputs().init(ctx.first.getNumExecutors()).limit(query_ctx->query_config.limit);
+
+  candidates_ = candidate_result_->getCandidates();
   if (ctx.first.getNumExecutors() == 1) {
     // one task for single-thread execution
     task_counters_.push_back(1);
 
-    if (query_ctx->query_config.mode == QueryMode::Profile) {
-      task_queue.putTask(new ProfileTask<TraverseChainTask>(qid, 0, ctx.first.getBatchSize(), plan_->getOperators(),
-                                                            plan_->getInputOperator(), query_ctx->data_graph,
-                                                            candidate_result_->getCandidates()));
-    } else {
-      task_queue.putTask(new TraverseChainTask(qid, 0, ctx.first.getBatchSize(), plan_->getOperators(),
-                                               plan_->getInputOperator(), query_ctx->data_graph,
-                                               candidate_result_->getCandidates()));
-    }
+    addTaskToQueue<TraverseChainTask>(&task_queue, qid, 0, ctx.first.getBatchSize(), plan_->getOperators(),
+                                      plan_->getInputOperator(), query_ctx->data_graph, &candidates_);
     return;
   }
 
   {  // TODO(tatiana): wrap with a task?
-    candidates_ = candidate_result_->getCandidates();
-
     for (auto op : plan_->getOperators()) {
       auto traverse = dynamic_cast<TraverseOperator*>(op);
       if (traverse == nullptr) break;
@@ -133,8 +156,8 @@ void MatchingParallelExecutionPlanDriver::init(QueryId qid, QueryContext* query_
 
   input_op_->setNext(plan_->getOperators().front());
 
-  task_queue.putTask(new MatchingParallelInputTask(qid, 0, (const GraphBase*)query_ctx->data_graph, input_op_.get(),
-                                                   candidate_result_->getCandidates()));
+  addTaskToQueue<MatchingParallelInputTask>(&task_queue, qid, 0, (const GraphBase*)query_ctx->data_graph,
+                                            input_op_.get(), candidate_result_->getCandidates());
 }
 
 void MatchingParallelExecutionPlanDriver::taskFinish(TaskBase* task, ThreadsafeTaskQueue* task_queue,
@@ -158,28 +181,29 @@ void MatchingParallelExecutionPlanDriver::taskFinish(TaskBase* task, ThreadsafeT
     if (task->getTaskId() == plan_->getOperators().size() - 1) {
       uint32_t input_index = 0;
       for (; input_index + batch_size_ < input_size; input_index += batch_size_) {
-        task_queue->putTask(new MatchingParallelOutputTask(task->getQueryId(), level, dynamic_cast<OutputOperator*>(op),
-                                                           inputs, input_index, input_index + batch_size_));
+        addTaskToQueue<MatchingParallelOutputTask>(task_queue, task->getQueryId(), level,
+                                                   dynamic_cast<OutputOperator*>(op), inputs, input_index,
+                                                   input_index + batch_size_);
       }
       if (input_index < input_size) {
-        task_queue->putTask(new MatchingParallelOutputTask(task->getQueryId(), level, dynamic_cast<OutputOperator*>(op),
-                                                           inputs, input_index, input_size));
+        addTaskToQueue<MatchingParallelOutputTask>(task_queue, task->getQueryId(), level,
+                                                   dynamic_cast<OutputOperator*>(op), inputs, input_index, input_size);
       }
     } else {
       uint32_t input_index = 0;
       for (; input_index + batch_size_ < input_size; input_index += batch_size_) {
-        task_queue->putTask(new MatchingParallelTraverseTask(
-            task->getQueryId(), level, dynamic_cast<TraverseOperator*>(op),
+        addTaskToQueue<MatchingParallelTraverseTask>(
+            task_queue, task->getQueryId(), level, dynamic_cast<TraverseOperator*>(op),
             dynamic_cast<TraverseOperator*>(op)->initTraverseContext(inputs.get(), task->getDataGraph(), input_index,
                                                                      input_index + batch_size_, query_type_),
-            inputs));
+            inputs);
       }
       if (input_index < input_size) {
-        task_queue->putTask(new MatchingParallelTraverseTask(
-            task->getQueryId(), level, dynamic_cast<TraverseOperator*>(op),
+        addTaskToQueue<MatchingParallelTraverseTask>(
+            task_queue, task->getQueryId(), level, dynamic_cast<TraverseOperator*>(op),
             dynamic_cast<TraverseOperator*>(op)->initTraverseContext(inputs.get(), task->getDataGraph(), input_index,
                                                                      input_size, query_type_),
-            inputs));
+            inputs);
       }
     }
   }

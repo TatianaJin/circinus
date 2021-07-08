@@ -29,8 +29,8 @@ namespace circinus {
 class Task;
 
 /** Uses flag: FLAGS_batch_size */
-class OperatorTree {
-  std::vector<Operator*> operators_;  // FIXME(tatiana): use unique_ptr?
+class[[deprecated]] OperatorTree {
+  std::vector<Operator*> operators_;
 
  public:
   ~OperatorTree() { clear(); }
@@ -44,12 +44,12 @@ class OperatorTree {
   inline bool empty() const { return operators_.empty(); }
 
   inline Operator* root() const { return operators_.front(); }
-  inline void push_back(Operator* t) { operators_.push_back(t); }
+  inline void push_back(Operator * t) { operators_.push_back(t); }
   inline void reserve(uint32_t size) { operators_.reserve(size); }
   inline Operator* getOperator(uint32_t idx) const { return operators_[idx]; }
   inline size_t getOperatorSize() const { return operators_.size(); }
 
-  inline void setOutput(Outputs* outputs) const {
+  inline void setOutput(Outputs * outputs) const {
     auto op = operators_.back();
     auto output_op = dynamic_cast<OutputOperator*>(op);
     CHECK(output_op != nullptr) << op->toString();

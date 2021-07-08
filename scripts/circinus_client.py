@@ -104,8 +104,8 @@ class CircinusCommandCompleter:
         cmds = [cmds[0], osp.join(cmds[1], "data_graph", "{0}.graph.bin".format(cmds[1])), cmds[1], '']
       elif len(cmds) == 3:
         cmds.append('')  # empty config
-    elif cmds[0] in ["profile","explain"]:
-      cmds[3] = "{0},mode={1}".format(cmds[3],cmds[0]) if len(cmds[3]) > 0 else "mode={0}".format(cmds[0])
+    elif cmds[0] in ["profile", "explain"]:
+      cmds[3] = "{0},mode={1}".format(cmds[3], cmds[0]) if len(cmds[3]) > 0 else "mode={0}".format(cmds[0])
       cmds[0] = "query"
     elif cmds[0] == "exit":
       self.send_sock.send_multipart([pack(x, mode='str') for x in cmds])
@@ -121,17 +121,19 @@ class CircinusCommandCompleter:
     if flag:
       if cmds[0] == "load":
         print("Loaded graph in {0} seconds".format(unpack(msgs[1], 'double')))
-      elif cmds[0] in ["query","profile"]:
-        title = ["elapsed_execution_time","filter_time","plan_time","enumerate_time","embedding_count","matching_order"]
+      elif cmds[0] in ["query", "profile"]:
+        idx = 1
+        if cmds[0] == "profile":
+          for i in range(1, len(msgs) - 1):
+            print(unpack(msgs[i], 'str'))
+          idx = len(msgs) - 1
+        title = ["elapsed_execution_time", "filter_time", "plan_time", "enumerate_time", "embedding_count", "matching_order"]
         format_str = ""
         for i in range(len(title)):
-            format_str = "{0}{{{2}:>{1}}} ".format(format_str, len(title[i]), i)
-        splits = unpack(msgs[1], 'str').split(',')
+          format_str = "{0}{{{2}:>{1}}} ".format(format_str, len(title[i]), i)
+        splits = unpack(msgs[idx], 'str').split(',')
         print(' '.join(title))
         print(format_str.format(*splits))
-        if cmds[0] == "profile":
-          for i in range(2, len(msgs)):
-            print(unpack(msgs[i], 'str'))
       elif cmds[0] == "explain":
         print(unpack(msgs[1], 'str'))
     else:
@@ -185,7 +187,7 @@ class CircinusCommandCompleter:
 
         cmds = [x for x in cmd.split(" ") if x != ""]
         if self.process_cmds(cmds):
-            return
+          return
         last_cmd = ""
 
 

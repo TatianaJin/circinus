@@ -20,6 +20,8 @@
 
 namespace circinus {
 
+class ProfileInfo;  // forward declaration
+
 class Operator {
  private:
   Operator* next_ = nullptr;
@@ -36,7 +38,7 @@ class Operator {
 
   virtual std::string toString() const { return getTypename(*this); }
 
-  virtual std::string toProfileString() const { return toString(); }
+  virtual std::string toProfileString(const ProfileInfo&) const { return toString(); }
 
   inline uint32_t getParallelism() const { return parallelism_; }
 
