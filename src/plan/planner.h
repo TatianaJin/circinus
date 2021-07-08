@@ -82,6 +82,10 @@ class Planner {
   BacktrackingPlan* generateExecutionPlan(const std::vector<std::vector<VertexID>>*, bool multithread = true);
 
  private:
+  inline bool toPartitionCandidates() const {
+    return query_context_->graph_metadata->numPartitions() > 1 && query_context_->query_config.use_partitioned_graph;
+  }
+
   inline std::vector<VertexID> estimateCardinalityInner(const GraphMetadata* metadata) const {
     std::vector<VertexID> ret;
     ret.resize(query_context_->query_graph.getNumVertices(), metadata->getNumVertices());

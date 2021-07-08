@@ -98,7 +98,7 @@ void MatchingParallelExecutionPlanDriver::init(QueryId qid, QueryContext* query_
   dynamic_cast<OutputOperator*>(plan_->getOutputOperator())->setOutput(&result_->getOutputs());
 
   result_->getOutputs().init(ctx.first.getNumExecutors()).limit(query_ctx->query_config.limit);
-  if (false && ctx.first.getNumExecutors() == 1) {
+  if (ctx.first.getNumExecutors() == 1) {
     // one task for single-thread execution
     task_counters_.push_back(1);
 

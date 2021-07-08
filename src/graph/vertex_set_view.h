@@ -106,6 +106,7 @@ class VertexSetView {
 
   VertexSetView() = default;
   VertexSetView(const VertexID* start, const VertexID* end) { addRange(start, end); }
+  VertexSetView(const std::vector<VertexID>& vec) { addRange(vec.data(), vec.data() + vec.size()); }
 
   inline void addRange(const VertexID* start, const VertexID* end) {
     if (start >= end || start == nullptr || end == nullptr) return;
@@ -123,6 +124,19 @@ class VertexSetView {
 
   inline ConstIterator begin() const { return ConstIterator(ranges_); }
   inline ConstIterator end() const { return ConstIterator(ranges_, true); }
+  inline ConstIterator iter(size_t idx) const {
+    uint32_t range_idx = 0;
+    RangeSize idx_in_range = 0;
+    size_t offset = 0;
+    for (; range_idx < ranges_.size(); ++range_idx) {
+      if (offset + ranges_[range_idx].second > idx) {
+        idx_in_range = idx - offset;
+        break;
+      }
+      offset += ranges_[range_idx].second;
+    }
+    return ConstIterator(ranges_, range_idx, idx_in_range);
+  }
 };
 
 }  // namespace circinus
