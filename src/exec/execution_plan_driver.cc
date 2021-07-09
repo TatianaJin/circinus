@@ -115,7 +115,6 @@ void ExecutionPlanDriver::taskFinish(TaskBase* task, ThreadsafeTaskQueue* task_q
                                      ThreadsafeQueue<ServerEvent>* reply_queue) {
   collectTaskInfo(task);
   if (--task_counters_[task->getTaskId()] == 0 && ++n_finished_tasks_ == task_counters_.size()) {
-    // TODO(tatiana): now we only consider count as output
     finishPlan(reply_queue);
   }
 }
@@ -207,7 +206,7 @@ void MatchingParallelExecutionPlanDriver::taskFinish(TaskBase* task, ThreadsafeT
   }
 
   if (--task_counters_[task->getTaskId()] == 0) {
-    // TODO(tatiana) support match limit
+    // TODO(limit): abort task when match limit is reached
     if (task->getTaskId() == 0 || task_depleted_[task->getTaskId() - 1]) {
       for (uint32_t i = task->getTaskId(); task_counters_[i] == 0 && i < task_counters_.size(); ++i) {
         task_depleted_[i] = true;

@@ -104,7 +104,7 @@ class TraverseChainTask : public TaskBase {
   }
 
   template <QueryType profile>
-  bool execute(const std::vector<CompressedSubgraphs>& inputs, uint32_t level = 0, uint32_t executor_idx = 0) {
+  bool execute(const std::vector<CompressedSubgraphs>& inputs, uint32_t level, uint32_t executor_idx) {
     std::vector<CompressedSubgraphs> outputs;
     auto op = operators_[level];
     if (level == operators_.size() - 1) {
@@ -129,7 +129,7 @@ class TraverseChainTask : public TaskBase {
       if (size == 0) {
         break;
       }
-      if (execute<profile>(outputs, level + 1)) {
+      if (execute<profile>(outputs, level + 1, executor_idx)) {
         finished = true;
         break;
       }

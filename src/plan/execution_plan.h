@@ -36,7 +36,7 @@ class ExecutionPlan {
   const GraphType graph_type_;
   const QueryGraph* query_graph_;
 
-  std::vector<Operator*> operators_;  // FIXME(tatiana): use unique_ptr?
+  std::vector<Operator*> operators_;  // TODO(tatiana): use unique_ptr?
   // TODO(tatiana): change to use unique_ptr
   std::vector<SubgraphFilter*> subgraph_filters_;  // owned, need to delete upon destruction
 
@@ -73,6 +73,10 @@ class ExecutionPlan {
       delete filter;
     }
     subgraph_filters_.clear();
+    for (auto& op : operators_) {
+      delete op;
+    }
+    operators_.clear();
   }
 
   void populatePhysicalPlan(const QueryGraph* g, const std::vector<QueryVertexID>& matching_order,

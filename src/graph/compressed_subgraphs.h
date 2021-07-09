@@ -216,15 +216,6 @@ class CompressedSubgraphs {
   static uint64_t getNumIsomorphicSubgraphs(unordered_set<VertexID>& existing_vertices,
                                             std::vector<std::vector<VertexID>*>& set_ptrs, uint64_t limit = ~0u);
 
-  [[deprecated]] bool isExisting(uint32_t key) const {
-    for (uint32_t existing_key : keys_) {
-      if (existing_key == key) {
-        return true;
-      }
-    }
-    return false;
-  }
-
   std::string toString() const {
     std::string s = "{";
     s += "key_size:" + std::to_string(keys_.size()) + "," + "set_size:" + std::to_string(sets_.size()) + ",";

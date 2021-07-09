@@ -83,14 +83,6 @@ class BacktrackingPlan {
     }
     return ss.str();
   }
-
-  // TODO(tatiana): deprecate the function
-  inline bool inputsAreKeys(uint32_t plan_idx = 0) const { return plans_[plan_idx]->inputAreKeys(); }
-
-  // TODO(tatiana): deprecate the function
-  inline uint32_t getInputCandidateIndex(uint32_t plan_idx = 0) const {
-    return plans_[plan_idx]->getRootQueryVertexID();  // now assume all vertices have candidates
-  }
 };
 
 }  // namespace circinus
