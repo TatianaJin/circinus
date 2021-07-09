@@ -50,11 +50,12 @@ DEFINE_uint64(query_size, 8, "The query size.");
 DEFINE_uint64(match_limit, 1e5, "The limit of matches to find");
 DEFINE_uint64(query_index, 1, "The index of query in the same category");
 DEFINE_string(match_order, "", "Matching order");
-DEFINE_string(filter, "nlf", "filter");
-DEFINE_string(profile_file, "", "profile file");
+DEFINE_string(filter, "nlf", "Candidate pruning strategy");
+DEFINE_int32(profile, 0, "0 means no profiling, 1 means to profile the execution, 2 means to profile min SI count");
+DEFINE_string(profile_prefix, "/data/share/users/byli/circinus/evaluation/profile/", "Profile file prefix");
 DEFINE_string(vertex_cover, "static", "Vertex cover strategy: static, dynamic, all");
 DEFINE_string(batch_file, "", "Batch query file");
-DEFINE_bool(bipartite_graph, false, "use bipartite graph or not");
+DEFINE_bool(bipartite_graph, false, "Use bipartite graph or not");  // TODO(exp): support for control experiment
 
 class QueryConfig {
  public:
@@ -171,6 +172,13 @@ class Benchmark {
     std::stringstream config;
     config << "cps=" << FLAGS_filter << ",cs=" << FLAGS_vertex_cover << ",limit=" << FLAGS_match_limit
            << ",mo=" << match_order;
+
+    if (FLAGS_profile == 1) {
+      config << ",mode=profile";
+    } else if (FLAGS_profile == 2) {
+      config << ",mode=profile_si";
+    }
+
     server_->query(std::string(dataset), std::move(query_path), config.str(), ADDRESS);
     // log result
     zmq::multipart_t reply;
@@ -178,6 +186,15 @@ class Benchmark {
     auto success = reply.poptyp<bool>();
     auto msg = reply.pop();
     if (success) {
+      if (FLAGS_profile) {
+        // TODO(exp): add match order strategy to profile file name
+        auto profile_file = FLAGS_profile_prefix + dataset + '_' + query_mode + '_' + std::to_string(query_size) + '_' +
+                            std::to_string(index) + '_' + FLAGS_filter;
+        LOG(INFO) << "-------------" << profile_file;
+        auto ofs = circinus::openOutputFile(profile_file);
+        ofs << std::string_view((char*)msg.data(), msg.size());
+        msg = reply.pop();
+      }
       (*out) << std::string_view((char*)msg.data(), msg.size());
     } else {
       LOG(WARNING) << std::string_view((char*)msg.data(), msg.size());
@@ -196,17 +213,11 @@ void run_benchmark(const std::string& query_file, Benchmark& benchmark, std::ost
   QueryConfig config;
   std::string dataset = "";
   double load_time = 0;
-  std::string profile_prefix = "/data/share/users/byli/circinus/evaluation/profile/";
   while (query_f >> config) {
     if (config.skipConfig()) continue;
     config.toString(LOG(INFO) << ">>>>>>>>>>>>>>>>> query config -vertex_cover " << FLAGS_vertex_cover << " -filter "
                               << FLAGS_filter << " -match_limit " << FLAGS_match_limit << ' ');
-    // TODO(tatiana): change profile_file from system flag to a query config
     // load graph if not cached
-    FLAGS_profile_file = profile_prefix + config.dataset + '_' + config.query_mode + '_' +
-                         std::to_string(config.query_size) + '_' + std::to_string(config.query_index) + '_' +
-                         FLAGS_filter;
-    LOG(INFO) << "-------------" << FLAGS_profile_file;
     if (config.dataset != dataset) {
       dataset = config.dataset;
       benchmark.loadDataset(dataset, load_time);

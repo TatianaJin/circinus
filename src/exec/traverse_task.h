@@ -44,17 +44,19 @@ class TraverseChainTask : public TaskBase {
   const std::vector<CandidateSetView>* candidates_;
 
   std::vector<ProfileInfo> profile_info_;
+  QueryType query_type_;
 
  public:
   TraverseChainTask(QueryId qid, TaskId tid, uint32_t batch_size, const std::vector<Operator*>& ops,
                     std::unique_ptr<InputOperator>&& input_op, const GraphBase* graph,
-                    const std::vector<CandidateSetView>* candidates)
+                    const std::vector<CandidateSetView>* candidates, QueryType query_type)
       : TaskBase(qid, tid),
         graph_(graph),
         batch_size_(batch_size),
         operators_(ops),
         input_op_(std::move(input_op)),
-        candidates_(candidates) {
+        candidates_(candidates),
+        query_type_(query_type) {
     CHECK(!candidates_->empty());
   }
 
@@ -116,7 +118,7 @@ class TraverseChainTask : public TaskBase {
       return output_op->validateAndOutput(inputs, executor_idx);
     }
     auto traverse_op = dynamic_cast<TraverseOperator*>(op);
-    auto ctx = createTraverseContext(inputs, outputs, level, traverse_op, profile);
+    auto ctx = createTraverseContext(inputs, outputs, level, traverse_op, query_type_);
     bool finished = false;
     while (true) {
       outputs.clear();
@@ -151,8 +153,8 @@ class TraverseTask : public TraverseChainTask {
  public:
   TraverseTask(QueryId query_id, TaskId task_id, uint32_t batch_size, const std::vector<Operator*>& operators,
                std::unique_ptr<InputOperator>&& input_op, const std::vector<CandidateScope>& scopes,
-               const GraphBase* graph, const std::vector<CandidateSetView>* candidates)
-      : TraverseChainTask(query_id, task_id, batch_size, operators, std::move(input_op), graph, candidates),
+               const GraphBase* graph, const std::vector<CandidateSetView>* candidates, QueryType query_type)
+      : TraverseChainTask(query_id, task_id, batch_size, operators, std::move(input_op), graph, candidates, query_type),
         partitioned_graph_(dynamic_cast<const ReorderedPartitionedGraph*>(graph)) {
     CHECK(partitioned_graph_ != nullptr);
     graph_views_ = setupGraphView(partitioned_graph_, operators, scopes);

@@ -48,6 +48,7 @@ void ExecutionPlanDriverBase::init(QueryId qid, QueryContext* query_ctx, Executi
                     ? QueryType::Profile
                     : ((query_ctx->query_config.mode == QueryMode::ProfileSI) ? QueryType::ProfileWithMiniIntersection
                                                                               : QueryType::Execute);
+  LOG(INFO) << "Query Type " << ((uint16_t)query_type_);
 
   finish_event_ = std::make_unique<ServerEvent>(ServerEvent::ExecutionPhase);
   finish_event_->data = &result_->getQueryResult();
@@ -107,7 +108,8 @@ void ExecutionPlanDriver::init(QueryId qid, QueryContext* query_ctx, ExecutionCo
     auto partitioned_result = dynamic_cast<PartitionedCandidateResult*>(candidate_result_.get());
     candidates_[i] = partitioned_result->getCandidatesByScopes(scopes);
     addTaskToQueue<TraverseTask>(&task_queue, qid, i, ctx.first.getBatchSize(), plan_->getOperators(plan_idx),
-                                 std::move(input_operator), scopes, query_ctx->data_graph, &candidates_[i]);
+                                 std::move(input_operator), scopes, query_ctx->data_graph, &candidates_[i],
+                                 query_type_);
   }
 }
 
@@ -132,7 +134,7 @@ void MatchingParallelExecutionPlanDriver::init(QueryId qid, QueryContext* query_
     task_counters_.push_back(1);
 
     addTaskToQueue<TraverseChainTask>(&task_queue, qid, 0, ctx.first.getBatchSize(), plan_->getOperators(),
-                                      plan_->getInputOperator(), query_ctx->data_graph, &candidates_);
+                                      plan_->getInputOperator(), query_ctx->data_graph, &candidates_, query_type_);
     return;
   }
 

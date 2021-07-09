@@ -283,6 +283,7 @@ inline uint32_t CircinusServer::newQuery(const std::string& graph_name, const st
                                          const std::string& query_config_str) {
   QueryGraph q(query_file);
   QueryConfig config(query_config_str);
+  DLOG(INFO) << "Query execution mode " << ((uint16_t)config.mode);
 
   auto& graph = data_graphs_.at(graph_name);
   if (reusable_indices_.empty()) {
