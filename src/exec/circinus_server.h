@@ -145,6 +145,7 @@ class CircinusServer {
     query_state.planner = new Planner(query_state.query_context);
     if (query_state.query_context.query_config.mode == QueryMode::Explain) {  // dry run
       auto cardinality = query_state.planner->estimateCardinality();
+      // FIXME(by)
       auto plan = query_state.planner->generateExecutionPlan(&cardinality);
       auto str = plan->toString();
       query_state.query_context.query_config.output = "plan";

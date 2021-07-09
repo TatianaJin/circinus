@@ -12,18 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <algorithm>
-#include <chrono>
-#include <cmath>
-#include <fstream>
-#include <limits>
 #include <map>
-#include <memory>
-#include <random>
-#include <sstream>
-#include <string>
-#include <utility>
-#include <vector>
 
 #include "gflags/gflags.h"
 #include "glog/logging.h"
@@ -32,75 +21,108 @@
 #endif
 #include "gtest/gtest.h"
 
-#include "exec/thread_pool.h"
 #include "graph/bipartite_graph.h"
-#include "graph/compressed_subgraphs.h"
 #include "graph/graph.h"
+#include "graph/partitioned_graph.h"
 #include "graph/query_graph.h"
-#include "ops/filters.h"
-#include "ops/logical_filters.h"
-#include "ops/operators.h"
-#include "ops/scans.h"
-#include "ops/types.h"
-#include "plan/execution_plan.h"
-#include "plan/naive_planner.h"
-#include "utils/flags.h"
-#include "utils/hashmap.h"
-#include "utils/profiler.h"
-#include "utils/utils.h"
+#include "ops/logical/filter/cfl_filter.h"
+#include "ops/logical/filter/daf_filter.h"
+#include "ops/logical/filter/filter.h"
+#include "ops/logical/filter/tso_filter.h"
+#include "utils/query_utils.h"
 
 namespace circinus {
-class StatelessFilterAndOrder {
+class OrderGenerator {
+ private:
+  std::map<std::pair<QueryVertexID, QueryVertexID>, BipartiteGraph> bg_map_;
+
+  const GraphBase* data_graph_;
+  const QueryGraph* query_graph_;
+  const std::vector<CandidateSetView>& candidates_;
+  const std::vector<VertexID>& candidate_sizes_;
+  const GraphMetadata& metadata_;
+
  public:
-  static QueryVertexID selectGQLStartVertex(const QueryGraph* query_graph,
-                                            const std::vector<VertexID>& candidates_cardinality) {
+  OrderGenerator(const GraphBase* data_graph, const GraphMetadata& metadata, const QueryGraph* query_graph,
+                 const std::vector<CandidateSetView>& candidates, const std::vector<VertexID>& candidate_sizes)
+      : data_graph_(data_graph),
+        metadata_(metadata),
+        query_graph_(query_graph),
+        candidates_(candidates),
+        candidate_sizes_(candidate_sizes) {}
+
+  const BipartiteGraph* getBipartiteGraph(QueryVertexID v1, QueryVertexID v2) {
+    std::pair<QueryVertexID, QueryVertexID> p(v1, v2);
+    auto bg = bg_map_.find(p);
+    if (bg == bg_map_.end()) {
+      BipartiteGraph newbg(v1, v2);
+      newbg.populateGraph((const Graph*)data_graph_, candidates_);
+      auto res = bg_map_.insert({p, std::move(newbg)});
+      bg = res.first;
+    }
+    return &(bg->second);
+  }
+
+  std::vector<QueryVertexID> getOrder(OrderStrategy order_strategy) {
+    switch (order_strategy) {
+    case OrderStrategy::None:
+    case OrderStrategy::CFL:
+      return getCFLOrder();
+    case OrderStrategy::DAF:
+      return getDAFOrder();
+    case OrderStrategy::TSO:
+      return getTSOOrder();
+    case OrderStrategy::GQL:
+      return getGQLOrder();
+    }
+  }
+
+  QueryVertexID selectGQLStartVertex() {
     QueryVertexID start_vertex = 0;
-    QueryVertexID qg_v_cnt = query_graph->getNumVertices();
+    QueryVertexID qg_v_cnt = query_graph_->getNumVertices();
     for (QueryVertexID i = 1; i < qg_v_cnt; ++i) {
       QueryVertexID cur_vertex = i;
-      VertexID size1 = candidates_cardinality[cur_vertex], size2 = candidates_cardinality[start_vertex];
+      size_t size1 = candidate_sizes_[cur_vertex], size2 = candidate_sizes_[start_vertex];
       if (size1 < size2) {
         start_vertex = cur_vertex;
       } else if (size1 == size2 &&
-                 query_graph->getVertexOutDegree(cur_vertex) > query_graph->getVertexOutDegree(start_vertex)) {
+                 query_graph_->getVertexOutDegree(cur_vertex) > query_graph_->getVertexOutDegree(start_vertex)) {
         start_vertex = cur_vertex;
       }
     }
     return start_vertex;
   }
 
-  static void updateValidVertices(const QueryGraph* query_graph, QueryVertexID query_vertex, std::vector<bool>& visited,
-                                  std::vector<bool>& adjacent) {
+  void updateValidVertices(QueryVertexID query_vertex, std::vector<bool>& visited, std::vector<bool>& adjacent) {
     visited[query_vertex] = true;
-    auto[nbrs, cnt] = query_graph->getOutNeighbors(query_vertex);
+    auto[nbrs, cnt] = query_graph_->getOutNeighbors(query_vertex);
     for (uint32_t i = 0; i < cnt; ++i) {
       adjacent[nbrs[i]] = true;
     }
   }
 
-  static std::vector<QueryVertexID> getGQLOrder(const Graph* data_graph, const QueryGraph* query_graph,
-                                                const std::vector<VertexID>& candidates_cardinality) {
-    QueryVertexID qg_v_cnt = query_graph->getNumVertices();
+  std::vector<QueryVertexID> getGQLOrder() {
+    QueryVertexID qg_v_cnt = query_graph_->getNumVertices();
     std::vector<bool> visited_vertices(qg_v_cnt, false);
     std::vector<bool> adjacent_vertices(qg_v_cnt, false);
     std::vector<QueryVertexID> order(qg_v_cnt);
 
-    QueryVertexID start_vertex = selectGQLStartVertex(query_graph, candidates_cardinality);
+    QueryVertexID start_vertex = selectGQLStartVertex();
     order[0] = start_vertex;
-    updateValidVertices(query_graph, start_vertex, visited_vertices, adjacent_vertices);
+    updateValidVertices(start_vertex, visited_vertices, adjacent_vertices);
 
     for (QueryVertexID i = 1; i < qg_v_cnt; ++i) {
       QueryVertexID next_vertex;
-      QueryVertexID min_value = data_graph->getNumVertices() + 1;
+      QueryVertexID min_value = metadata_.getNumVertices() + 1;
       for (QueryVertexID j = 0; j < qg_v_cnt; ++j) {
         QueryVertexID cur_vertex = j;
         if (!visited_vertices[cur_vertex] && adjacent_vertices[cur_vertex]) {
-          size_t cnt = candidates_cardinality[cur_vertex];
+          size_t cnt = candidate_sizes_[cur_vertex];
           if (cnt < min_value) {
             min_value = cnt;
             next_vertex = cur_vertex;
           } else if (cnt == min_value &&
-                     query_graph->getVertexOutDegree(cur_vertex) > query_graph->getVertexOutDegree(next_vertex)) {
+                     query_graph_->getVertexOutDegree(cur_vertex) > query_graph_->getVertexOutDegree(next_vertex)) {
             next_vertex = cur_vertex;
           }
         }
@@ -111,10 +133,10 @@ class StatelessFilterAndOrder {
     return order;
   }
 
-  static std::vector<QueryVertexID> getDPISOOrder(const QueryGraph* query_graph,
-                                                  const LogicalDPISOFilter& logical_filter) {
+  std::vector<QueryVertexID> getDAFOrder() {
+    auto logical_filter = LogicalDAFFilter(metadata_, query_graph_, candidate_sizes_);
     const std::vector<QueryVertexID>& bfs_order = logical_filter.getBfsOrder();
-    QueryVertexID qg_v_cnt = query_graph->getNumVertices();
+    QueryVertexID qg_v_cnt = query_graph_->getNumVertices();
     std::vector<QueryVertexID> order(qg_v_cnt);
     for (QueryVertexID i = 0; i < qg_v_cnt; ++i) {
       order[i] = bfs_order[i];
@@ -122,10 +144,7 @@ class StatelessFilterAndOrder {
     return order;
   }
 
-  static void estimatePathEmbeddsingsNum(std::vector<QueryVertexID>& path,
-                                         std::vector<size_t>& estimated_embeddings_num,
-                                         std::vector<std::vector<VertexID>> candidates_sets,
-                                         std::map<std::pair<QueryVertexID, QueryVertexID>, BipartiteGraph> bg_map) {
+  void estimatePathEmbeddsingsNum(std::vector<QueryVertexID>& path, std::vector<size_t>& estimated_embeddings_num) {
     assert(path.size() > 1);
     std::vector<size_t> parent;
     std::vector<size_t> children;
@@ -133,11 +152,11 @@ class StatelessFilterAndOrder {
     size_t begin = path.size() - 2, end = path.size() - 1;
 
     estimated_embeddings_num.resize(path.size() - 1);
-    auto last_edge = bg_map[{path[begin], path[end]}];
+    auto last_edge = getBipartiteGraph(path[begin], path[end]);
     children.resize(last_edge->getNumVertices());
 
     size_t sum = 0;
-    for (auto& v : candidates_sets[path[begin]]) {
+    for (auto& v : candidates_[path[begin]]) {
       int offset = last_edge->getOffset(v);
       children[offset] = last_edge->getVertexOutDegree(v);
       sum += children[offset];
@@ -148,11 +167,11 @@ class StatelessFilterAndOrder {
     for (int i = begin; i >= 1; --i) {
       begin = i - 1;
       end = i;
-      auto edge = bg_map[{path[begin], path[end]}];
+      auto edge = getBipartiteGraph(path[begin], path[end]);
       parent.resize(edge->getNumVertices());
 
       sum = 0;
-      for (auto& v : candidates_sets[path[begin]]) {
+      for (auto& v : candidates_[path[begin]]) {
         size_t local_sum = 0;
         auto[nbrs, cnt] = edge->getOutNeighbors(v);
         for (uint32_t j = 0; j < cnt; ++j) {
@@ -170,20 +189,18 @@ class StatelessFilterAndOrder {
     }
   }
 
-  static QueryVertexID generateNoneTreeEdgesCount(const QueryGraph* query_graph, const std::vector<TreeNode>& tree_node,
-                                                  std::vector<QueryVertexID>& path) {
-    auto non_tree_edge_count = query_graph->getVertexOutDegree(path[0]) - tree_node[path[0]].children_.size();
+  QueryVertexID generateNoneTreeEdgesCount(const std::vector<TreeNode>& tree_node, std::vector<QueryVertexID>& path) {
+    auto non_tree_edge_count = query_graph_->getVertexOutDegree(path[0]) - tree_node[path[0]].children_.size();
     for (size_t i = 1; i < path.size(); ++i) {
       auto vertex = path[i];
-      non_tree_edge_count += query_graph->getVertexOutDegree(vertex) - tree_node[vertex].children_.size() - 1;
+      non_tree_edge_count += query_graph_->getVertexOutDegree(vertex) - tree_node[vertex].children_.size() - 1;
     }
 
     return non_tree_edge_count;
   }
 
-  static void generateRootToLeafPaths(const std::vector<TreeNode>& tree_node, QueryVertexID cur_vertex,
-                                      std::vector<QueryVertexID>& cur_path,
-                                      std::vector<std::vector<QueryVertexID>>& paths) {
+  void generateRootToLeafPaths(const std::vector<TreeNode>& tree_node, QueryVertexID cur_vertex,
+                               std::vector<QueryVertexID>& cur_path, std::vector<std::vector<QueryVertexID>>& paths) {
     auto& cur_node = tree_node[cur_vertex];
     cur_path.push_back(cur_vertex);
     if (cur_node.children_.size() == 0) {
@@ -196,14 +213,12 @@ class StatelessFilterAndOrder {
     cur_path.pop_back();
   }
 
-  static std::vector<QueryVertexID> getTSOOrder(
-      const QueryGraph* query_graph, const LogicalTSOFilter& logical_filter,
-      std::vector<std::vector<VertexID>> candidates_sets,
-      std::map<std::pair<QueryVertexID, QueryVertexID>, BipartiteGraph> bg_map) {
+  std::vector<QueryVertexID> getTSOOrder() {
+    auto logical_filter = LogicalTSOFilter(metadata_, query_graph_, candidate_sizes_);
     const std::vector<TreeNode>& tree = logical_filter.getTree();
     const std::vector<QueryVertexID>& dfs_order = logical_filter.getDfsOrder();
 
-    QueryVertexID qg_v_cnt = query_graph->getNumVertices();
+    QueryVertexID qg_v_cnt = query_graph_->getNumVertices();
     std::vector<std::vector<QueryVertexID>> paths;
     paths.reserve(qg_v_cnt);
 
@@ -215,7 +230,7 @@ class StatelessFilterAndOrder {
     for (auto& path : paths) {
       std::vector<size_t> estimated_embeddings_num;
       QueryVertexID non_tree_edges_count = generateNoneTreeEdgesCount(tree, path);
-      estimatePathEmbeddsingsNum(path, estimated_embeddings_num, candidates_sets, bg_map);
+      estimatePathEmbeddsingsNum(path, estimated_embeddings_num);
       double score = estimated_embeddings_num[0] / (double)(non_tree_edges_count + 1);
       path_orders.emplace_back(std::make_pair(score, &path));
     }
@@ -237,25 +252,25 @@ class StatelessFilterAndOrder {
     return order;
   }
 
-  static void generateLeaves(const QueryGraph* query_graph, std::vector<QueryVertexID>& leaves) {
-    for (QueryVertexID i = 0; i < query_graph->getNumVertices(); ++i) {
+  void generateLeaves(std::vector<QueryVertexID>& leaves) {
+    for (QueryVertexID i = 0; i < query_graph_->getNumVertices(); ++i) {
       QueryVertexID cur_vertex = i;
-      if (query_graph->getVertexOutDegree(cur_vertex) == 1) {
+      if (query_graph_->getVertexOutDegree(cur_vertex) == 1) {
         leaves.push_back(cur_vertex);
       }
     }
   }
 
-  static void generateCorePaths(const QueryGraph* query_graph, const std::vector<TreeNode>& tree_node,
-                                QueryVertexID cur_vertex, std::vector<QueryVertexID>& cur_core_path,
-                                std::vector<std::vector<QueryVertexID>>& core_paths, const TwoCoreSolver& tcs) {
+  void generateCorePaths(const std::vector<TreeNode>& tree_node, QueryVertexID cur_vertex,
+                         std::vector<QueryVertexID>& cur_core_path, std::vector<std::vector<QueryVertexID>>& core_paths,
+                         const TwoCoreSolver& tcs) {
     const TreeNode& node = tree_node[cur_vertex];
     cur_core_path.push_back(cur_vertex);
 
     bool is_core_leaf = true;
     for (const auto& child : node.children_) {
       if (tcs.isInCore(child)) {
-        generateCorePaths(query_graph, tree_node, child, cur_core_path, core_paths, tcs);
+        generateCorePaths(tree_node, child, cur_core_path, core_paths, tcs);
         is_core_leaf = false;
       }
     }
@@ -266,16 +281,16 @@ class StatelessFilterAndOrder {
     cur_core_path.pop_back();
   }
 
-  static void generateTreePaths(const QueryGraph* query_graph, const std::vector<TreeNode>& tree_node,
-                                QueryVertexID cur_vertex, std::vector<QueryVertexID>& cur_tree_path,
-                                std::vector<std::vector<QueryVertexID>>& tree_paths) {
+  void generateTreePaths(const std::vector<TreeNode>& tree_node, QueryVertexID cur_vertex,
+                         std::vector<QueryVertexID>& cur_tree_path,
+                         std::vector<std::vector<QueryVertexID>>& tree_paths) {
     const TreeNode& node = tree_node[cur_vertex];
     cur_tree_path.push_back(cur_vertex);
 
     bool is_tree_leaf = true;
     for (auto child : node.children_) {
-      if (query_graph->getVertexOutDegree(child) > 1) {
-        generateTreePaths(query_graph, tree_node, child, cur_tree_path, tree_paths);
+      if (query_graph_->getVertexOutDegree(child) > 1) {
+        generateTreePaths(tree_node, child, cur_tree_path, tree_paths);
         is_tree_leaf = false;
       }
     }
@@ -286,14 +301,12 @@ class StatelessFilterAndOrder {
     cur_tree_path.pop_back();
   }
 
-  static std::vector<QueryVertexID> getCFLOrder(
-      const Graph* data_graph, const QueryGraph* query_graph, const LogicalCFLFilter& logical_filter,
-      std::vector<std::vector<VertexID>> candidates_sets,
-      std::map<std::pair<QueryVertexID, QueryVertexID>, BipartiteGraph> bg_map) {
+  std::vector<QueryVertexID> getCFLOrder() {
+    auto logical_filter = LogicalCFLFilter(metadata_, query_graph_, candidate_sizes_);
     const std::vector<TreeNode>& tree = logical_filter.getTree();
     const std::vector<QueryVertexID>& bfs_order = logical_filter.getBfsOrder();
 
-    QueryVertexID qg_v_cnt = query_graph->getNumVertices();
+    QueryVertexID qg_v_cnt = query_graph_->getNumVertices();
     QueryVertexID root_vertex = bfs_order[0];
     std::vector<QueryVertexID> order(qg_v_cnt);
     std::vector<bool> visited_vertices(qg_v_cnt, false);
@@ -302,19 +315,19 @@ class StatelessFilterAndOrder {
     std::vector<std::vector<std::vector<QueryVertexID>>> forests;
     std::vector<QueryVertexID> leaves;
 
-    generateLeaves(query_graph, leaves);
+    generateLeaves(leaves);
 
     const auto& tcs = logical_filter.getTwoCoreSolver();
     const auto& core_table = tcs.get2CoreTable();
     if (tcs.isInCore(root_vertex)) {
       std::vector<QueryVertexID> temp_core_path;
-      generateCorePaths(query_graph, tree, root_vertex, temp_core_path, core_paths, tcs);
+      generateCorePaths(tree, root_vertex, temp_core_path, core_paths, tcs);
       for (QueryVertexID i = 0; i < qg_v_cnt; ++i) {
         QueryVertexID cur_vertex = i;
         if (tcs.isInCore(cur_vertex)) {
           std::vector<std::vector<QueryVertexID>> temp_tree_paths;
           std::vector<QueryVertexID> temp_tree_path;
-          generateTreePaths(query_graph, tree, cur_vertex, temp_tree_path, temp_tree_paths);
+          generateTreePaths(tree, cur_vertex, temp_tree_path, temp_tree_paths);
           if (!temp_tree_paths.empty()) {
             forests.emplace_back(temp_tree_paths);
           }
@@ -323,7 +336,7 @@ class StatelessFilterAndOrder {
     } else {
       std::vector<std::vector<QueryVertexID>> temp_tree_paths;
       std::vector<QueryVertexID> temp_tree_path;
-      generateTreePaths(query_graph, tree, root_vertex, temp_tree_path, temp_tree_paths);
+      generateTreePaths(tree, root_vertex, temp_tree_path, temp_tree_paths);
       if (!temp_tree_paths.empty()) {
         forests.emplace_back(temp_tree_paths);
       }
@@ -342,7 +355,7 @@ class StatelessFilterAndOrder {
         paths_non_tree_edge_num.push_back(non_tree_edge_num + 1);
 
         std::vector<size_t> path_embeddings_num;
-        estimatePathEmbeddsingsNum(path, path_embeddings_num, candidates_sets, bg_map);
+        estimatePathEmbeddsingsNum(path, path_embeddings_num);
         paths_embededdings_num.emplace_back(path_embeddings_num);
       }
 
@@ -385,7 +398,7 @@ class StatelessFilterAndOrder {
           }
 
           double cur_value = paths_embededdings_num[i][path_root_vertex_idx] /
-                             (double)(candidates_sets_[core_paths[i][path_root_vertex_idx]].size());
+                             (double)(candidate_sizes_[core_paths[i][path_root_vertex_idx]]);
           if (cur_value < min_value) {
             min_value = cur_value;
             selected_path_index = i;
@@ -410,7 +423,7 @@ class StatelessFilterAndOrder {
       std::vector<std::vector<size_t>> paths_embededdings_num;
       for (auto& path : tree_paths) {
         std::vector<size_t> path_embeddings_num;
-        estimatePathEmbeddsingsNum(path, path_embeddings_num, candidates_sets, bg_map);
+        estimatePathEmbeddsingsNum(path, path_embeddings_num);
         paths_embededdings_num.emplace_back(path_embeddings_num);
       }
 
@@ -430,7 +443,7 @@ class StatelessFilterAndOrder {
           }
 
           double cur_value = paths_embededdings_num[i][path_root_vertex_idx] /
-                             (double)(candidates_sets_[tree_paths[i][path_root_vertex_idx]].size());
+                             (double)(candidate_sizes_[tree_paths[i][path_root_vertex_idx]]);
           if (cur_value < min_value) {
             min_value = cur_value;
             selected_path_index = i;
@@ -457,7 +470,7 @@ class StatelessFilterAndOrder {
 
       for (QueryVertexID i = 0; i < leaves.size(); ++i) {
         QueryVertexID vertex = leaves[i];
-        double cur_value = candidates_sets_[vertex].size();
+        double cur_value = candidate_sizes_[vertex];
 
         if (cur_value < min_value) {
           min_value = cur_value;

@@ -28,7 +28,6 @@ namespace circinus {
 class CandidatePruningPlanDriver : public PlanDriver {
   CandidatePruningPlan* plan_;
   CandidateResult* result_;                                   // owned by ExecutorManager
-  std::vector<std::vector<VertexID>> candidate_cardinality_;  // {partition: {query vertex: cardinality}}
 
  public:
   explicit CandidatePruningPlanDriver(CandidatePruningPlan* plan) : plan_(plan) {}

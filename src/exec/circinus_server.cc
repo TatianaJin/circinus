@@ -179,7 +179,7 @@ void CircinusServer::handleCandidatePhase(const Event& event) {
   DCHECK(event.data != nullptr);
   auto planner = active_queries_[event.query_id].planner;
   DCHECK(planner != nullptr);
-  auto result = (const std::vector<std::vector<VertexID>>*)event.data;
+  auto result = (const CandidateResult*)event.data;
   auto plan = planner->updateCandidatePruningPlan(result);
   std::unique_ptr<PlanDriver> plan_driver = nullptr;
   if (plan->isFinished()) {

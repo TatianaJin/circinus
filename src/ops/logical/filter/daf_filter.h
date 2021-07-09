@@ -28,7 +28,7 @@ namespace circinus {
 
 class NeighborhoodFilter;  // forward declaration
 
-class LogicalDPISOFilter : public LogicalNeighborhoodFilter {
+class LogicalDAFFilter : public LogicalNeighborhoodFilter {
  private:
   QueryVertexID start_vertex_;
   std::vector<TreeNode> tree_;
@@ -38,8 +38,8 @@ class LogicalDPISOFilter : public LogicalNeighborhoodFilter {
   QueryVertexID getStartVertex(const GraphMetadata& metadata, const QueryGraph* query_graph,
                                const std::vector<VertexID>& candidate_size);
 
-  LogicalDPISOFilter(const GraphMetadata& metadata, const QueryGraph* query_graph,
-                     const std::vector<VertexID>& candidate_size);
+  LogicalDAFFilter(const GraphMetadata& metadata, const QueryGraph* query_graph,
+                   const std::vector<VertexID>& candidate_size);
 
   const std::vector<QueryVertexID>& getBfsOrder() const { return bfs_order_; }
 

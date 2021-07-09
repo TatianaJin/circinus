@@ -21,7 +21,7 @@
 #include "graph/query_graph.h"
 #include "graph/types.h"
 #include "ops/logical/filter/cfl_filter.h"
-#include "ops/logical/filter/dpiso_filter.h"
+#include "ops/logical/filter/daf_filter.h"
 #include "ops/logical/filter/filter.h"
 #include "ops/logical/filter/gql_filter.h"
 #include "ops/logical/filter/nlf_filter.h"
@@ -88,8 +88,8 @@ class CandidatePruningPlan {
     neighbor_filters_.emplace_back(std::make_unique<LogicalCFLFilter>(metadata, q, candidate_size));
   }
 
-  void newDPISOFilter(const QueryGraph* q, const GraphMetadata& metadata, const std::vector<VertexID>& candidate_size) {
-    neighbor_filters_.emplace_back(std::make_unique<LogicalDPISOFilter>(metadata, q, candidate_size));
+  void newDAFFilter(const QueryGraph* q, const GraphMetadata& metadata, const std::vector<VertexID>& candidate_size) {
+    neighbor_filters_.emplace_back(std::make_unique<LogicalDAFFilter>(metadata, q, candidate_size));
   }
 
   void newTSOFilter(const QueryGraph* q, const GraphMetadata& metadata, const std::vector<VertexID>& candidate_size) {

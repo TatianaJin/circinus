@@ -61,6 +61,7 @@ struct ServerEvent {
 };
 
 enum class CandidatePruningStrategy : uint16_t { None = 0, Adaptive, LDF, NLF, CFL, DAF, GQL, TSO };
+enum class OrderStrategy : uint16_t { None = 0, CFL, DAF, GQL, TSO };
 enum class CompressionStrategy : uint16_t { None = 0, Static, Dynamic };
 enum class QueryMode : uint16_t { Execute = 0, Profile, Explain, ProfileSI };
 
@@ -98,9 +99,15 @@ class QueryConfig {
                                                                      {"profile", QueryMode::Profile},
                                                                      {"explain", QueryMode::Explain},
                                                                      {"profile_si", QueryMode::ProfileSI}};
+  static inline const unordered_map<std::string, OrderStrategy> order_strategies = {{"none", OrderStrategy::None},
+                                                                                    {"cfl", OrderStrategy::CFL},
+                                                                                    {"daf", OrderStrategy::DAF},
+                                                                                    {"gql", OrderStrategy::GQL},
+                                                                                    {"tso", OrderStrategy::TSO}};
 
   std::string matching_order;
   CandidatePruningStrategy candidate_pruning_strategy = CandidatePruningStrategy::CFL;
+  OrderStrategy order_strategy = OrderStrategy::CFL;
   CompressionStrategy compression_strategy = CompressionStrategy::Dynamic;
   bool use_auxiliary_index = false;
   bool use_partitioned_graph = true;
@@ -128,8 +135,7 @@ class QueryConfig {
       if (key == "cps" || key == "candidate_pruning_strategy") {
         validateConfig(candidate_pruning_strategy, value, candidate_pruning_strategies, "candidate pruning strategy");
       } else if (key == "mo" || key == "matching_order") {
-        matching_order = value;
-        // TODO(tatiana): use strategy name instead of actual matching order
+        validateConfig(order_strategy, value, order_strategies, "order strategy");
       } else if (key == "cs" || key == "compression_strategy") {
         validateConfig(compression_strategy, value, compression_strategies, "compression strategy");
       } else if (key == "mode") {

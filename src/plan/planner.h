@@ -20,9 +20,8 @@
 #include <utility>
 #include <vector>
 
-
+#include "exec/result.h"
 #include "graph/types.h"
-#include "ops/order/order_base.h"
 #include "plan/backtracking_plan.h"
 #include "plan/candidate_pruning_plan.h"
 #include "plan/execution_plan.h"
@@ -57,7 +56,7 @@ class Planner {
    */
   CandidatePruningPlan* generateCandidatePruningPlan();
 
-  CandidatePruningPlan* updateCandidatePruningPlan(const std::vector<std::vector<VertexID>>* cardinality);
+  CandidatePruningPlan* updateCandidatePruningPlan(const CandidateResult* result);
 
   std::vector<std::vector<VertexID>> estimateCardinality() const;
 
@@ -78,6 +77,8 @@ class Planner {
    * Then the whole search space for backtracking is divided by picking a scope of candidate vertices for each of the
    * other query vertices.
    */
+  BacktrackingPlan* generateExecutionPlan(const CandidateResult*, bool multithread = true);
+
   BacktrackingPlan* generateExecutionPlan(const std::vector<std::vector<VertexID>>*, bool multithread = true);
 
  private:
@@ -100,7 +101,8 @@ class Planner {
     return ret;
   }
 
-  ExecutionPlan* generateExecutionPlan(const std::vector<VertexID>& cardinality, bool multithread);
+  ExecutionPlan* generateExecutionPlan(const std::vector<VertexID>& cardinality,
+                                       const std::vector<QueryVertexID>& use_order, bool multithread);
 
   /* start of interface for specifying partitioning strategy */
   virtual std::vector<QueryVertexID> getPartitioningQueryVertices();  // based on query vertex occurence in covers

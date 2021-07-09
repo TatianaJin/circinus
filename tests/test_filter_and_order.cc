@@ -27,7 +27,6 @@
 #endif
 #include "gtest/gtest.h"
 
-#include "exec/thread_pool.h"
 #include "graph/compressed_subgraphs.h"
 #include "graph/graph.h"
 #include "graph/query_graph.h"

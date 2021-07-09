@@ -40,6 +40,11 @@ class CandidateScope {
   uint32_t partition_ = 0;
 
  public:
+  explicit CandidateScope(uint32_t partition) {
+    partition_ = partition;
+    type_ = CandidateScopeType::Partition;
+  }
+
   void usePartition(uint32_t partition) {
     partition_ = partition;
     type_ = CandidateScopeType::Partition;

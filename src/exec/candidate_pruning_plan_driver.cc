@@ -67,7 +67,7 @@ void CandidatePruningPlanDriver::initPhase1TasksForPartitionedGraph(QueryId qid,
 void CandidatePruningPlanDriver::init(QueryId qid, QueryContext* query_ctx, ExecutionContext& ctx,
                                       ThreadsafeTaskQueue& task_queue) {
   finish_event_ = std::make_unique<ServerEvent>(ServerEvent::CandidatePhase);
-  finish_event_->data = &candidate_cardinality_;
+  finish_event_->data = &result_;
   finish_event_->query_id = qid;
   if (plan_->getPhase() == 1) {
     auto n_partitions = query_ctx->graph_metadata->numPartitions();
@@ -126,12 +126,10 @@ void CandidatePruningPlanDriver::taskFinish(TaskBase* task, ThreadsafeTaskQueue*
 
     if (++n_finished_tasks_ == task_counters_.size()) {
       if (plan_->getPhase() == 1) {
-        candidate_cardinality_ = result_->getCandidateCardinality();
         reply_queue->push(std::move(*finish_event_));
         reset();
       } else if (plan_->getPhase() == 3) {
         result_->removeInvalid(dynamic_cast<NeighborhoodFilterTask*>(task)->getFilter()->getQueryVertex());
-        candidate_cardinality_ = result_->getCandidateCardinality();
         reply_queue->push(std::move(*finish_event_));
         reset();
       }

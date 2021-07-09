@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "ops/logical/filter/dpiso_filter.h"
+#include "ops/logical/filter/daf_filter.h"
 
 #include <memory>
 
@@ -22,7 +22,7 @@
 
 namespace circinus {
 
-LogicalDPISOFilter::LogicalDPISOFilter(const GraphMetadata& metadata, const QueryGraph* query_graph,
+LogicalDAFFilter::LogicalDAFFilter(const GraphMetadata& metadata, const QueryGraph* query_graph,
                                        const std::vector<VertexID>& candidate_size)
     : LogicalNeighborhoodFilter(query_graph) {
   start_vertex_ = getStartVertex(metadata, query_graph, candidate_size);
@@ -49,7 +49,7 @@ LogicalDPISOFilter::LogicalDPISOFilter(const GraphMetadata& metadata, const Quer
   }
 }
 
-std::vector<std::unique_ptr<NeighborhoodFilter>> LogicalDPISOFilter::toPhysicalOperators(const GraphMetadata& metadata,
+std::vector<std::unique_ptr<NeighborhoodFilter>> LogicalDAFFilter::toPhysicalOperators(const GraphMetadata& metadata,
                                                                                          ExecutionConfig& exec) {
   std::vector<std::unique_ptr<NeighborhoodFilter>> ret;
   for (uint32_t refine_time = 0; refine_time < 3; ++refine_time) {
@@ -73,7 +73,8 @@ std::vector<std::unique_ptr<NeighborhoodFilter>> LogicalDPISOFilter::toPhysicalO
   }
   return ret;
 }
-QueryVertexID LogicalDPISOFilter::getStartVertex(const GraphMetadata& metadata, const QueryGraph* query_graph,
+
+QueryVertexID LogicalDAFFilter::getStartVertex(const GraphMetadata& metadata, const QueryGraph* query_graph,
                                                  const std::vector<VertexID>& candidate_size) {
   double min_score = metadata.getNumVertices();
   QueryVertexID start_vertex = 0;

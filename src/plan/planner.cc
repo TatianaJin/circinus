@@ -20,9 +20,8 @@
 #include <utility>
 #include <vector>
 
-
 #include "ops/logical/compressed_input.h"
-#include "ops/order/cfl_order.h"
+#include "ops/order_generator.h"
 #include "plan/backtracking_plan.h"
 #include "plan/candidate_pruning_plan.h"
 #include "plan/execution_plan.h"
@@ -87,14 +86,15 @@ CandidatePruningPlan* Planner::generateCandidatePruningPlan() {
   return &candidate_pruning_plan_;
 }
 
-CandidatePruningPlan* Planner::updateCandidatePruningPlan(const std::vector<std::vector<VertexID>>* part_cardinality) {
+CandidatePruningPlan* Planner::updateCandidatePruningPlan(const CandidateResult* result) {
+  auto part_cardinality = result->getCandidateCardinality();
   auto& q = query_context_->query_graph;
   auto& strategy = query_context_->query_config.candidate_pruning_strategy;
-  auto n_qvs = (*part_cardinality)[0].size();
+  auto n_qvs = part_cardinality[0].size();
   std::vector<VertexID> cardinality(n_qvs, 0);
-  for (uint32_t i = 0; i < part_cardinality->size(); ++i) {
+  for (uint32_t i = 0; i < part_cardinality.size(); ++i) {
     for (uint32_t j = 0; j < n_qvs; ++j) {
-      cardinality[j] += (*part_cardinality)[i][j];
+      cardinality[j] += part_cardinality[i][j];
     }
   }
   if (strategy == CandidatePruningStrategy::LDF || strategy == CandidatePruningStrategy::NLF) {
@@ -113,7 +113,7 @@ CandidatePruningPlan* Planner::updateCandidatePruningPlan(const std::vector<std:
     auto& metadata = *query_context_->graph_metadata;
     switch (strategy) {
     case CandidatePruningStrategy::DAF: {
-      candidate_pruning_plan_.newDPISOFilter(&q, metadata, cardinality);
+      candidate_pruning_plan_.newDAFFilter(&q, metadata, cardinality);
       break;
     }
     case CandidatePruningStrategy::CFL: {
@@ -221,20 +221,28 @@ void Planner::newInputOperators() {
       logical_plan->getMatchingOrder().front(), logical_plan->inputAreKeys()));
 }
 
-BacktrackingPlan* Planner::generateExecutionPlan(const std::vector<std::vector<VertexID>>* candidate_cardinality,
-                                                 bool multithread) {
+BacktrackingPlan* Planner::generateExecutionPlan(const CandidateResult* result, bool multithread) {
+  auto candidate_cardinality = result->getCandidateCardinality();
+  auto candidate_views = result->getCandidates();
   if (!toPartitionCandidates()) {  // no partition, generate one execution plan
     backtracking_plan_ = std::make_unique<BacktrackingPlan>();
-    if (candidate_cardinality->size() > 1) {
-      std::vector<VertexID> sum(candidate_cardinality->front().size(), 0);
-      for (auto& part : *candidate_cardinality) {
+    if (candidate_cardinality.size() > 1) {
+      std::vector<VertexID> sum(candidate_cardinality.front().size(), 0);
+      for (auto& part : candidate_cardinality) {
         for (uint32_t i = 0; i < part.size(); ++i) {
           sum[i] += part[i];
         }
       }
-      backtracking_plan_->addPlan(generateExecutionPlan(sum, multithread));
+      auto order_generator = OrderGenerator(query_context_->data_graph, *query_context_->graph_metadata,
+                                            &query_context_->query_graph, candidate_views, sum);
+      auto use_order = order_generator.getOrder(query_context_->query_config.order_strategy);
+      backtracking_plan_->addPlan(generateExecutionPlan(sum, use_order, multithread));
     } else {
-      backtracking_plan_->addPlan(generateExecutionPlan(candidate_cardinality->front(), multithread));
+      auto order_generator =
+          OrderGenerator(query_context_->data_graph, *query_context_->graph_metadata, &query_context_->query_graph,
+                         candidate_views, candidate_cardinality.front());
+      auto use_order = order_generator.getOrder(query_context_->query_config.order_strategy);
+      backtracking_plan_->addPlan(generateExecutionPlan(candidate_cardinality.front(), use_order, multithread));
     }
     // one logical input operator
     newInputOperators();
@@ -243,9 +251,18 @@ BacktrackingPlan* Planner::generateExecutionPlan(const std::vector<std::vector<V
 
   backtracking_plan_ = std::make_unique<BacktrackingPlan>();
   // generate a logical plan for each partition
-  for (auto& stats : *candidate_cardinality) {
+  result = (PartitionedCandidateResult*)result;
+  auto n_qvs = query_context_->query_graph.getNumVertices();
+  for (uint32_t i = 0; i < candidate_cardinality.size(); ++i) {
+    auto& stats = candidate_cardinality[i];
     // TODO(tatiana): apply the state-of-the-art matching order strategies, compute the orders only
-    backtracking_plan_->addPlan(generateExecutionPlan(stats, multithread));
+    std::vector<CandidateScope> scope(n_qvs, CandidateScope(i));
+
+    auto order_generator = OrderGenerator(query_context_->data_graph, query_context_->graph_metadata->getPartition(i),
+                                          &query_context_->query_graph,
+                                          ((PartitionedCandidateResult*)result)->getCandidatesByScopes(scope), stats);
+    auto use_order = order_generator.getOrder(query_context_->query_config.order_strategy);
+    backtracking_plan_->addPlan(generateExecutionPlan(stats, use_order, multithread));
   }
   auto partitioning_qv = getPartitioningQueryVertices();
   backtracking_plan_->addPartitionedPlans(generatePartitionedPlans(partitioning_qv));
@@ -256,7 +273,44 @@ BacktrackingPlan* Planner::generateExecutionPlan(const std::vector<std::vector<V
   return backtracking_plan_.get();
 }
 
-ExecutionPlan* Planner::generateExecutionPlan(const std::vector<VertexID>& candidate_cardinality, bool multithread) {
+BacktrackingPlan* Planner::generateExecutionPlan(const std::vector<std::vector<VertexID>>* candidate_cardinality,
+                                                 bool multithread) {
+  auto use_order = getOrder(query_context_->query_config.matching_order, query_context_->query_graph.getNumVertices());
+  if (!toPartitionCandidates()) {  // no partition, generate one execution plan
+    backtracking_plan_ = std::make_unique<BacktrackingPlan>();
+    if (candidate_cardinality->size() > 1) {
+      std::vector<VertexID> sum(candidate_cardinality->front().size(), 0);
+      for (auto& part : *candidate_cardinality) {
+        for (uint32_t i = 0; i < part.size(); ++i) {
+          sum[i] += part[i];
+        }
+      }
+      backtracking_plan_->addPlan(generateExecutionPlan(sum, use_order, multithread));
+    } else {
+      backtracking_plan_->addPlan(generateExecutionPlan(candidate_cardinality->front(), use_order, multithread));
+    }
+    // one logical input operator
+    newInputOperators();
+    return backtracking_plan_.get();
+  }
+
+  backtracking_plan_ = std::make_unique<BacktrackingPlan>();
+  // generate a logical plan for each partition
+  auto n_qvs = query_context_->query_graph.getNumVertices();
+  for (auto& stats : *candidate_cardinality) {
+    backtracking_plan_->addPlan(generateExecutionPlan(stats, use_order, multithread));
+  }
+  auto partitioning_qv = getPartitioningQueryVertices();
+  backtracking_plan_->addPartitionedPlans(generatePartitionedPlans(partitioning_qv));
+
+  // one logical input operator for each logical plan
+  newInputOperators(query_context_->query_graph, partitioning_qv);
+  LOG(INFO) << "Generated plan";
+  return backtracking_plan_.get();
+}
+
+ExecutionPlan* Planner::generateExecutionPlan(const std::vector<VertexID>& candidate_cardinality,
+                                              const std::vector<QueryVertexID>& use_order, bool multithread) {
   // TODO(tatiana): handle the case when the cardinality of a candidate set is 0
   for (auto c : candidate_cardinality) {
     CHECK_NE(c, 0);
@@ -272,9 +326,6 @@ ExecutionPlan* Planner::generateExecutionPlan(const std::vector<VertexID>& candi
           : (query_context_->query_config.use_auxiliary_index ? GraphType::BipartiteGraphView : GraphType::Normal);
   planners_.push_back(std::make_unique<NaivePlanner>(&query_context_->query_graph, &cardinality, graph_type));
   auto& planner = planners_.back();
-
-  // now order is directly configured
-  auto use_order = getOrder(query_context_->query_config.matching_order, query_context_->query_graph.getNumVertices());
 
   ExecutionPlan* plan = nullptr;
   // TODO(tatiana): consider make the first vertex in the matching order to be a key if multithread?
