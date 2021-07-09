@@ -150,7 +150,7 @@ class CircinusServer {
       query_state.query_context.query_config.output = "plan";
       finishQuery(query_index, &str, "");
     } else {  // enter actual execution phases
-      if (query_state.query_context.query_config.mode == QueryMode::Profile) {
+      if (query_state.query_context.query_config.isProfileMode()) {
         query_state.query_context.query_config.output = "profile_count";
       }
       query_state.filter_start_time = std::chrono::high_resolution_clock::now();

@@ -106,7 +106,7 @@ class VertexSetView {
 
   VertexSetView() = default;
   VertexSetView(const VertexID* start, const VertexID* end) { addRange(start, end); }
-  VertexSetView(const std::vector<VertexID>& vec) { addRange(vec.data(), vec.data() + vec.size()); }
+  explicit VertexSetView(const std::vector<VertexID>& vec) { addRange(vec.data(), vec.data() + vec.size()); }
 
   inline void addRange(const VertexID* start, const VertexID* end) {
     if (start >= end || start == nullptr || end == nullptr) return;

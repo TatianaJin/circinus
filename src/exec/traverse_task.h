@@ -122,10 +122,10 @@ class TraverseChainTask : public TaskBase {
       outputs.clear();
       uint32_t size = 0;
       if
-        constexpr(isProfileMode(profile)) { size = traverse_op->expandAndProfile(batch_size_, ctx.get()); }
-      else {
+        constexpr(isProfileMode(profile)) size = traverse_op->expandAndProfile(batch_size_, ctx.get());
+      else
         size = traverse_op->expand(batch_size_, ctx.get());
-      }
+
       if (size == 0) {
         break;
       }

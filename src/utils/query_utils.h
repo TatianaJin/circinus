@@ -39,8 +39,6 @@ struct ServerEvent {
     ShutDown = 0,
     LoadGraph,
     NewQuery,
-    Explain,
-    Profile,
     /* Internal phases */
     CandidatePhase,
     ExecutionPhase,
@@ -64,7 +62,7 @@ struct ServerEvent {
 
 enum class CandidatePruningStrategy : uint16_t { None = 0, Adaptive, LDF, NLF, CFL, DAF, GQL, TSO };
 enum class CompressionStrategy : uint16_t { None = 0, Static, Dynamic };
-enum class QueryMode : uint16_t { Execute = 0, Profile, Explain };
+enum class QueryMode : uint16_t { Execute = 0, Profile, Explain, ProfileSI };
 
 // TODO(tatiana): this is workaround as we do not implement the order now
 inline std::vector<QueryVertexID> getOrder(const std::string& order_str, uint32_t size) {
@@ -96,8 +94,10 @@ class QueryConfig {
       {"ldf", CandidatePruningStrategy::LDF},   {"nlf", CandidatePruningStrategy::NLF},
       {"cfl", CandidatePruningStrategy::CFL},   {"daf", CandidatePruningStrategy::DAF},
       {"gql", CandidatePruningStrategy::GQL}};
-  static inline const unordered_map<std::string, QueryMode> modes = {
-      {"execute", QueryMode::Execute}, {"profile", QueryMode::Profile}, {"explain", QueryMode::Explain}};
+  static inline const unordered_map<std::string, QueryMode> modes = {{"execute", QueryMode::Execute},
+                                                                     {"profile", QueryMode::Profile},
+                                                                     {"explain", QueryMode::Explain},
+                                                                     {"profile_si", QueryMode::ProfileSI}};
 
   std::string matching_order;
   CandidatePruningStrategy candidate_pruning_strategy = CandidatePruningStrategy::CFL;
@@ -145,6 +145,8 @@ class QueryConfig {
       }
     }
   }
+
+  bool isProfileMode() const { return mode == QueryMode::Profile || mode == QueryMode::ProfileSI; }
 
  private:
   template <typename T, typename Container>

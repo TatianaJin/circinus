@@ -104,7 +104,7 @@ class CircinusCommandCompleter:
         cmds = [cmds[0], osp.join(cmds[1], "data_graph", "{0}.graph.bin".format(cmds[1])), cmds[1], '']
       elif len(cmds) == 3:
         cmds.append('')  # empty config
-    elif cmds[0] in ["profile", "explain"]:
+    elif cmds[0] in ["profile", "explain", "profile_si"]:
       cmds[3] = "{0},mode={1}".format(cmds[3], cmds[0]) if len(cmds[3]) > 0 else "mode={0}".format(cmds[0])
       cmds[0] = "query"
     elif cmds[0] == "exit":
@@ -121,9 +121,9 @@ class CircinusCommandCompleter:
     if flag:
       if cmds[0] == "load":
         print("Loaded graph in {0} seconds".format(unpack(msgs[1], 'double')))
-      elif cmds[0] in ["query", "profile"]:
+      elif cmds[0] in ["query", "profile", "profile_si"]:
         idx = 1
-        if cmds[0] == "profile":
+        if cmds[0] != "query":
           for i in range(1, len(msgs) - 1):
             print(unpack(msgs[i], 'str'))
           idx = len(msgs) - 1

@@ -31,7 +31,7 @@ void ExecutionPlanDriverBase::init(QueryId qid, QueryContext* query_ctx, Executi
                                    ThreadsafeTaskQueue& task_queue) {
   start_time_ = std::chrono::high_resolution_clock::now();
   candidate_result_.reset(dynamic_cast<CandidateResult*>(ctx.second.release()));
-  ctx.second = Result::newExecutionResult(query_ctx->query_config.mode == QueryMode::Profile, plan_->getPlans());
+  ctx.second = Result::newExecutionResult(query_ctx->query_config.isProfileMode(), plan_->getPlans());
   result_ = (ExecutionResult*)ctx.second.get();
   result_->getOutputs().init(ctx.first.getNumExecutors()).limit(query_ctx->query_config.limit);
   if (plan_->getPlans().size() == 1) {
@@ -44,12 +44,10 @@ void ExecutionPlanDriverBase::init(QueryId qid, QueryContext* query_ctx, Executi
     result_->setMatchingOrder("mixed");
   }
 
-  // TODO(tatiana): add profile mode ProfileWithMiniIntersection
   query_type_ = (query_ctx->query_config.mode == QueryMode::Profile)
                     ? QueryType::Profile
-                    : (/*(query_ctx->query_config.mode == QueryMode::ProfileWithMiniIntersection) ?
-                          QueryType::ProfileWithMiniIntersection :*/
-                       QueryType::Execute);
+                    : ((query_ctx->query_config.mode == QueryMode::ProfileSI) ? QueryType::ProfileWithMiniIntersection
+                                                                              : QueryType::Execute);
 
   finish_event_ = std::make_unique<ServerEvent>(ServerEvent::ExecutionPhase);
   finish_event_->data = &result_->getQueryResult();

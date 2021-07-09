@@ -149,9 +149,7 @@ class ReorderedPartitionedGraph : public GraphBase {
     } else {
       std::tie(range_l, range_r) = label_ranges_per_part_[partition].at(nbr_label);
     }
-    
     auto[start, end] = getVertexRange(nbrs.first, nbrs.first + nbrs.second, range_l, range_r);
-    
     return VertexSetView(start, end);
   }
 
