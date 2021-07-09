@@ -33,8 +33,8 @@
 #include "ops/filters.h"
 #include "ops/logical_filters.h"
 #include "ops/operators.h"
-#include "ops/order.h"
 #include "ops/scans.h"
+#include "ops/stateful_filter_and_order.h"
 #include "ops/types.h"
 #include "plan/execution_plan.h"
 #include "plan/naive_planner.h"
@@ -42,6 +42,7 @@
 #include "utils/hashmap.h"
 #include "utils/profiler.h"
 #include "utils/utils.h"
+using circinus::StatefulFilterAndOrder;
 
 using circinus::CompressedSubgraphs;
 using circinus::ExecutionConfig;
@@ -82,6 +83,7 @@ const char answer_dir[] = "/data/share/users/qlma/circinus-test/answer/";
 const std::vector<int> query_size_list = {4, 8, 12, 16, 20, 24, 32};
 const std::vector<std::string> query_mode_list = {"dense", "sparse"};
 const std::pair<int, int> query_index_range = {1, 200};
+
 
 std::vector<std::vector<VertexID>> getCandidateSets(const Graph& g, const QueryGraph& q,
                                                     const std::string& filter_str) {
@@ -135,6 +137,7 @@ std::vector<std::vector<VertexID>> getCandidateSets(const Graph& g, const QueryG
   return candidates;
 }
 
+
 void run(const std::string& dataset, const std::string& filter, std::vector<std::string>& answers) {
   auto graph_path = dataset + "/data_graph/" + dataset + ".graph";
   auto data_dir_str = std::string(data_dir);
@@ -153,7 +156,8 @@ void run(const std::string& dataset, const std::string& filter, std::vector<std:
         QueryGraph q(query_dir);  // load query graph
         std::stringstream ss;
         ss << dataset << ',' << query_size << ',' << query_mode << ',' << i << ':';
-        auto candidates = getCandidateSets(g, q, filter);  // get candidates for each query vertex
+        auto[lf, candidates] =
+            StatefulFilterAndOrder::getCandidateSets(g, q, filter);  // get candidates for each query vertex
         for (auto v : candidates) {
           ss << v.size() << ' ';
         }

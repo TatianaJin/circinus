@@ -18,7 +18,6 @@
 
 #include "exec/execution_config.h"
 #include "ops/filters/filter.h"
-#include "ops/order/dpiso_order.h"
 #include "utils/utils.h"
 
 namespace circinus {
@@ -26,8 +25,7 @@ namespace circinus {
 LogicalDPISOFilter::LogicalDPISOFilter(const GraphMetadata& metadata, const QueryGraph* query_graph,
                                        const std::vector<VertexID>& candidate_size)
     : LogicalNeighborhoodFilter(query_graph) {
-  OrderBase dpiso_order;
-  start_vertex_ = dpiso_order.getStartVertex(metadata, query_graph, candidate_size);
+  start_vertex_ = getStartVertex(metadata, query_graph, candidate_size);
   uint32_t query_vertices_num = query_graph->getNumVertices();
   bfs(query_graph, start_vertex_, tree_, bfs_order_);
   std::vector<uint32_t> order_index(query_vertices_num);
@@ -75,5 +73,23 @@ std::vector<std::unique_ptr<NeighborhoodFilter>> LogicalDPISOFilter::toPhysicalO
   }
   return ret;
 }
+QueryVertexID LogicalDPISOFilter::getStartVertex(const GraphMetadata& metadata, const QueryGraph* query_graph,
+                                                 const std::vector<VertexID>& candidate_size) {
+  double min_score = metadata.getNumVertices();
+  QueryVertexID start_vertex = 0;
 
+  for (QueryVertexID v = 0; v < query_graph->getNumVertices(); ++v) {
+    uint32_t degree = query_graph->getVertexOutDegree(v);
+
+    if (degree <= 1) continue;
+
+    double cur_score = candidate_size[v] / (double)degree;
+    if (cur_score < min_score) {
+      min_score = cur_score;
+      start_vertex = v;
+    }
+  }
+
+  return start_vertex;
+}
 }  // namespace circinus

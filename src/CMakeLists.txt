@@ -48,8 +48,6 @@ set(circinus_ops_sources
   ${PROJECT_SOURCE_DIR}/src/ops/logical/filter/nlf_filter.cc
   ${PROJECT_SOURCE_DIR}/src/ops/logical/filter/tso_filter.cc
   ${PROJECT_SOURCE_DIR}/src/ops/logical/scan/ldf_scan.cc
-  ${PROJECT_SOURCE_DIR}/src/ops/order/cfl_order.cc
-  ${PROJECT_SOURCE_DIR}/src/ops/order/tso_order.cc
   ${PROJECT_SOURCE_DIR}/src/ops/output_operator.cc
   ${PROJECT_SOURCE_DIR}/src/ops/scans.cc
   ${PROJECT_SOURCE_DIR}/src/ops/scans/ldf_scan.cc

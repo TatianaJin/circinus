@@ -25,7 +25,7 @@ class TestTwoCoreSolver : public testing::Test {};
 
 TEST_F(TestTwoCoreSolver, Correctness) {
   QueryGraph graph("resources/test_vertex_cover1.graph");
-  TwoCoreSolver solver;
-  solver.get2CoreVertices(&graph);
+  TwoCoreSolver solver(&graph);
+  solver.get2CoreVertices();
   // TODO(tatiana): check answer
 }

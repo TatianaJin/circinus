@@ -20,6 +20,7 @@
 #include <utility>
 #include <vector>
 
+
 #include "graph/types.h"
 #include "ops/order/order_base.h"
 #include "plan/backtracking_plan.h"
@@ -37,8 +38,6 @@ namespace circinus {
 class Planner {
   QueryContext* const query_context_ = nullptr;
   CandidatePruningPlan candidate_pruning_plan_;
-
-  std::unique_ptr<OrderBase> order_ = nullptr;
 
   // TODO(tatiana): refactor for current framework
   std::vector<std::unique_ptr<NaivePlanner>> planners_;

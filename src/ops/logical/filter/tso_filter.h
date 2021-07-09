@@ -39,6 +39,13 @@ class LogicalTSOFilter : public LogicalNeighborhoodFilter {
   LogicalTSOFilter(const GraphMetadata& metadata, const QueryGraph* query_graph,
                    const std::vector<VertexID>& candidate_size);
 
+  QueryVertexID getStartVertex(const GraphMetadata& metadata, const QueryGraph* query_graph_,
+                               const std::vector<VertexID>& candidate_size);
+
+  const std::vector<QueryVertexID>& getDfsOrder() const { return dfs_order_; }
+
+  const std::vector<TreeNode>& getTree() const { return tree_; }
+
   std::vector<std::unique_ptr<NeighborhoodFilter>> toPhysicalOperators(const GraphMetadata& metadata,
                                                                        ExecutionConfig& exec) override;
 };
