@@ -27,8 +27,8 @@ namespace circinus {
 
 class CandidatePruningPlanDriver : public PlanDriver {
   CandidatePruningPlan* plan_;
-  CandidateResult* result_;  // owned by ExecutorManager
-  std::vector<VertexID> candidate_cardinality_;
+  CandidateResult* result_;                                   // owned by ExecutorManager
+  std::vector<std::vector<VertexID>> candidate_cardinality_;  // {partition: {query vertex: cardinality}}
 
  public:
   explicit CandidatePruningPlanDriver(CandidatePruningPlan* plan) : plan_(plan) {}
@@ -36,6 +36,10 @@ class CandidatePruningPlanDriver : public PlanDriver {
   void init(QueryId qid, QueryContext* query_ctx, ExecutionContext& ctx, ThreadsafeTaskQueue& task_queue) override;
 
   void taskFinish(TaskBase* task, ThreadsafeTaskQueue* task_queue, ThreadsafeQueue<ServerEvent>* reply_queue) override;
+
+ private:
+  void initPhase1TasksForPartitionedGraph(QueryId qid, QueryContext* query_ctx, ExecutionContext& ctx,
+                                          ThreadsafeTaskQueue& task_queue);
 };
 
 }  // namespace circinus

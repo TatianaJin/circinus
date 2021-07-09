@@ -24,6 +24,7 @@
 #include "./metis.h"
 #include "graph/graph_base.h"
 #include "graph/types.h"
+#include "graph/vertex_set_view.h"
 #include "utils/hashmap.h"
 
 namespace circinus {
@@ -56,15 +57,23 @@ class Graph : public GraphBase {
     return getVertexOutDegree(id);
   }
 
+  inline VertexID getVertexInDegreeWithHint(VertexID id, LabelID nbr_label, uint32_t graph_idx = 0) const {
+    return getVertexOutDegree(id);
+  }
+
   /* compatible interface for graph partition TODO(tatiana): unnecessary? */
   inline VertexID getVertexGlobalId(VertexID id) const { return id; }
   inline VertexID getVertexLocalId(VertexID id) const { return id; }
 
   inline LabelID getVertexLabel(VertexID id) const { return labels_[id]; }
 
-  inline std::pair<const VertexID*, uint32_t> getOutNeighborsWithHint(VertexID id, LabelID nbr_label,
-                                                                      uint32_t graph_idx = 0) const {
-    return getOutNeighbors(id);
+  inline VertexSetView getOutNeighborsWithHint(VertexID id, LabelID nbr_label, uint32_t graph_idx = 0) const {
+    auto[first, size] = getOutNeighbors(id);
+    return VertexSetView(first, first + size);
+  }
+
+  inline VertexSetView getInNeighborsWithHint(VertexID id, LabelID nbr_label, uint32_t graph_idx = 0) const {
+    return getOutNeighborsWithHint(id, nbr_label, graph_idx);
   }
 
   /* end of vertex-level accessers */

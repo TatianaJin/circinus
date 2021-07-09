@@ -144,7 +144,8 @@ uint64_t CompressedSubgraphs::getNumIsomorphicSubgraphs(const PruningIndexGroups
   return std::min(count, limit);
 }
 
-std::ostream& CompressedSubgraphs::logEnumerated(std::ostream& ss, std::vector<std::pair<bool, uint32_t>>& log_indices,
+std::ostream& CompressedSubgraphs::logEnumerated(std::ostream& ss,
+                                                 const std::vector<std::pair<bool, uint32_t>>& log_indices,
                                                  uint64_t limit) const {
   if (sets_.empty()) {
     if (!keys_.empty()) {

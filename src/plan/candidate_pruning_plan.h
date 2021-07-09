@@ -31,6 +31,15 @@
 namespace circinus {
 
 class CandidatePruningPlan {
+ private:
+  uint32_t phase_ = 1;
+  bool finished_ = false;
+  bool partition_result_ = false;  // whether to partition the candidate sets
+  LogicalLDFScan scan_;            // phase 1 scan operator
+  // LogicalExpandOperator expand_;                             // phase 2 expand operator
+  std::vector<std::unique_ptr<LogicalLocalFilter>> local_filters_;            // for phase 1 and 2
+  std::vector<std::unique_ptr<LogicalNeighborhoodFilter>> neighbor_filters_;  // phase 3 operators
+
  public:
   CandidatePruningPlan() {}
 
@@ -48,13 +57,15 @@ class CandidatePruningPlan {
   /**
    * The returned scan operators need to be deleted.
    */
-  std::vector<std::unique_ptr<Scan>> getScanOperators(GraphMetadata& metadata, ExecutionConfig& exec_conf) {
+  std::vector<std::unique_ptr<Scan>> getScanOperators(const GraphMetadata& metadata, ExecutionConfig& exec_conf) {
     auto ret = scan_.toPhysicalOperators(metadata, exec_conf);
     for (auto& logical_filter : local_filters_) {
       auto filters = logical_filter->toPhysicalOperators(metadata, exec_conf);
       DCHECK_EQ(filters.size(), ret.size());
       for (uint32_t i = 0; i < ret.size(); ++i) {
-        ret[i]->addFilter(std::move(filters[i]));
+        if (ret[i] != nullptr) {
+          ret[i]->addFilter(std::move(filters[i]));
+        }
       }
     }
     return ret;
@@ -63,10 +74,13 @@ class CandidatePruningPlan {
   uint32_t getPhase() const { return phase_; }
   uint32_t completePhase() {
     local_filters_.clear();
+    neighbor_filters_.clear();
     return ++phase_;
   }
   bool isFinished() const { return finished_; }
   void setFinished() { finished_ = true; }
+  bool toPartitionResult() const { return partition_result_; }
+  void setPartitionResult(bool to_partition) { partition_result_ = to_partition; }
 
   const auto& getScanQueryVertices() const { return scan_.getQueryVertices(); }
 
@@ -87,7 +101,7 @@ class CandidatePruningPlan {
   /**
    * The returned filters should be executed sequentially, while each filter is executed in parallel.
    */
-  std::vector<std::unique_ptr<NeighborhoodFilter>> getFilterOperators(GraphMetadata& metadata,
+  std::vector<std::unique_ptr<NeighborhoodFilter>> getFilterOperators(const GraphMetadata& metadata,
                                                                       ExecutionConfig& exec_conf) {
     std::vector<std::unique_ptr<NeighborhoodFilter>> ret;
     for (auto& filter : neighbor_filters_) {
@@ -98,15 +112,6 @@ class CandidatePruningPlan {
     }
     return ret;
   }
-
- private:
-  uint32_t phase_ = 1;
-  bool finished_ = false;
-  LogicalLDFScan scan_;  // phase 1 scan operator
-  // LogicalExpandOperator expand_;                             // phase 2 expand operator
-  std::vector<std::unique_ptr<LogicalLocalFilter>> local_filters_;  // for phase 1 and 2
-  // phase 3 operators
-  std::vector<std::unique_ptr<LogicalNeighborhoodFilter>> neighbor_filters_;
 };
 
 }  // namespace circinus

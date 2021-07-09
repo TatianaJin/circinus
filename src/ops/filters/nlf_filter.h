@@ -31,10 +31,16 @@ class NLFFilter : public LocalFilter {
 
  public:
   NLFFilter(const QueryGraph* query_graph, QueryVertexID query_vid);
-  explicit NLFFilter(unordered_map<LabelID, uint32_t>&& neighbor_label_frequency)
-      : neighbor_label_frequency_(std::move(neighbor_label_frequency)) {}
+  explicit NLFFilter(const unordered_map<LabelID, uint32_t>& neighbor_label_frequency)
+      : neighbor_label_frequency_(neighbor_label_frequency) {
+    DCHECK(!neighbor_label_frequency_.empty());
+  }
+
+  virtual ~NLFFilter() {}
 
   bool prune(const Graph& data_graph, VertexID v) const override;
+
+  bool prune(const GraphPartition& g, VertexID v) const override;
 };
 
 class QuickNLFFilter : public LocalFilter {
@@ -42,10 +48,12 @@ class QuickNLFFilter : public LocalFilter {
   const unordered_map<LabelID, uint32_t> neighbor_label_frequency_;
 
  public:
-  explicit QuickNLFFilter(unordered_map<LabelID, uint32_t>&& neighbor_label_frequency)
-      : neighbor_label_frequency_(std::move(neighbor_label_frequency)) {}
+  explicit QuickNLFFilter(const unordered_map<LabelID, uint32_t>& neighbor_label_frequency)
+      : neighbor_label_frequency_(neighbor_label_frequency) {}
 
   bool prune(const Graph& data_graph, VertexID v) const override;
+
+  bool prune(const GraphPartition& g, VertexID v) const override;
 };
 
 class MNDNLFFilter : public NLFFilter {

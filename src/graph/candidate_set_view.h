@@ -14,18 +14,28 @@
 
 #pragma once
 
-#include <cinttypes>
+#include <iterator>
+#include <vector>
 
-#include "utils/query_utils.h"
+#include "glog/logging.h"
+
+#include "graph/types.h"
+#include "graph/vertex_set_view.h"
 
 namespace circinus {
 
-inline constexpr bool isProfileMode(QueryType profile) {
-  return profile == QueryType::Profile || profile == QueryType::ProfileWithMiniIntersection;
-}
+class CandidateSetView : public VertexSetView {
+ public:
+  CandidateSetView() {}
 
-inline constexpr bool isProfileWithMiniIntersectionMode(QueryType profile) {
-  return profile == QueryType::ProfileWithMiniIntersection;
-}
+  explicit CandidateSetView(const std::vector<VertexID>& candidates) {
+    addRange(candidates.data(), candidates.data() + candidates.size());
+  }
+
+  CandidateSetView(const std::vector<VertexID>* candidates, const CandidateScope& scope,
+                   const std::vector<VertexID>& partition_offsets);
+
+  CandidateSetView(const std::vector<std::vector<VertexID>>& partitioned_candidates, const CandidateScope& scope);
+};
 
 }  // namespace circinus

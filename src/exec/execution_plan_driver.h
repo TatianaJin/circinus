@@ -14,22 +14,52 @@
 
 #pragma once
 
+#include <memory>
+#include <utility>
+#include <vector>
+
 #include "exec/plan_driver.h"
 #include "exec/result.h"
+#include "exec/task.h"
 #include "exec/traverse_task.h"
 #include "plan/backtracking_plan.h"
 #include "utils/query_utils.h"
+#include "utils/utils.h"
 
 namespace circinus {
 
-/** Supports partition-parallel execution.
- */
-class ExecutionPlanDriver : public PlanDriver {
+class ExecutionPlanDriverBase : public PlanDriver {
+ protected:
   BacktrackingPlan* plan_;
+  std::unique_ptr<CandidateResult> candidate_result_ = nullptr;
   ExecutionResult* result_;  // owned by ExecutorManager
+  std::chrono::time_point<std::chrono::high_resolution_clock> start_time_;
+  QueryType query_type_;
 
  public:
-  explicit ExecutionPlanDriver(BacktrackingPlan* plan) : plan_(plan) {}
+  explicit ExecutionPlanDriverBase(BacktrackingPlan* plan) : plan_(plan) {}
+  virtual ~ExecutionPlanDriverBase() {}
+
+  void init(QueryId qid, QueryContext* query_ctx, ExecutionContext& ctx, ThreadsafeTaskQueue& task_queue) override;
+
+  void finishPlan(ThreadsafeQueue<ServerEvent>* reply_queue) {
+    result_->setElapsedExecutionTime(toSeconds(start_time_, std::chrono::high_resolution_clock::now()));
+    result_->setCount();
+    reply_queue->push(std::move(*finish_event_));
+    reset();
+  }
+
+  inline void collectTaskInfo(TaskBase* task) const {
+    result_->addEnumerateTime(task->getExecutionTime());
+    result_->collect(task);
+  }
+};
+
+/** Supports partition-parallel execution.
+ */
+class ExecutionPlanDriver : public ExecutionPlanDriverBase {
+ public:
+  explicit ExecutionPlanDriver(BacktrackingPlan* plan) : ExecutionPlanDriverBase(plan) {}
 
   void init(QueryId qid, QueryContext* query_ctx, ExecutionContext& ctx, ThreadsafeTaskQueue& task_queue) override;
 
@@ -38,12 +68,15 @@ class ExecutionPlanDriver : public PlanDriver {
 
 /** Alternative to ExecutionPlanDriver, supports matching-parallel execution.
  */
-class MatchingParallelExecutionPlanDriver : public PlanDriver {
-  BacktrackingPlan* plan_;
-  ExecutionResult* result_;  // owned by ExecutorManager
+class MatchingParallelExecutionPlanDriver : public ExecutionPlanDriverBase {
+ private:
+  uint32_t batch_size_;
+  std::unique_ptr<InputOperator> input_op_ = nullptr;
+  std::vector<bool> task_depleted_;
+  std::vector<CandidateSetView> candidates_;
 
  public:
-  explicit MatchingParallelExecutionPlanDriver(BacktrackingPlan* plan) : plan_(plan) {}
+  explicit MatchingParallelExecutionPlanDriver(BacktrackingPlan* plan) : ExecutionPlanDriverBase(plan) {}
 
   void init(QueryId qid, QueryContext* query_ctx, ExecutionContext& ctx, ThreadsafeTaskQueue& task_queue) override;
 

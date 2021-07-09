@@ -42,7 +42,25 @@ bool NLFFilter::prune(const Graph& data_graph, VertexID candidate) const {
         neighbor_label_frequency.erase(pos);
         if (neighbor_label_frequency.empty()) {  // all labels are satisfied
           return false;
-          break;
+        }
+      }
+    }
+  }
+  return true;
+}
+
+bool NLFFilter::prune(const GraphPartition& data_graph, VertexID candidate) const {
+  auto neighbor_label_frequency = neighbor_label_frequency_;
+  auto neighbors = data_graph.getOutNeighbors(candidate);
+  // check if the neighbors of the candidate satisfy the neighbor label frequency of the query vertex
+  for (uint32_t i = 0; i < neighbors.second; ++i) {
+    auto label = data_graph.getVertexLabel(neighbors.first[i]);
+    auto pos = neighbor_label_frequency.find(label);
+    if (pos != neighbor_label_frequency.end()) {
+      if (--pos->second == 0) {  // `label` is satisfied
+        neighbor_label_frequency.erase(pos);
+        if (neighbor_label_frequency.empty()) {  // all labels are satisfied
+          return false;
         }
       }
     }
@@ -53,7 +71,8 @@ bool NLFFilter::prune(const Graph& data_graph, VertexID candidate) const {
 /**
  * @param g An undirected graph with vertices sorted by label (vertices with smaller label id has smaller id).
  */
-inline const VertexID* upperBound(const Graph& g, const VertexID* first, const VertexID* last, LabelID label) {
+template <typename GraphView>
+inline const VertexID* upperBound(const GraphView& g, const VertexID* first, const VertexID* last, LabelID label) {
   if (std::distance(first, last) > 32) {  // binary search when the list is long
     return std::upper_bound(first, last, label,
                             [&g](LabelID label, VertexID v) { return label < g.getVertexLabel(v); });
@@ -84,6 +103,47 @@ bool QuickNLFFilter::prune(const Graph& data_graph, VertexID candidate) const {
         return true;
       } else if (n_checked_label == neighbor_label_frequency_.size()) {  // all labels have been checked
         return false;
+      }
+    }
+  }
+  return true;
+}
+
+bool QuickNLFFilter::prune(const GraphPartition& g, VertexID v) const {
+  auto neighbors = g.getOutNeighbors(v);
+  uint32_t n_checked_label = 0;
+
+  // check if the neighbors of the candidate satisfy the neighbor label frequency of the query vertex
+  if (neighbors.first[0] >= g.getPartitionOffset() &&
+      neighbors.first[neighbors.second - 1] < g.getPartitionEnd()) {  // if the neighbors are all in the same partition
+    for (uint32_t i = 0; i < neighbors.second;) {
+      auto label = g.getVertexLabel(neighbors.first[i]);
+      auto next_pos = upperBound(g, neighbors.first + i + 1, neighbors.first + neighbors.second, label);
+      auto frequency = next_pos - (neighbors.first + i);
+      i += frequency;
+      auto pos = neighbor_label_frequency_.find(label);
+      if (pos != neighbor_label_frequency_.end()) {
+        ++n_checked_label;
+        if (pos->second > frequency) {  // if label frequency is not satisfied, prune this candidate
+          return true;
+        } else if (n_checked_label == neighbor_label_frequency_.size()) {  // all labels have been checked
+          return false;
+        }
+      }
+    }
+  } else {
+    auto neighbor_label_frequency = neighbor_label_frequency_;
+    for (uint32_t i = 0; i < neighbors.second; ++i) {
+      auto label = g.getVertexLabel(neighbors.first[i]);
+      auto pos = neighbor_label_frequency.find(label);
+      if (pos != neighbor_label_frequency.end()) {
+        if (--pos->second == 0) {  // `label` is satisfied
+          neighbor_label_frequency.erase(pos);
+          if (neighbor_label_frequency.empty()) {  // all labels are satisfied
+            return false;
+            break;
+          }
+        }
       }
     }
   }

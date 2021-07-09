@@ -21,6 +21,8 @@
 
 namespace circinus {
 
+#define SHARDING_FACTOR 3
+
 ExecutorManager::ExecutorManager(ThreadsafeQueue<ServerEvent>* queue) : reply_queue_(queue) {
   executors_.start(&task_queue_, &finished_tasks_);
   finish_task_handler_ = std::thread([this]() {
@@ -36,7 +38,6 @@ ExecutorManager::ExecutorManager(ThreadsafeQueue<ServerEvent>* queue) : reply_qu
         driver = state.second.get();
       }
       DCHECK(ctx->second != nullptr);
-      ctx->second->collect(task.get());
       driver->taskFinish(task.get(), &task_queue_, reply_queue_);
     }
   });
@@ -64,10 +65,13 @@ void ExecutorManager::ExecutorPool::start(ThreadsafeTaskQueue* task_queue,
                                           ThreadsafeQueue<std::unique_ptr<TaskBase>>* finished_task) {
   pool_.reserve(n_threads_);
   for (uint32_t i = 0; i < n_threads_; ++i) {
-    pool_.push_back(std::thread([i, task_queue, finished_task]() {
+    pool_.push_back(std::thread([this, i, task_queue, finished_task]() {
       while (true) {
         auto task = task_queue->getTask();
-        task->run();
+        if (task == nullptr) {
+          break;
+        }
+        task->runWithTiming(i);
         finished_task->push(std::move(task));
       }
     }));
@@ -75,6 +79,9 @@ void ExecutorManager::ExecutorPool::start(ThreadsafeTaskQueue* task_queue,
 }
 
 // TODO(tatiana): setup ExecutionConfig
-ExecutionConfig ExecutorManager::getExecutionConfig() const { return ExecutionConfig(); }
+ExecutionConfig ExecutorManager::getExecutionConfig() const {
+  return ExecutionConfig(executors_.getNumExecutors(),
+                         executors_.getNumExecutors() == 1 ? 1 : executors_.getNumExecutors() * SHARDING_FACTOR);
+}
 
 }  // namespace circinus

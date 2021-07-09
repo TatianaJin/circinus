@@ -15,6 +15,7 @@
 #pragma once
 
 #include <cinttypes>
+#include <iostream>
 #include <memory>
 #include <vector>
 
@@ -27,6 +28,41 @@ using VertexID = uint64_t;
 
 using VertexSet = std::shared_ptr<std::vector<VertexID>>;
 
+const LabelID ALL_LABEL = ~0u;
+
 enum class GraphType : uint32_t { Normal, GraphView, BipartiteGraphView };
+
+enum class CandidateScopeType : uint8_t { All, Partition, Inverse };
+
+class CandidateScope {
+ private:
+  CandidateScopeType type_ = CandidateScopeType::All;
+  uint32_t partition_ = 0;
+
+ public:
+  void usePartition(uint32_t partition) {
+    partition_ = partition;
+    type_ = CandidateScopeType::Partition;
+  }
+
+  void excludePartition(uint32_t partition) {
+    partition_ = partition;
+    type_ = CandidateScopeType::Inverse;
+  }
+
+  inline auto getType() const { return type_; }
+  inline uint32_t getPartition() const { return partition_; }
+
+  void print(std::ostream& oss) const {
+    if (type_ == CandidateScopeType::All) {
+      oss << "all";
+    } else {
+      if (type_ == CandidateScopeType::Inverse) {
+        oss << '-';
+      }
+      oss << partition_;
+    }
+  }
+};
 
 }  // namespace circinus

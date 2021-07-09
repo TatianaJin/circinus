@@ -16,7 +16,7 @@
 
 namespace circinus {
 
-void GQLFilter::filter(const Graph* data_graph, std::vector<std::vector<VertexID>>* candidates,
+void GQLFilter::filter(const GraphBase* data_graph, std::vector<std::vector<VertexID>>* candidates,
                        FilterContext* ctx) const {
   LOG(INFO) << "QueryVertex " << query_vertex_ << " " << ctx->end - ctx->offset;
   for (uint32_t i = ctx->offset; i < ctx->end; ++i) {
@@ -31,7 +31,7 @@ void GQLFilter::filter(const Graph* data_graph, std::vector<std::vector<VertexID
   }
 }
 
-bool GQLFilter::verify(const Graph* data_graph, const VertexID data_vertex,
+bool GQLFilter::verify(const GraphBase* data_graph, const VertexID data_vertex,
                        std::vector<std::vector<VertexID>>* candidates) const {
   const auto& query_vertex_neighbors = query_graph_->getOutNeighbors(query_vertex_);
   const auto& data_vertex_neighbors = data_graph->getOutNeighbors(data_vertex);

@@ -22,21 +22,27 @@
 #include "zmq_addon.hpp"
 
 #include "exec/execution_plan_driver.h"
+#include "graph/partitioned_graph.h"
 #include "utils/network_utils.h"
 
 namespace circinus {
 
+#define DEFAULT_PORT 55954
+#define NUM_TRY_PORT 10
+
 void CircinusServer::Listen() {
   client_server_thread_ = std::thread([this]() {
     zmq::socket_t socket(zmq_ctx_, ZMQ_PULL);
-    // socket.bind("tcp://*:" + std::to_string(GetAvailablePort()));
-    socket.bind("tcp://*:55954");
+    // default port 55954, repeatedly try next if not available
+    auto port = GetAvailablePort(DEFAULT_PORT, NUM_TRY_PORT);
+    LOG(INFO) << "Circinus Server listening on port " << port;
+    socket.bind("tcp://*:" + std::to_string(port));
     while (true) {
       zmq::multipart_t msg;
       msg.recv(socket);
       auto event_str = msg.popstr();
       if (event_str == "exit") {
-        CHECK(msg.empty());
+        CHECK(msg.empty()) << msg.size();
         shutDown();
         break;
       } else if (event_str == "query") {
@@ -50,7 +56,7 @@ void CircinusServer::Listen() {
           query(std::move(graph_name), std::move(query_path), std::move(query_config), msg.popstr());
         }
       } else if (event_str == "load") {
-        DCHECK_GE(msg.size(), 3);
+        DCHECK_GE(msg.size(), 2);
         auto graph_path = msg.popstr();
         auto graph_name = msg.popstr();
         if (msg.size() == 0) {
@@ -97,6 +103,7 @@ void CircinusServer::Serve(bool listen) {
         break;
       }
       default:
+        // TODO(tatiana): explain and profile mode
         LOG(FATAL) << "Unknown event type " << event;
       }
     } catch (const std::exception& e) {
@@ -152,7 +159,16 @@ void CircinusServer::handleLoadGraph(const Event& event) {
     // Graph loading is blocking, the server does not handle new requests when loading the graph
     load_time = loadGraphFromBinary(event.args[0], event.args[1]);
   } else {
-    LOG(WARNING) << "The graph loading option is not implemented yet";
+    if (event.args.back().substr(0, 10) == "partition=") {
+      uint32_t partition = std::stoi(event.args.back().substr(10));
+      if (partition == 0) {
+        load_time = loadGraphFromBinary(event.args[0], event.args[1]);
+      } else {
+        load_time = loadPartitionedGraphFromBinary(event.args[0], event.args[1], partition);
+      }
+    } else {
+      LOG(WARNING) << "The graph loading option is not implemented yet";
+    }
   }
   if (!event.client_addr.empty()) {
     replyToClient(event.client_addr, &load_time, sizeof(load_time));
@@ -163,22 +179,27 @@ void CircinusServer::handleCandidatePhase(const Event& event) {
   DCHECK(event.data != nullptr);
   auto planner = active_queries_[event.query_id].planner;
   DCHECK(planner != nullptr);
-  auto plan = planner->updateCandidatePruningPlan((const std::vector<VertexID>*)event.data);
+  auto result = (const std::vector<std::vector<VertexID>>*)event.data;
+  auto plan = planner->updateCandidatePruningPlan(result);
   std::unique_ptr<PlanDriver> plan_driver = nullptr;
   if (plan->isFinished()) {
+    auto now = std::chrono::high_resolution_clock::now();
+    active_queries_[event.query_id].filter_time = toSeconds(active_queries_[event.query_id].filter_start_time, now);
     // backtracking phase
     LOG(INFO) << "Candidate generation finished. Start backtracking.";
-    auto plan = planner->generateExecutionPlan((const std::vector<VertexID>*)event.data);
-    if (active_queries_[event.query_id].query_context.graph_metadata->numPartitions() == 1) {
+    auto plan = planner->generateExecutionPlan(result);
+    if (active_queries_[event.query_id].query_context.graph_metadata->numPartitions() == 1 ||
+        !active_queries_[event.query_id].query_context.query_config.use_partitioned_graph) {
       plan_driver = std::make_unique<MatchingParallelExecutionPlanDriver>(plan);
     } else {
       plan_driver = std::make_unique<ExecutionPlanDriver>(plan);
     }
+    active_queries_[event.query_id].plan_time = toSeconds(now, std::chrono::high_resolution_clock::now());
   }
   executor_manager_.run(event.query_id, &active_queries_[event.query_id].query_context, std::move(plan_driver));
 }
 
-bool CircinusServer::replyToClient(const std::string& client_addr, const void* data, size_t size, bool success) {
+bool CircinusServer::replyToClient(const std::string& client_addr, zmq::multipart_t& msg) {
   if (client_addr.empty()) return true;
   auto pos = sockets_to_clients_.find(client_addr);
   if (pos == sockets_to_clients_.end()) {
@@ -187,9 +208,6 @@ bool CircinusServer::replyToClient(const std::string& client_addr, const void* d
     pos->second.connect(client_addr);
   }
   try {
-    zmq::multipart_t msg;
-    msg.pushtyp<bool>(success);
-    msg.addmem(data, size);
     msg.send(pos->second);
     return true;
   } catch (zmq::error_t& e) {
@@ -198,25 +216,121 @@ bool CircinusServer::replyToClient(const std::string& client_addr, const void* d
   return false;
 }
 
+bool CircinusServer::replyToClient(const std::string& client_addr, const void* data, size_t size, bool success) {
+  zmq::multipart_t msg;
+  msg.pushtyp<bool>(success);
+  msg.addmem(data, size);
+  return replyToClient(client_addr, msg);
+}
+
 bool CircinusServer::replyToClient(const std::string& client_addr, std::vector<char>* data) {
-  if (client_addr.empty()) return true;
-  auto pos = sockets_to_clients_.find(client_addr);
-  if (pos == sockets_to_clients_.end()) {
-    pos = sockets_to_clients_.insert({client_addr, zmq::socket_t(zmq_ctx_, ZMQ_PUSH)}).first;
-    pos->second.setsockopt(ZMQ_LINGER, 0);  // do not linger after socket is closed
-    pos->second.connect(client_addr);
+  zmq::multipart_t reply;
+  reply.pushtyp<bool>(true);
+  zmq::message_t msg(data->data(), data->size(), [](void*, void* hint) { delete (std::vector<char>*)hint; }, data);
+  reply.add(std::move(msg));
+  return replyToClient(client_addr, reply);
+}
+
+double CircinusServer::loadGraphFromBinary(const std::string& graph_path, const std::string& name) {
+  std::ifstream input(graph_path, std::ios::binary);
+  if (!input.is_open()) {                // cannot open file
+    if (Path::isRelative(graph_path)) {  // if relative path, try search under FLAGS_data_dir
+      return loadGraphFromBinary(Path::join(FLAGS_data_dir, graph_path), name);
+    }
+    std::stringstream ss;
+    ss << std::strerror(errno) << ": " << graph_path;
+    throw std::runtime_error(ss.str());
   }
-  try {
-    zmq::multipart_t reply;
-    reply.pushtyp<bool>(true);
-    zmq::message_t msg(data->data(), data->size(), [](void*, void* hint) { delete (std::vector<char>*)hint; }, data);
-    reply.add(std::move(msg));
-    reply.send(pos->second);
-    return true;
-  } catch (zmq::error_t& e) {
-    LOG(WARNING) << e.what();
+  auto start_loading = std::chrono::steady_clock::now();
+  auto data_graph = std::make_unique<Graph>();
+  data_graph->loadUndirectedGraphFromBinary(input);
+  data_graph->buildLabelIndex();  // TODO(tatiana): construct label index only when suitable
+  GraphMetadata meta(*data_graph);
+  auto end_loading = std::chrono::steady_clock::now();
+  auto memory = data_graph->getMemoryUsage();
+  LOG(INFO) << "graph " << name << " takes " << memory.first / 1024 / 1024 << "MB";
+  data_graphs_.insert({name, std::make_pair(std::move(data_graph), std::move(meta))});
+  return ((double)std::chrono::duration_cast<std::chrono::microseconds>(end_loading - start_loading).count()) / 1e6;
+}
+
+double CircinusServer::loadPartitionedGraphFromBinary(const std::string& graph_path, const std::string& name,
+                                                      uint32_t n_partitions) {
+  LOG(INFO) << graph_path;
+  std::ifstream input(graph_path, std::ios::binary);
+  if (!input.is_open()) {                // cannot open file
+    if (Path::isRelative(graph_path)) {  // if relative path, try search under FLAGS_data_dir
+      return loadPartitionedGraphFromBinary(Path::join(FLAGS_data_dir, graph_path), name, n_partitions);
+    }
+    std::stringstream ss;
+    ss << std::strerror(errno) << ": " << graph_path;
+    throw std::runtime_error(ss.str());
   }
-  return false;
+  auto start_loading = std::chrono::steady_clock::now();
+  auto data_graph = std::make_unique<ReorderedPartitionedGraph>();
+  data_graph->loadUndirectedGraphFromBinary(input);
+
+  GraphMetadata meta(*data_graph);
+  auto end_loading = std::chrono::steady_clock::now();
+  auto memory = data_graph->getMemoryUsage();
+  LOG(INFO) << "graph " << name << " takes " << memory.first / 1024 / 1024 << "MB, edge cut "
+            << data_graph->getNumEdgeCuts() << '/' << data_graph->getNumEdges() << '='
+            << data_graph->getNumEdgeCuts() / (double)data_graph->getNumEdges();
+  data_graphs_.insert({name, std::make_pair(std::move(data_graph), std::move(meta))});
+  return ((double)std::chrono::duration_cast<std::chrono::microseconds>(end_loading - start_loading).count()) / 1e6;
+}
+
+inline uint32_t CircinusServer::newQuery(const std::string& graph_name, const std::string& query_file,
+                                         const std::string& query_config_str) {
+  QueryGraph q(query_file);
+  QueryConfig config(query_config_str);
+
+  auto& graph = data_graphs_.at(graph_name);
+  if (reusable_indices_.empty()) {
+    active_queries_.emplace_back(std::move(q), std::move(config), graph.first.get(), &graph.second);
+    return active_queries_.size() - 1;
+  }
+  // reuse deleted index
+  auto idx = reusable_indices_.back();
+  active_queries_[idx].query_context = QueryContext(std::move(q), std::move(config), graph.first.get(), &graph.second);
+  reusable_indices_.pop_back();
+  return idx;
+}
+
+void CircinusServer::finishQuery(uint32_t query_index, void* result, const std::string& error) {
+  auto& query = active_queries_[query_index];
+  delete query.planner;
+  query.planner = nullptr;
+  reusable_indices_.push_back(query_index);
+  if (error.empty()) {
+    if (query.query_context.query_config.output == "count") {
+      auto res = reinterpret_cast<QueryResult*>(result);
+      res->filter_time = query.filter_time;
+      res->plan_time = query.plan_time;
+      auto reply = res->toString();
+      replyToClient(query.client_addr, reply.data(), reply.size(), true);
+    } else if (query.query_context.query_config.output == "plan") {
+      auto& reply = *reinterpret_cast<std::string*>(result);
+      replyToClient(query.client_addr, reply.data(), reply.size(), true);
+    } else if (query.query_context.query_config.output == "profile_count") {
+      auto& reply = *reinterpret_cast<ProfiledExecutionResult*>(result);
+      reply.getQueryResult().filter_time = query.filter_time;
+      reply.getQueryResult().plan_time = query.plan_time;
+      zmq::multipart_t msg;
+      msg.pushtyp<bool>(true);
+      msg.pushstr(reply.getQueryResult().toString());
+      for (auto& str : reply.getProfiledPlanStrings()) {
+        msg.pushstr(str);
+      }
+      replyToClient(query.client_addr, msg);
+    } else {
+      // TODO(tatiana): support other output option
+      LOG(WARNING) << "Output option not implemented yet: " << query.query_context.query_config.output;
+    }
+  } else {
+    replyToClient(query.client_addr, error);
+  }
+  // make sure the pointer result is not needed before clearQuery
+  executor_manager_.clearQuery(query_index);
 }
 
 }  // namespace circinus

@@ -45,8 +45,9 @@ class NeighborhoodFilter : public Operator {
   VertexID filter_size_ = 0;
 
  private:
-  inline bool intersectionNotNullBS(const std::pair<const VertexID*, uint32_t>& set1,
-                                    const std::pair<const VertexID*, uint32_t>& set2) const {
+  // TODO(tatiana): use template forward iterator
+  static inline bool intersectionNotNullBS(const std::pair<const VertexID*, uint32_t>& set1,
+                                           const std::pair<const VertexID*, uint32_t>& set2) {
     if (set1.second <= set2.second) {
       auto lower_bound = set2.first;
       for (uint32_t i = 0; i < set1.second; ++i) {
@@ -63,32 +64,6 @@ class NeighborhoodFilter : public Operator {
       }
     } else {
       return intersectionNotNullBS(set2, set1);
-    }
-    return false;
-  }
-
-  inline bool intersectionNotNull(const std::pair<const VertexID*, uint32_t>& set1,
-                                  const std::pair<const VertexID*, uint32_t>& set2) const {
-    if (std::max(set1.second, set2.second) >= 32) {
-      return intersectionNotNullBS(set1, set2);
-    }
-    if (set1.second <= set2.second) {
-      uint32_t set2_index = 0;
-      for (uint32_t i = 0; i < set1.second; ++i) {
-        auto vid = set1.first[i];
-        while (set2_index < set2.second && set2.first[set2_index] < vid) {
-          ++set2_index;
-        }
-        if (set2_index == set2.second) {  // all elements in the rest of set2 are smaller than the rest of set1
-          return false;
-        }
-
-        if (set2.first[set2_index] == vid) {
-          return true;
-        }
-      }
-    } else {
-      return intersectionNotNull(set2, set1);
     }
     return false;
   }
@@ -116,6 +91,32 @@ class NeighborhoodFilter : public Operator {
       : NeighborhoodFilter(conf, query_graph, query_vertex, std::vector<QueryVertexID>{pivot_vertex}, std::move(name)) {
   }
 
+  static inline bool intersectionNotNull(const std::pair<const VertexID*, uint32_t>& set1,
+                                         const std::pair<const VertexID*, uint32_t>& set2) {
+    if (std::max(set1.second, set2.second) >= 32) {
+      return intersectionNotNullBS(set1, set2);
+    }
+    if (set1.second <= set2.second) {
+      uint32_t set2_index = 0;
+      for (uint32_t i = 0; i < set1.second; ++i) {
+        auto vid = set1.first[i];
+        while (set2_index < set2.second && set2.first[set2_index] < vid) {
+          ++set2_index;
+        }
+        if (set2_index == set2.second) {  // all elements in the rest of set2 are smaller than the rest of set1
+          return false;
+        }
+
+        if (set2.first[set2_index] == vid) {
+          return true;
+        }
+      }
+    } else {
+      return intersectionNotNull(set2, set1);
+    }
+    return false;
+  }
+
   inline void setInputSize(uint64_t filter_size) { filter_size_ = filter_size; }
 
   inline QueryVertexID getQueryVertex() const { return query_vertex_; }
@@ -125,13 +126,14 @@ class NeighborhoodFilter : public Operator {
     auto chunk_size = filter_size_ / parallelism_;
     CHECK_NE(chunk_size, 0) << "scan_size=" << filter_size_ << ", parallelism=" << parallelism_;
     if (task_idx < filter_size_ % parallelism_) {
-      return FilterContext((chunk_size + 1) * task_idx, chunk_size + 1);
+      auto offset = (chunk_size + 1) * task_idx;
+      return FilterContext(offset, offset + chunk_size + 1);
     }
-    LOG(INFO) << filter_size_;
-    return FilterContext(chunk_size * task_idx + (filter_size_ % parallelism_), chunk_size);
+    auto offset = chunk_size * task_idx + (filter_size_ % parallelism_);
+    return FilterContext(offset, offset + chunk_size);
   }
 
-  virtual void filter(const Graph* g, std::vector<std::vector<VertexID>>* candidates, FilterContext* ctx) const {
+  virtual void filter(const GraphBase* g, std::vector<std::vector<VertexID>>* candidates, FilterContext* ctx) const {
     CHECK_LE(ctx->end, (*candidates)[query_vertex_].size()) << ctx->end << "  " << (*candidates)[query_vertex_].size();
     for (uint32_t i = ctx->offset; i < ctx->end; ++i) {
       VertexID& candidate = (*candidates)[query_vertex_][i];

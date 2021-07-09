@@ -14,18 +14,29 @@
 
 #pragma once
 
-#include <cinttypes>
+#include <utility>
 
-#include "utils/query_utils.h"
+#include "exec/task.h"
 
 namespace circinus {
 
-inline constexpr bool isProfileMode(QueryType profile) {
-  return profile == QueryType::Profile || profile == QueryType::ProfileWithMiniIntersection;
-}
+class ProfileTaskBase {
+ public:
+  // FIXME(tatiana)
+  virtual ProfileInfo* getProfileInfo() const { return nullptr; }
+};
 
-inline constexpr bool isProfileWithMiniIntersectionMode(QueryType profile) {
-  return profile == QueryType::ProfileWithMiniIntersection;
-}
+template <typename T>
+class ProfileTask : public T, public ProfileTaskBase {
+  static_assert(std::is_base_of<TaskBase, T>::value, "T should inherit from TaskBase");
+
+ public:
+  template <typename... Args>
+  ProfileTask(QueryId qid, TaskId tid, Args... args) : T(qid, tid, std::move(args)...) {}
+
+  void run(uint32_t executor_idx) override { T::profile(executor_idx); }
+
+  const GraphBase* getDataGraph() const override { return T::getDataGraph(); }
+};
 
 }  // namespace circinus

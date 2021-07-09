@@ -14,10 +14,15 @@
 
 #include "plan/planner.h"
 
+#include <algorithm>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
+
+#include "ops/logical/compressed_input.h"
+#include "ops/order/cfl_order.h"
 #include "plan/backtracking_plan.h"
 #include "plan/candidate_pruning_plan.h"
 #include "plan/execution_plan.h"
@@ -26,6 +31,9 @@
 
 namespace circinus {
 
+/**
+ * For now, in the case of partitioned graph, all graph partitions share the same candidate pruning plan.
+ */
 CandidatePruningPlan* Planner::generateCandidatePruningPlan() {
   auto& q = query_context_->query_graph;
   auto& strategy = query_context_->query_config.candidate_pruning_strategy;
@@ -42,12 +50,14 @@ CandidatePruningPlan* Planner::generateCandidatePruningPlan() {
   case CandidatePruningStrategy::LDF: {
     LOG(INFO) << "Prune candidate by LDF";
     candidate_pruning_plan_.newLDFScan(q);
+    candidate_pruning_plan_.setPartitionResult(query_context_->graph_metadata->numPartitions() > 1);
     return &candidate_pruning_plan_;
   }
   case CandidatePruningStrategy::NLF: {
     LOG(INFO) << "Prune candidate by NLF";
     candidate_pruning_plan_.newLDFScan(q);
     candidate_pruning_plan_.newNLFFilter(q);
+    candidate_pruning_plan_.setPartitionResult(query_context_->graph_metadata->numPartitions() > 1);
     return &candidate_pruning_plan_;
   }
   case CandidatePruningStrategy::DAF: {
@@ -77,12 +87,19 @@ CandidatePruningPlan* Planner::generateCandidatePruningPlan() {
   return &candidate_pruning_plan_;
 }
 
-CandidatePruningPlan* Planner::updateCandidatePruningPlan(const std::vector<VertexID>* cardinality) {
+CandidatePruningPlan* Planner::updateCandidatePruningPlan(const std::vector<std::vector<VertexID>>* part_cardinality) {
   auto& q = query_context_->query_graph;
   auto& strategy = query_context_->query_config.candidate_pruning_strategy;
+  auto n_qvs = (*part_cardinality)[0].size();
+  std::vector<VertexID> cardinality(n_qvs, 0);
+  for (uint32_t i = 0; i < part_cardinality->size(); ++i) {
+    for (uint32_t j = 0; j < n_qvs; ++j) {
+      cardinality[j] += (*part_cardinality)[i][j];
+    }
+  }
   if (strategy == CandidatePruningStrategy::LDF || strategy == CandidatePruningStrategy::NLF) {
-    for (uint32_t i = 0; i < cardinality->size(); ++i) {
-      DLOG(INFO) << "|C(v" << i << ")|: " << (*cardinality)[i];
+    for (uint32_t i = 0; i < cardinality.size(); ++i) {
+      DLOG(INFO) << " |C(v" << i << ")|: " << cardinality[i];
     }
     candidate_pruning_plan_.setFinished();
     return &candidate_pruning_plan_;
@@ -96,11 +113,11 @@ CandidatePruningPlan* Planner::updateCandidatePruningPlan(const std::vector<Vert
     auto& metadata = *query_context_->graph_metadata;
     switch (strategy) {
     case CandidatePruningStrategy::DAF: {
-      candidate_pruning_plan_.newDPISOFilter(&q, metadata, *cardinality);
+      candidate_pruning_plan_.newDPISOFilter(&q, metadata, cardinality);
       break;
     }
     case CandidatePruningStrategy::CFL: {
-      candidate_pruning_plan_.newCFLFilter(&q, metadata, *cardinality);
+      candidate_pruning_plan_.newCFLFilter(&q, metadata, cardinality);
       break;
     }
     case CandidatePruningStrategy::GQL: {
@@ -108,7 +125,7 @@ CandidatePruningPlan* Planner::updateCandidatePruningPlan(const std::vector<Vert
       break;
     }
     case CandidatePruningStrategy::TSO: {
-      candidate_pruning_plan_.newTSOFilter(&q, metadata, *cardinality);
+      candidate_pruning_plan_.newTSOFilter(&q, metadata, cardinality);
       break;
     }
     default:
@@ -116,53 +133,165 @@ CandidatePruningPlan* Planner::updateCandidatePruningPlan(const std::vector<Vert
     }
     return &candidate_pruning_plan_;
   }
+  candidate_pruning_plan_.setPartitionResult(query_context_->graph_metadata->numPartitions() > 1);
+  for (uint32_t i = 0; i < cardinality.size(); ++i) {
+    DLOG(INFO) << " |C(v" << i << ")|: " << cardinality[i];
+  }
   candidate_pruning_plan_.setFinished();
   return &candidate_pruning_plan_;
 }
 
-BacktrackingPlan* Planner::generateExecutionPlan(const std::vector<VertexID>* candidate_cardinality, bool multithread) {
-  std::vector<double> cardinality{candidate_cardinality->begin(), candidate_cardinality->end()};
+std::vector<std::vector<VertexID>> Planner::estimateCardinality() const {
+  auto metadata = query_context_->graph_metadata;
+  std::vector<std::vector<VertexID>> ret;
+  ret.reserve(metadata->numPartitions());
+  if (metadata->numPartitions() > 1) {
+    for (uint32_t i = 0; i < metadata->numPartitions(); ++i) {
+      ret.emplace_back(estimateCardinalityInner(&metadata->getPartition(i)));
+    }
+  } else {
+    ret.emplace_back(estimateCardinalityInner(metadata));
+  }
+  return ret;
+}
+
+std::vector<QueryVertexID> Planner::getPartitioningQueryVertices() {
+  auto& q = query_context_->query_graph;
+
+  // we favor the query vertices that are used as the compression key for task data partitioning
+  std::vector<uint32_t> qv_frequency_in_cover(q.getNumVertices(), 0);
+  for (auto plan : backtracking_plan_->getPlans()) {
+    for (QueryVertexID i = 0; i < q.getNumVertices(); ++i) {
+      qv_frequency_in_cover[i] += plan->isInCover(i);
+    }
+  }
+  std::vector<QueryVertexID> order_by_cover_occurrence(q.getNumVertices());
+  std::iota(order_by_cover_occurrence.begin(), order_by_cover_occurrence.end(), 0);
+  std::sort(order_by_cover_occurrence.begin(), order_by_cover_occurrence.end(),
+            [&qv_frequency_in_cover](QueryVertexID a, QueryVertexID b) {
+              return qv_frequency_in_cover[a] >= qv_frequency_in_cover[b];
+            });
+
+  uint32_t common_cover_vertex_count = 0;
+  std::stringstream ss;
+  for (auto v : order_by_cover_occurrence) {
+    if (qv_frequency_in_cover[v] == backtracking_plan_->getPlans().size()) {
+      ++common_cover_vertex_count;
+      ss << ' ' << v;
+    } else {
+      break;
+    }
+  }
+  LOG(INFO) << "Common cover vertex: [" << ss.str() << ']';
+  if (common_cover_vertex_count != 0) {
+    // TODO(tatiana): pick the indicator by considering the closeness centrality?
+  }
+  // TODO(tatiana): now we use only one partitioning query vertex to test the pipeline, later may consider
+  // parallelism for deciding partitioning vertices
+  order_by_cover_occurrence.resize(1);
+  return order_by_cover_occurrence;
+}
+
+std::vector<std::pair<uint32_t, std::vector<CandidateScope>>> Planner::generatePartitionedPlans(
+    const std::vector<QueryVertexID>& partitioning_qv) {
+  CHECK_EQ(partitioning_qv.size(), 1);  // consider the locality indicator only, no. tasks equal to no. partitions
+  DLOG(INFO) << "partitioning_qv = " << partitioning_qv.front();
+  std::vector<std::pair<uint32_t, std::vector<CandidateScope>>> ret;
+  ret.reserve(backtracking_plan_->getPlans().size());
+
+  auto n_qvs = query_context_->query_graph.getNumVertices();
+  for (uint32_t i = 0; i < backtracking_plan_->getPlans().size(); ++i) {
+    ret.emplace_back(i, std::vector<CandidateScope>(n_qvs));
+    ret.back().second[partitioning_qv[0]].usePartition(i);
+  }
+  return ret;
+}
+
+void Planner::newInputOperators(const QueryGraph& q, const std::vector<QueryVertexID>& partitioning_qvs) {
+  for (auto logical_plan : backtracking_plan_->getPlans()) {
+    // TODO(byli): use neighborhood filter corresponding to the candidate pruning strategy?
+    backtracking_plan_->addInputOperator(std::make_unique<PartitionedLogicalCompressedInputOperator>(
+        &q, logical_plan->inputAreKeys(), logical_plan->getMatchingOrder(), partitioning_qvs));
+  }
+}
+
+void Planner::newInputOperators() {
+  auto& logical_plan = backtracking_plan_->getPlans().front();
+  backtracking_plan_->addInputOperator(std::make_unique<LogicalCompressedInputOperator>(
+      logical_plan->getMatchingOrder().front(), logical_plan->inputAreKeys()));
+}
+
+BacktrackingPlan* Planner::generateExecutionPlan(const std::vector<std::vector<VertexID>>* candidate_cardinality,
+                                                 bool multithread) {
+  if (candidate_cardinality->size() == 1 ||
+      !query_context_->query_config.use_partitioned_graph) {  // no partition, generate one execution plan
+    backtracking_plan_ = std::make_unique<BacktrackingPlan>();
+    backtracking_plan_->addPlan(generateExecutionPlan(candidate_cardinality->front(), multithread));
+    // one logical input operator
+    newInputOperators();
+    return backtracking_plan_.get();
+  }
+
+  backtracking_plan_ = std::make_unique<BacktrackingPlan>();
+  // generate a logical plan for each partition
+  for (auto& stats : *candidate_cardinality) {
+    // TODO(tatiana): apply the state-of-the-art matching order strategies, compute the orders only
+    backtracking_plan_->addPlan(generateExecutionPlan(stats, multithread));
+  }
+  auto partitioning_qv = getPartitioningQueryVertices();
+  backtracking_plan_->addPartitionedPlans(generatePartitionedPlans(partitioning_qv));
+
+  // one logical input operator for each logical plan
+  newInputOperators(query_context_->query_graph, partitioning_qv);
+  LOG(INFO) << "Generated plan";
+  return backtracking_plan_.get();
+}
+
+ExecutionPlan* Planner::generateExecutionPlan(const std::vector<VertexID>& candidate_cardinality, bool multithread) {
+  // TODO(tatiana): handle the case when the cardinality of a candidate set is 0
+  for (auto c : candidate_cardinality) {
+    CHECK_NE(c, 0);
+  }
+  std::vector<double> cardinality{candidate_cardinality.begin(), candidate_cardinality.end()};
 
   /* The data graph representation varies depending on the execution strategy.
    * For query execution with partitioned graphs, use GraphView. For query on normal graphs, use Normal;
    * For query using an auxiliary bipartite-graph-based index, use BipartiteGraphView. */
   GraphType graph_type =
-      query_context_->graph_metadata->numPartitions() > 1
+      (query_context_->graph_metadata->numPartitions() > 1 && query_context_->query_config.use_partitioned_graph)
           ? GraphType::GraphView
           : (query_context_->query_config.use_auxiliary_index ? GraphType::BipartiteGraphView : GraphType::Normal);
-  planner_ = std::make_unique<NaivePlanner>(&query_context_->query_graph, &cardinality, graph_type);
+  planners_.push_back(std::make_unique<NaivePlanner>(&query_context_->query_graph, &cardinality, graph_type));
+  auto& planner = planners_.back();
 
   // now order is directly configured
   auto use_order = getOrder(query_context_->query_config.matching_order, query_context_->query_graph.getNumVertices());
-
+  
   ExecutionPlan* plan = nullptr;
-  bool inputs_are_keys = true;
   // TODO(tatiana): consider make the first vertex in the matching order to be a key if multithread?
   switch (query_context_->query_config.compression_strategy) {
   case CompressionStrategy::Static: {
-    plan = planner_->generatePlan(use_order);
-    inputs_are_keys = plan->isInCover(plan->getRootQueryVertexID());
+    plan = planner->generatePlan(use_order);
+    plan->setInputAreKeys(plan->isInCover(plan->getRootQueryVertexID()));
     break;
   }
   case CompressionStrategy::Dynamic: {
-    planner_->generateOrder(use_order);
+    planner->generateOrder(use_order);
     std::vector<std::vector<double>> cardinality_per_level(cardinality.size(), cardinality);
-    planner_->generateCoverNode(cardinality_per_level);
-    plan = planner_->generatePlanWithDynamicCover();
-    inputs_are_keys =
-        plan->isInCover(plan->getRootQueryVertexID()) && (plan->getToKeyLevel(plan->getRootQueryVertexID()) == 0);
+    planner->generateCoverNode(cardinality_per_level);
+    plan = planner->generatePlanWithDynamicCover();
+    plan->setInputAreKeys(plan->isInCover(plan->getRootQueryVertexID()) &&
+                          (plan->getToKeyLevel(plan->getRootQueryVertexID()) == 0));
     break;
   }
   case CompressionStrategy::None: {
-    plan = planner_->generatePlanWithoutCompression(use_order);
-    inputs_are_keys = true;
+    plan = planner->generatePlanWithoutCompression(use_order);
+    plan->setInputAreKeys(true);
   }
   }
 
-  LOG(INFO) << "Generated plan";
-  backtracking_plan_ = std::make_unique<BacktrackingPlan>(
-      plan, inputs_are_keys, plan->getRootQueryVertexID());  // now assume all vertices have candidates
-  return backtracking_plan_.get();
+  // plan->printPhysicalPlan();
+  return plan;
 }
 
 }  // namespace circinus

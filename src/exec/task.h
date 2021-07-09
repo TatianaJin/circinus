@@ -20,13 +20,15 @@
 #include "graph/compressed_subgraphs.h"
 #include "graph/graph.h"
 #include "utils/query_utils.h"
+#include "utils/utils.h"
 
 namespace circinus {
 
 class TaskBase {
- private:
+ protected:
   uint16_t query_id_;
   uint16_t task_id_;
+  double time_ = 0;
 
  public:
   TaskBase(QueryId query_id, TaskId task_id) : query_id_(query_id), task_id_(task_id) {}
@@ -34,29 +36,23 @@ class TaskBase {
   virtual ~TaskBase() {}
 
   bool isBefore(TaskBase* other) const {
-    return (query_id_ == other->query_id_) ? task_id_ < other->task_id_ : query_id_ < other->query_id_;
+    return (query_id_ == other->query_id_) ? task_id_ > other->task_id_ : query_id_ < other->query_id_;
   }
 
   inline auto getQueryId() const { return query_id_; }
   inline auto getTaskId() const { return task_id_; }
 
-  virtual const Graph* getDataGraph() const = 0;
-  virtual void run() = 0;
-  virtual void profile() { run(); }
-};
+  virtual const GraphBase* getDataGraph() const = 0;
+  virtual void run(uint32_t executor_idx) = 0;
+  virtual void profile(uint32_t executor_idx) { run(executor_idx); }
 
-class Task {
-  uint32_t level_;
-  std::vector<CompressedSubgraphs> input_;
-  const Graph* data_graph_;
+  inline void runWithTiming(uint32_t executor_idx) {
+    auto start = std::chrono::high_resolution_clock::now();
+    run(executor_idx);
+    time_ += toSeconds(start, std::chrono::high_resolution_clock::now());
+  }
 
- public:
-  Task(uint32_t level, std::vector<CompressedSubgraphs>&& input, const Graph* graph)
-      : level_(level), input_(std::move(input)), data_graph_(graph) {}
-
-  inline uint32_t getLevel() const { return level_; }
-  inline const auto& getInput() const { return input_; }
-  inline const Graph* getDataGraph() const { return data_graph_; }
+  inline double getExecutionTime() const { return time_; }
 };
 
 }  // namespace circinus

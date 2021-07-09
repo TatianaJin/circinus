@@ -16,6 +16,7 @@
 
 #include "exec/task.h"
 #include "graph/graph.h"
+#include "graph/graph_partition.h"
 #include "ops/scans.h"
 
 namespace circinus {
@@ -24,17 +25,41 @@ class ScanTask : public TaskBase {
  private:
   ScanContext scan_context_;
   const Scan* scan_;  // not owned
-  const Graph* graph_;
+  const GraphBase* graph_;
+  uint32_t partition_ = ~0u;
 
  public:
-  ScanTask(QueryId query_id, TaskId task_id, uint32_t shard_id, const Scan* scan, const Graph* graph)
-      : TaskBase(query_id, task_id), scan_context_(scan->initScanContext(shard_id)), scan_(scan), graph_(graph) {}
+  ScanTask(QueryId query_id, TaskId task_id, uint32_t shard_id, const Scan* scan, const GraphBase* graph)
+      : TaskBase(query_id, task_id), scan_context_(scan->initScanContext(shard_id)), scan_(scan), graph_(graph) {
+    CHECK(dynamic_cast<const Graph*>(graph_) != nullptr);
+    DLOG(INFO) << "ScanTask " << task_id << '.' << shard_id << " [" << scan_context_.scan_offset << ", "
+               << scan_context_.scan_end << ")";
+  }
 
-  ScanContext& getScanContext() { return scan_context_; }
+  ScanTask(QueryId query_id, TaskId task_id, uint32_t shard_id, const Scan* scan, const GraphBase* graph,
+           uint32_t partition)
+      : TaskBase(query_id, task_id),
+        scan_context_(scan->initScanContext(shard_id)),
+        scan_(scan),
+        graph_(graph),
+        partition_(partition) {
+    CHECK(dynamic_cast<const ReorderedPartitionedGraph*>(graph_) != nullptr);
+  }
 
-  const Graph* getDataGraph() const override { return graph_; }
+  inline ScanContext& getScanContext() { return scan_context_; }
+  inline uint32_t getPartition() const { return partition_; }
 
-  void run() override { scan_->scan(graph_, &scan_context_); }
+  const GraphBase* getDataGraph() const override { return graph_; }
+
+  void run(uint32_t executor_idx) override {
+    if (partition_ == ~0u) {
+      scan_->scan(dynamic_cast<const Graph*>(graph_), &scan_context_);
+    } else {
+      // zero-copy partition view
+      GraphPartition graph_partition(dynamic_cast<const ReorderedPartitionedGraph*>(graph_), partition_);
+      scan_->scan(&graph_partition, &scan_context_);
+    }
+  }
 };
 
 }  // namespace circinus

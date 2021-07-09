@@ -44,6 +44,7 @@ using circinus::Graph;
 using circinus::Scan;
 using circinus::NLFFilter;
 using circinus::QueryGraph;
+using circinus::QueryType;
 using circinus::QueryVertexID;
 using circinus::VertexID;
 using circinus::BipartiteGraph;
@@ -138,10 +139,12 @@ class TestExpandEdgeCosts : public testing::Test {
     auto op_filter = newExpandEdgeOperator(parent, target, cover, indices, q, false);
     auto op = op_filter.first;
     auto start = std::chrono::high_resolution_clock::now();
-    op->setCandidateSets(&candidates[target]);
-    op->input(seeds, &g);
+    circinus::CandidateSetView view(candidates[target]);
+    op->setCandidateSets(&view);
+    auto ctx = op->initTraverseContext(&seeds, &g, 0, seeds.size(), QueryType::Execute);
     std::vector<CompressedSubgraphs> outputs;
-    while (op->expand(&outputs, BATCH_SIZE) > 0) {
+    ctx->outputs = &outputs;
+    while (op->expand(BATCH_SIZE, ctx.get()) > 0) {
     }
     auto end = std::chrono::high_resolution_clock::now();
     delete op;
@@ -192,17 +195,19 @@ class TestExpandEdgeCosts : public testing::Test {
                                                    same_label_indices[1], same_label_indices[0], ~0u, filter);
     }
     auto start = std::chrono::high_resolution_clock::now();
-    op->setCandidateSets(&candidates[target]);
-    op->input(seeds, &g);
+    circinus::CandidateSetView view(candidates[target]);
+    op->setCandidateSets(&view);
+    auto ctx = op->initTraverseContext(&seeds, &g, 0, seeds.size(), QueryType::Execute);  
     if
       constexpr(use_bipartite_graph) {
         if (cover[parent] == 1 && cover[target] == 1) {
           bg = new circinus::GraphView<BipartiteGraph>(op->computeBipartiteGraphs(&g, candidates));
-          op->input(seeds, bg);
+          ctx = op->initTraverseContext(&seeds, bg, 0, seeds.size(), QueryType::Execute);
         }
       }
     std::vector<CompressedSubgraphs> outputs;
-    while (op->expand(&outputs, BATCH_SIZE) > 0) {
+    ctx->outputs = &outputs;
+    while (op->expand(BATCH_SIZE, ctx.get()) > 0) {
     }
     auto end = std::chrono::high_resolution_clock::now();
     auto ret = getNumSubgraphs(outputs);
@@ -221,16 +226,18 @@ class TestExpandEdgeCosts : public testing::Test {
     auto op_filter = newExpandEdgeOperator(parent, target, cover, indices, q, use_bipartite_graph);
     auto op_expand_edge = op_filter.first;
     start = std::chrono::high_resolution_clock::now();
-    op_expand_edge->setCandidateSets(&candidates[target]);
-    op_expand_edge->input(seeds, &g);
+    op_expand_edge->setCandidateSets(&view);
+    ctx = op_expand_edge->initTraverseContext(&seeds, &g, 0, seeds.size(), QueryType::Execute);  
     if
       constexpr(use_bipartite_graph) {
         if (cover[parent] == 1 && cover[target] == 1) {
           bg = new circinus::GraphView<BipartiteGraph>(op_expand_edge->computeBipartiteGraphs(&g, candidates));
-          op_expand_edge->input(seeds, bg);
+          ctx = op_expand_edge->initTraverseContext(&seeds, bg, 0, seeds.size(), QueryType::Execute);  
         }
       }
-    while (op_expand_edge->expand(&outputs, BATCH_SIZE) > 0) {
+
+    ctx->outputs = &outputs;
+    while (op_expand_edge->expand(BATCH_SIZE, ctx.get()) > 0) {
     }
     end = std::chrono::high_resolution_clock::now();
     EXPECT_EQ(ret, getNumSubgraphs(outputs));
@@ -284,6 +291,7 @@ class TestExpandEdgeCosts : public testing::Test {
         auto neighbors = q.getOutNeighbors(v);
         for (uint32_t nb = 0; nb < neighbors.second; ++nb) {
           auto target = neighbors.first[nb];
+          LOG(INFO) << v << " " << target;
           uint32_t n_output;
           { /* key to set */
             cover[v] = 1;
@@ -312,7 +320,6 @@ class TestExpandEdgeCosts : public testing::Test {
               ASSERT_EQ(n_output, getNumMatches(v, target, cover, candidates, seed_sets, g, q));
             }
           }
-          LOG(INFO) << "-------";
         }
       }
     }

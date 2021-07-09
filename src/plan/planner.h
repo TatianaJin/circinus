@@ -14,10 +14,15 @@
 
 #pragma once
 
+#include <algorithm>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
+
+#include "graph/types.h"
+#include "ops/order/order_base.h"
 #include "plan/backtracking_plan.h"
 #include "plan/candidate_pruning_plan.h"
 #include "plan/execution_plan.h"
@@ -35,11 +40,13 @@ class Planner {
   CandidatePruningPlan candidate_pruning_plan_;
 
   // TODO(tatiana): refactor for current framework
-  std::unique_ptr<NaivePlanner> planner_ = nullptr;
+  std::vector<std::unique_ptr<NaivePlanner>> planners_;
   std::unique_ptr<BacktrackingPlan> backtracking_plan_ = nullptr;
 
  public:
   explicit Planner(QueryContext& query_context) : query_context_(&query_context) {}
+
+  virtual ~Planner() {}
 
   /** Generates a candidate pruning plan.
    * A candidate pruning plan has three phases, which are all optional.
@@ -50,9 +57,55 @@ class Planner {
    */
   CandidatePruningPlan* generateCandidatePruningPlan();
 
-  CandidatePruningPlan* updateCandidatePruningPlan(const std::vector<VertexID>* cardinality);
+  CandidatePruningPlan* updateCandidatePruningPlan(const std::vector<std::vector<VertexID>>* cardinality);
 
-  BacktrackingPlan* generateExecutionPlan(const std::vector<VertexID>*, bool multithread = true);
+  std::vector<std::vector<VertexID>> estimateCardinality() const;
+
+  /** Generates a subgraph matching backtracking plan.
+   *
+   * First, for each graph partition, an execution plan containing a matching order and a compression strategy is
+   * generated to respect the local graph distribution in the partition. Then the subgraph matching problem is divided
+   * into multiple parallel subgraph matching tasks that find mappings of the query graph on different parts of the
+   * data graph. The outputs of the parallel tasks should contain no duplicate while jointly cover all valid matches.
+   *
+   * Each task uses the plan generated based on a partition x, when the majority of its expanded vertices on the data
+   * graph is in paritition x, so that the plan gives minimal computation workload. Since the matches may span over
+   * multiple graph partitions, some tasks must work on more than one partition. To decide which plan a task should use,
+   * a query vertex that has high connectivity/importance in the query graph is picked as the locality indicator. That
+   * is, if a match of the indicator query vertex is in partition x, most (if not all) data vertices that appear in the
+   * same embedding with this match are expected to be in partition x. The indicator serves as the primary partitioning
+   * query vertex so that each task only uses a partition of the candidate set for the query vertex.
+   * Then the whole search space for backtracking is divided by picking a scope of candidate vertices for each of the
+   * other query vertices.
+   */
+  BacktrackingPlan* generateExecutionPlan(const std::vector<std::vector<VertexID>>*, bool multithread = true);
+
+ private:
+  inline std::vector<VertexID> estimateCardinalityInner(const GraphMetadata* metadata) const {
+    std::vector<VertexID> ret;
+    ret.resize(query_context_->query_graph.getNumVertices(), metadata->getNumVertices());
+    for (uint32_t i = 0; i < query_context_->query_graph.getNumVertices(); ++i) {
+      if (metadata->hasLabelFrequency()) {
+        ret[i] = std::min(ret[i], metadata->getLabelFrequency(query_context_->query_graph.getVertexLabel(i)));
+      }
+      if (metadata->hasOutDegreeFrequency()) {
+        ret[i] = std::min(ret[i],
+                          metadata->getNumVerticesWithOutDegreeGE(query_context_->query_graph.getVertexOutDegree(i)));
+      }
+    }
+    return ret;
+  }
+
+  ExecutionPlan* generateExecutionPlan(const std::vector<VertexID>& cardinality, bool multithread);
+
+  /* start of interface for specifying partitioning strategy */
+  virtual std::vector<QueryVertexID> getPartitioningQueryVertices();  // based on query vertex occurence in covers
+  virtual std::vector<std::pair<uint32_t, std::vector<CandidateScope>>> generatePartitionedPlans(
+      const std::vector<QueryVertexID>& partitioning_qv);  // based on indicator partition only
+  virtual void newInputOperators(const QueryGraph& q, const std::vector<QueryVertexID>& partitioning_qvs);
+
+  virtual void newInputOperators();
+  /* end of interface for specifying partitioning strategy */
 };
 
 }  // namespace circinus

@@ -27,18 +27,20 @@ set(circinus_exec_sources
   ${PROJECT_SOURCE_DIR}/src/exec/result.cc
 )
 set(circinus_graph_sources
+  ${PROJECT_SOURCE_DIR}/src/graph/candidate_set_view.cc
   ${PROJECT_SOURCE_DIR}/src/graph/compressed_subgraphs.cc
   ${PROJECT_SOURCE_DIR}/src/graph/graph.cc
   ${PROJECT_SOURCE_DIR}/src/graph/graph_base.cc
+  ${PROJECT_SOURCE_DIR}/src/graph/graph_partition.cc
   ${PROJECT_SOURCE_DIR}/src/graph/partitioned_graph.cc
   ${PROJECT_SOURCE_DIR}/src/graph/query_graph.cc
 )
 set(circinus_ops_sources
-  ${PROJECT_SOURCE_DIR}/src/ops/expand_set_to_key_vertex_operator.cc
   ${PROJECT_SOURCE_DIR}/src/ops/expand_edge_operator.cc
   ${PROJECT_SOURCE_DIR}/src/ops/filters/gql_filter.cc
   ${PROJECT_SOURCE_DIR}/src/ops/filters/nlf_filter.cc
   ${PROJECT_SOURCE_DIR}/src/ops/filters/subgraph_filter.cc
+  ${PROJECT_SOURCE_DIR}/src/ops/logical/compressed_input.cc
   ${PROJECT_SOURCE_DIR}/src/ops/logical/filter/cfl_filter.cc
   ${PROJECT_SOURCE_DIR}/src/ops/logical/filter/dpiso_filter.cc
   ${PROJECT_SOURCE_DIR}/src/ops/logical/filter/gql_filter.cc
@@ -53,7 +55,6 @@ set(circinus_ops_sources
 set(circinus_plan_sources
   ${PROJECT_SOURCE_DIR}/src/plan/execution_plan.cc
   ${PROJECT_SOURCE_DIR}/src/plan/naive_planner.cc
-  ${PROJECT_SOURCE_DIR}/src/plan/operator_tree.cc
   ${PROJECT_SOURCE_DIR}/src/plan/planner.cc
 )
 set(circinus_utils_sources

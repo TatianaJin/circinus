@@ -43,7 +43,6 @@ class ExecutorManager {
    private:
     std::vector<std::thread> pool_;
     uint32_t n_threads_;
-    bool running_ = false;
 
    public:
     explicit ExecutorPool(uint32_t n_threads = FLAGS_num_cores) : n_threads_(n_threads) {}
@@ -55,19 +54,31 @@ class ExecutorManager {
     }
 
     void start(ThreadsafeTaskQueue* task_queue, ThreadsafeQueue<std::unique_ptr<TaskBase>>* finished_task);
-    inline void shutDown() { running_ = false; }
+    inline void shutDown(ThreadsafeTaskQueue* task_queue) {
+      for (uint32_t i = 0; i < n_threads_; ++i) {
+        task_queue->putTask(nullptr);
+      }
+    }
+    inline uint32_t getNumExecutors() const { return n_threads_; }
   } executors_;
 
   ThreadsafeQueue<ServerEvent>* reply_queue_;  // to server, not owned
   ThreadsafeTaskQueue task_queue_;
   ThreadsafeQueue<std::unique_ptr<TaskBase>> finished_tasks_;
 
-  unordered_map<QueryId, std::pair<ExecutionContext, std::unique_ptr<PlanDriver>>> execution_ctx_;
+  // stl is used as phmap invalidates the reference/pointer to element upon flat map mutation
+  std::unordered_map<QueryId, std::pair<ExecutionContext, std::unique_ptr<PlanDriver>>> execution_ctx_;
   std::mutex execution_ctx_mu_;
   std::thread finish_task_handler_;
 
  public:
   explicit ExecutorManager(ThreadsafeQueue<ServerEvent>* queue);
+
+  ~ExecutorManager() {
+    executors_.shutDown(&task_queue_);
+    finished_tasks_.push(nullptr);
+    finish_task_handler_.join();
+  }
 
   /* interface with circinus server, called by the circinus main thread */
   /**
@@ -76,6 +87,7 @@ class ExecutorManager {
   void run(QueryId qid, QueryContext* query_ctx, std::unique_ptr<PlanDriver>&& plan_driver);
   inline void clearQuery(QueryId qid) {
     std::lock_guard<std::mutex> lock(execution_ctx_mu_);
+    LOG(INFO) << "Query " << qid << " Finished.";
     execution_ctx_.erase(qid);
   }
 

@@ -14,108 +14,67 @@
 
 #pragma once
 
-#include <algorithm>
 #include <chrono>
 #include <fstream>
+#include <memory>
 #include <string>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
 #include "graph/bipartite_graph.h"
+#include "graph/candidate_set_view.h"
 #include "graph/compressed_subgraphs.h"
 #include "graph/graph.h"
+#include "graph/graph_partition.h"
+#include "graph/partitioned_graph.h"
 #include "graph/types.h"
 #include "ops/filters/subgraph_filter.h"
 #include "ops/operator.h"
-#include "ops/types.h"
-#include "utils/hashmap.h"
+#include "utils/query_utils.h"
 #include "utils/utils.h"
 
 namespace circinus {
 
-inline void removeExceptions(const std::pair<const VertexID*, uint32_t>& setPair, std::vector<VertexID>* res,
-                             const unordered_set<VertexID>& except = {}) {
-  for (uint32_t i = 0; i < setPair.second; ++i) {
-    auto vid = setPair.first[i];
-    if (except.count(vid) == 0) res->emplace_back(vid);
-  }
-}
-// binary search is more expensive when the two sets are similar
-inline void intersect_bs(const std::pair<const VertexID*, uint32_t>& set1,
-                         const std::pair<const VertexID*, uint32_t>& set2, std::vector<VertexID>* intersection,
-                         const unordered_set<VertexID>& except = {}) {
-  if (set1.second <= set2.second) {
-    intersection->reserve(set1.second);
-    auto lower_bound = set2.first;
-    for (uint32_t i = 0; i < set1.second; ++i) {
-      auto vid = set1.first[i];
-      lower_bound = std::lower_bound(lower_bound, set2.first + set2.second, vid);
-      uint32_t index = lower_bound - set2.first;
-      // if lower_bound is out of range, all elements in the rest of set2 are smaller than the rest of set1
-      if (index >= set2.second) {
-        break;
-      }
-      if (*lower_bound == vid && except.count(vid) == 0) intersection->emplace_back(vid);
-    }
-  } else {
-    intersect_bs(set2, set1, intersection, except);
-  }
-}
+class TraverseContext : public ProfileInfo {
+ private:
+  uint32_t input_index_ = 0;
+  uint32_t input_start_index_ = 0;
+  uint32_t input_end_index_ = 0;
+  const std::vector<CompressedSubgraphs>* current_inputs_ = nullptr;
 
-/** set1 and set2 must be sorted in ascending order */
-inline void intersect(const std::pair<const VertexID*, uint32_t>& set1,
-                      const std::pair<const VertexID*, uint32_t>& set2, std::vector<VertexID>* intersection,
-                      const unordered_set<VertexID>& except = {}) {
-  if (std::max(set1.second, set2.second) >= 32) {
-    intersect_bs(set1, set2, intersection, except);
-    return;
-  }
-  if (set1.second <= set2.second) {
-    intersection->reserve(set1.second);
-    uint32_t set2_index = 0;
-    for (uint32_t i = 0; i < set1.second; ++i) {
-      auto vid = set1.first[i];
-      while (set2_index < set2.second && set2.first[set2_index] < vid) {
-        ++set2_index;
-      }
-      if (set2_index == set2.second) {  // all elements in the rest of set2 are smaller than the rest of set1
-        break;
-      }
-      if (set2.first[set2_index] == vid && except.count(vid) == 0) intersection->emplace_back(vid);
-    }
-  } else {
-    intersect(set2, set1, intersection, except);
-  }
-}
+ public:
+  const void* current_data_graph = nullptr;
+  std::vector<CompressedSubgraphs>* outputs;
+  QueryType query_type;
 
-inline void intersect(const unordered_set<VertexID>& set1, const std::pair<const VertexID*, uint32_t>& set2,
-                      std::vector<VertexID>* intersection, const unordered_set<VertexID>& except = {}) {
-  intersection->reserve(std::min(set2.second, (uint32_t)set1.size()));
-  for (uint32_t i = 0; i < set2.second; ++i) {
-    auto vid = set2.first[i];
-    if (set1.count(vid) && except.count(vid) == 0) intersection->emplace_back(vid);
-  }
-}
+  TraverseContext() {}
+  TraverseContext(const std::vector<CompressedSubgraphs>* inputs, const void* data_graph)
+      : TraverseContext(inputs, data_graph, 0, inputs->size()) {}
 
-/** set1 and set2 must be sorted in ascending order */
-inline void intersect(const std::vector<VertexID>& set1, const std::pair<const VertexID*, uint32_t>& set2,
-                      std::vector<VertexID>* intersection, const unordered_set<VertexID>& except = {}) {
-  intersect(std::make_pair(set1.data(), (uint32_t)set1.size()), set2, intersection, except);
-}
+  TraverseContext(const std::vector<CompressedSubgraphs>* inputs, const void* data_graph, uint32_t input_index,
+                  uint32_t input_end_index)
+      : input_index_(input_index),
+        input_start_index_(input_index),
+        input_end_index_(input_end_index),
+        current_inputs_(inputs),
+        current_data_graph(data_graph) {}
 
-/** set1 and set2 must be sorted in ascending order */
-inline void intersect(const std::vector<VertexID>& set1, const std::vector<VertexID>& set2,
-                      std::vector<VertexID>* intersection, const unordered_set<VertexID>& except = {}) {
-  intersect(set1, std::make_pair(set2.data(), (uint32_t)set2.size()), intersection, except);
-}
+  virtual ~TraverseContext() {}
 
-void intersectInplace(const std::vector<VertexID>& set1, const std::pair<const VertexID*, uint32_t>& set2,
-                      std::vector<VertexID>* intersection);
+  inline const CompressedSubgraphs& getCurrentInput() const { return (*current_inputs_)[input_index_]; }
+  inline const CompressedSubgraphs& getPreviousInput() const { return (*current_inputs_)[input_index_ - 1]; }
+  inline bool hasNextInput() const { return input_index_ < input_end_index_; }
+  inline uint32_t getInputIndex() const { return input_index_; }
+  inline uint32_t getTotalInputSize() const { return input_index_ - input_start_index_; }
+  inline const auto getOutputs() const { return outputs; }
+
+  inline void nextInput() { ++input_index_; }
+  inline void clearOutputs() { outputs->clear(); }
+};
 
 class TraverseOperator : public Operator {
  protected:
-  const std::vector<VertexID>* candidates_ = nullptr;
+  const CandidateSetView* candidates_ = nullptr;
   const QueryVertexID target_vertex_;
 
   /* for non-repeated-vertex check */
@@ -123,25 +82,6 @@ class TraverseOperator : public Operator {
   std::vector<uint32_t> same_label_key_indices_;
   std::vector<uint32_t> same_label_set_indices_;
   SubgraphFilter* const subgraph_filter_ = nullptr;  // owned by the execution plan
-
-  /* transient variables for recording the current inputs */
-  uint32_t input_index_ = 0;
-  const std::vector<CompressedSubgraphs>* current_inputs_ = nullptr;
-  const void* current_data_graph_ = nullptr;
-
-  uint32_t current_inputs_size_ = 0;
-  /* for profiling */
-  uint64_t total_input_size_ = 0;
-  uint64_t total_output_size_ = 0;
-  uint64_t total_num_input_subgraphs_ = 0;
-  uint64_t total_num_output_subgraphs_ = 0;
-  double total_time_in_milliseconds_ = 0;
-  // to be updated in derived class
-  uint64_t intersection_count_ = 0;
-  uint64_t total_intersection_input_size_ = 0;
-  uint64_t total_intersection_output_size_ = 0;
-  uint64_t distinct_intersection_count_ =
-      0;  // the minimal number of intersection needed if all intersection function call results can be cached
 
   std::vector<std::pair<bool, uint32_t>> matching_order_indices_;
 
@@ -158,107 +98,98 @@ class TraverseOperator : public Operator {
         subgraph_filter_(filter) {}
   virtual ~TraverseOperator() {}
 
-  inline virtual void setCandidateSets(const std::vector<VertexID>* candidates) { candidates_ = candidates; }
-  inline const std::vector<VertexID>* getCandidateSet() const { return candidates_; }
-  inline const uint32_t getInputIndex() const { return input_index_; }
-  inline const auto& getSameLabelKeyIndices() const { return same_label_key_indices_; }
-  inline const auto& getSameLabelSetIndices() const { return same_label_set_indices_; }
-  inline auto getSetPruningThreshold() const { return set_pruning_threshold_; }
-  inline auto getCurrentDataGraph() const { return current_data_graph_; }
-  inline QueryVertexID getTargetQueryVertex() const { return target_vertex_; }
-
-  inline const auto& getMatchingOrderIndices() const { return matching_order_indices_; }
+  /* setters */
+  inline virtual void setCandidateSets(const CandidateSetView* candidates) { candidates_ = candidates; }
   inline void setMatchingOrderIndices(std::vector<std::pair<bool, uint32_t>>&& matching_order_indices) {
     matching_order_indices_ = std::move(matching_order_indices);
   }
 
-  inline bool filter(const CompressedSubgraphs& subgraphs) {
+  /* getters */
+  inline const CandidateSetView* getCandidateSet() const { return candidates_; }
+  inline const auto& getSameLabelKeyIndices() const { return same_label_key_indices_; }
+  inline const auto& getSameLabelSetIndices() const { return same_label_set_indices_; }
+  inline auto getSetPruningThreshold() const { return set_pruning_threshold_; }
+  inline QueryVertexID getTargetQueryVertex() const { return target_vertex_; }
+  inline const auto& getMatchingOrderIndices() const { return matching_order_indices_; }
+
+  inline bool filter(const CompressedSubgraphs& subgraphs) const {
     DCHECK(subgraph_filter_ != nullptr);
     return subgraph_filter_->filter(subgraphs);
   }
 
-  inline uint32_t filter(std::vector<CompressedSubgraphs>& subgraphs, uint32_t start, uint32_t end) {
+  inline uint32_t filter(std::vector<CompressedSubgraphs>& subgraphs, uint32_t start, uint32_t end) const {
     DCHECK(subgraph_filter_ != nullptr);
     return subgraph_filter_->filter(subgraphs, start, end);
   }
 
-  virtual std::vector<BipartiteGraph*> computeBipartiteGraphs(
-      const Graph* g, const std::vector<std::vector<VertexID>>& candidate_sets) = 0;
-
-  virtual void input(const std::vector<CompressedSubgraphs>& inputs, const void* data_graph) {
-    current_inputs_ = &inputs;
-    input_index_ = 0;
-    current_data_graph_ = data_graph;
+  // for backward compabilitity of tests
+  inline std::vector<std::unique_ptr<BipartiteGraph>> computeBipartiteGraphs(
+      const Graph* g, const std::vector<std::vector<VertexID>>& candidate_sets) {
+    std::vector<CandidateSetView> views(candidate_sets.begin(), candidate_sets.end());
+    return computeBipartiteGraphs(g, views);
   }
 
-  virtual uint32_t expand(std::vector<CompressedSubgraphs>* outputs, uint32_t cap) = 0;
+  virtual std::vector<std::unique_ptr<BipartiteGraph>> computeBipartiteGraphs(
+      const Graph* g, const std::vector<CandidateSetView>& candidate_sets) = 0;
 
-  virtual void inputAndProfile(const std::vector<CompressedSubgraphs>& inputs, const void* data_graph) {
-    input(inputs, data_graph);
-    current_inputs_size_ = inputs.size();
-    total_input_size_ += inputs.size();
+  virtual std::vector<std::unique_ptr<GraphPartitionBase>> computeGraphPartitions(
+      const ReorderedPartitionedGraph* g, const std::vector<CandidateScope>& candidate_scopes) const = 0;
+
+  virtual std::unique_ptr<TraverseContext> initTraverseContext(const std::vector<CompressedSubgraphs>* inputs,
+                                                               const void* graph, uint32_t input_start,
+                                                               uint32_t input_end, QueryType profile) const {
+    auto ret = std::make_unique<TraverseContext>(inputs, graph, input_start, input_end);
+    ret->query_type = profile;
+    return ret;
   }
 
-  uint32_t expandAndProfile(std::vector<CompressedSubgraphs>* outputs, uint32_t cap, uint32_t query_type) {
+  virtual uint32_t expand(uint32_t cap, TraverseContext* ctx) const = 0;
+
+  uint32_t expandAndProfile(uint32_t cap, TraverseContext* ctx) const {
     auto start = std::chrono::high_resolution_clock::now();
-    auto n = expandAndProfileInner(outputs, cap, query_type);
+    auto n = expandAndProfileInner(cap, ctx);
     auto stop = std::chrono::high_resolution_clock::now();
-    total_time_in_milliseconds_ +=
+    ctx->total_time_in_milliseconds +=
         (std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start).count() / 1000000.0);
     {
       uint32_t size = 0;
-      auto offset = outputs->size() - n;
+      auto offset = ctx->outputs->size() - n;
       for (uint32_t i = 0; i < n; ++i) {
-        if ((*outputs)[offset + i].getNumIsomorphicSubgraphs(1) == 0) {
+        if ((*(ctx->outputs))[offset + i].getNumIsomorphicSubgraphs(1) == 0) {
           // CHECK(false) << toString() << "\n\t" << (*outputs)[offset + i].toString();
           continue;
         }
         if (size != i) {
-          (*outputs)[offset + size] = std::move((*outputs)[offset + i]);
+          (*(ctx->outputs))[offset + size] = std::move((*(ctx->outputs))[offset + i]);
         }
         ++size;
       }
-      outputs->erase(outputs->begin() + (offset + size), outputs->end());
+      ctx->outputs->erase(ctx->outputs->begin() + (offset + size), ctx->outputs->end());
       n = size;
     }
     if (false) {
-      std::ofstream ss("output_" + std::to_string(outputs->front().getNumVertices()), std::ofstream::app);
-      for (auto& output : *outputs) {
+      std::ofstream ss("output_" + std::to_string(ctx->outputs->front().getNumVertices()), std::ofstream::app);
+      for (auto& output : *(ctx->outputs)) {
         output.logEnumerated(ss, matching_order_indices_);
       }
     }
-    total_num_output_subgraphs_ += getNumSubgraphs(*outputs, outputs->size() - n, outputs->size());
-    total_output_size_ += n;
+    ctx->total_num_output_subgraphs += getNumSubgraphs(*(ctx->outputs), ctx->outputs->size() - n, ctx->outputs->size());
+    ctx->total_output_size += n;
     return n;
   }
 
-  void updateIntersectInfo(uint32_t input_size, uint32_t output_size) {
-    ++intersection_count_;
-    total_intersection_input_size_ += input_size;
-    total_intersection_output_size_ += output_size;
-  }
-
-  std::string toProfileString() const override {
+  // FIXME(tatiana): profile info interface
+  std::string toProfileString(TraverseContext* ctx) const {
     std::stringstream ss;
-    ss << toString() << ',' << total_time_in_milliseconds_ << ',' << getTotalInputSize() << ',' << total_output_size_
-       << ',' << total_num_input_subgraphs_ << ',' << total_num_output_subgraphs_ << ',' << intersection_count_ << ','
-       << total_intersection_input_size_ << ',' << total_intersection_output_size_ << ','
-       << distinct_intersection_count_;
+    ss << toString() << ',' << ctx->total_time_in_milliseconds << ',' << ctx->getTotalInputSize() << ','
+       << ctx->total_output_size << ',' << ctx->total_num_input_subgraphs << ',' << ctx->total_num_output_subgraphs
+       << ',' << ctx->intersection_count << ',' << ctx->total_intersection_input_size << ','
+       << ctx->total_intersection_output_size << ',' << ctx->distinct_intersection_count;
     return ss.str();
   }
 
-  inline uint64_t getIntersectionCount() const { return intersection_count_; }
-
-  inline uint64_t getTotalIntersectionInputSize() const { return total_intersection_input_size_; }
-
-  inline uint64_t getTotalIntersectionOutputSize() const { return total_intersection_output_size_; }
-
-  inline uint64_t getDistinctIntersectionCount() const { return distinct_intersection_count_; }
-
  protected:
-  virtual uint32_t expandAndProfileInner(std::vector<CompressedSubgraphs>* outputs, uint32_t cap,
-                                         uint32_t query_type) = 0;
-  inline uint32_t getTotalInputSize() const { return total_input_size_ - (current_inputs_size_ - input_index_); }
+  virtual uint32_t expandAndProfileInner(uint32_t cap, TraverseContext* ctx) const = 0;
 };
 
 }  // namespace circinus

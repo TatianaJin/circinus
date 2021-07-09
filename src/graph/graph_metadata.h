@@ -72,6 +72,11 @@ class GraphMetadata {
         auto& offsets = g.getLabelOffsetsInPartition(partition);
         for (auto& pair : offsets) {
           pm.label_frequency_.insert({pair.first, pair.second.second - pair.second.first});
+          if (label_frequency_.find(pair.first) != label_frequency_.end()) {
+            label_frequency_[pair.first] += pair.second.second - pair.second.first;
+          } else {
+            label_frequency_.insert({pair.first, pair.second.second - pair.second.first});
+          }
         }
       }
     }

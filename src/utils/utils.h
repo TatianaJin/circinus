@@ -18,7 +18,9 @@
 #include <memory>
 #include <queue>
 #include <string>
+#include <unordered_set>
 #include <vector>
+
 #include "graph/compressed_subgraphs.h"
 #include "graph/graph.h"
 #include "graph/query_graph.h"
@@ -27,9 +29,10 @@
 
 namespace circinus {
 
-const uint64_t INVALID_VERTEX_ID = 0xffffffffffffffff;
+#define toSeconds(start, end) \
+  (((double)std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count()) / 1e9)
 
-using circinus::QueryGraph;
+const uint64_t INVALID_VERTEX_ID = 0xffffffffffffffff;
 
 static void dfs(QueryVertexID cur_vertex, const std::vector<TreeNode>& dfs_tree,
                 std::vector<QueryVertexID>& dfs_order) {
@@ -126,6 +129,13 @@ static inline uint64_t getNumSubgraphs(const std::vector<CompressedSubgraphs>& g
     count += groups[i].getNumSubgraphs();
   }
   return count;
+}
+
+inline void removeExceptions(const VertexSetView& set, std::vector<VertexID>* res,
+                             const unordered_set<VertexID>& except = {}) {
+  for (auto vid : set) {
+    if (except.count(vid) == 0) res->emplace_back(vid);
+  }
 }
 
 #ifdef __GNUG__

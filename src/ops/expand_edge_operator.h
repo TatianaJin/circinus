@@ -14,15 +14,42 @@
 
 #pragma once
 
+#include <memory>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "graph/types.h"
 #include "ops/filters/subgraph_filter.h"
 #include "ops/traverse_operator.h"
+#include "ops/types.h"
 #include "utils/hashmap.h"
 
 namespace circinus {
+
+class ExpandEdgeTraverseContext : public TraverseContext {
+  unordered_set<VertexID> parent_set_;  // for profile
+
+ public:
+  ExpandEdgeTraverseContext(const std::vector<CompressedSubgraphs>* inputs, const void* data_graph,
+                            uint32_t input_index, uint32_t input_end_index)
+      : TraverseContext(inputs, data_graph, input_index, input_end_index) {}
+
+  template <QueryType profile>
+  inline void updateIntersection(uint32_t input_size, uint32_t output_size, VertexID parent) {
+    if
+      constexpr(isProfileMode(profile)) {
+        if
+          constexpr(isProfileWithMiniIntersectionMode(profile)) {
+            distinct_intersection_count += parent_set_.insert(parent).second;
+          }
+        total_intersection_input_size += input_size;
+        total_intersection_output_size += output_size;
+      }
+  }
+
+  inline bool hasIntersectionParent(VertexID parent_match) { return parent_set_.insert(parent_match).second; }
+};
 
 class ExpandEdgeOperator : public TraverseOperator {
  protected:
@@ -69,12 +96,28 @@ class ExpandEdgeOperator : public TraverseOperator {
 
   virtual ~ExpandEdgeOperator() {}
 
-  std::vector<BipartiteGraph*> computeBipartiteGraphs(
-      const Graph* g, const std::vector<std::vector<VertexID>>& candidate_sets) override {
-    std::vector<BipartiteGraph*> ret;
+  std::unique_ptr<TraverseContext> initTraverseContext(const std::vector<CompressedSubgraphs>* inputs,
+                                                       const void* graph, uint32_t start, uint32_t end,
+                                                       QueryType profile) const override {
+    auto ret = std::make_unique<ExpandEdgeTraverseContext>(inputs, graph, start, end);
+    ret->query_type = profile;
+    return ret;
+  }
+
+  std::vector<std::unique_ptr<BipartiteGraph>> computeBipartiteGraphs(
+      const Graph* g, const std::vector<CandidateSetView>& candidate_sets) override {
+    std::vector<std::unique_ptr<BipartiteGraph>> ret;
     ret.reserve(1);
-    ret.emplace_back(new BipartiteGraph(parent_id_, target_vertex_));
-    ret.back()->populateGraph(g, &candidate_sets);
+    ret.emplace_back(std::make_unique<BipartiteGraph>(parent_id_, target_vertex_));
+    ret.back()->populateGraph(g, candidate_sets);
+    return ret;
+  }
+
+  std::vector<std::unique_ptr<GraphPartitionBase>> computeGraphPartitions(
+      const ReorderedPartitionedGraph* g, const std::vector<CandidateScope>& candidate_scopes) const override {
+    std::vector<std::unique_ptr<GraphPartitionBase>> ret;
+    ret.emplace_back(
+        GraphPartitionBase::createGraphPartition(candidate_scopes[parent_id_], candidate_scopes[target_vertex_], g));
     return ret;
   }
 

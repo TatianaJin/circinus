@@ -14,41 +14,43 @@
 
 #pragma once
 
+#include <memory>
 #include <utility>
 #include <vector>
 
 #include "graph/types.h"
+#include "graph/vertex_set_view.h"
 
 namespace circinus {
 
 template <typename G>
 class GraphView {
   /** Each graph corresponds to a query graph edge in `Expand` */
-  std::vector<G*> graphs_;  // owned, need to delete upon destruction
+  std::vector<std::unique_ptr<G>> graphs_;  // owned, need to delete upon destruction
 
  public:
-  explicit GraphView(std::vector<G*>&& graphs) : graphs_(std::move(graphs)) {}
-
-  ~GraphView() {
-    for (auto g : graphs_) {
-      delete g;
-    }
-    graphs_.clear();
-  }
+  explicit GraphView(std::vector<std::unique_ptr<G>>&& graphs) : graphs_(std::move(graphs)) {}
 
   /**
-   * nbr_label Hint of the label of out neighbors. The results do not guarantee that the hint is used.
+   * @param nbr_label Hint of the label of out neighbors. The results do not guarantee that the hint is used.
    */
   inline VertexID getVertexOutDegreeWithHint(VertexID id, LabelID nbr_label, uint32_t graph_idx) const {
     return graphs_[graph_idx]->getVertexOutDegreeWithHint(id, nbr_label);
   }
 
+  inline VertexID getVertexInDegreeWithHint(VertexID id, LabelID nbr_label, uint32_t graph_idx) const {
+    return graphs_[graph_idx]->getVertexInDegreeWithHint(id, nbr_label);
+  }
+
   /**
-   * nbr_label Hint of the label of out neighbors. The results do not guarantee that the hint is used.
+   * @param nbr_label Hint of the label of out neighbors. The results do not guarantee that the hint is used.
    */
-  inline std::pair<const VertexID*, uint32_t> getOutNeighborsWithHint(VertexID id, LabelID nbr_label,
-                                                                      uint32_t graph_idx) const {
+  inline VertexSetView getOutNeighborsWithHint(VertexID id, LabelID nbr_label, uint32_t graph_idx) const {
     return graphs_[graph_idx]->getOutNeighborsWithHint(id, nbr_label);
+  }
+
+  inline VertexSetView getInNeighborsWithHint(VertexID id, LabelID nbr_label, uint32_t graph_idx) const {
+    return graphs_[graph_idx]->getInNeighborsWithHint(id, nbr_label);
   }
 };
 
