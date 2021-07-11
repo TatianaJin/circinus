@@ -256,11 +256,14 @@ BacktrackingPlan* Planner::generateExecutionPlan(const CandidateResult* result, 
   for (uint32_t i = 0; i < candidate_cardinality.size(); ++i) {
     auto& stats = candidate_cardinality[i];
     // TODO(tatiana): apply the state-of-the-art matching order strategies, compute the orders only
-    std::vector<CandidateScope> scope(n_qvs, CandidateScope(i));
+    std::vector<CandidateScope> scopes(n_qvs);
+    for (auto& scope : scopes) {
+      scope.usePartition(i);
+    }
 
     auto order_generator = OrderGenerator(query_context_->data_graph, query_context_->graph_metadata->getPartition(i),
                                           &query_context_->query_graph,
-                                          ((PartitionedCandidateResult*)result)->getCandidatesByScopes(scope), stats);
+                                          ((PartitionedCandidateResult*)result)->getCandidatesByScopes(scopes), stats);
     auto use_order = order_generator.getOrder(query_context_->query_config.order_strategy);
     backtracking_plan_->addPlan(generateExecutionPlan(stats, use_order, multithread));
   }

@@ -30,7 +30,8 @@
 namespace circinus {
 
 /** The projection of the data graph on two sets of vertices */
-class BipartiteGraph : public Graph {  // Overwrite variable:vlist_,elist_,n_vertices_  function:getVertexOutDegree,getOutNeighbors
+class BipartiteGraph
+    : public Graph {  // Overwrite variable:vlist_,elist_,n_vertices_  function:getVertexOutDegree,getOutNeighbors
  private:
   unordered_map<VertexID, uint32_t> offset_by_vertex_;
   bool populated_ = false;
@@ -41,6 +42,8 @@ class BipartiteGraph : public Graph {  // Overwrite variable:vlist_,elist_,n_ver
  public:
   BipartiteGraph(VertexID id1, VertexID id2) : Graph(), source_id_(id1), destination_id_(id2) {}
 
+  inline QueryVertexID getSourceId() const { return source_id_; }
+
   inline void populateGraph(const Graph* g, const std::vector<CandidateSetView>& candidate_sets) {
     populateGraph(g, candidate_sets[source_id_], candidate_sets[destination_id_]);
   }
@@ -49,9 +52,7 @@ class BipartiteGraph : public Graph {  // Overwrite variable:vlist_,elist_,n_ver
   void populateGraph(const Graph* g, const CandidateSetView& candidate_set1, const CandidateSetView& candidate_set2) {
     if (populated_) return;
 
-
     populated_ = true;
-
     unordered_set<VertexID> vset(candidate_set2.begin(), candidate_set2.end());
     n_vertices_ = candidate_set1.size();
     vlist_.reserve(n_vertices_ + 1);
@@ -72,6 +73,11 @@ class BipartiteGraph : public Graph {  // Overwrite variable:vlist_,elist_,n_ver
 
   std::pair<uint64_t, uint64_t> getProfilePair() const {
     return {bipartite_graph_intersection_input_size_, bipartite_graph_intersection_output_size_};
+  }
+
+  inline uint32_t getOffset(VertexID id) const {
+    CHECK_EQ(offset_by_vertex_.count(id), 1) << " id " << id;
+    return offset_by_vertex_.at(id);
   }
 
   /**

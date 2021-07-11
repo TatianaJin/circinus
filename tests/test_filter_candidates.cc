@@ -27,23 +27,30 @@
 #endif
 #include "gtest/gtest.h"
 
+#include "graph/candidate_set_view.h"
 #include "graph/compressed_subgraphs.h"
 #include "graph/graph.h"
+#include "graph/graph_metadata.h"
 #include "graph/query_graph.h"
 #include "ops/filters.h"
 #include "ops/logical_filters.h"
 #include "ops/operators.h"
+#include "ops/order_generator.h"
 #include "ops/scans.h"
-#include "ops/stateful_filter_and_order.h"
 #include "ops/types.h"
 #include "plan/execution_plan.h"
 #include "plan/naive_planner.h"
 #include "utils/flags.h"
 #include "utils/hashmap.h"
 #include "utils/profiler.h"
+#include "utils/query_utils.h"
 #include "utils/utils.h"
-using circinus::StatefulFilterAndOrder;
 
+using circinus::OrderStrategy;
+using circinus::CandidateSetView;
+using circinus::GraphBase;
+using circinus::GraphMetadata;
+using circinus::OrderGenerator;
 using circinus::CompressedSubgraphs;
 using circinus::ExecutionConfig;
 using circinus::ExecutionPlan;
@@ -64,7 +71,7 @@ using circinus::LogicalCFLFilter;
 using circinus::LogicalGQLFilter;
 using circinus::LogicalNLFFilter;
 using circinus::LogicalTSOFilter;
-using circinus::LogicalDPISOFilter;
+using circinus::LogicalDAFFilter;
 using circinus::LogicalNeighborhoodFilter;
 
 // physical filter
@@ -79,14 +86,15 @@ using circinus::GQLFilter;
 const std::vector<std::string> datasets_ = {"dblp",    "eu2005",  "hprd",  "human",
                                             "patents", "wordnet", "yeast", "youtube"};
 const char data_dir[] = "/data/share/project/haxe/data/subgraph_matching_datasets";
-const char answer_dir[] = "/data/share/users/qlma/circinus-test/answer/";
+const char cs_answer_dir[] = "/data/share/users/qlma/circinus-test/answer/";
+const char order_answer_dir[] = "/data/share/users/qlma/circinus-test/order/answer/";
 const std::vector<int> query_size_list = {4, 8, 12, 16, 20, 24, 32};
 const std::vector<std::string> query_mode_list = {"dense", "sparse"};
 const std::pair<int, int> query_index_range = {1, 200};
 
-
-std::vector<std::vector<VertexID>> getCandidateSets(const Graph& g, const QueryGraph& q,
-                                                    const std::string& filter_str) {
+std::pair<std::vector<std::vector<VertexID>>, std::vector<VertexID>> getCandidateSets(const Graph& g,
+                                                                                      const QueryGraph& q,
+                                                                                      const std::string& filter_str) {
   std::vector<std::vector<VertexID>> candidates(q.getNumVertices());
   std::vector<VertexID> candidate_size(q.getNumVertices());
   ExecutionConfig config;
@@ -109,7 +117,7 @@ std::vector<std::vector<VertexID>> getCandidateSets(const Graph& g, const QueryG
     if (filter_str.compare("cfl") == 0) {
       logical_filter = std::make_unique<LogicalCFLFilter>(metadata, &q, candidate_size);
     } else if (filter_str.compare("dpiso") == 0) {
-      logical_filter = std::make_unique<LogicalDPISOFilter>(metadata, &q, candidate_size);
+      logical_filter = std::make_unique<LogicalDAFFilter>(metadata, &q, candidate_size);
     } else if (filter_str.compare("tso") == 0) {
       logical_filter = std::make_unique<LogicalTSOFilter>(metadata, &q, candidate_size);
     } else if (filter_str.compare("gql") == 0) {
@@ -134,11 +142,36 @@ std::vector<std::vector<VertexID>> getCandidateSets(const Graph& g, const QueryG
     //   LOG(INFO) << "query vertex " << i << " candidate size: " << candidates[i].size() << '\n';
     // }
   }
-  return candidates;
+  return std::make_pair(candidates, candidate_size);
 }
 
+std::vector<QueryVertexID> getOrder(const Graph* data_graph, const QueryGraph* query_graph,
+                                    const std::vector<std::vector<VertexID>>& candidates,
+                                    const std::vector<VertexID>& candidate_sizes, const std::string& filter_str) {
+  auto metadata = GraphMetadata(*data_graph);
+  std::vector<CandidateSetView> candidate_views;
+  candidate_views.reserve(candidates.size());
+  for (auto& candidate : candidates) {
+    candidate_views.emplace_back(candidate);
+  }
 
-void run(const std::string& dataset, const std::string& filter, std::vector<std::string>& answers) {
+  OrderGenerator order_generator =
+      OrderGenerator((const GraphBase*)data_graph, metadata, query_graph, candidate_views, candidate_sizes);
+  if (filter_str.compare("cfl") == 0) {
+    return order_generator.getOrder(OrderStrategy::CFL);
+  } else if (filter_str.compare("dpiso") == 0) {
+    return order_generator.getOrder(OrderStrategy::DAF);
+  } else if (filter_str.compare("tso") == 0) {
+    return order_generator.getOrder(OrderStrategy::TSO);
+  } else if (filter_str.compare("gql") == 0) {
+    return order_generator.getOrder(OrderStrategy::GQL);
+  } else {
+    return order_generator.getOrder(OrderStrategy::None);
+  }
+}
+
+void run(const std::string& dataset, const std::string& filter, std::vector<std::string>& CSAnswers,
+         std::vector<std::string>& OAnswers) {
   auto graph_path = dataset + "/data_graph/" + dataset + ".graph";
   auto data_dir_str = std::string(data_dir);
   Graph g(data_dir_str + "/" + graph_path);  // load data graph
@@ -154,23 +187,30 @@ void run(const std::string& dataset, const std::string& filter, std::vector<std:
         std::ifstream infile(query_dir);
         if (!infile) continue;
         QueryGraph q(query_dir);  // load query graph
-        std::stringstream ss;
-        ss << dataset << ',' << query_size << ',' << query_mode << ',' << i << ':';
-        auto[lf, candidates] =
-            StatefulFilterAndOrder::getCandidateSets(g, q, filter);  // get candidates for each query vertex
+        std::stringstream ss1, ss2;
+        ss1 << dataset << ',' << query_size << ',' << query_mode << ',' << i << ':';
+        ss2 << dataset << ',' << query_size << ',' << query_mode << ',' << i << ':';
+        auto[candidates, candidate_size] = getCandidateSets(g, q, filter);  // get candidates for each query vertex
+        auto order = getOrder(&g, &q, candidates, candidate_size, filter);
         for (auto v : candidates) {
-          ss << v.size() << ' ';
+          ss1 << v.size() << ' ';
         }
-        std::string result_str = ss.str();
-        result_str.pop_back();
-        std::string expect_str = answers[index++];
-        EXPECT_EQ(result_str, expect_str);
+        for (auto v : order) {
+          ss2 << v << ' ';
+        }
+        std::string result_str1 = ss1.str(), result_str2 = ss2.str();
+        result_str1.pop_back();
+        result_str2.pop_back();
+        std::string expect_str1 = CSAnswers[index];
+        std::string expect_str2 = OAnswers[index];
+        ++index;
+        EXPECT_EQ(result_str1, expect_str1);
+        EXPECT_EQ(result_str2, expect_str2);
       }
 }
 
-bool getAnswers(const std::string& filter, const std::string& dataset, std::vector<std::string>& answers) {
-  auto answer_path = std::string(answer_dir) + filter;
-  std::ifstream in(answer_path);
+bool getAnswers(const std::string& path, const std::string& dataset, std::vector<std::string>& answers) {
+  std::ifstream in(path);
   if (in) {
     std::string line;
     while (getline(in, line)) {
@@ -182,11 +222,22 @@ bool getAnswers(const std::string& filter, const std::string& dataset, std::vect
   }
 }
 
+bool getCSAnswers(const std::string& filter, const std::string& dataset, std::vector<std::string>& CSAnswers) {
+  auto answer_path = std::string(cs_answer_dir) + filter;
+  return getAnswers(answer_path, dataset, CSAnswers);
+}
+bool getOrderAnswers(const std::string& filter, const std::string& dataset, std::vector<std::string>& OAnswers) {
+  auto answer_path = std::string(order_answer_dir) + filter;
+  return getAnswers(answer_path, dataset, OAnswers);
+}
+
 void filterTest(std::string filter, std::string dataset) {
-  std::vector<std::string> answers;
-  bool res = getAnswers(filter, dataset, answers);
+  std::vector<std::string> CSAnswers, OAnswers;
+  bool res = getCSAnswers(filter, dataset, CSAnswers);
   EXPECT_EQ(res, true);
-  run(dataset, filter, answers);
+  res = getOrderAnswers(filter, dataset, OAnswers);
+  EXPECT_EQ(res, true);
+  run(dataset, filter, CSAnswers, OAnswers);
 }
 
 TEST(TestCFLFilterCandidates, dblp) { filterTest("cfl", "dblp"); }

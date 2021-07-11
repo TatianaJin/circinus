@@ -34,7 +34,15 @@
 namespace circinus {
 class OrderGenerator {
  private:
-  std::map<std::pair<QueryVertexID, QueryVertexID>, BipartiteGraph> bg_map_;
+  struct hash_pair {
+    template <class T1, class T2>
+    size_t operator()(const std::pair<T1, T2>& p) const {
+      auto hash1 = std::hash<T1>{}(p.first);
+      auto hash2 = std::hash<T2>{}(p.second);
+      return hash1 ^ hash2;
+    }
+  };
+  std::unordered_map<std::pair<QueryVertexID, QueryVertexID>, BipartiteGraph, hash_pair> bg_map_;
 
   const GraphBase* data_graph_;
   const QueryGraph* query_graph_;
@@ -157,7 +165,7 @@ class OrderGenerator {
 
     size_t sum = 0;
     for (auto& v : candidates_[path[begin]]) {
-      int offset = last_edge->getOffset(v);
+      uint32_t offset = last_edge->getOffset(v);
       children[offset] = last_edge->getVertexOutDegree(v);
       sum += children[offset];
     }
@@ -171,11 +179,11 @@ class OrderGenerator {
       parent.resize(edge->getNumVertices());
 
       sum = 0;
+      CHECK_EQ(path[end], last_edge->getSourceId());
       for (auto& v : candidates_[path[begin]]) {
         size_t local_sum = 0;
-        auto[nbrs, cnt] = edge->getOutNeighbors(v);
-        for (uint32_t j = 0; j < cnt; ++j) {
-          auto nbr = nbrs[j];
+        auto vertex_view = edge->getOutNeighborsWithHint(v);
+        for (auto nbr : vertex_view) {
           local_sum += children[last_edge->getOffset(nbr)];
         }
         parent[edge->getOffset(v)] = local_sum;

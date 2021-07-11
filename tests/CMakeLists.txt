@@ -40,13 +40,6 @@ if(GTEST_FOUND)
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
   )
 
-  add_executable(TestFAO unittest_main.cc test_filter_and_order.cc)
-  target_link_libraries(TestFAO circinus ${GTEST_LIBRARY} ${EXTERNAL_LIBRARY})
-  add_test(NAME TestFAO
-    COMMAND TestFAO
-    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-  )
-
   add_executable(TestMetis unittest_main.cc test_metis.cc)
   target_link_libraries(TestMetis circinus ${GTEST_LIBRARY} ${EXTERNAL_LIBRARY})
   add_test(NAME TestMetis

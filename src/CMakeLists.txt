@@ -43,7 +43,7 @@ set(circinus_ops_sources
   ${PROJECT_SOURCE_DIR}/src/ops/input_operator.cc
   ${PROJECT_SOURCE_DIR}/src/ops/logical/compressed_input.cc
   ${PROJECT_SOURCE_DIR}/src/ops/logical/filter/cfl_filter.cc
-  ${PROJECT_SOURCE_DIR}/src/ops/logical/filter/dpiso_filter.cc
+  ${PROJECT_SOURCE_DIR}/src/ops/logical/filter/daf_filter.cc
   ${PROJECT_SOURCE_DIR}/src/ops/logical/filter/gql_filter.cc
   ${PROJECT_SOURCE_DIR}/src/ops/logical/filter/nlf_filter.cc
   ${PROJECT_SOURCE_DIR}/src/ops/logical/filter/tso_filter.cc
