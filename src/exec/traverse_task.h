@@ -20,6 +20,9 @@
 #include <vector>
 
 #include "glog/logging.h"
+#ifdef WITH_GPERF
+#include "gperftools/profiler.h"
+#endif
 
 #include "exec/task.h"
 #include "graph/graph.h"
@@ -64,6 +67,8 @@ class TraverseChainTask : public TaskBase {
   const auto& getProfileInfo() const { return profile_info_; }
 
   void run(uint32_t executor_idx) override {
+    // auto profile_output = "Task " + std::to_string(task_id_);
+    // ProfilerStart(profile_output.data());
     setupCandidateSets();
 
     auto old_count = dynamic_cast<OutputOperator*>(operators_.back())->getOutput()->getCount(executor_idx);
@@ -72,6 +77,7 @@ class TraverseChainTask : public TaskBase {
     execute<QueryType::Execute>(inputs, 0, executor_idx);
     auto new_count = dynamic_cast<OutputOperator*>(operators_.back())->getOutput()->getCount(executor_idx);
     LOG(INFO) << "Task " << task_id_ << " input " << inputs.size() << " count " << (new_count - old_count);
+    // ProfilerStop();
   }
 
   void profile(uint32_t executor_idx) override {

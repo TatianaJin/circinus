@@ -302,7 +302,6 @@ BacktrackingPlan* Planner::generateExecutionPlan(const std::vector<std::vector<V
 
   backtracking_plan_ = std::make_unique<BacktrackingPlan>();
   // generate a logical plan for each partition
-  auto n_qvs = query_context_->query_graph.getNumVertices();
   for (auto& stats : *candidate_cardinality) {
     backtracking_plan_->addPlan(generateExecutionPlan(stats, use_order, multithread));
   }

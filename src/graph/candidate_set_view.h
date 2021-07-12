@@ -27,6 +27,7 @@ namespace circinus {
 class CandidateSetView : public VertexSetView {
  public:
   CandidateSetView() {}
+  using ConstIterator = const VertexID*;
 
   explicit CandidateSetView(const std::vector<VertexID>& candidates) {
     addRange(candidates.data(), candidates.data() + candidates.size());
@@ -36,6 +37,9 @@ class CandidateSetView : public VertexSetView {
                    const std::vector<VertexID>& partition_offsets);
 
   CandidateSetView(const std::vector<std::vector<VertexID>>& partitioned_candidates, const CandidateScope& scope);
+
+  inline ConstIterator begin() const { return ranges_.front().first; }
+  inline ConstIterator end() const { return ranges_.front().first + ranges_.front().second; }
 };
 
 }  // namespace circinus

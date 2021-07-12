@@ -116,7 +116,7 @@ class OrderGenerator {
     updateValidVertices(start_vertex, visited_vertices, adjacent_vertices);
 
     for (QueryVertexID i = 1; i < qg_v_cnt; ++i) {
-      QueryVertexID next_vertex;
+      QueryVertexID next_vertex = 0;
       QueryVertexID min_value = metadata_.getNumVertices() + 1;
       for (QueryVertexID j = 0; j < qg_v_cnt; ++j) {
         QueryVertexID cur_vertex = j;

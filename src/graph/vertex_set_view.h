@@ -28,6 +28,8 @@ namespace circinus {
 class VertexSetView {
   using RangeSize = uint32_t;
   size_t size_ = 0;
+
+ protected:
   std::vector<std::pair<const VertexID*, RangeSize>> ranges_;
 
  public:
@@ -92,7 +94,7 @@ class VertexSetView {
         ++target_range_idx;
       }
       if (target_range_idx == (*ranges_).size()) {  // end of view
-        return ConstIterator((*ranges_), true);
+        return end;
       }
       // find lower bound index in range
       const VertexID* first = (*ranges_)[target_range_idx].first + (target_range_idx == range_idx_) * idx_in_range_;
@@ -121,6 +123,7 @@ class VertexSetView {
 
   inline size_t size() const { return size_; }
   inline bool empty() const { return size_ == 0; }
+  inline const auto& getRanges() const { return ranges_; }
 
   inline ConstIterator begin() const { return ConstIterator(ranges_); }
   inline ConstIterator end() const { return ConstIterator(ranges_, true); }
