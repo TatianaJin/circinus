@@ -90,7 +90,7 @@ class OrderGenerator {
     QueryVertexID qg_v_cnt = query_graph_->getNumVertices();
     for (QueryVertexID i = 1; i < qg_v_cnt; ++i) {
       QueryVertexID cur_vertex = i;
-      size_t size1 = candidate_sizes_[cur_vertex], size2 = candidate_sizes_[start_vertex];
+      size_t size1 = candidates_[cur_vertex].size(), size2 = candidates_[start_vertex].size();
       if (size1 < size2) {
         start_vertex = cur_vertex;
       } else if (size1 == size2 &&
@@ -125,7 +125,7 @@ class OrderGenerator {
       for (QueryVertexID j = 0; j < qg_v_cnt; ++j) {
         QueryVertexID cur_vertex = j;
         if (!visited_vertices[cur_vertex] && adjacent_vertices[cur_vertex]) {
-          size_t cnt = candidate_sizes_[cur_vertex];
+          size_t cnt = candidates_[cur_vertex].size();
           if (cnt < min_value) {
             min_value = cnt;
             next_vertex = cur_vertex;
@@ -406,7 +406,7 @@ class OrderGenerator {
           }
 
           double cur_value = paths_embededdings_num[i][path_root_vertex_idx] /
-                             (double)(candidate_sizes_[core_paths[i][path_root_vertex_idx]]);
+                             (double)(candidates_[core_paths[i][path_root_vertex_idx]].size());
           if (cur_value < min_value) {
             min_value = cur_value;
             selected_path_index = i;
@@ -454,7 +454,7 @@ class OrderGenerator {
           }
 
           double cur_value = paths_embededdings_num[i][path_root_vertex_idx] /
-                             (double)(candidate_sizes_[tree_paths[i][path_root_vertex_idx]]);
+                             (double)(candidates_[tree_paths[i][path_root_vertex_idx]].size());
           if (cur_value < min_value) {
             min_value = cur_value;
             selected_path_index = i;
@@ -481,7 +481,7 @@ class OrderGenerator {
 
       for (QueryVertexID i = 0; i < leaves.size(); ++i) {
         QueryVertexID vertex = leaves[i];
-        double cur_value = candidate_sizes_[vertex];
+        double cur_value = candidates_[vertex].size();
 
         if (cur_value < min_value) {
           min_value = cur_value;

@@ -111,6 +111,8 @@ std::pair<std::vector<std::vector<VertexID>>, std::vector<VertexID>> getCandidat
     // LOG(INFO) << "query vertex " << v << ' ' << scan->toString();
   }
 
+  auto pre_filter_candidates = candidates;
+  auto pre_filter_candidate_size = candidate_size;
   if (filter_str.compare("ldf") && filter_str.compare("nlf")) {
     auto metadata = GraphMetadata(g);
     std::unique_ptr<LogicalNeighborhoodFilter> logical_filter;
@@ -142,7 +144,7 @@ std::pair<std::vector<std::vector<VertexID>>, std::vector<VertexID>> getCandidat
     //   LOG(INFO) << "query vertex " << i << " candidate size: " << candidates[i].size() << '\n';
     // }
   }
-  return std::make_pair(candidates, candidate_size);
+  return std::make_pair(candidates, pre_filter_candidate_size);
 }
 
 std::vector<QueryVertexID> getOrder(const Graph* data_graph, const QueryGraph* query_graph,
@@ -191,6 +193,10 @@ void run(const std::string& dataset, const std::string& filter, std::vector<std:
         ss1 << dataset << ',' << query_size << ',' << query_mode << ',' << i << ':';
         ss2 << dataset << ',' << query_size << ',' << query_mode << ',' << i << ':';
         auto[candidates, candidate_size] = getCandidateSets(g, q, filter);  // get candidates for each query vertex
+        std::vector<VertexID> pre_filter_candidate_size;
+        for (auto v : candidates) {
+          pre_filter_candidate_size.push_back(v.size());
+        }
         auto order = getOrder(&g, &q, candidates, candidate_size, filter);
         for (auto v : candidates) {
           ss1 << v.size() << ' ';
@@ -264,11 +270,11 @@ TEST(TestGQLFilterCandidates, patents) { filterTest("gql", "patents"); }
 TEST(TestGQLFilterCandidates, wordnet) { filterTest("gql", "wordnet"); }
 TEST(TestGQLFilterCandidates, yeast) { filterTest("gql", "yeast"); }
 TEST(TestGQLFilterCandidates, youtube) { filterTest("gql", "youtube"); }
-TEST(TestDPISOFilterCandidates, dblp) { filterTest("dpiso", "dblp"); }
-TEST(TestDPISOFilterCandidates, eu2005) { filterTest("dpiso", "eu2005"); }
-TEST(TestDPISOFilterCandidates, hprd) { filterTest("dpiso", "hprd"); }
-TEST(TestDPISOFilterCandidates, human) { filterTest("dpiso", "human"); }
-TEST(TestDPISOFilterCandidates, patents) { filterTest("dpiso", "patents"); }
-TEST(TestDPISOFilterCandidates, wordnet) { filterTest("dpiso", "wordnet"); }
-TEST(TestDPISOFilterCandidates, yeast) { filterTest("dpiso", "yeast"); }
-TEST(TestDPISOFilterCandidates, youtube) { filterTest("dpiso", "youtube"); }
+TEST(TestDAFFilterCandidates, dblp) { filterTest("dpiso", "dblp"); }
+TEST(TestDAFFilterCandidates, eu2005) { filterTest("dpiso", "eu2005"); }
+TEST(TestDAFFilterCandidates, hprd) { filterTest("dpiso", "hprd"); }
+TEST(TestDAFFilterCandidates, human) { filterTest("dpiso", "human"); }
+TEST(TestDAFFilterCandidates, patents) { filterTest("dpiso", "patents"); }
+TEST(TestDAFFilterCandidates, wordnet) { filterTest("dpiso", "wordnet"); }
+TEST(TestDAFFilterCandidates, yeast) { filterTest("dpiso", "yeast"); }
+TEST(TestDAFFilterCandidates, youtube) { filterTest("dpiso", "youtube"); }
