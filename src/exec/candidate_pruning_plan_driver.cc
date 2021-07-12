@@ -38,6 +38,7 @@ void CandidatePruningPlanDriver::initPhase1TasksForPartitionedGraph(QueryId qid,
   task_counters_.resize(n_qvs);
   ctx.second = Result::newPartitionedCandidateResult(n_qvs, n_partitions);
   result_ = (CandidateResult*)ctx.second.get();
+  finish_event_->data = result_;
   // TODO(tatiana) now for simplicity enforce one task per partition for one query vertex
   ctx.first.setMaxParallelism(1);
   for (uint32_t i = 0; i < n_partitions; ++i) {
@@ -67,7 +68,6 @@ void CandidatePruningPlanDriver::initPhase1TasksForPartitionedGraph(QueryId qid,
 void CandidatePruningPlanDriver::init(QueryId qid, QueryContext* query_ctx, ExecutionContext& ctx,
                                       ThreadsafeTaskQueue& task_queue) {
   finish_event_ = std::make_unique<ServerEvent>(ServerEvent::CandidatePhase);
-  finish_event_->data = &result_;
   finish_event_->query_id = qid;
   if (plan_->getPhase() == 1) {
     auto n_partitions = query_ctx->graph_metadata->numPartitions();
@@ -108,6 +108,7 @@ void CandidatePruningPlanDriver::init(QueryId qid, QueryContext* query_ctx, Exec
       operators_.push_back(std::move(filter));
     }
   }
+  finish_event_->data = result_;
 }
 
 void CandidatePruningPlanDriver::taskFinish(TaskBase* task, ThreadsafeTaskQueue* task_queue,

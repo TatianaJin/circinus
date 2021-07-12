@@ -86,7 +86,9 @@ CandidatePruningPlan* Planner::generateCandidatePruningPlan() {
   return &candidate_pruning_plan_;
 }
 
+// FIXME(tatiana): classes in plan should not know classes in exec
 CandidatePruningPlan* Planner::updateCandidatePruningPlan(const CandidateResult* result) {
+  CHECK(result != nullptr);
   auto part_cardinality = result->getCandidateCardinality();
   auto& q = query_context_->query_graph;
   auto& strategy = query_context_->query_config.candidate_pruning_strategy;
@@ -221,6 +223,7 @@ void Planner::newInputOperators() {
       logical_plan->getMatchingOrder().front(), logical_plan->inputAreKeys()));
 }
 
+// FIXME(tatiana): classes in plan should not know classes in exec
 BacktrackingPlan* Planner::generateExecutionPlan(const CandidateResult* result, bool multithread) {
   auto candidate_cardinality = result->getCandidateCardinality();
   auto candidate_views = result->getCandidates();

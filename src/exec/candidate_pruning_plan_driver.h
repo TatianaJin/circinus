@@ -27,7 +27,7 @@ namespace circinus {
 
 class CandidatePruningPlanDriver : public PlanDriver {
   CandidatePruningPlan* plan_;
-  CandidateResult* result_;                                   // owned by ExecutorManager
+  CandidateResult* result_ = nullptr;  // owned by ExecutorManager
 
  public:
   explicit CandidatePruningPlanDriver(CandidatePruningPlan* plan) : plan_(plan) {}

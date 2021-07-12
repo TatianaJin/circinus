@@ -44,12 +44,13 @@ class BipartiteGraph
 
   inline QueryVertexID getSourceId() const { return source_id_; }
 
-  inline void populateGraph(const Graph* g, const std::vector<CandidateSetView>& candidate_sets) {
+  inline void populateGraph(const GraphBase* g, const std::vector<CandidateSetView>& candidate_sets) {
     populateGraph(g, candidate_sets[source_id_], candidate_sets[destination_id_]);
   }
 
   /** Only populates the edges from vertices in candidate_set1 to vertices in candidate_set2 */
-  void populateGraph(const Graph* g, const CandidateSetView& candidate_set1, const CandidateSetView& candidate_set2) {
+  void populateGraph(const GraphBase* g, const CandidateSetView& candidate_set1,
+                     const CandidateSetView& candidate_set2) {
     if (populated_) return;
 
     populated_ = true;

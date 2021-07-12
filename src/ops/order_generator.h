@@ -14,12 +14,7 @@
 
 #include <map>
 
-#include "gflags/gflags.h"
 #include "glog/logging.h"
-#ifdef WITH_GPERF
-#include "gperftools/profiler.h"
-#endif
-#include "gtest/gtest.h"
 
 #include "graph/bipartite_graph.h"
 #include "graph/graph.h"
@@ -54,17 +49,17 @@ class OrderGenerator {
   OrderGenerator(const GraphBase* data_graph, const GraphMetadata& metadata, const QueryGraph* query_graph,
                  const std::vector<CandidateSetView>& candidates, const std::vector<VertexID>& candidate_sizes)
       : data_graph_(data_graph),
-        metadata_(metadata),
         query_graph_(query_graph),
         candidates_(candidates),
-        candidate_sizes_(candidate_sizes) {}
+        candidate_sizes_(candidate_sizes),
+        metadata_(metadata) {}
 
   const BipartiteGraph* getBipartiteGraph(QueryVertexID v1, QueryVertexID v2) {
     std::pair<QueryVertexID, QueryVertexID> p(v1, v2);
     auto bg = bg_map_.find(p);
     if (bg == bg_map_.end()) {
       BipartiteGraph newbg(v1, v2);
-      newbg.populateGraph((const Graph*)data_graph_, candidates_);
+      newbg.populateGraph(data_graph_, candidates_);
       auto res = bg_map_.insert({p, std::move(newbg)});
       bg = res.first;
     }
@@ -83,6 +78,7 @@ class OrderGenerator {
     case OrderStrategy::GQL:
       return getGQLOrder();
     }
+    return getCFLOrder();  // default
   }
 
   QueryVertexID selectGQLStartVertex() {
@@ -141,19 +137,15 @@ class OrderGenerator {
     return order;
   }
 
+  // FIXME(tatiana): need to support adaptive ordering strategy
   std::vector<QueryVertexID> getDAFOrder() {
     auto logical_filter = LogicalDAFFilter(metadata_, query_graph_, candidate_sizes_);
-    const std::vector<QueryVertexID>& bfs_order = logical_filter.getBfsOrder();
-    QueryVertexID qg_v_cnt = query_graph_->getNumVertices();
-    std::vector<QueryVertexID> order(qg_v_cnt);
-    for (QueryVertexID i = 0; i < qg_v_cnt; ++i) {
-      order[i] = bfs_order[i];
-    }
-    return order;
+    return logical_filter.getBfsOrder();
   }
 
-  void estimatePathEmbeddsingsNum(std::vector<QueryVertexID>& path, std::vector<size_t>& estimated_embeddings_num) {
-    assert(path.size() > 1);
+  void estimatePathEmbeddsingsNum(const std::vector<QueryVertexID>& path,
+                                  std::vector<size_t>& estimated_embeddings_num) {
+    CHECK_GT(path.size(), 1);
     std::vector<size_t> parent;
     std::vector<size_t> children;
 
@@ -172,7 +164,7 @@ class OrderGenerator {
 
     estimated_embeddings_num[begin] = sum;
 
-    for (int i = begin; i >= 1; --i) {
+    for (uint32_t i = begin; i >= 1; --i) {
       begin = i - 1;
       end = i;
       auto edge = getBipartiteGraph(path[begin], path[end]);
@@ -190,14 +182,15 @@ class OrderGenerator {
         sum += local_sum;
       }
 
-      estimated_embeddings_num[i - 1] = sum;
+      estimated_embeddings_num[begin] = sum;
       parent.swap(children);
 
       last_edge = edge;
     }
   }
 
-  QueryVertexID generateNoneTreeEdgesCount(const std::vector<TreeNode>& tree_node, std::vector<QueryVertexID>& path) {
+  QueryVertexID generateNoneTreeEdgesCount(const std::vector<TreeNode>& tree_node,
+                                           const std::vector<QueryVertexID>& path) {
     auto non_tree_edge_count = query_graph_->getVertexOutDegree(path[0]) - tree_node[path[0]].children_.size();
     for (size_t i = 1; i < path.size(); ++i) {
       auto vertex = path[i];
@@ -326,7 +319,6 @@ class OrderGenerator {
     generateLeaves(leaves);
 
     const auto& tcs = logical_filter.getTwoCoreSolver();
-    const auto& core_table = tcs.get2CoreTable();
     if (tcs.isInCore(root_vertex)) {
       std::vector<QueryVertexID> temp_core_path;
       generateCorePaths(tree, root_vertex, temp_core_path, core_paths, tcs);
@@ -335,6 +327,7 @@ class OrderGenerator {
         if (tcs.isInCore(cur_vertex)) {
           std::vector<std::vector<QueryVertexID>> temp_tree_paths;
           std::vector<QueryVertexID> temp_tree_path;
+          // FIXME(tatiana): here the tree paths can contain core vertices?
           generateTreePaths(tree, cur_vertex, temp_tree_path, temp_tree_paths);
           if (!temp_tree_paths.empty()) {
             forests.emplace_back(temp_tree_paths);
@@ -358,6 +351,7 @@ class OrderGenerator {
     if (!core_paths.empty()) {
       std::vector<std::vector<size_t>> paths_embededdings_num;
       std::vector<QueryVertexID> paths_non_tree_edge_num;
+      paths_non_tree_edge_num.reserve(core_paths.size());
       for (auto& path : core_paths) {
         QueryVertexID non_tree_edge_num = generateNoneTreeEdgesCount(tree, path);
         paths_non_tree_edge_num.push_back(non_tree_edge_num + 1);
@@ -390,6 +384,8 @@ class OrderGenerator {
       paths_embededdings_num.erase(paths_embededdings_num.begin() + selected_path_index);
       paths_non_tree_edge_num.erase(paths_non_tree_edge_num.begin() + selected_path_index);
 
+      // Select subsequent paths
+      // TODO(tatiana): the following codes and the codes for path ordering of forest can be shared?
       while (!core_paths.empty()) {
         min_value = std::numeric_limits<double>::max();
         selected_path_index = 0;
@@ -427,10 +423,12 @@ class OrderGenerator {
     }
 
     // Order tree paths.
+    // TODO(tatiana): there is only path ordering within each tree, but not ordering trees in the forest?
     for (auto& tree_paths : forests) {
       std::vector<std::vector<size_t>> paths_embededdings_num;
       for (auto& path : tree_paths) {
         std::vector<size_t> path_embeddings_num;
+        // FIXME(tatiana): no need to estimate for the path segment which contain query vertices in core? see line 335
         estimatePathEmbeddsingsNum(path, path_embeddings_num);
         paths_embededdings_num.emplace_back(path_embeddings_num);
       }
@@ -446,6 +444,7 @@ class OrderGenerator {
 
             if (visited_vertices[cur_vertex]) continue;
 
+            // TODO(tatiana): j cannot be 0 because the first vertex of the path is in core? CHECK_NE(j, 0);
             path_root_vertex_idx = j == 0 ? j : j - 1;
             break;
           }
@@ -472,7 +471,7 @@ class OrderGenerator {
     }
 
     // Order the leaves.
-    while (!leaves.empty()) {
+    while (!leaves.empty()) {  // TODO(tatiana): simply sort the leaves instead of taking min and erasing?
       double min_value = std::numeric_limits<double>::max();
       QueryVertexID selected_leaf_index = 0;
 
