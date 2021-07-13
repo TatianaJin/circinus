@@ -12,7 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <map>
+#include <algorithm>
+#include <limits>
+#include <unordered_map>
+#include <utility>
+#include <vector>
 
 #include "glog/logging.h"
 

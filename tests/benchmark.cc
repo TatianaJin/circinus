@@ -32,10 +32,8 @@
 #include "exec/circinus_server.h"
 #include "utils/file_utils.h"
 
-
 using circinus::CircinusServer;
 using circinus::QueryVertexID;
-
 
 #define BATCH_SIZE FLAGS_batch_size
 #define toSeconds(start, end) \
@@ -58,7 +56,6 @@ DEFINE_string(profile_prefix, "/data/share/users/byli/circinus/evaluation/profil
 DEFINE_string(vertex_cover, "static", "Vertex cover strategy: static, dynamic, all");
 DEFINE_string(batch_file, "", "Batch query file");
 DEFINE_bool(bipartite_graph, false, "Use bipartite graph or not");  // TODO(exp): support for control experiment
-
 
 class QueryConfig {
  public:

@@ -197,7 +197,7 @@ class TestExpandEdgeCosts : public testing::Test {
     auto start = std::chrono::high_resolution_clock::now();
     circinus::CandidateSetView view(candidates[target]);
     op->setCandidateSets(&view);
-    auto ctx = op->initTraverseContext(&seeds, &g, 0, seeds.size(), QueryType::Execute);  
+    auto ctx = op->initTraverseContext(&seeds, &g, 0, seeds.size(), QueryType::Execute);
     if
       constexpr(use_bipartite_graph) {
         if (cover[parent] == 1 && cover[target] == 1) {
@@ -227,12 +227,12 @@ class TestExpandEdgeCosts : public testing::Test {
     auto op_expand_edge = op_filter.first;
     start = std::chrono::high_resolution_clock::now();
     op_expand_edge->setCandidateSets(&view);
-    ctx = op_expand_edge->initTraverseContext(&seeds, &g, 0, seeds.size(), QueryType::Execute);  
+    ctx = op_expand_edge->initTraverseContext(&seeds, &g, 0, seeds.size(), QueryType::Execute);
     if
       constexpr(use_bipartite_graph) {
         if (cover[parent] == 1 && cover[target] == 1) {
           bg = new circinus::GraphView<BipartiteGraph>(op_expand_edge->computeBipartiteGraphs(&g, candidates));
-          ctx = op_expand_edge->initTraverseContext(&seeds, bg, 0, seeds.size(), QueryType::Execute);  
+          ctx = op_expand_edge->initTraverseContext(&seeds, bg, 0, seeds.size(), QueryType::Execute);
         }
       }
 

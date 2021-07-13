@@ -23,7 +23,7 @@
 namespace circinus {
 
 LogicalDAFFilter::LogicalDAFFilter(const GraphMetadata& metadata, const QueryGraph* query_graph,
-                                       const std::vector<VertexID>& candidate_size)
+                                   const std::vector<VertexID>& candidate_size)
     : LogicalNeighborhoodFilter(query_graph) {
   start_vertex_ = getStartVertex(metadata, query_graph, candidate_size);
   uint32_t query_vertices_num = query_graph->getNumVertices();
@@ -50,7 +50,7 @@ LogicalDAFFilter::LogicalDAFFilter(const GraphMetadata& metadata, const QueryGra
 }
 
 std::vector<std::unique_ptr<NeighborhoodFilter>> LogicalDAFFilter::toPhysicalOperators(const GraphMetadata& metadata,
-                                                                                         ExecutionConfig& exec) {
+                                                                                       ExecutionConfig& exec) {
   std::vector<std::unique_ptr<NeighborhoodFilter>> ret;
   for (uint32_t refine_time = 0; refine_time < 3; ++refine_time) {
     if (refine_time % 2 == 0) {
@@ -75,7 +75,7 @@ std::vector<std::unique_ptr<NeighborhoodFilter>> LogicalDAFFilter::toPhysicalOpe
 }
 
 QueryVertexID LogicalDAFFilter::getStartVertex(const GraphMetadata& metadata, const QueryGraph* query_graph,
-                                                 const std::vector<VertexID>& candidate_size) {
+                                               const std::vector<VertexID>& candidate_size) {
   double min_score = metadata.getNumVertices();
   QueryVertexID start_vertex = 0;
 
