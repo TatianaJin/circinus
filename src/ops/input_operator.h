@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <chrono>
 #include <memory>
 #include <string>
 #include <utility>
@@ -21,10 +22,9 @@
 
 #include "graph/candidate_set_view.h"
 #include "graph/compressed_subgraphs.h"
-#include "graph/graph.h"
-#include "graph/partitioned_graph.h"
-#include "ops/filters/filter.h"
 #include "ops/operator.h"
+#include "utils/query_utils.h"
+#include "utils/utils.h"
 
 namespace circinus {
 
@@ -37,12 +37,29 @@ class InputOperator : public Operator {
   InputOperator(const QueryVertexID starting_vertex, const bool inputs_are_keys)
       : starting_vertex_(starting_vertex), inputs_are_keys_(inputs_are_keys) {}
 
+  virtual ~InputOperator() {}
+
   virtual std::vector<CompressedSubgraphs> getInputs(const void* g,
                                                      const std::vector<CandidateSetView>& candidates) const;
+
+  // TODO(profile): record intersection count in input op?
+  virtual void inputAndProfile(const void* g, const std::vector<CandidateSetView>& candidates,
+                               std::vector<CompressedSubgraphs>* output, ProfileInfo* info) const {
+    auto start = std::chrono::high_resolution_clock::now();
+    *output = getInputs(g, candidates);
+    auto end = std::chrono::high_resolution_clock::now();
+    info->total_time_in_milliseconds += toMilliseconds(start, end);
+  }
 
   std::string toString() const override {
     std::stringstream ss;
     ss << "InputOperator: query vertex " << starting_vertex_ << " key " << inputs_are_keys_;
+    return ss.str();
+  }
+
+  std::string toProfileString(const ProfileInfo& info) const override {
+    std::stringstream ss;
+    ss << toString() << ',' << info.total_time_in_milliseconds;
     return ss.str();
   }
 };

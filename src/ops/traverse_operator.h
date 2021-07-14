@@ -149,9 +149,8 @@ class TraverseOperator : public Operator {
     auto start = std::chrono::high_resolution_clock::now();
     auto n = expandAndProfileInner(cap, ctx);
     auto stop = std::chrono::high_resolution_clock::now();
-    ctx->total_time_in_milliseconds +=
-        (std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start).count() / 1000000.0);
-    {
+    ctx->total_time_in_milliseconds += toMilliseconds(start, stop);
+    if (false) {
       uint32_t size = 0;
       auto offset = ctx->outputs->size() - n;
       for (uint32_t i = 0; i < n; ++i) {

@@ -52,6 +52,7 @@ class TaskBase {
     time_ += toSeconds(start, std::chrono::high_resolution_clock::now());
   }
 
+  /* @returns Execution time in seconds */
   inline double getExecutionTime() const { return time_; }
 };
 

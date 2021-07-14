@@ -82,10 +82,11 @@ class TraverseChainTask : public TaskBase {
 
   void profile(uint32_t executor_idx) override {
     setupCandidateSets();
-    // TODO(profile): record intersection count in input op?
-    profile_info_.resize(operators_.size());
+    profile_info_.resize(operators_.size() + 1);  // traverse chain + input operator
+    std::vector<CompressedSubgraphs> inputs;
+    input_op_->inputAndProfile(graph_, *candidates_, &inputs, &profile_info_.front());
     // TODO(tatiana): support match limit
-    execute<QueryType::Profile>(input_op_->getInputs(graph_, *candidates_), 0, executor_idx);
+    execute<QueryType::Profile>(inputs, 0, executor_idx);
   }
 
  protected:
@@ -119,7 +120,8 @@ class TraverseChainTask : public TaskBase {
       auto output_op = dynamic_cast<OutputOperator*>(op);
       if
         constexpr(isProfileMode(profile)) {
-          return output_op->validateAndOutputAndProfile(inputs, 0, inputs.size(), executor_idx, &profile_info_[level]);
+          return output_op->validateAndOutputAndProfile(inputs, 0, inputs.size(), executor_idx,
+                                                        &profile_info_[level + 1]);
         }
       return output_op->validateAndOutput(inputs, executor_idx);
     }
@@ -145,8 +147,9 @@ class TraverseChainTask : public TaskBase {
     if
       constexpr(isProfileMode(profile)) {
         ctx->total_input_size = ctx->getTotalInputSize();
-        profile_info_[level] = std::move(*ctx);
+        profile_info_[level + 1] += *ctx;
       }
+
     return finished;
   }
 };
@@ -213,6 +216,7 @@ class MatchingParallelInputTask : public MatchingParallelTask {
   const GraphBase* graph_ = nullptr;
   const InputOperator* input_op_ = nullptr;
   std::vector<CandidateSetView> candidates_;
+  ProfileInfo info_;
 
  public:
   MatchingParallelInputTask(QueryId qid, TaskId tid, const GraphBase* graph, const InputOperator* input_op,
@@ -222,8 +226,10 @@ class MatchingParallelInputTask : public MatchingParallelTask {
   const GraphBase* getDataGraph() const override { return graph_; }
 
   void run(uint32_t executor_idx) override { outputs_ = input_op_->getInputs(graph_, candidates_); }
-  // TODO(profile): record intersection count in input op?
-  void profile(uint32_t executor_idx) override { outputs_ = input_op_->getInputs(graph_, candidates_); }
+
+  void profile(uint32_t executor_idx) override { input_op_->inputAndProfile(graph_, candidates_, &outputs_, &info_); }
+
+  void collectProfileInfo(ProfileInfo& agg) const override { agg += info_; }
 
   Operator* getNextOperator() override { return input_op_->getNext(); }
 };

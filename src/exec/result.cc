@@ -39,7 +39,7 @@ std::unique_ptr<Result> Result::newExecutionResult(bool profile, const std::vect
     std::vector<uint32_t> plan_sizes;
     plan_sizes.reserve(plans.size());
     for (auto& plan : plans) {
-      plan_sizes.push_back(plan->getOperators().size());
+      plan_sizes.push_back(plan->getOperators().size() + 1);
     }
     return std::make_unique<ProfiledExecutionResult>(plan_sizes);
   }
@@ -150,16 +150,18 @@ void ProfiledExecutionResult::collect(TaskBase* task) {
     auto matching_parallel_task = dynamic_cast<MatchingParallelTask*>(task);
     CHECK(matching_parallel_task != nullptr);
     // TODO(profile): record intersection count in input op? now skip input task
-    matching_parallel_task->collectProfileInfo(profiles_.front()[matching_parallel_task->getTaskId() - 1]);
+    matching_parallel_task->collectProfileInfo(profiles_.front()[matching_parallel_task->getTaskId()]);
   }
 }
 
-void ProfiledExecutionResult::setProfiledPlan(uint32_t profile_idx, const std::vector<Operator*>& ops) {
-  CHECK_EQ(ops.size(), profiles_[profile_idx].size());
+void ProfiledExecutionResult::setProfiledPlan(uint32_t profile_idx, const std::vector<Operator*>& ops,
+                                              const InputOperator* input_op) {
+  CHECK_EQ(1 + ops.size(), profiles_[profile_idx].size());
   auto size = ops.size();
-  profiled_plan_str_[profile_idx].reserve(size);
+  profiled_plan_str_[profile_idx].reserve(size + 1);
+  profiled_plan_str_[profile_idx].push_back(input_op->toProfileString(profiles_[profile_idx].front()));
   for (uint32_t i = 0; i < size; ++i) {
-    profiled_plan_str_[profile_idx].push_back(ops[i]->toProfileString(profiles_[profile_idx][i]));
+    profiled_plan_str_[profile_idx].push_back(ops[i]->toProfileString(profiles_[profile_idx][i + 1]));
   }
 }
 

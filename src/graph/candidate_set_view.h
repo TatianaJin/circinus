@@ -38,8 +38,10 @@ class CandidateSetView : public VertexSetView {
 
   CandidateSetView(const std::vector<std::vector<VertexID>>& partitioned_candidates, const CandidateScope& scope);
 
-  inline ConstIterator begin() const { return ranges_.front().first; }
-  inline ConstIterator end() const { return ranges_.front().first + ranges_.front().second; }
+  inline ConstIterator begin() const { return ranges_.empty() ? nullptr : ranges_.front().first; }
+  inline ConstIterator end() const {
+    return ranges_.empty() ? nullptr : (ranges_.front().first + ranges_.front().second);
+  }
 };
 
 }  // namespace circinus

@@ -45,6 +45,8 @@ class BipartiteGraph
   inline QueryVertexID getSourceId() const { return source_id_; }
 
   inline void populateGraph(const GraphBase* g, const std::vector<CandidateSetView>& candidate_sets) {
+    DCHECK_LT(source_id_, candidate_sets.size());
+    DCHECK_LT(destination_id_, candidate_sets.size());
     populateGraph(g, candidate_sets[source_id_], candidate_sets[destination_id_]);
   }
 

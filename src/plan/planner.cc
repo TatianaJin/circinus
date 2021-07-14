@@ -226,8 +226,8 @@ void Planner::newInputOperators() {
 // FIXME(tatiana): classes in plan should not know classes in exec
 BacktrackingPlan* Planner::generateExecutionPlan(const CandidateResult* result, bool multithread) {
   auto candidate_cardinality = result->getCandidateCardinality();
-  auto candidate_views = result->getCandidates();
   if (!toPartitionCandidates()) {  // no partition, generate one execution plan
+    auto candidate_views = result->getCandidates();
     backtracking_plan_ = std::make_unique<BacktrackingPlan>();
     if (candidate_cardinality.size() > 1) {
       std::vector<VertexID> sum(candidate_cardinality.front().size(), 0);
@@ -263,10 +263,9 @@ BacktrackingPlan* Planner::generateExecutionPlan(const CandidateResult* result, 
     for (auto& scope : scopes) {
       scope.usePartition(i);
     }
-
+    auto candidate_views = ((PartitionedCandidateResult*)result)->getCandidatesByScopes(scopes);
     auto order_generator = OrderGenerator(query_context_->data_graph, query_context_->graph_metadata->getPartition(i),
-                                          &query_context_->query_graph,
-                                          ((PartitionedCandidateResult*)result)->getCandidatesByScopes(scopes), stats);
+                                          &query_context_->query_graph, candidate_views, stats);
     auto use_order = order_generator.getOrder(query_context_->query_config.order_strategy);
     backtracking_plan_->addPlan(generateExecutionPlan(stats, use_order, multithread));
   }

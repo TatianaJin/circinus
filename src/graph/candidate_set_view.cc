@@ -52,6 +52,7 @@ CandidateSetView::CandidateSetView(const std::vector<VertexID>* candidates, cons
     }
   }
   }
+  CHECK_EQ(ranges_.size(), 1) << "For CandidateSetView, only 1 range is supported for efficiency reason";
 }
 
 CandidateSetView::CandidateSetView(const std::vector<std::vector<VertexID>>& partitioned_candidates,
@@ -77,6 +78,8 @@ CandidateSetView::CandidateSetView(const std::vector<std::vector<VertexID>>& par
     }
   }
   }
+
+  CHECK_EQ(ranges_.size(), 1) << "For CandidateSetView, only 1 range is supported for efficiency reason";
 }
 
 }  // namespace circinus

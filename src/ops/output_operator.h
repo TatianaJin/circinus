@@ -96,8 +96,7 @@ class OutputOperator : public Operator {
     uint32_t old_start = input_start;
     auto ret = validateAndOutput(input, input_start, input_end, output_index);
     auto stop = std::chrono::high_resolution_clock::now();
-    info->total_time_in_milliseconds +=
-        (std::chrono::duration_cast<std::chrono::nanoseconds>(stop - start).count() / 1000000.0);
+    info->total_time_in_milliseconds += toMilliseconds(start, stop);
     info->total_num_input_subgraphs += getNumSubgraphs(input, old_start, input_start);
     info->total_input_size += input_start - old_start;
     return ret;

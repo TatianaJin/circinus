@@ -23,6 +23,7 @@
 #include "exec/task.h"
 #include "graph/candidate_set_view.h"
 #include "graph/types.h"
+#include "ops/input_operator.h"
 #include "ops/output_operator.h"
 #include "plan/execution_plan.h"
 #include "utils/query_utils.h"
@@ -163,7 +164,7 @@ class ProfiledExecutionResult : public ExecutionResult {
     }
   }
 
-  void setProfiledPlan(uint32_t profile_idx, const std::vector<Operator*>& ops);
+  void setProfiledPlan(uint32_t profile_idx, const std::vector<Operator*>& ops, const InputOperator* input_op);
 
   const auto& getProfiledPlanStrings() const { return profiled_plan_str_; }
 

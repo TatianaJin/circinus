@@ -14,6 +14,11 @@
 
 #include "ops/input_operator.h"
 
+#include "graph/candidate_set_view.h"
+#include "graph/compressed_subgraphs.h"
+#include "graph/partitioned_graph.h"
+#include "ops/filters/filter.h"
+
 namespace circinus {
 
 std::vector<CompressedSubgraphs> InputOperator::getInputs(const void* g,

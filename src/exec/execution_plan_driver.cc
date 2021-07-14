@@ -64,9 +64,9 @@ void ExecutionPlanDriverBase::finishPlan(ThreadsafeQueue<ServerEvent>* reply_que
     std::stringstream ss;
     for (uint32_t i = 0; i < size; ++i) {
       ss << "[ Plan " << i << " ]\n";
-      ss << "0," << plan_->getInputOperator(i)->toString() << std::endl;
-      profiled->setProfiledPlan(i, plan_->getOperators(i));
-      uint32_t op_idx = 1;
+      auto input_op = plan_->getInputOperator(i);
+      profiled->setProfiledPlan(i, plan_->getOperators(i), input_op.get());
+      uint32_t op_idx = 0;
       for (auto& op_profile : profiled->getProfiledPlanStrings()[i]) {
         ss << op_idx << ',' << op_profile << std::endl;
         ++op_idx;
