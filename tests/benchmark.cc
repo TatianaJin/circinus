@@ -93,9 +93,13 @@ class QueryConfig {
     query_mode = std::string(&line_[old_pos], pos - old_pos);
     old_pos = ++pos;
     // parse query_index
-    CHECK_NE((pos = line_.find(',', pos)), std::string::npos);
+    pos = line_.find(',', pos);
+    if (pos == line_.npos) {
+      pos = line_.size();
+    }
     line_[pos] = '\0';
     query_index = std::atoi(&line_[old_pos]);
+    /*
     old_pos = ++pos;
     // parse match_order
     pos = line_.find(',', pos);
@@ -107,6 +111,7 @@ class QueryConfig {
     } else {
       match_order = std::string(&line_[old_pos], pos - old_pos);
     }
+    */
   }
 
   std::ostream& toString(std::ostream& ss) {
@@ -187,9 +192,9 @@ class Benchmark {
     auto msg = reply.pop();
     if (success) {
       if (FLAGS_profile) {
-        // TODO(exp): add match order strategy to profile file name
-        auto profile_file = FLAGS_profile_prefix + dataset + '_' + query_mode + '_' + std::to_string(query_size) + '_' +
-                            std::to_string(index) + '_' + FLAGS_filter;
+        auto profile_file_name =
+            dataset + '_' + query_mode + '_' + std::to_string(query_size) + '_' + std::to_string(index);
+        auto profile_file = circinus::Path::join(FLAGS_profile_prefix, profile_file_name);
         LOG(INFO) << "-------------" << profile_file;
         auto ofs = circinus::openOutputFile(profile_file);
         ofs << std::string_view((char*)msg.data(), msg.size());
@@ -216,7 +221,8 @@ void run_benchmark(const std::string& query_file, Benchmark& benchmark, std::ost
   while (query_f >> config) {
     if (config.skipConfig()) continue;
     config.toString(LOG(INFO) << ">>>>>>>>>>>>>>>>> query config -vertex_cover " << FLAGS_vertex_cover << " -filter "
-                              << FLAGS_filter << " -match_limit " << FLAGS_match_limit << ' ');
+                              << FLAGS_filter << " -match_order " << FLAGS_match_order << " -match_limit "
+                              << FLAGS_match_limit << ' ');
     // load graph if not cached
     if (config.dataset != dataset) {
       dataset = config.dataset;
