@@ -28,7 +28,7 @@
 
 namespace circinus {
 
-template <typename G, bool intersect_candidates = true>
+template <typename G, bool intersect_candidates>
 class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
  public:
   ExpandKeyToKeyVertexOperator(const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,

@@ -18,6 +18,7 @@
 #include <utility>
 #include <vector>
 
+#include "graph/graph.h"
 #include "graph/types.h"
 #include "graph/vertex_set_view.h"
 
@@ -45,11 +46,13 @@ class GraphView {
   /**
    * @param nbr_label Hint of the label of out neighbors. The results do not guarantee that the hint is used.
    */
-  inline VertexSetView getOutNeighborsWithHint(VertexID id, LabelID nbr_label, uint32_t graph_idx) const {
+  inline std::conditional_t<std::is_same_v<Graph, G>, SingleRangeVertexSetView, VertexSetView> getOutNeighborsWithHint(
+      VertexID id, LabelID nbr_label, uint32_t graph_idx) const {
     return graphs_[graph_idx]->getOutNeighborsWithHint(id, nbr_label);
   }
 
-  inline VertexSetView getInNeighborsWithHint(VertexID id, LabelID nbr_label, uint32_t graph_idx) const {
+  inline std::conditional_t<std::is_same_v<Graph, G>, SingleRangeVertexSetView, VertexSetView> getInNeighborsWithHint(
+      VertexID id, LabelID nbr_label, uint32_t graph_idx) const {
     return graphs_[graph_idx]->getInNeighborsWithHint(id, nbr_label);
   }
 };

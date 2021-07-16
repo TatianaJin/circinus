@@ -69,7 +69,7 @@ class ExpandEdgeOperator : public TraverseOperator {
                                                          const std::vector<uint32_t>& same_label_key_indices,
                                                          const std::vector<uint32_t>& same_label_set_indices,
                                                          uint64_t set_pruning_threshold, SubgraphFilter* filter,
-                                                         bool intersect_candidates, GraphType graph_type);
+                                                         GraphType graph_type);
 
   static TraverseOperator* newExpandEdgeKeyToSetOperator(QueryVertexID parent_vertex, QueryVertexID target_vertex,
                                                          const unordered_map<QueryVertexID, uint32_t>& indices,

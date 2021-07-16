@@ -91,25 +91,33 @@ class SDGraphPartition : public GraphPartitionBase {
 
   inline VertexSetView getOutNeighborsWithHint(VertexID vid, LabelID nbr_label) const override {
     if
-      constexpr(limit_dst) { return original_graph_->getOutNeighborsWithHint(vid, nbr_label, dst_partition_); }
+      constexpr(limit_dst) {
+        return original_graph_->getOutNeighborsInPartitionWithHint(vid, nbr_label, dst_partition_);
+      }
     return original_graph_->getAllOutNeighborsWithHint(vid, nbr_label);
   }
 
   inline VertexSetView getInNeighborsWithHint(VertexID vid, LabelID nbr_label) const override {
     if
-      constexpr(limit_src) { return original_graph_->getOutNeighborsWithHint(vid, nbr_label, src_partition_); }
+      constexpr(limit_src) {
+        return original_graph_->getOutNeighborsInPartitionWithHint(vid, nbr_label, src_partition_);
+      }
     return original_graph_->getAllOutNeighborsWithHint(vid, nbr_label);
   }
 
   inline VertexID getVertexOutDegreeWithHint(VertexID vid, LabelID nbr_label) const override {
     if
-      constexpr(limit_dst) { return original_graph_->getVertexOutDegreeWithHint(vid, nbr_label, dst_partition_); }
+      constexpr(limit_dst) {
+        return original_graph_->getVertexOutDegreeInPartitionWithHint(vid, nbr_label, dst_partition_);
+      }
     return original_graph_->getVertexOutDegree(vid);
   }
 
   inline VertexID getVertexInDegreeWithHint(VertexID vid, LabelID nbr_label) const override {
     if
-      constexpr(limit_src) { return original_graph_->getVertexOutDegreeWithHint(vid, nbr_label, src_partition_); }
+      constexpr(limit_src) {
+        return original_graph_->getVertexOutDegreeInPartitionWithHint(vid, nbr_label, src_partition_);
+      }
     return original_graph_->getVertexOutDegree(vid);
   }
 

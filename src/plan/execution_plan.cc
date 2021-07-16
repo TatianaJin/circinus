@@ -24,6 +24,7 @@
 #include "graph/bipartite_graph.h"
 #include "graph/graph_view.h"
 #include "ops/operators.h"
+#include "ops/traverse_operator_utils.h"
 #include "utils/hashmap.h"
 
 namespace circinus {
@@ -344,7 +345,7 @@ TraverseOperator* ExecutionPlan::newExpandEdgeKeyToKeyOperator(
 #endif
   auto ret = ExpandEdgeOperator::newExpandEdgeKeyToKeyOperator(
       parent_vertex, target_vertex, query_vertex_indices_, same_label_indices[1], same_label_indices[0],
-      getSetPruningThreshold(target_vertex), filter, graph_type_ != GraphType::BipartiteGraphView, graph_type_);
+      getSetPruningThreshold(target_vertex), filter, graph_type_);
   setMatchingOrderIndices(target_vertex, ret);
   operators_.push_back(ret);
   return ret;
@@ -427,17 +428,8 @@ TraverseOperator* ExecutionPlan::newExpandIntoOperator(const std::vector<QueryVe
 #ifdef USE_FILTER
   filter = createFilter(std::move(pruning_set_indices));
 #endif
-  TraverseOperator* ret;
-  if (graph_type_ == GraphType::Normal) {
-    ret = new ExpandIntoOperator<Graph>(parents, target_vertex, query_vertex_indices_, prev_key_parents, filter);
-  } else if (graph_type_ == GraphType::GraphView) {
-    ret = new ExpandIntoOperator<GraphView<GraphPartitionBase>>(parents, target_vertex, query_vertex_indices_,
-                                                                prev_key_parents, filter);
-  } else {
-    CHECK(graph_type_ == GraphType::BipartiteGraphView) << "unknown graph type " << ((uint32_t)graph_type_);
-    ret = new ExpandIntoOperator<GraphView<BipartiteGraph>>(parents, target_vertex, query_vertex_indices_,
+  TraverseOperator* ret = newTraverseOp<ExpandIntoOperator>(graph_type_, parents, target_vertex, query_vertex_indices_,
                                                             prev_key_parents, filter);
-  }
   operators_.push_back(ret);
   return ret;
 }
@@ -458,21 +450,9 @@ TraverseOperator* ExecutionPlan::newExpandSetVertexOperator(
   }
   subgraph_filters_.push_back(filter);
 #endif
-  TraverseOperator* ret;
-
-  if (graph_type_ == GraphType::Normal) {
-    ret = new ExpandKeyToSetVertexOperator<Graph>(parents, target_vertex, query_vertex_indices_, same_label_indices[1],
-                                                  same_label_indices[0], getSetPruningThreshold(target_vertex), filter);
-  } else if (graph_type_ == GraphType::GraphView) {
-    ret = new ExpandKeyToSetVertexOperator<GraphView<GraphPartitionBase>>(
-        parents, target_vertex, query_vertex_indices_, same_label_indices[1], same_label_indices[0],
-        getSetPruningThreshold(target_vertex), filter);
-  } else {
-    CHECK(graph_type_ == GraphType::BipartiteGraphView) << "unknown graph type " << ((uint32_t)graph_type_);
-    ret = new ExpandKeyToSetVertexOperator<GraphView<BipartiteGraph>>(parents, target_vertex, query_vertex_indices_,
-                                                                      same_label_indices[1], same_label_indices[0],
-                                                                      getSetPruningThreshold(target_vertex), filter);
-  }
+  TraverseOperator* ret = newTraverseOp<ExpandKeyToSetVertexOperator>(
+      graph_type_, parents, target_vertex, query_vertex_indices_, same_label_indices[1], same_label_indices[0],
+      getSetPruningThreshold(target_vertex), filter);
   setMatchingOrderIndices(target_vertex, ret);
   operators_.push_back(ret);
   return ret;
@@ -503,21 +483,9 @@ TraverseOperator* ExecutionPlan::newExpandSetToKeyVertexOperator(
 #ifdef USE_FILTER
   filter = createFilter(std::move(pruning_set_indices));
 #endif
-  TraverseOperator* ret;
-  if (graph_type_ == GraphType::Normal) {
-    ret = new ExpandSetToKeyVertexOperator<Graph>(parents, target_vertex, query_vertex_indices_, same_label_indices[1],
-                                                  target_same_label_set_indices, getSetPruningThreshold(target_vertex),
-                                                  filter);
-  } else if (graph_type_ == GraphType::GraphView) {
-    ret = new ExpandSetToKeyVertexOperator<GraphView<GraphPartitionBase>>(
-        parents, target_vertex, query_vertex_indices_, same_label_indices[1], target_same_label_set_indices,
-        getSetPruningThreshold(target_vertex), filter);
-  } else {
-    CHECK(graph_type_ == GraphType::BipartiteGraphView) << "unknown graph type " << ((uint32_t)graph_type_);
-    ret = new ExpandSetToKeyVertexOperator<GraphView<BipartiteGraph>>(
-        parents, target_vertex, query_vertex_indices_, same_label_indices[1], target_same_label_set_indices,
-        getSetPruningThreshold(target_vertex), filter);
-  }
+  TraverseOperator* ret = newTraverseOp<ExpandSetToKeyVertexOperator>(
+      graph_type_, parents, target_vertex, query_vertex_indices_, same_label_indices[1], target_same_label_set_indices,
+      getSetPruningThreshold(target_vertex), filter);
   setMatchingOrderIndices(target_vertex, ret);
   operators_.push_back(ret);
   return ret;
@@ -531,22 +499,9 @@ TraverseOperator* ExecutionPlan::newExpandKeyKeyVertexOperator(
   filter = SubgraphFilter::newSetPrunningSubgraphFilter(same_label_indices[0]);
   subgraph_filters_.push_back(filter);
 #endif
-  TraverseOperator* ret;
-  if (graph_type_ == GraphType::Normal) {
-    ret = new ExpandKeyToKeyVertexOperator<Graph, true>(parents, target_vertex, query_vertex_indices_,
-                                                        same_label_indices[1], same_label_indices[0],
-                                                        getSetPruningThreshold(target_vertex), filter);
-  } else if (graph_type_ == GraphType::GraphView) {
-    ret = new ExpandKeyToKeyVertexOperator<GraphView<GraphPartitionBase>, true>(
-        parents, target_vertex, query_vertex_indices_, same_label_indices[1], same_label_indices[0],
-        getSetPruningThreshold(target_vertex), filter);
-  } else {
-    CHECK(graph_type_ == GraphType::BipartiteGraphView) << "unknown graph type " << ((uint32_t)graph_type_);
-    ret = new ExpandKeyToKeyVertexOperator<GraphView<BipartiteGraph>, false>(
-        parents, target_vertex, query_vertex_indices_, same_label_indices[1], same_label_indices[0],
-        getSetPruningThreshold(target_vertex), filter);
-  }
-
+  TraverseOperator* ret = newTraverseOp<ExpandKeyToKeyVertexOperator>(
+      graph_type_, parents, target_vertex, query_vertex_indices_, same_label_indices[1], same_label_indices[0],
+      getSetPruningThreshold(target_vertex), filter);
   setMatchingOrderIndices(target_vertex, ret);
   operators_.push_back(ret);
   return ret;
@@ -596,21 +551,9 @@ TraverseOperator* ExecutionPlan::newEnumerateKeyExpandToSetOperator(
     }
   }
   filter->setPruningSetThresholds(std::move(pruning_set_thresholds));
-  TraverseOperator* ret;
-  if (graph_type_ == GraphType::Normal) {
-    ret = new EnumerateKeyExpandToSetOperator<Graph>(
-        parents, target_vertex, input_query_vertex_indices, query_vertex_indices_, keys_to_enumerate, cover_table_,
-        same_label_indices, std::move(enumerated_key_pruning_indices), filter);
-  } else if (graph_type_ == GraphType::GraphView) {
-    ret = new EnumerateKeyExpandToSetOperator<GraphView<GraphPartitionBase>>(
-        parents, target_vertex, input_query_vertex_indices, query_vertex_indices_, keys_to_enumerate, cover_table_,
-        same_label_indices, std::move(enumerated_key_pruning_indices), filter);
-  } else {
-    CHECK(graph_type_ == GraphType::BipartiteGraphView) << "unknown graph type " << ((uint32_t)graph_type_);
-    ret = new EnumerateKeyExpandToSetOperator<GraphView<BipartiteGraph>>(
-        parents, target_vertex, input_query_vertex_indices, query_vertex_indices_, keys_to_enumerate, cover_table_,
-        same_label_indices, std::move(enumerated_key_pruning_indices), filter);
-  }
+  TraverseOperator* ret = newTraverseOp<EnumerateKeyExpandToSetOperator>(
+      graph_type_, parents, target_vertex, input_query_vertex_indices, query_vertex_indices_, keys_to_enumerate,
+      cover_table_, same_label_indices, std::move(enumerated_key_pruning_indices), filter);
   setMatchingOrderIndices(target_vertex, ret);
   operators_.push_back(ret);
   return ret;

@@ -68,7 +68,7 @@ class ReorderedPartitionedGraph : public GraphBase {
   /** Get the number of neighbors refined by hints.
    * @param partition The desired partition of neighbors.
    */
-  VertexID getVertexOutDegreeWithHint(VertexID id, LabelID nbr_label, uint32_t partition = 0) const {
+  VertexID getVertexOutDegreeInPartitionWithHint(VertexID id, LabelID nbr_label, uint32_t partition = 0) const {
     auto nbrs = getOutNeighbors(id);
     auto first_neighbor = nbrs.first[0];
     auto last_neighbor = nbrs.first[nbrs.second - 1];
@@ -89,8 +89,16 @@ class ReorderedPartitionedGraph : public GraphBase {
     return std::min(range_r - range_l, getVertexOutDegree(id));
   }
 
-  inline VertexID getVertexInDegreeWithHint(VertexID id, LabelID nbr_label, uint32_t partition = 0) const {
-    return getVertexOutDegreeWithHint(id, nbr_label, partition);
+  inline VertexID getVertexInDegreeInPartitionWithHint(VertexID id, LabelID nbr_label, uint32_t partition = 0) const {
+    return getVertexOutDegreeInPartitionWithHint(id, nbr_label, partition);
+  }
+
+  inline VertexID getVertexOutDegreeWithHint(VertexID id, LabelID nbr_label, uint32_t graph_idx = 0) const {
+    return getVertexOutDegree(id);
+  }
+
+  inline VertexID getVertexInDegreeWithHint(VertexID id, LabelID nbr_label, uint32_t graph_idx = 0) const {
+    return getVertexOutDegree(id);
   }
 
   // do we need to consider an O(1) time implementation?
@@ -139,7 +147,7 @@ class ReorderedPartitionedGraph : public GraphBase {
   /** Get the neighbors that satisfy the hints.
    * @param partition The desired partition of neighbors.
    */
-  VertexSetView getOutNeighborsWithHint(VertexID id, LabelID nbr_label, uint32_t partition = 0) const {
+  VertexSetView getOutNeighborsInPartitionWithHint(VertexID id, LabelID nbr_label, uint32_t partition = 0) const {
     auto nbrs = getOutNeighbors(id);
     VertexID range_l, range_r;
     // get the range of vertex ids that satisfy the hint
@@ -155,8 +163,16 @@ class ReorderedPartitionedGraph : public GraphBase {
     return VertexSetView(start, end);
   }
 
-  inline VertexSetView getInNeighborsWithHint(VertexID id, LabelID nbr_label, uint32_t partition = 0) const {
-    return getOutNeighborsWithHint(id, nbr_label, partition);
+  inline VertexSetView getInNeighborsInPartitionWithHint(VertexID id, LabelID nbr_label, uint32_t partition = 0) const {
+    return getOutNeighborsInPartitionWithHint(id, nbr_label, partition);
+  }
+
+  inline VertexSetView getOutNeighborsWithHint(VertexID id, LabelID nbr_label, uint32_t graph_idx = 0) const {
+    return getAllOutNeighborsWithHint(id, nbr_label);
+  }
+
+  inline VertexSetView getInNeighborsWithHint(VertexID id, LabelID nbr_label, uint32_t graph_idx = 0) const {
+    return getAllOutNeighborsWithHint(id, nbr_label);
   }
 
   VertexSetView getAllOutNeighborsWithHint(VertexID id, LabelID nbr_label) const {

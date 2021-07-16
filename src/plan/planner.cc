@@ -327,7 +327,9 @@ ExecutionPlan* Planner::generateExecutionPlan(const std::vector<VertexID>& candi
   GraphType graph_type =
       toPartitionCandidates()
           ? GraphType::GraphView
-          : (query_context_->query_config.use_auxiliary_index ? GraphType::BipartiteGraphView : GraphType::Normal);
+          : (query_context_->query_config.use_auxiliary_index
+                 ? GraphType::BipartiteGraphView
+                 : (query_context_->graph_metadata->numPartitions() > 1 ? GraphType::Partitioned : GraphType::Normal));
   planners_.push_back(std::make_unique<NaivePlanner>(&query_context_->query_graph, &cardinality, graph_type));
   auto& planner = planners_.back();
 
