@@ -38,8 +38,8 @@ class CountOutputOperator : public OutputOperator {
       count_acc = outputs_->updateCount(update, output_index);
       ++input_start;
       if (count_acc >= outputs_->getLimitPerThread()) {
-        DLOG(INFO) << "last input num subgraphs " << group.getNumSubgraphs() << " isomorphic " << update << " total "
-                   << count_acc;
+        // DLOG(INFO) << "last input num subgraphs " << group.getNumSubgraphs() << " isomorphic " << update << " total "
+        //            << count_acc << " limit " << outputs_->getLimitPerThread();
         return true;
       }
     }

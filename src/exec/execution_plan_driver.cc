@@ -210,7 +210,7 @@ void MatchingParallelExecutionPlanDriver::taskFinish(TaskBase* task, ThreadsafeT
   if (--task_counters_[task->getTaskId()] == 0) {
     // TODO(limit): abort task when match limit is reached
     if (task->getTaskId() == 0 || task_depleted_[task->getTaskId() - 1]) {
-      for (uint32_t i = task->getTaskId(); task_counters_[i] == 0 && i < task_counters_.size(); ++i) {
+      for (uint32_t i = task->getTaskId(); i < task_counters_.size() && task_counters_[i] == 0; ++i) {
         task_depleted_[i] = true;
         ++n_finished_tasks_;
       }

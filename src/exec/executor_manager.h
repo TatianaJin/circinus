@@ -54,11 +54,7 @@ class ExecutorManager {
     }
 
     void start(ThreadsafeTaskQueue* task_queue, ThreadsafeQueue<std::unique_ptr<TaskBase>>* finished_task);
-    inline void shutDown(ThreadsafeTaskQueue* task_queue) {
-      for (uint32_t i = 0; i < n_threads_; ++i) {
-        task_queue->putTask(nullptr);
-      }
-    }
+    inline void shutDown(ThreadsafeTaskQueue* task_queue) { task_queue->shutDown(); }
     inline uint32_t getNumExecutors() const { return n_threads_; }
   } executors_;
 

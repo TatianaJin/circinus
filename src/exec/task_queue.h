@@ -36,6 +36,7 @@ class ThreadsafeTaskQueue {
   std::priority_queue<TaskBase*, std::vector<TaskBase*>, Comparator> queue_;  // need to delete the pointers
   std::mutex mu_;
   std::condition_variable cv_;
+  bool shut_down_ = false;
 
  public:
   ~ThreadsafeTaskQueue() {
@@ -43,6 +44,14 @@ class ThreadsafeTaskQueue {
       delete queue_.top();
       queue_.pop();
     }
+  }
+
+  void shutDown() {
+    {
+      std::lock_guard<std::mutex> lock(mu_);
+      shut_down_ = true;
+    }
+    cv_.notify_all();
   }
 
   void putTask(TaskBase* task) {
@@ -57,7 +66,8 @@ class ThreadsafeTaskQueue {
 
   std::unique_ptr<TaskBase> getTask() {
     std::unique_lock<std::mutex> lock(mu_);
-    cv_.wait(lock, [this]() { return !queue_.empty(); });
+    cv_.wait(lock, [this]() { return shut_down_ || !queue_.empty(); });
+    if (shut_down_) return nullptr;
     auto ret = std::unique_ptr<TaskBase>(queue_.top());
     queue_.pop();
     return ret;

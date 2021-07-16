@@ -96,10 +96,10 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
           updateDistinctSICount((ExpandVertexTraverseContext*)ctx);
         }
       if (min_parent_set_size < candidates_->size()) {
-        DLOG(INFO) << "fromSetNeighborStrategy";
+        // DLOG(INFO) << "fromSetNeighborStrategy";
         output_num += fromSetNeighborStrategy<profile>(min_parent_vertex, min_parent_idx, ctx);
       } else {
-        DLOG(INFO) << "fromCandidateStrategy";
+        // DLOG(INFO) << "fromCandidateStrategy";
         output_num += fromCandidateStrategy<profile>(ctx);
       }
       if
