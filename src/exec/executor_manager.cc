@@ -38,7 +38,11 @@ ExecutorManager::ExecutorManager(ThreadsafeQueue<ServerEvent>* queue) : reply_qu
         driver = state.second.get();
       }
       DCHECK(ctx->second != nullptr);
-      driver->taskFinish(task.get(), &task_queue_, reply_queue_);
+      if (task->isTimeOut()) {
+        driver->taskTimeOut(task.get(), reply_queue_);
+      } else {
+        driver->taskFinish(task.get(), &task_queue_, reply_queue_);
+      }
     }
   });
 }
@@ -71,7 +75,9 @@ void ExecutorManager::ExecutorPool::start(ThreadsafeTaskQueue* task_queue,
         if (task == nullptr) {
           break;
         }
-        task->runWithTiming(i);
+        if (!task->isTimeOut()) {
+          task->runWithTiming(i);
+        }
         finished_task->push(std::move(task));
       }
     }));

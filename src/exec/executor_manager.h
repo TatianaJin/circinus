@@ -15,6 +15,7 @@
 #pragma once
 
 #include <memory>
+#include <string>
 #include <thread>
 #include <unordered_map>
 #include <utility>
@@ -81,9 +82,13 @@ class ExecutorManager {
    * @param plan_driver If plan_driver is nullptr, use the previous one.
    */
   void run(QueryId qid, QueryContext* query_ctx, std::unique_ptr<PlanDriver>&& plan_driver);
-  inline void clearQuery(QueryId qid) {
+  inline void clearQuery(QueryId qid, const std::string& error) {
     std::lock_guard<std::mutex> lock(execution_ctx_mu_);
-    LOG(INFO) << "Query " << qid << " Finished.";
+    if (error != "") {
+      LOG(INFO) << "Query " << qid << " " << error << ".";
+    } else {
+      LOG(INFO) << "Query " << qid << " Finished.";
+    }
     execution_ctx_.erase(qid);
   }
 

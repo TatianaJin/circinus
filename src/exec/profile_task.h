@@ -26,7 +26,8 @@ class ProfileTask : public T {
 
  public:
   template <typename... Args>
-  ProfileTask(QueryId qid, TaskId tid, Args... args) : T(qid, tid, std::forward<Args>(args)...) {}
+  ProfileTask(QueryId qid, TaskId tid, std::chrono::time_point<std::chrono::system_clock> stop_time, Args... args)
+      : T(qid, tid, stop_time, std::forward<Args>(args)...) {}
 
   void run(uint32_t executor_idx) override { T::profile(executor_idx); }
 

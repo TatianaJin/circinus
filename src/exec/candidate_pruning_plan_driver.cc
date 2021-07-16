@@ -47,7 +47,7 @@ void CandidatePruningPlanDriver::initPhase1TasksForPartitionedGraph(QueryId qid,
       auto& scan = scans[task_id];
       if (scan != nullptr) {
         task_counters_[task_id] += scan->getParallelism();
-        task_queue.putTask(new ScanTask(qid, task_id, 0, scan.get(), query_ctx->data_graph, i));
+        task_queue.putTask(new ScanTask(qid, task_id, query_ctx->stop_time, 0, scan.get(), query_ctx->data_graph, i));
         operators_.push_back(std::move(scan));
       } else {
         DLOG(INFO) << "partition " << i << '/' << n_partitions << " no candidates for " << task_id;
@@ -84,7 +84,7 @@ void CandidatePruningPlanDriver::init(QueryId qid, QueryContext* query_ctx, Exec
       CHECK(scan != nullptr) << task_id;
       task_counters_[task_id] = scan->getParallelism();
       for (uint32_t i = 0; i < scan->getParallelism(); ++i) {
-        task_queue.putTask(new ScanTask(qid, task_id, i, scan.get(), query_ctx->data_graph));
+        task_queue.putTask(new ScanTask(qid, task_id, query_ctx->stop_time, i, scan.get(), query_ctx->data_graph));
       }
       DLOG(INFO) << "Query " << qid << " Task " << task_id << " " << scan->getParallelism() << " shard(s)";
       operators_.push_back(std::move(scan));
@@ -101,8 +101,8 @@ void CandidatePruningPlanDriver::init(QueryId qid, QueryContext* query_ctx, Exec
     filter->setParallelism((input_size + FLAGS_batch_size - 1) / FLAGS_batch_size);
     task_counters_[task_id] = filter->getParallelism();
     for (uint32_t i = 0; i < filter->getParallelism(); ++i) {
-      task_queue.putTask(new NeighborhoodFilterTask(qid, task_id, i, filter.get(), query_ctx->data_graph,
-                                                    result_->getMergedCandidates()));
+      task_queue.putTask(new NeighborhoodFilterTask(qid, task_id, query_ctx->stop_time, i, filter.get(),
+                                                    query_ctx->data_graph, result_->getMergedCandidates()));
     }
     for (auto& filter : filters) {
       operators_.push_back(std::move(filter));
@@ -147,10 +147,17 @@ void CandidatePruningPlanDriver::taskFinish(TaskBase* task, ThreadsafeTaskQueue*
       filter->setParallelism((input_size + FLAGS_batch_size - 1) / FLAGS_batch_size);
       task_counters_[n_finished_tasks_] = filter->getParallelism();
       for (uint32_t i = 0; i < filter->getParallelism(); ++i) {
-        task_queue->putTask(new NeighborhoodFilterTask(task->getQueryId(), n_finished_tasks_, i, filter,
-                                                       task->getDataGraph(), result_->getMergedCandidates()));
+        task_queue->putTask(new NeighborhoodFilterTask(task->getQueryId(), n_finished_tasks_, task->getStopTime(), i,
+                                                       filter, task->getDataGraph(), result_->getMergedCandidates()));
       }
     }
+  }
+}
+
+void CandidatePruningPlanDriver::taskTimeOut(TaskBase* task, ThreadsafeQueue<ServerEvent>* reply_queue) {
+  if (--task_counters_[task->getTaskId()] == 0 && ++n_finished_tasks_ == task_counters_.size()) {
+    finish_event_->type = ServerEvent::TimeOut;
+    reply_queue->push(std::move(*finish_event_));
   }
 }
 

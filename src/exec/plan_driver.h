@@ -49,6 +49,7 @@ class PlanDriver {
   virtual void init(QueryId qid, QueryContext* query_ctx, ExecutionContext& ctx, ThreadsafeTaskQueue& task_queue) = 0;
   virtual void taskFinish(TaskBase* task, ThreadsafeTaskQueue* task_queue,
                           ThreadsafeQueue<ServerEvent>* reply_queue) = 0;
+  virtual void taskTimeOut(TaskBase* task, ThreadsafeQueue<ServerEvent>* reply_queue) = 0;
 
  protected:
   void reset() {

@@ -102,6 +102,10 @@ void CircinusServer::Serve(bool listen) {
         handleExecutionPhase(event);
         break;
       }
+      case Event::TimeOut: {
+        handleQueryTimeOut(event);
+        break;
+      }
       default:
         LOG(FATAL) << "Unknown event type " << event;
       }
@@ -287,12 +291,14 @@ inline uint32_t CircinusServer::newQuery(const std::string& graph_name, const st
 
   auto& graph = data_graphs_.at(graph_name);
   if (reusable_indices_.empty()) {
-    active_queries_.emplace_back(std::move(q), std::move(config), graph.first.get(), &graph.second);
+    active_queries_.emplace_back(std::move(q), std::move(config), graph.first.get(), &graph.second,
+                                 std::chrono::system_clock::now() + config.time_limit);
     return active_queries_.size() - 1;
   }
   // reuse deleted index
   auto idx = reusable_indices_.back();
-  active_queries_[idx].query_context = QueryContext(std::move(q), std::move(config), graph.first.get(), &graph.second);
+  active_queries_[idx].query_context = QueryContext(std::move(q), std::move(config), graph.first.get(), &graph.second,
+                                                    std::chrono::system_clock::now() + config.time_limit);
   reusable_indices_.pop_back();
   return idx;
 }
@@ -329,7 +335,7 @@ void CircinusServer::finishQuery(uint32_t query_index, void* result, const std::
     replyToClient(query.client_addr, error);
   }
   // make sure the pointer result is not needed before clearQuery
-  executor_manager_.clearQuery(query_index);
+  executor_manager_.clearQuery(query_index, error);
 }
 
 }  // namespace circinus

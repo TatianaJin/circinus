@@ -37,6 +37,7 @@ class ExecutionPlanDriverBase : public PlanDriver {
   std::chrono::time_point<std::chrono::high_resolution_clock> start_time_;
   QueryType query_type_;
   std::vector<std::vector<CandidateSetView>> candidates_;
+  bool is_time_out_ = false;
 
  public:
   explicit ExecutionPlanDriverBase(BacktrackingPlan* plan) : plan_(plan) {}
@@ -45,6 +46,8 @@ class ExecutionPlanDriverBase : public PlanDriver {
   void init(QueryId qid, QueryContext* query_ctx, ExecutionContext& ctx, ThreadsafeTaskQueue& task_queue) override;
 
   void finishPlan(ThreadsafeQueue<ServerEvent>* reply_queue);
+
+  void taskTimeOut(TaskBase* task, ThreadsafeQueue<ServerEvent>* reply_queue) override;
 
   inline void collectTaskInfo(TaskBase* task) const {
     result_->addEnumerateTime(task->getExecutionTime());
@@ -89,6 +92,8 @@ class MatchingParallelExecutionPlanDriver : public ExecutionPlanDriverBase {
   void init(QueryId qid, QueryContext* query_ctx, ExecutionContext& ctx, ThreadsafeTaskQueue& task_queue) override;
 
   void taskFinish(TaskBase* task, ThreadsafeTaskQueue* task_queue, ThreadsafeQueue<ServerEvent>* reply_queue) override;
+
+  void taskTimeOut(TaskBase* task, ThreadsafeQueue<ServerEvent>* reply_queue) override;
 };
 
 }  // namespace circinus

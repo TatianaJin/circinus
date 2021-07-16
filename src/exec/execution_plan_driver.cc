@@ -14,6 +14,7 @@
 
 #include "exec/execution_plan_driver.h"
 
+#include <chrono>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -56,6 +57,13 @@ void ExecutionPlanDriverBase::init(QueryId qid, QueryContext* query_ctx, Executi
 }
 
 void ExecutionPlanDriverBase::finishPlan(ThreadsafeQueue<ServerEvent>* reply_queue) {
+  if (is_time_out_) {
+    finish_event_->type = ServerEvent::TimeOut;
+    reply_queue->push(std::move(*finish_event_));
+    reset();
+    return;
+  }
+
   result_->setElapsedExecutionTime(toSeconds(start_time_, std::chrono::high_resolution_clock::now()));
   result_->setCount();
   auto profiled = dynamic_cast<ProfiledExecutionResult*>(result_);
@@ -90,6 +98,13 @@ void ExecutionPlanDriverBase::finishPlan(ThreadsafeQueue<ServerEvent>* reply_que
   reset();
 }
 
+void ExecutionPlanDriverBase::taskTimeOut(TaskBase* task, ThreadsafeQueue<ServerEvent>* reply_queue) {
+  is_time_out_ = true;
+  if (--task_counters_[task->getTaskId()] == 0 && ++n_finished_tasks_ == task_counters_.size()) {
+    finishPlan(reply_queue);
+  }
+}
+
 void ExecutionPlanDriver::init(QueryId qid, QueryContext* query_ctx, ExecutionContext& ctx,
                                ThreadsafeTaskQueue& task_queue) {
   ExecutionPlanDriverBase::init(qid, query_ctx, ctx, task_queue);
@@ -107,9 +122,9 @@ void ExecutionPlanDriver::init(QueryId qid, QueryContext* query_ctx, ExecutionCo
     auto& scopes = plan_->getPartitionedPlan(i).second;
     auto partitioned_result = dynamic_cast<PartitionedCandidateResult*>(candidate_result_.get());
     candidates_[i] = partitioned_result->getCandidatesByScopes(scopes);
-    addTaskToQueue<TraverseTask>(&task_queue, qid, i, ctx.first.getBatchSize(), plan_->getOperators(plan_idx),
-                                 std::move(input_operator), scopes, query_ctx->data_graph, &candidates_[i],
-                                 query_type_);
+    addTaskToQueue<TraverseTask>(&task_queue, qid, i, query_ctx->stop_time, ctx.first.getBatchSize(),
+                                 plan_->getOperators(plan_idx), std::move(input_operator), scopes,
+                                 query_ctx->data_graph, &candidates_[i], query_type_);
   }
 }
 
@@ -133,8 +148,9 @@ void MatchingParallelExecutionPlanDriver::init(QueryId qid, QueryContext* query_
     // one task for single-thread execution
     task_counters_.push_back(1);
 
-    addTaskToQueue<TraverseChainTask>(&task_queue, qid, 0, ctx.first.getBatchSize(), plan_->getOperators(),
-                                      plan_->getInputOperator(), query_ctx->data_graph, &candidates_, query_type_);
+    addTaskToQueue<TraverseChainTask>(&task_queue, qid, 0, query_ctx->stop_time, ctx.first.getBatchSize(),
+                                      plan_->getOperators(), plan_->getInputOperator(), query_ctx->data_graph,
+                                      &candidates_, query_type_);
     return;
   }
 
@@ -154,9 +170,9 @@ void MatchingParallelExecutionPlanDriver::init(QueryId qid, QueryContext* query_
   CHECK_EQ(task_counters_[0], 1) << " input task counter is not equal to 1 ";  // TODO(tatiana): parallel input tasks
 
   input_op_->setNext(plan_->getOperators().front());
-
-  addTaskToQueue<MatchingParallelInputTask>(&task_queue, qid, 0, (const GraphBase*)query_ctx->data_graph,
-                                            input_op_.get(), candidate_result_->getCandidates());
+  addTaskToQueue<MatchingParallelInputTask>(&task_queue, qid, 0, query_ctx->stop_time,
+                                            (const GraphBase*)query_ctx->data_graph, input_op_.get(),
+                                            candidate_result_->getCandidates());
 }
 
 void MatchingParallelExecutionPlanDriver::taskFinish(TaskBase* task, ThreadsafeTaskQueue* task_queue,
@@ -180,26 +196,26 @@ void MatchingParallelExecutionPlanDriver::taskFinish(TaskBase* task, ThreadsafeT
     if (task->getTaskId() == plan_->getOperators().size() - 1) {
       uint32_t input_index = 0;
       for (; input_index + batch_size_ < input_size; input_index += batch_size_) {
-        addTaskToQueue<MatchingParallelOutputTask>(task_queue, task->getQueryId(), level,
+        addTaskToQueue<MatchingParallelOutputTask>(task_queue, task->getQueryId(), level, task->getStopTime(),
                                                    dynamic_cast<OutputOperator*>(op), inputs, input_index,
                                                    input_index + batch_size_);
       }
       if (input_index < input_size) {
-        addTaskToQueue<MatchingParallelOutputTask>(task_queue, task->getQueryId(), level,
+        addTaskToQueue<MatchingParallelOutputTask>(task_queue, task->getQueryId(), level, task->getStopTime(),
                                                    dynamic_cast<OutputOperator*>(op), inputs, input_index, input_size);
       }
     } else {
       uint32_t input_index = 0;
       for (; input_index + batch_size_ < input_size; input_index += batch_size_) {
         addTaskToQueue<MatchingParallelTraverseTask>(
-            task_queue, task->getQueryId(), level, dynamic_cast<TraverseOperator*>(op),
+            task_queue, task->getQueryId(), level, task->getStopTime(), dynamic_cast<TraverseOperator*>(op),
             dynamic_cast<TraverseOperator*>(op)->initTraverseContext(inputs.get(), task->getDataGraph(), input_index,
                                                                      input_index + batch_size_, query_type_),
             inputs);
       }
       if (input_index < input_size) {
         addTaskToQueue<MatchingParallelTraverseTask>(
-            task_queue, task->getQueryId(), level, dynamic_cast<TraverseOperator*>(op),
+            task_queue, task->getQueryId(), level, task->getStopTime(), dynamic_cast<TraverseOperator*>(op),
             dynamic_cast<TraverseOperator*>(op)->initTraverseContext(inputs.get(), task->getDataGraph(), input_index,
                                                                      input_size, query_type_),
             inputs);
@@ -211,6 +227,21 @@ void MatchingParallelExecutionPlanDriver::taskFinish(TaskBase* task, ThreadsafeT
     // TODO(limit): abort task when match limit is reached
     if (task->getTaskId() == 0 || task_depleted_[task->getTaskId() - 1]) {
       for (uint32_t i = task->getTaskId(); i < task_counters_.size() && task_counters_[i] == 0; ++i) {
+        task_depleted_[i] = true;
+        ++n_finished_tasks_;
+      }
+    }
+    if (n_finished_tasks_ == task_counters_.size()) {
+      finishPlan(reply_queue);
+    }
+  }
+}
+
+void MatchingParallelExecutionPlanDriver::taskTimeOut(TaskBase* task, ThreadsafeQueue<ServerEvent>* reply_queue) {
+  is_time_out_ = true;
+  if (--task_counters_[task->getTaskId()] == 0) {
+    if (task->getTaskId() == 0 || task_depleted_[task->getTaskId() - 1]) {
+      for (uint32_t i = task->getTaskId(); task_counters_[i] == 0 && i < task_counters_.size(); ++i) {
         task_depleted_[i] = true;
         ++n_finished_tasks_;
       }

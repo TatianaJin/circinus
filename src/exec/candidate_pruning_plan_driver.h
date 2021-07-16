@@ -36,6 +36,8 @@ class CandidatePruningPlanDriver : public PlanDriver {
 
   void taskFinish(TaskBase* task, ThreadsafeTaskQueue* task_queue, ThreadsafeQueue<ServerEvent>* reply_queue) override;
 
+  void taskTimeOut(TaskBase* task, ThreadsafeQueue<ServerEvent>* reply_queue) override;
+
  private:
   void initPhase1TasksForPartitionedGraph(QueryId qid, QueryContext* query_ctx, ExecutionContext& ctx,
                                           ThreadsafeTaskQueue& task_queue);

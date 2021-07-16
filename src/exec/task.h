@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <chrono>
 #include <utility>
 #include <vector>
 
@@ -29,9 +30,11 @@ class TaskBase {
   uint16_t query_id_;
   uint16_t task_id_;
   double time_ = 0;
+  std::chrono::time_point<std::chrono::system_clock> stop_time_;
 
  public:
-  TaskBase(QueryId query_id, TaskId task_id) : query_id_(query_id), task_id_(task_id) {}
+  TaskBase(QueryId query_id, TaskId task_id, std::chrono::time_point<std::chrono::system_clock> stop_time)
+      : query_id_(query_id), task_id_(task_id), stop_time_(stop_time) {}
 
   virtual ~TaskBase() {}
 
@@ -39,8 +42,10 @@ class TaskBase {
     return (query_id_ == other->query_id_) ? task_id_ > other->task_id_ : query_id_ < other->query_id_;
   }
 
+  inline bool isTimeOut() const { return std::chrono::system_clock::now() >= stop_time_; }
   inline auto getQueryId() const { return query_id_; }
   inline auto getTaskId() const { return task_id_; }
+  inline auto getStopTime() const { return stop_time_; }
 
   virtual const GraphBase* getDataGraph() const = 0;
   virtual void run(uint32_t executor_idx) = 0;

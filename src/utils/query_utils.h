@@ -42,6 +42,7 @@ struct ServerEvent {
     /* Internal phases */
     CandidatePhase,
     ExecutionPhase,
+    TimeOut,
   } type;
   std::vector<std::string> args;
   std::string client_addr;
@@ -113,6 +114,7 @@ class QueryConfig {
   bool use_partitioned_graph = true;
   std::string output = "count";
   uint64_t limit = ~0ull;
+  std::chrono::seconds time_limit = std::chrono::seconds(3);
   QueryMode mode = QueryMode::Execute;
 
   explicit QueryConfig(const std::string& config_str = "") {
@@ -142,6 +144,8 @@ class QueryConfig {
         validateConfig(mode, value, modes, "query mode");
       } else if (key == "limit") {
         limit = std::stoull(value);
+      } else if (key == "time_limit") {
+        time_limit = std::chrono::seconds(std::stol(value));
       } else if (key == "use_partitioned_graph" || key == "upg") {
         use_partitioned_graph = value == "true" || value == "1";
       } else if (key == "use_auxiliary_index" || key == "uai") {
@@ -177,15 +181,22 @@ struct QueryContext {
   QueryConfig query_config;
   GraphBase* data_graph;
   GraphMetadata* graph_metadata;
+  std::chrono::time_point<std::chrono::system_clock> stop_time;
 
-  QueryContext(QueryGraph&& q, QueryConfig&& config, GraphBase* g, GraphMetadata* metadata)
-      : query_graph(std::move(q)), query_config(std::move(config)), data_graph(g), graph_metadata(metadata) {}
+  QueryContext(QueryGraph&& q, QueryConfig&& config, GraphBase* g, GraphMetadata* metadata,
+               std::chrono::time_point<std::chrono::system_clock> stop_time)
+      : query_graph(std::move(q)),
+        query_config(std::move(config)),
+        data_graph(g),
+        graph_metadata(metadata),
+        stop_time(stop_time) {}
 
   void operator=(QueryContext&& context) {
     query_graph = std::move(context.query_graph);
     query_config = std::move(context.query_config);
     data_graph = context.data_graph;
     graph_metadata = context.graph_metadata;
+    stop_time = context.stop_time;
   }
 };
 

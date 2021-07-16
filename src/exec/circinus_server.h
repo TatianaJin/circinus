@@ -51,8 +51,9 @@ struct QueryState {
   double filter_time = 0;
   double plan_time = 0;
 
-  QueryState(QueryGraph&& q, QueryConfig&& config, GraphBase* g, GraphMetadata* m)
-      : query_context(std::move(q), std::move(config), g, m) {}
+  QueryState(QueryGraph&& q, QueryConfig&& config, GraphBase* g, GraphMetadata* m,
+             std::chrono::time_point<std::chrono::system_clock> stop_time)
+      : query_context(std::move(q), std::move(config), g, m, stop_time) {}
 };
 
 class CircinusServer {
@@ -117,6 +118,8 @@ class CircinusServer {
     DCHECK(event.data != nullptr);
     finishQuery(event.query_id, event.data, "");
   }
+
+  inline void handleQueryTimeOut(const Event& event) { finishQuery(event.query_id, event.data, "timeout"); }
 
   /* end of event handlers */
 
