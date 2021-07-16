@@ -67,12 +67,13 @@ class Graph : public GraphBase {
 
   inline LabelID getVertexLabel(VertexID id) const { return labels_[id]; }
 
-  inline VertexSetView getOutNeighborsWithHint(VertexID id, LabelID nbr_label, uint32_t graph_idx = 0) const {
+  inline SingleRangeVertexSetView getOutNeighborsWithHint(VertexID id, LabelID nbr_label,
+                                                          uint32_t graph_idx = 0) const {
     auto[first, size] = getOutNeighbors(id);
-    return VertexSetView(first, first + size);
+    return SingleRangeVertexSetView(first, size);
   }
 
-  inline VertexSetView getInNeighborsWithHint(VertexID id, LabelID nbr_label, uint32_t graph_idx = 0) const {
+  inline SingleRangeVertexSetView getInNeighborsWithHint(VertexID id, LabelID nbr_label, uint32_t graph_idx = 0) const {
     return getOutNeighborsWithHint(id, nbr_label, graph_idx);
   }
 

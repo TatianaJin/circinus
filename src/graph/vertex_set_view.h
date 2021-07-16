@@ -142,4 +142,15 @@ class VertexSetView {
   }
 };
 
+class SingleRangeVertexSetView : public VertexSetView {
+ public:
+  using ConstIterator = const VertexID*;
+  SingleRangeVertexSetView(const VertexID* start, size_t size) { addRange(start, start + size); }
+
+  inline ConstIterator begin() const { return ranges_.empty() ? nullptr : ranges_.front().first; }
+  inline ConstIterator end() const {
+    return ranges_.empty() ? nullptr : (ranges_.front().first + ranges_.front().second);
+  }
+};
+
 }  // namespace circinus
