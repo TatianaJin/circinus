@@ -119,11 +119,10 @@ class TestExpandEdgeCosts : public testing::Test {
               filter};
     }
     if (cover[parent] == 1) {
-      return {
-          ExpandEdgeOperator::newExpandEdgeKeyToKeyOperator(
-              parent, target, indices, same_label_indices[1], same_label_indices[0], ~0u, filter, !use_bipartite_graph,
-              use_bipartite_graph ? circinus::GraphType::BipartiteGraphView : circinus::GraphType::Normal),
-          filter};
+      return {ExpandEdgeOperator::newExpandEdgeKeyToKeyOperator(
+                  parent, target, indices, same_label_indices[1], same_label_indices[0], ~0u, filter,
+                  use_bipartite_graph ? circinus::GraphType::BipartiteGraphView : circinus::GraphType::Normal),
+              filter};
     }
     return {ExpandEdgeOperator::newExpandEdgeSetToKeyOperator(parent, target, indices, same_label_indices[1], {}, ~0u,
                                                               filter, circinus::GraphType::Normal),

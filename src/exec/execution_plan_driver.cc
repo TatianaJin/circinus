@@ -114,6 +114,9 @@ void ExecutionPlanDriver::init(QueryId qid, QueryContext* query_ctx, ExecutionCo
   task_counters_.resize(plan_->getPlans().size(), 1);  // one task per partition
   candidates_.resize(n_plans);
   for (uint32_t i = 0; i < n_plans; ++i) {
+    if (i != 12) {
+      continue;
+    }
     auto plan_idx = plan_->getPartitionedPlan(i).first;
     dynamic_cast<OutputOperator*>(plan_->getOutputOperator(plan_idx))
         ->setOutput(&result_->getOutputs());  // all plans share the same output

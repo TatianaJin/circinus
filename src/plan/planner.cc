@@ -257,6 +257,7 @@ BacktrackingPlan* Planner::generateExecutionPlan(const CandidateResult* result, 
   result = (PartitionedCandidateResult*)result;
   auto n_qvs = query_context_->query_graph.getNumVertices();
   for (uint32_t i = 0; i < candidate_cardinality.size(); ++i) {
+    LOG(INFO) << "Generate Plan " << i;
     auto& stats = candidate_cardinality[i];
     // TODO(tatiana): apply the state-of-the-art matching order strategies, compute the orders only
     std::vector<CandidateScope> scopes(n_qvs);
@@ -267,7 +268,11 @@ BacktrackingPlan* Planner::generateExecutionPlan(const CandidateResult* result, 
     auto order_generator = OrderGenerator(query_context_->data_graph, query_context_->graph_metadata->getPartition(i),
                                           &query_context_->query_graph, candidate_views, stats);
     auto use_order = order_generator.getOrder(query_context_->query_config.order_strategy);
-    backtracking_plan_->addPlan(generateExecutionPlan(stats, use_order, multithread));
+    auto plan = generateExecutionPlan(stats, use_order, multithread);
+    if (plan == nullptr) {
+      continue;
+    }
+    backtracking_plan_->addPlan(plan);
   }
   auto partitioning_qv = getPartitioningQueryVertices();
   backtracking_plan_->addPartitionedPlans(generatePartitionedPlans(partitioning_qv));
@@ -302,7 +307,11 @@ BacktrackingPlan* Planner::generateExecutionPlan(const std::vector<std::vector<V
   backtracking_plan_ = std::make_unique<BacktrackingPlan>();
   // generate a logical plan for each partition
   for (auto& stats : *candidate_cardinality) {
-    backtracking_plan_->addPlan(generateExecutionPlan(stats, use_order, multithread));
+    auto plan = generateExecutionPlan(stats, use_order, multithread);
+    if (plan == nullptr) {
+      continue;
+    }
+    backtracking_plan_->addPlan(plan);
   }
   auto partitioning_qv = getPartitioningQueryVertices();
   backtracking_plan_->addPartitionedPlans(generatePartitionedPlans(partitioning_qv));
@@ -316,8 +325,15 @@ BacktrackingPlan* Planner::generateExecutionPlan(const std::vector<std::vector<V
 ExecutionPlan* Planner::generateExecutionPlan(const std::vector<VertexID>& candidate_cardinality,
                                               const std::vector<QueryVertexID>& use_order, bool multithread) {
   // TODO(tatiana): handle the case when the cardinality of a candidate set is 0
+  std::stringstream ss;
   for (auto c : candidate_cardinality) {
-    CHECK_NE(c, 0);
+    ss << c << " ";
+  }
+  LOG(INFO) << ss.str();
+  for (auto c : candidate_cardinality) {
+    if (c == 0) {
+      return nullptr;
+    }
   }
   std::vector<double> cardinality{candidate_cardinality.begin(), candidate_cardinality.end()};
 
