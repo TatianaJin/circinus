@@ -71,7 +71,7 @@ class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
         uint32_t key = query_vertex_indices_.at(parents_[i]);
         DCHECK_LT(key, input.getNumKeys());
         uint32_t key_vid = input.getKeyVal(key);
-        auto neighbors = data_graph->getOutNeighborsWithHint(key_vid, ALL_LABEL, i);
+        auto neighbors = data_graph->getOutNeighborsWithHint(key_vid, target_label_, i);
         if (i == 0) {
           if (!intersect_candidates) {
             removeExceptions(neighbors, &new_keys, exceptions);

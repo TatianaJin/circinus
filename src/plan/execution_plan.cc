@@ -25,9 +25,20 @@
 #include "graph/graph_view.h"
 #include "ops/operators.h"
 #include "ops/traverse_operator_utils.h"
+#include "utils/flags.h"
 #include "utils/hashmap.h"
 
 namespace circinus {
+
+inline std::vector<LabelID> getParentLabels(const QueryGraph& q, const std::vector<QueryVertexID>& parents) {
+  if (!FLAGS_label_filter) return std::vector<LabelID>(parents.size(), ALL_LABEL);
+  std::vector<LabelID> res;
+  res.reserve(parents.size());
+  for (auto p : parents) {
+    res.push_back(q.getVertexLabel(p));
+  }
+  return res;
+}
 
 // BipartiteGraph used in this function but not the other function with the same name
 void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<QueryVertexID>& matching_order,
@@ -415,6 +426,8 @@ TraverseOperator* ExecutionPlan::newExpandEdgeSetToKeyOperator(
       parent_vertex, target_vertex, query_vertex_indices_, target_same_label_indices[1], target_same_label_set_indices,
       getSetPruningThreshold(target_vertex), nullptr, graph_type_);
 #endif
+  ((ExpandEdgeOperator*)ret)
+      ->setParentLabel(FLAGS_label_filter ? query_graph_->getVertexLabel(parent_vertex) : ALL_LABEL);
   setMatchingOrderIndices(target_vertex, ret);
   operators_.push_back(ret);
   return ret;
@@ -428,8 +441,9 @@ TraverseOperator* ExecutionPlan::newExpandIntoOperator(const std::vector<QueryVe
 #ifdef USE_FILTER
   filter = createFilter(std::move(pruning_set_indices));
 #endif
-  TraverseOperator* ret = newTraverseOp<ExpandIntoOperator>(graph_type_, parents, target_vertex, query_vertex_indices_,
-                                                            prev_key_parents, filter);
+  TraverseOperator* ret =
+      newTraverseOp<ExpandIntoOperator>(graph_type_, parents, target_vertex, query_vertex_indices_, prev_key_parents,
+                                        filter, getParentLabels(*query_graph_, parents));
   operators_.push_back(ret);
   return ret;
 }
@@ -485,7 +499,7 @@ TraverseOperator* ExecutionPlan::newExpandSetToKeyVertexOperator(
 #endif
   TraverseOperator* ret = newTraverseOp<ExpandSetToKeyVertexOperator>(
       graph_type_, parents, target_vertex, query_vertex_indices_, same_label_indices[1], target_same_label_set_indices,
-      getSetPruningThreshold(target_vertex), filter);
+      getSetPruningThreshold(target_vertex), filter, getParentLabels(*query_graph_, parents));
   setMatchingOrderIndices(target_vertex, ret);
   operators_.push_back(ret);
   return ret;

@@ -25,6 +25,7 @@
 #include "graph/query_graph.h"
 #include "ops/expand_vertex_operator.h"
 #include "ops/expand_vertex_traverse_context.h"
+#include "ops/traverse_operator_utils.h"
 #include "ops/types.h"
 #include "utils/hashmap.h"
 
@@ -32,14 +33,21 @@ namespace circinus {
 
 template <typename G>
 class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
+  std::vector<LabelID> parent_labels_;
+
  public:
   ExpandSetToKeyVertexOperator(const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
                                const unordered_map<QueryVertexID, uint32_t>& query_vertex_indices,
                                const std::vector<uint32_t>& same_label_key_indices,
                                const std::vector<uint32_t>& same_label_set_indices, uint64_t set_pruning_threshold,
-                               SubgraphFilter* subgraph_filter = nullptr)
+                               SubgraphFilter* subgraph_filter = nullptr, std::vector<LabelID>&& parent_labels = {})
       : ExpandVertexOperator(parents, target_vertex, query_vertex_indices, same_label_key_indices,
-                             same_label_set_indices, set_pruning_threshold, subgraph_filter) {}
+                             same_label_set_indices, set_pruning_threshold, subgraph_filter),
+        parent_labels_(std::move(parent_labels)) {
+    if (parent_labels_.empty()) parent_labels_.resize(parents.size(), ALL_LABEL);
+  }
+
+  inline void setParentLabels(std::vector<LabelID>&& parent_labels) { parent_labels_ = std::move(parent_labels); }
 
   uint32_t expand(uint32_t batch_size, TraverseContext* ctx) const override {
     return expandInner<QueryType::Execute>(batch_size, ctx);
@@ -55,7 +63,16 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
   std::string toString() const override {
     std::stringstream ss;
     ss << "ExpandSetToKeyVertexOperator";
-    toStringInner(ss);
+    {
+      uint32_t idx = 0;
+      for (auto parent : parents_) {
+        DCHECK_EQ(query_vertex_indices_.count(parent), 1);
+        ss << ' ' << parent << ':' << parent_labels_[idx++];
+      }
+      DCHECK_EQ(query_vertex_indices_.count(target_vertex_), 1);
+      ss << " -> " << target_vertex_ << ':' << target_label_;
+      if (candidates_ != nullptr) ss << " (" << candidates_->size() << ")";
+    }
     return ss.str();
   }
 
@@ -73,7 +90,7 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
       auto current_set = input.getSet(query_vertex_indices_.at(par));
       uint32_t current_size = 0;
       for (auto set_vertex_id : *current_set) {
-        current_size += ((G*)(ctx->current_data_graph))->getVertexOutDegreeWithHint(set_vertex_id, ALL_LABEL, idx);
+        current_size += ((G*)(ctx->current_data_graph))->getVertexOutDegreeWithHint(set_vertex_id, target_label_, idx);
       }
       if (current_size < size) {
         size = current_size;
@@ -143,10 +160,10 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
         std::vector<VertexID> new_set;
         uint32_t id = query_vertex_indices_.at(set_vid);
         if
-          constexpr(
-              !std::is_same<G, Graph>::value) {  // if using graph view, select neighbors from the right graph part
-            key_out_neighbors =
-                ((G*)(ctx->current_data_graph))->getInNeighborsWithHint(key_vertex_id, ALL_LABEL, parent_idx);
+          constexpr(sensitive_to_hint<G>) {  // if graph provides different neighbors for hints, select neighbors from
+                                             // the right graph part
+            key_out_neighbors = ((G*)(ctx->current_data_graph))
+                                    ->getInNeighborsWithHint(key_vertex_id, parent_labels_[parent_idx], parent_idx);
           }
         intersect(*input.getSet(id), key_out_neighbors, &new_set);  // No need for exceptions
         if
@@ -193,7 +210,7 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
     auto exceptions = input.getExceptions(same_label_key_indices_, same_label_set_indices_);
 
     for (VertexID vid : *parent_match) {
-      auto out_neighbors = ((G*)(ctx->current_data_graph))->getOutNeighborsWithHint(vid, ALL_LABEL, min_parent_idx);
+      auto out_neighbors = ((G*)(ctx->current_data_graph))->getOutNeighborsWithHint(vid, target_label_, min_parent_idx);
       for (VertexID key_vertex_id : out_neighbors) {
         if (exceptions.count(key_vertex_id)) {
           continue;
@@ -224,10 +241,10 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
             std::vector<VertexID> new_set;
             uint32_t id = query_vertex_indices_.at(set_vid);
             if
-              constexpr(
-                  !std::is_same<G, Graph>::value) {  // if using graph view, select neighbors from the right graph part
-                key_out_neighbors =
-                    ((G*)(ctx->current_data_graph))->getInNeighborsWithHint(key_vertex_id, ALL_LABEL, parent_idx);
+              constexpr(sensitive_to_hint<G>) {  // if graph provides different neighbors for hints, select neighbors
+                                                 // from the right graph part
+                key_out_neighbors = ((G*)(ctx->current_data_graph))
+                                        ->getInNeighborsWithHint(key_vertex_id, parent_labels_[parent_idx], parent_idx);
               }
             intersect(*input.getSet(id), key_out_neighbors, &new_set);
             if

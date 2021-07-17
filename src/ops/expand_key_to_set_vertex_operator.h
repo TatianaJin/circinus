@@ -70,7 +70,7 @@ class ExpandKeyToSetVertexOperator : public ExpandVertexOperator {
       for (uint32_t i = 0; i < parents_.size(); ++i) {
         uint32_t key = query_vertex_indices_.at(parents_[i]);
         uint32_t key_vid = input.getKeyVal(key);
-        auto neighbors = ((G*)ctx->current_data_graph)->getOutNeighborsWithHint(key_vid, ALL_LABEL, i);
+        auto neighbors = ((G*)ctx->current_data_graph)->getOutNeighborsWithHint(key_vid, target_label_, i);
         if (i == 0) {
           intersect(*candidates_, neighbors, &new_set, exceptions);
           if

@@ -303,7 +303,7 @@ uint32_t EnumerateKeyExpandToSetOperator<G>::expandInner(uint32_t batch_size, Tr
         }
         auto pidx = enumerate_key_depth + existing_key_parent_indices_.size();  // parent index
         DCHECK(ctx->target_sets[enumerate_key_depth + 1].empty()) << enumerate_key_depth;
-        auto neighbors = getDataGraph(ctx)->getOutNeighborsWithHint(key_vid, ALL_LABEL, pidx);
+        auto neighbors = getDataGraph(ctx)->getOutNeighborsWithHint(key_vid, target_label_, pidx);
         if (ctx->target_sets[enumerate_key_depth].empty()) {
           DCHECK_EQ(enumerate_key_depth, 0);
           intersect(*candidates_, neighbors, &ctx->target_sets[enumerate_key_depth + 1], ctx->existing_vertices);
@@ -406,7 +406,7 @@ bool EnumerateKeyExpandToSetOperator<G>::expandInner(
 
   for (uint32_t i = 0; i < existing_key_parent_indices_.size(); ++i) {
     uint32_t key_vid = input.getKeyVal(existing_key_parent_indices_[i]);
-    auto neighbors = getDataGraph(ctx)->getOutNeighborsWithHint(key_vid, ALL_LABEL, i);
+    auto neighbors = getDataGraph(ctx)->getOutNeighborsWithHint(key_vid, target_label_, i);
     auto input_size = target_set.size() + neighbors.size();
     if (i == 0) {
       intersect(*candidates_, neighbors, &target_set, ctx->existing_vertices);

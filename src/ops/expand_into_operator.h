@@ -26,6 +26,7 @@
 #include "graph/query_graph.h"
 #include "ops/expand_vertex_traverse_context.h"
 #include "ops/traverse_operator.h"
+#include "ops/traverse_operator_utils.h"
 #include "ops/types.h"
 #include "utils/hashmap.h"
 
@@ -37,15 +38,22 @@ class ExpandIntoOperator : public TraverseOperator {
   unordered_map<QueryVertexID, uint32_t> query_vertex_indices_;
   // for profiling
   std::vector<QueryVertexID> key_parents_;  // the key parents of the previous operator
+  std::vector<LabelID> parent_labels_;
 
  public:
   ExpandIntoOperator(const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
                      const unordered_map<QueryVertexID, uint32_t>& query_vertex_indices,
-                     const std::vector<QueryVertexID>& prev_key_parents, SubgraphFilter* subgraph_filter = nullptr)
+                     const std::vector<QueryVertexID>& prev_key_parents, SubgraphFilter* subgraph_filter = nullptr,
+                     std::vector<LabelID>&& parent_labels = {})
       : TraverseOperator(target_vertex, subgraph_filter),
         parents_(parents),
         query_vertex_indices_(query_vertex_indices),
-        key_parents_(prev_key_parents) {}
+        key_parents_(prev_key_parents),
+        parent_labels_(std::move(parent_labels)) {
+    if (parent_labels_.empty()) parent_labels_.resize(parents.size(), ALL_LABEL);
+  }
+
+  inline void setParentLabels(std::vector<LabelID>&& parent_labels) { parent_labels_ = std::move(parent_labels); }
 
   uint32_t expand(uint32_t batch_size, TraverseContext* ctx) const override {
     return expandInner<QueryType::Execute>(batch_size, ctx);
@@ -91,12 +99,13 @@ class ExpandIntoOperator : public TraverseOperator {
   std::string toString() const override {
     std::stringstream ss;
     ss << "ExpandIntoOperator";
+    uint32_t idx = 0;
     for (auto parent : parents_) {
       DCHECK_EQ(query_vertex_indices_.count(parent), 1);
-      ss << ' ' << parent;
+      ss << ' ' << parent << ':' << parent_labels_[idx++];
     }
     DCHECK_EQ(query_vertex_indices_.count(target_vertex_), 1);
-    ss << " -> " << target_vertex_;
+    ss << " -> " << target_vertex_ << ':' << target_label_;
     return ss.str();
   }
 
@@ -176,8 +185,9 @@ class ExpandIntoOperator : public TraverseOperator {
         std::vector<VertexID> new_set;
         uint32_t id = query_vertex_indices_.at(vid);
         if
-          constexpr(!std::is_same<G, Graph>::value) {
-            key_neighbors = ((G*)ctx->current_data_graph)->getInNeighborsWithHint(key_vertex_id, ALL_LABEL, parent_idx);
+          constexpr(sensitive_to_hint<G>) {
+            key_neighbors = ((G*)ctx->current_data_graph)
+                                ->getInNeighborsWithHint(key_vertex_id, parent_labels_[parent_idx], parent_idx);
           }
         intersect(*(input.getSet(id)), key_neighbors, &new_set);
         if

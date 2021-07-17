@@ -130,7 +130,7 @@ class ReorderedPartitionedGraph : public GraphBase {
     }
     // linear scan
     end = search_end;
-    start = search_start;
+    start = search_start - 1;
     for (auto ptr = search_start; ptr < search_end; ++ptr) {
       if (*ptr < range_l) {
         start = ptr;

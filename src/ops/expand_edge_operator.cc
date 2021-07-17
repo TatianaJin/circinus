@@ -28,7 +28,6 @@
 #include "graph/compressed_subgraphs.h"
 #include "graph/graph.h"
 #include "graph/graph_view.h"
-#include "graph/query_graph.h"
 #include "graph/types.h"
 #include "ops/filters/subgraph_filter.h"
 #include "ops/traverse_operator.h"
@@ -97,7 +96,7 @@ class ExpandEdgeKeyToSetOperator : public ExpandEdgeOperator {
   inline bool expandInner(const CompressedSubgraphs& input, TraverseContext* ctx) const {
     std::vector<VertexID> targets;
     auto parent_match = input.getKeyVal(parent_index_);
-    auto neighbors = getDataGraph(ctx)->getOutNeighborsWithHint(parent_match, ALL_LABEL, 0);
+    auto neighbors = getDataGraph(ctx)->getOutNeighborsWithHint(parent_match, target_label_, 0);
     intersect(candidate_set_, neighbors, &targets,
               input.getExceptions(same_label_key_indices_, same_label_set_indices_));
 
@@ -239,7 +238,7 @@ class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
   inline void expandInner(const CompressedSubgraphs& input, ExpandEdgeKeyToKeyTraverseContext* ctx) const {
     auto& current_targets = ctx->resetTargets();
     auto parent_match = input.getKeyVal(parent_index_);
-    auto neighbors = getDataGraph(ctx)->getOutNeighborsWithHint(parent_match, ALL_LABEL, 0);
+    auto neighbors = getDataGraph(ctx)->getOutNeighborsWithHint(parent_match, target_label_, 0);
     if (!intersect_candidates) {
       removeExceptions(neighbors, &current_targets,
                        input.getExceptions(same_label_key_indices_, same_label_set_indices_));
@@ -286,12 +285,12 @@ class ExpandEdgeSetToKeyTraverseContext : public ExpandEdgeTraverseContext {
   inline void setResults(CurrentResults* ptr) { current_results_.reset(ptr); }
 
   template <typename G>
-  void init(const CandidateSetView& candidates) {
+  void init(const CandidateSetView& candidates, LabelID parent_label) {
     auto data_graph = reinterpret_cast<const G*>(current_data_graph);
     // if a different data graph is given, recompute the candidates' neighbor size
     candidates_neighbor_size_ = 0;
     for (auto candidate : candidates) {
-      candidates_neighbor_size_ += data_graph->getVertexInDegreeWithHint(candidate, ALL_LABEL, 0);
+      candidates_neighbor_size_ += data_graph->getVertexInDegreeWithHint(candidate, parent_label, 0);
     }
   }
 };
@@ -300,11 +299,14 @@ template <QueryType profile, typename G>
 class CurrentResultsByCandidate : public CurrentResults {
  private:
   CandidateSetView::ConstIterator candidate_iter_;
+  const LabelID parent_label_;
 
  public:
-  CurrentResultsByCandidate(const CompressedSubgraphs* input, uint32_t parent_index, const TraverseOperator* owner,
-                            ExpandEdgeTraverseContext* ctx)
-      : CurrentResults(input, parent_index, owner, ctx), candidate_iter_(owner->getCandidateSet()->begin()) {}
+  CurrentResultsByCandidate(const CompressedSubgraphs* input, uint32_t parent_index, LabelID parent_label,
+                            const TraverseOperator* owner, ExpandEdgeTraverseContext* ctx)
+      : CurrentResults(input, parent_index, owner, ctx),
+        candidate_iter_(owner->getCandidateSet()->begin()),
+        parent_label_(parent_label) {}
 
   uint32_t getResults(std::vector<CompressedSubgraphs>* outputs, uint32_t cap) override {
     uint32_t n = 0;
@@ -318,7 +320,7 @@ class CurrentResultsByCandidate : public CurrentResults {
       if (exceptions.count(candidate)) {
         continue;
       }
-      auto neighbors = data_graph->getInNeighborsWithHint(candidate, ALL_LABEL, 0);
+      auto neighbors = data_graph->getInNeighborsWithHint(candidate, parent_label_, 0);
       intersect(*parent_set, neighbors, &parents);  // No need for exceptions
       if
         constexpr(isProfileMode(profile)) {
@@ -355,11 +357,12 @@ class CurrentResultsByParent : public CurrentResults {
     auto& parent_set = *input_->getSet(parent_index_);
     unordered_map<VertexID, int> group_index;
     uint32_t n = 0;
+    auto target_label = owner_->getTargetLabel();
     for (uint32_t i = 0; i < parent_set.size(); ++i) {
       auto parent_match = parent_set[i];
       if (exceptions_.count(parent_match)) continue;
       std::vector<VertexID> targets;
-      auto neighbors = ((const G*)ctx_->current_data_graph)->getOutNeighborsWithHint(parent_match, ALL_LABEL, 0);
+      auto neighbors = ((const G*)ctx_->current_data_graph)->getOutNeighborsWithHint(parent_match, target_label, 0);
       intersect(*owner_->getCandidateSet(), neighbors, &targets, exceptions_);
       if
         constexpr(isProfileMode(profile)) {
@@ -395,11 +398,12 @@ class CurrentResultsByExtension : public CurrentResults {
   std::queue<VertexID> extensions_;
   uint32_t parent_match_index_ = 0;
   unordered_set<VertexID> current_exceptions_;
+  const LabelID parent_label_;
 
  public:
-  CurrentResultsByExtension(const CompressedSubgraphs* input, uint32_t parent_index, const TraverseOperator* owner,
-                            ExpandEdgeTraverseContext* ctx)
-      : CurrentResults(input, parent_index, owner, ctx) {
+  CurrentResultsByExtension(const CompressedSubgraphs* input, uint32_t parent_index, LabelID parent_label,
+                            const TraverseOperator* owner, ExpandEdgeTraverseContext* ctx)
+      : CurrentResults(input, parent_index, owner, ctx), parent_label_(parent_label) {
     current_exceptions_ = input_->getExceptions(owner->getSameLabelKeyIndices(), owner->getSameLabelSetIndices());
   }
 
@@ -413,7 +417,7 @@ class CurrentResultsByExtension : public CurrentResults {
         auto candidate = extensions_.front();
         extensions_.pop();
         std::vector<VertexID> parents;  // valid parents for current candidate
-        auto neighbors = g->getInNeighborsWithHint(candidate, ALL_LABEL, 0);
+        auto neighbors = g->getInNeighborsWithHint(candidate, parent_label_, 0);
         intersect(parent_set, neighbors, &parents);  // no need for exceptions
         if
           constexpr(isProfileMode(profile)) {
@@ -446,7 +450,7 @@ class CurrentResultsByExtension : public CurrentResults {
       return;
     }
     std::vector<VertexID> current_extensions;
-    auto neighbors = g->getOutNeighborsWithHint(parent_match, ALL_LABEL, 0);
+    auto neighbors = g->getOutNeighborsWithHint(parent_match, owner_->getTargetLabel(), 0);
     intersect(*owner_->getCandidateSet(), neighbors, &current_extensions, current_exceptions_);
     if
       constexpr(isProfileMode(profile)) {
@@ -492,7 +496,7 @@ class ExpandEdgeSetToKeyOperator : public ExpandEdgeOperator {
                                                        QueryType profile) const override {
     auto ret = std::make_unique<ExpandEdgeSetToKeyTraverseContext>(inputs, graph, input_start, input_end);
     CHECK(candidates_ != nullptr) << "need to call setCandidateSets() first";
-    ret->init<G>(*candidates_);
+    ret->init<G>(*candidates_, parent_label_);
     ret->query_type = profile;
     return ret;
   }
@@ -514,7 +518,7 @@ class ExpandEdgeSetToKeyOperator : public ExpandEdgeOperator {
     DCHECK_NE(ctx->getCandidateNeighborSize(), 0);
     uint64_t set_neighbor_size = 0;
     for (auto v : *parent_set) {
-      set_neighbor_size += getDataGraph(ctx)->getVertexOutDegreeWithHint(v, ALL_LABEL, 0);
+      set_neighbor_size += getDataGraph(ctx)->getVertexOutDegreeWithHint(v, target_label_, 0);
     }
     auto enumerating_candidate_cost = 2 * ctx->getCandidateNeighborSize();
     auto enumerating_parent_cost =
@@ -576,7 +580,7 @@ class ExpandEdgeSetToKeyOperator : public ExpandEdgeOperator {
     switch (mode) {
     case ByCandidate:
       // enumerating target candidates is likely to incur less computation
-      ctx->setResults(new CurrentResultsByCandidate<profile, G>(&input, parent_index_, this, ctx));
+      ctx->setResults(new CurrentResultsByCandidate<profile, G>(&input, parent_index_, parent_label_, this, ctx));
       break;
     case ByParent:
       // enumerating vertices in the parent set is likely to incur less computation
@@ -584,7 +588,7 @@ class ExpandEdgeSetToKeyOperator : public ExpandEdgeOperator {
       break;
     default:
       // enumerating vertices in the parent set is likely to incur less computation
-      ctx->setResults(new CurrentResultsByExtension<profile, G>(&input, parent_index_, this, ctx));
+      ctx->setResults(new CurrentResultsByExtension<profile, G>(&input, parent_index_, parent_label_, this, ctx));
     }
   }
 };

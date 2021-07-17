@@ -31,6 +31,9 @@
 
 namespace circinus {
 
+/** Uses flag:
+ *    label_filter  Whether to set target and parent query vertex label for pruning adjacency lists before intersection.
+ */
 class ExecutionPlan {
  protected:
   const GraphType graph_type_;
@@ -138,6 +141,7 @@ class ExecutionPlan {
       if (v == target_vertex) break;
     }
     op->setMatchingOrderIndices(std::move(matching_order_indices));
+    op->setTargetLabel(FLAGS_label_filter ? query_graph_->getVertexLabel(target_vertex) : ALL_LABEL);
   }
 
   inline SubgraphFilter* createFilter(std::vector<std::vector<uint32_t>>&& pruning_set_indices) {

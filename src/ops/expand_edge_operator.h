@@ -56,6 +56,7 @@ class ExpandEdgeOperator : public TraverseOperator {
   uint32_t parent_index_;  // index of parent query vertex in the compressed subgraphs
   uint32_t target_index_;  // index of target query vertex in the compressed subgraphs
   QueryVertexID parent_id_;
+  LabelID parent_label_ = ALL_LABEL;
 
  public:
   /**
@@ -96,6 +97,8 @@ class ExpandEdgeOperator : public TraverseOperator {
 
   virtual ~ExpandEdgeOperator() {}
 
+  inline void setParentLabel(LabelID l) { parent_label_ = l; }
+
   std::unique_ptr<TraverseContext> initTraverseContext(const std::vector<CompressedSubgraphs>* inputs,
                                                        const void* graph, uint32_t start, uint32_t end,
                                                        QueryType profile) const override {
@@ -123,7 +126,7 @@ class ExpandEdgeOperator : public TraverseOperator {
 
  protected:
   inline void toStringInner(std::stringstream& ss) const {
-    ss << ' ' << parent_id_ << " -> " << target_vertex_;
+    ss << ' ' << parent_id_ << ':' << parent_label_ << " -> " << target_vertex_ << ':' << target_label_;
     if (candidates_ != nullptr) ss << " (" << candidates_->size() << ")";
   }
 };

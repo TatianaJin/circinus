@@ -85,7 +85,7 @@ class ExpandVertexOperator : public TraverseOperator {
       ss << ' ' << parent;
     }
     DCHECK_EQ(query_vertex_indices_.count(target_vertex_), 1);
-    ss << " -> " << target_vertex_;
+    ss << " -> " << target_vertex_ << ':' << target_label_;
     if (candidates_ != nullptr) ss << " (" << candidates_->size() << ")";
   }
 };

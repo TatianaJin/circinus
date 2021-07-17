@@ -76,6 +76,7 @@ class TraverseOperator : public Operator {
  protected:
   const CandidateSetView* candidates_ = nullptr;
   const QueryVertexID target_vertex_;
+  LabelID target_label_ = ALL_LABEL;  // FIXME(tatiana): try using label when get neighbors for intersection
 
   /* for non-repeated-vertex check */
   uint64_t set_pruning_threshold_ = ~0u;
@@ -103,6 +104,7 @@ class TraverseOperator : public Operator {
   inline void setMatchingOrderIndices(std::vector<std::pair<bool, uint32_t>>&& matching_order_indices) {
     matching_order_indices_ = std::move(matching_order_indices);
   }
+  inline void setTargetLabel(LabelID l) { target_label_ = l; }
 
   /* getters */
   inline const CandidateSetView* getCandidateSet() const { return candidates_; }
@@ -111,6 +113,7 @@ class TraverseOperator : public Operator {
   inline auto getSetPruningThreshold() const { return set_pruning_threshold_; }
   inline QueryVertexID getTargetQueryVertex() const { return target_vertex_; }
   inline const auto& getMatchingOrderIndices() const { return matching_order_indices_; }
+  inline auto getTargetLabel() const { return target_label_; }
 
   inline bool filter(const CompressedSubgraphs& subgraphs) const {
     DCHECK(subgraph_filter_ != nullptr);

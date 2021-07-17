@@ -20,6 +20,7 @@ DECLARE_int32(batch_size);
 DECLARE_int32(num_cores);
 DECLARE_int32(profile);
 DECLARE_uint64(set_pruning_threshold);
+DECLARE_bool(label_filter);
 
 DECLARE_bool(standalone);
 DECLARE_string(data_dir);

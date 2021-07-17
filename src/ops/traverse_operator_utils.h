@@ -55,4 +55,7 @@ inline TraverseOperator* newTraverseOp(GraphType g_type, Args... args) {
   return nullptr;
 }
 
+template <typename G>
+inline constexpr bool sensitive_to_hint = !std::is_same<G, Graph>::value;
+
 }  // namespace circinus
