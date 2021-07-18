@@ -362,7 +362,7 @@ class OrderGenerator {
 
         std::vector<size_t> path_embeddings_num;
         estimatePathEmbeddsingsNum(path, path_embeddings_num);
-        paths_embededdings_num.emplace_back(path_embeddings_num);
+        paths_embededdings_num.emplace_back(std::move(path_embeddings_num));
       }
 
       // Select the start path.

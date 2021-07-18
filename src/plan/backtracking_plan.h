@@ -44,6 +44,8 @@ class BacktrackingPlan {
 
   inline const auto& getPlans() const { return plans_; }
 
+  inline const auto& getPlan(uint32_t idx) const { return plans_[idx]; }
+
   inline uint32_t getNumPartitionedPlans() const { return partitioned_plans_.size(); }
   inline const auto& getPartitionedPlan(uint32_t idx) const { return partitioned_plans_[idx]; }
 

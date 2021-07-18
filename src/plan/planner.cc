@@ -204,7 +204,7 @@ std::vector<std::pair<uint32_t, std::vector<CandidateScope>>> Planner::generateP
   auto n_qvs = query_context_->query_graph.getNumVertices();
   for (uint32_t i = 0; i < backtracking_plan_->getPlans().size(); ++i) {
     ret.emplace_back(i, std::vector<CandidateScope>(n_qvs));
-    ret.back().second[partitioning_qv[0]].usePartition(i);
+    ret.back().second[partitioning_qv[0]].usePartition(backtracking_plan_->getPlan(i)->getPartitionId());
   }
   return ret;
 }
@@ -239,13 +239,14 @@ BacktrackingPlan* Planner::generateExecutionPlan(const CandidateResult* result, 
       auto order_generator = OrderGenerator(query_context_->data_graph, *query_context_->graph_metadata,
                                             &query_context_->query_graph, candidate_views, sum);
       auto use_order = order_generator.getOrder(query_context_->query_config.order_strategy);
-      backtracking_plan_->addPlan(generateExecutionPlan(sum, use_order, multithread));
+      backtracking_plan_->addPlan(generateExecutionPlan(sum, use_order, multithread, 0, &candidate_views));
     } else {
       auto order_generator =
           OrderGenerator(query_context_->data_graph, *query_context_->graph_metadata, &query_context_->query_graph,
                          candidate_views, candidate_cardinality.front());
       auto use_order = order_generator.getOrder(query_context_->query_config.order_strategy);
-      backtracking_plan_->addPlan(generateExecutionPlan(candidate_cardinality.front(), use_order, multithread));
+      backtracking_plan_->addPlan(
+          generateExecutionPlan(candidate_cardinality.front(), use_order, multithread, 0, &candidate_views));
     }
     // one logical input operator
     newInputOperators();
@@ -268,7 +269,7 @@ BacktrackingPlan* Planner::generateExecutionPlan(const CandidateResult* result, 
     auto order_generator = OrderGenerator(query_context_->data_graph, query_context_->graph_metadata->getPartition(i),
                                           &query_context_->query_graph, candidate_views, stats);
     auto use_order = order_generator.getOrder(query_context_->query_config.order_strategy);
-    auto plan = generateExecutionPlan(stats, use_order, multithread);
+    auto plan = generateExecutionPlan(stats, use_order, multithread, i, &candidate_views);
     if (plan == nullptr) {
       continue;
     }
@@ -306,8 +307,9 @@ BacktrackingPlan* Planner::generateExecutionPlan(const std::vector<std::vector<V
 
   backtracking_plan_ = std::make_unique<BacktrackingPlan>();
   // generate a logical plan for each partition
-  for (auto& stats : *candidate_cardinality) {
-    auto plan = generateExecutionPlan(stats, use_order, multithread);
+  for (uint32_t i = 0; i < candidate_cardinality->size(); ++i) {
+    auto& stats = (*candidate_cardinality)[i];
+    auto plan = generateExecutionPlan(stats, use_order, multithread, i);
     if (plan == nullptr) {
       continue;
     }
@@ -323,7 +325,9 @@ BacktrackingPlan* Planner::generateExecutionPlan(const std::vector<std::vector<V
 }
 
 ExecutionPlan* Planner::generateExecutionPlan(const std::vector<VertexID>& candidate_cardinality,
-                                              const std::vector<QueryVertexID>& use_order, bool multithread) {
+                                              const std::vector<QueryVertexID>& use_order, bool multithread,
+                                              uint32_t partition_id,
+                                              const std::vector<CandidateSetView>* candidate_views) {
   // TODO(tatiana): handle the case when the cardinality of a candidate set is 0
   std::stringstream ss;
   for (auto c : candidate_cardinality) {
@@ -361,7 +365,7 @@ ExecutionPlan* Planner::generateExecutionPlan(const std::vector<VertexID>& candi
     planner->generateOrder(use_order);
     std::vector<std::vector<double>> cardinality_per_level(cardinality.size(), cardinality);
     planner->generateCoverNode(cardinality_per_level);
-    plan = planner->generatePlanWithDynamicCover();
+    plan = planner->generatePlanWithDynamicCover(query_context_->data_graph, candidate_views);
     plan->setInputAreKeys(plan->isInCover(plan->getRootQueryVertexID()) &&
                           (plan->getToKeyLevel(plan->getRootQueryVertexID()) == 0));
     break;
@@ -371,6 +375,7 @@ ExecutionPlan* Planner::generateExecutionPlan(const std::vector<VertexID>& candi
     plan->setInputAreKeys(true);
   }
   }
+  plan->setPartitionId(partition_id);
 
   // plan->printPhysicalPlan();
   return plan;

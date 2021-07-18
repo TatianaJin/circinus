@@ -102,7 +102,9 @@ class Planner {
   }
 
   ExecutionPlan* generateExecutionPlan(const std::vector<VertexID>& cardinality,
-                                       const std::vector<QueryVertexID>& use_order, bool multithread);
+                                       const std::vector<QueryVertexID>& use_order, bool multithread,
+                                       uint32_t partition_id = 0,
+                                       const std::vector<CandidateSetView>* candidate_views = nullptr);
 
   /* start of interface for specifying partitioning strategy */
   virtual std::vector<QueryVertexID> getPartitioningQueryVertices();  // based on query vertex occurence in covers

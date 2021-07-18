@@ -67,7 +67,8 @@ class NaivePlanner {
   ExecutionPlan* generatePlan(const std::vector<QueryVertexID>& use_order = {});
   ExecutionPlan* generatePlanWithEagerDynamicCover(const std::vector<QueryVertexID>& use_order = {});
   ExecutionPlan* generatePlanWithoutCompression(const std::vector<QueryVertexID>& use_order = {});
-  ExecutionPlan* generatePlanWithDynamicCover();
+  ExecutionPlan* generatePlanWithDynamicCover(const GraphBase* data_graph,
+                                              const std::vector<CandidateSetView>* candidate_views);
 
   ExecutionPlan* generatePlanWithSampleExecution(const std::vector<std::vector<double>>& cardinality,
                                                  const std::vector<double>& level_cost);
@@ -79,6 +80,12 @@ class NaivePlanner {
       const std::vector<QueryVertexID>& use_order = {});
 
  private:
+  double estimateCardinality(const GraphBase* data_graph, const std::vector<CandidateSetView>* candidate_views,
+                             const uint64_t cover_bits, uint32_t level);
+
+  unordered_map<VertexID, double> dfsComputeCost(QueryVertexID qid, const uint64_t cover_bits,
+                                                 std::vector<bool>& visited, const GraphBase* data_graph,
+                                                 const std::vector<CandidateSetView>* candidate_views);
   std::vector<QueryVertexID> generateMatchingOrder(const QueryGraph* g, const std::vector<int>& core_table,
                                                    QueryVertexID start_vertex);
 

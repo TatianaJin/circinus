@@ -149,10 +149,10 @@ class CircinusServer {
     if (query_state.query_context.query_config.mode == QueryMode::Explain) {  // dry run
       auto cardinality = query_state.planner->estimateCardinality();
       // FIXME(by)
-      auto plan = query_state.planner->generateExecutionPlan(&cardinality);
-      auto str = plan->toString();
-      query_state.query_context.query_config.output = "plan";
-      finishQuery(query_index, &str, "");
+      // auto plan = query_state.planner->generateExecutionPlan(&cardinality);
+      // auto str = plan->toString();
+      // query_state.query_context.query_config.output = "plan";
+      // finishQuery(query_index, &str, "");
     } else {  // enter actual execution phases
       if (query_state.query_context.query_config.isProfileMode()) {
         query_state.query_context.query_config.output = "profile_count";

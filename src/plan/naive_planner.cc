@@ -361,7 +361,61 @@ ExecutionPlan* NaivePlanner::generatePlanWithEagerDynamicCover(const std::vector
   return &plan_;
 }
 
-ExecutionPlan* NaivePlanner::generatePlanWithDynamicCover() {
+unordered_map<VertexID, double> NaivePlanner::dfsComputeCost(QueryVertexID qid, const uint64_t cover_bits,
+                                                             std::vector<bool>& visited, const GraphBase* data_graph,
+                                                             const std::vector<CandidateSetView>* candidate_views) {
+  visited[qid] = true;
+
+  unordered_map<VertexID, double> ret;
+  for (VertexID v : (*candidate_views)[qid]) {
+    ret[v] = 1;
+  }
+  auto[qnbrs, qcnt] = query_graph_->getOutNeighbors(qid);
+  for (uint32_t i = 0; i < qcnt; ++i) {
+    QueryVertexID nbr = qnbrs[i];
+    if ((cover_bits >> nbr & 1) == 0 || visited[nbr]) {
+      continue;
+    }
+    auto child_ret = dfsComputeCost(nbr, cover_bits, visited, data_graph, candidate_views);
+    for (VertexID v : (*candidate_views)[qid]) {
+      double sum = 0;
+      auto[nbrs, cnt] = data_graph->getOutNeighbors(v);
+      for (uint32_t j = 0; j < cnt; ++j) {
+        if (child_ret.find(nbrs[j]) != child_ret.end()) {
+          sum += child_ret[nbrs[j]];
+        }
+      }
+      ret[v] *= sum;
+    }
+  }
+  return std::move(ret);
+}
+
+double NaivePlanner::estimateCardinality(const GraphBase* data_graph,
+                                         const std::vector<CandidateSetView>* candidate_views,
+                                         const uint64_t cover_bits, uint32_t level) {
+  double ret = 1;
+  std::vector<bool> visited(matching_order_.size(), false);
+  for (uint32_t i = level + 1; i < matching_order_.size(); ++i) {
+    visited[i] = true;
+  }
+
+  for (auto it = matching_order_.rbegin(); it != matching_order_.rend(); ++it) {
+    if ((cover_bits >> *it & 1) == 0 || visited[*it]) {
+      continue;
+    }
+    auto current_candidate_cars = dfsComputeCost(*it, cover_bits, visited, data_graph, candidate_views);
+    double sum = 0;
+    for (auto candidate_car : current_candidate_cars) {
+      sum += candidate_car.second;
+    }
+    ret *= sum;
+  }
+  return ret;
+}
+
+ExecutionPlan* NaivePlanner::generatePlanWithDynamicCover(const GraphBase* data_graph,
+                                                          const std::vector<CandidateSetView>* candidate_views) {
   std::vector<std::vector<double>> costs_car(covers_.size());
   std::vector<std::vector<uint32_t>> pre(covers_.size());
   std::vector<std::vector<double>> car(covers_.size());
@@ -371,8 +425,12 @@ ExecutionPlan* NaivePlanner::generatePlanWithDynamicCover() {
     car[i].resize(covers_[i].size());
     for (uint32_t j = 0; j < covers_[i].size(); ++j) {
       car[i][j] = 1;
-      for (QueryVertexID qid : covers_[i][j].cover) {
-        car[i][j] = car[i][j] * (*candidate_cardinality_)[qid];
+      if (candidate_views == nullptr) {
+        for (QueryVertexID qid : covers_[i][j].cover) {
+          car[i][j] = car[i][j] * (*candidate_cardinality_)[qid];
+        }
+      } else {
+        car[i][j] = estimateCardinality(data_graph, candidate_views, covers_[i][j].cover_bits, i);
       }
     }
   }
@@ -410,13 +468,13 @@ ExecutionPlan* NaivePlanner::generatePlanWithDynamicCover() {
     }
     LOG(INFO) << i << " cover " << s << " cardinality " << car[last][i] << ", costs_car " << costs_car[last][i];
 
-    if (costs_car[last][i] >= 0 && (mini_cost < 0 || mini_cost > costs_car[last][i])) {
-      mini_cost = costs_car[last][i];
+    if (car[last][i] >= 0 && (mini_cost < 0 || mini_cost > car[last][i])) {
+      mini_cost = car[last][i];
       best_idx = i;
     }
   }
   CHECK(best_idx != -1) << "ERROR: can not get best plan index.";
-  // best_idx = 0;
+  // best_idx = 1;
   LOG(INFO) << "best last level cover idx " << best_idx << "  " << car[last][best_idx];
   std::vector<int> select_cover(matching_order_.size(), 0);
   for (uint32_t i = 0; i < matching_order_.size(); ++i) {

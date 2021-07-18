@@ -55,6 +55,8 @@ class ExecutionPlan {
    * For non-key vertices, the index n_sets-th key following the matching order */
   unordered_map<QueryVertexID, uint32_t> query_vertex_indices_;
 
+  uint32_t partition_id_ = 0;
+
   void addKeys(const std::vector<QueryVertexID>& keys_to_add, std::vector<QueryVertexID>& set_vertices,
                uint32_t& n_keys) {
     for (auto v : keys_to_add) {
@@ -90,6 +92,7 @@ class ExecutionPlan {
                             const unordered_map<QueryVertexID, uint32_t>& level_become_key);
 
   void setInputAreKeys(bool flag) { inputs_are_keys_ = flag; }
+  void setPartitionId(uint32_t partition_id) { partition_id_ = partition_id; }
   bool inputAreKeys() const { return inputs_are_keys_; }
 
   void printPhysicalPlan() const {
@@ -123,6 +126,8 @@ class ExecutionPlan {
     }
     LOG(INFO) << n_keys << " keys " << (query_graph_->getNumVertices() - n_keys) << " sets";
   }
+
+  inline uint32_t getPartitionId() const { return partition_id_; }
 
   inline const std::vector<Operator*>& getOperators() const { return operators_; }
   inline std::vector<Operator*>& getOperators() { return operators_; }
