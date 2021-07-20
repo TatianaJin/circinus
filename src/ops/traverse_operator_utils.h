@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <utility>
+
 #include "graph/bipartite_graph.h"
 #include "graph/graph.h"
 #include "graph/graph_view.h"

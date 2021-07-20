@@ -52,7 +52,7 @@ struct QueryState {
   double plan_time = 0;
 
   QueryState(QueryGraph&& q, QueryConfig&& config, GraphBase* g, GraphMetadata* m,
-             std::chrono::time_point<std::chrono::system_clock> stop_time)
+             std::chrono::time_point<std::chrono::steady_clock> stop_time)
       : query_context(std::move(q), std::move(config), g, m, stop_time) {}
 };
 

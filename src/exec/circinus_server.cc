@@ -292,13 +292,13 @@ inline uint32_t CircinusServer::newQuery(const std::string& graph_name, const st
   auto& graph = data_graphs_.at(graph_name);
   if (reusable_indices_.empty()) {
     active_queries_.emplace_back(std::move(q), std::move(config), graph.first.get(), &graph.second,
-                                 std::chrono::system_clock::now() + config.time_limit);
+                                 std::chrono::steady_clock::now() + config.time_limit);
     return active_queries_.size() - 1;
   }
   // reuse deleted index
   auto idx = reusable_indices_.back();
   active_queries_[idx].query_context = QueryContext(std::move(q), std::move(config), graph.first.get(), &graph.second,
-                                                    std::chrono::system_clock::now() + config.time_limit);
+                                                    std::chrono::steady_clock::now() + config.time_limit);
   reusable_indices_.pop_back();
   return idx;
 }

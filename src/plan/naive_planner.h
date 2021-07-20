@@ -81,11 +81,13 @@ class NaivePlanner {
 
  private:
   double estimateCardinality(const GraphBase* data_graph, const std::vector<CandidateSetView>* candidate_views,
-                             const uint64_t cover_bits, uint32_t level);
+                             uint64_t cover_bits, uint32_t level);
 
-  unordered_map<VertexID, double> dfsComputeCost(QueryVertexID qid, const uint64_t cover_bits,
-                                                 std::vector<bool>& visited, const GraphBase* data_graph,
-                                                 const std::vector<CandidateSetView>* candidate_views);
+  void getCoverCC(QueryVertexID qid, QueryVertexID cc_id, const uint64_t cover_bits, std::vector<QueryVertexID>& cc);
+  unordered_map<VertexID, double> dfsComputeCost(QueryVertexID qid, uint64_t cover_bits, std::vector<bool>& visited,
+                                                 const GraphBase* data_graph,
+                                                 const std::vector<CandidateSetView>* candidate_views,
+                                                 const std::vector<QueryVertexID>& cc, bool with_traversal = false);
   std::vector<QueryVertexID> generateMatchingOrder(const QueryGraph* g, const std::vector<int>& core_table,
                                                    QueryVertexID start_vertex);
 

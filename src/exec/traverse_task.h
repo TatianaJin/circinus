@@ -50,7 +50,7 @@ class TraverseChainTask : public TaskBase {
   QueryType query_type_;
 
  public:
-  TraverseChainTask(QueryId qid, TaskId tid, std::chrono::time_point<std::chrono::system_clock> stop_time,
+  TraverseChainTask(QueryId qid, TaskId tid, std::chrono::time_point<std::chrono::steady_clock> stop_time,
                     uint32_t batch_size, const std::vector<Operator*>& ops, std::unique_ptr<InputOperator>&& input_op,
                     const GraphBase* graph, const std::vector<CandidateSetView>* candidates, QueryType query_type)
       : TaskBase(qid, tid, stop_time),
@@ -74,6 +74,7 @@ class TraverseChainTask : public TaskBase {
     auto old_count = dynamic_cast<OutputOperator*>(operators_.back())->getOutput()->getCount(executor_idx);
     // TODO(tatiana): support match limit
     auto inputs = input_op_->getInputs(graph_, *candidates_);
+    LOG(INFO) << "Task " << task_id_ << " input " << inputs.size();
     execute<QueryType::Execute>(inputs, 0, executor_idx);
     auto new_count = dynamic_cast<OutputOperator*>(operators_.back())->getOutput()->getCount(executor_idx);
     LOG(INFO) << "Task " << task_id_ << " input " << inputs.size() << " count " << (new_count - old_count);
@@ -117,6 +118,7 @@ class TraverseChainTask : public TaskBase {
     if (isTimeOut()) {
       return true;
     }
+    // LOG(INFO) << "level " << level;
     std::vector<CompressedSubgraphs> outputs;
     auto op = operators_[level];
     if (level == operators_.size() - 1) {
@@ -166,7 +168,7 @@ class TraverseTask : public TraverseChainTask {
   std::vector<GraphView<GraphPartitionBase>> graph_views_;
 
  public:
-  TraverseTask(QueryId query_id, TaskId task_id, std::chrono::time_point<std::chrono::system_clock> stop_time,
+  TraverseTask(QueryId query_id, TaskId task_id, std::chrono::time_point<std::chrono::steady_clock> stop_time,
                uint32_t batch_size, const std::vector<Operator*>& operators, std::unique_ptr<InputOperator>&& input_op,
                const std::vector<CandidateScope>& scopes, const GraphBase* graph,
                const std::vector<CandidateSetView>* candidates, QueryType query_type)
@@ -211,7 +213,7 @@ class MatchingParallelTask : public TaskBase {
   std::vector<CompressedSubgraphs> outputs_;
 
  public:
-  MatchingParallelTask(QueryId qid, TaskId tid, std::chrono::time_point<std::chrono::system_clock> stop_time)
+  MatchingParallelTask(QueryId qid, TaskId tid, std::chrono::time_point<std::chrono::steady_clock> stop_time)
       : TaskBase(qid, tid, stop_time) {}
 
   inline uint32_t getNextLevel() const { return getTaskId() + 1; }
@@ -228,7 +230,7 @@ class MatchingParallelInputTask : public MatchingParallelTask {
   ProfileInfo info_;
 
  public:
-  MatchingParallelInputTask(QueryId qid, TaskId tid, std::chrono::time_point<std::chrono::system_clock> stop_time,
+  MatchingParallelInputTask(QueryId qid, TaskId tid, std::chrono::time_point<std::chrono::steady_clock> stop_time,
                             const GraphBase* graph, const InputOperator* input_op,
                             std::vector<CandidateSetView>&& candidates)
       : MatchingParallelTask(qid, tid, stop_time),
@@ -257,7 +259,7 @@ class MatchingParallelTraverseTask : public MatchingParallelTask {
   std::shared_ptr<std::vector<CompressedSubgraphs>> inputs_;
 
  public:
-  MatchingParallelTraverseTask(QueryId qid, TaskId tid, std::chrono::time_point<std::chrono::system_clock> stop_time,
+  MatchingParallelTraverseTask(QueryId qid, TaskId tid, std::chrono::time_point<std::chrono::steady_clock> stop_time,
                                TraverseOperator* traverse_op, std::unique_ptr<TraverseContext>&& traverse_ctx,
                                const std::shared_ptr<std::vector<CompressedSubgraphs>>& inputs)
       : MatchingParallelTask(qid, tid, stop_time),
@@ -294,7 +296,7 @@ class MatchingParallelOutputTask : public MatchingParallelTask {
   uint32_t input_end_index_ = 0;
 
  public:
-  MatchingParallelOutputTask(QueryId qid, TaskId tid, std::chrono::time_point<std::chrono::system_clock> stop_time,
+  MatchingParallelOutputTask(QueryId qid, TaskId tid, std::chrono::time_point<std::chrono::steady_clock> stop_time,
                              OutputOperator* op, const std::shared_ptr<std::vector<CompressedSubgraphs>>& inputs,
                              uint32_t input_index, uint32_t input_end_index)
       : MatchingParallelTask(qid, tid, stop_time),

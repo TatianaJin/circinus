@@ -29,7 +29,7 @@ class ScanTask : public TaskBase {
   uint32_t partition_ = ~0u;
 
  public:
-  ScanTask(QueryId query_id, TaskId task_id, std::chrono::time_point<std::chrono::system_clock> stop_time,
+  ScanTask(QueryId query_id, TaskId task_id, std::chrono::time_point<std::chrono::steady_clock> stop_time,
            uint32_t shard_id, const Scan* scan, const GraphBase* graph)
       : TaskBase(query_id, task_id, stop_time),
         scan_context_(scan->initScanContext(shard_id)),
@@ -40,7 +40,7 @@ class ScanTask : public TaskBase {
                << scan_context_.scan_end << ")";
   }
 
-  ScanTask(QueryId query_id, TaskId task_id, std::chrono::time_point<std::chrono::system_clock> stop_time,
+  ScanTask(QueryId query_id, TaskId task_id, std::chrono::time_point<std::chrono::steady_clock> stop_time,
            uint32_t shard_id, const Scan* scan, const GraphBase* graph, uint32_t partition)
       : TaskBase(query_id, task_id, stop_time),
         scan_context_(scan->initScanContext(shard_id)),

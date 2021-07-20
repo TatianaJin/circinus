@@ -30,7 +30,7 @@ class NeighborhoodFilterTask : public TaskBase {
   std::vector<std::vector<VertexID>>* candidates_;
 
  public:
-  NeighborhoodFilterTask(QueryId query_id, TaskId task_id, std::chrono::time_point<std::chrono::system_clock> stop_time,
+  NeighborhoodFilterTask(QueryId query_id, TaskId task_id, std::chrono::time_point<std::chrono::steady_clock> stop_time,
                          uint32_t shard_id, const NeighborhoodFilter* filter, const GraphBase* graph,
                          std::vector<std::vector<VertexID>>* candidates)
       : TaskBase(query_id, task_id, stop_time),

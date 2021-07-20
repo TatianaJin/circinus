@@ -181,10 +181,10 @@ struct QueryContext {
   QueryConfig query_config;
   GraphBase* data_graph;
   GraphMetadata* graph_metadata;
-  std::chrono::time_point<std::chrono::system_clock> stop_time;
+  std::chrono::time_point<std::chrono::steady_clock> stop_time;
 
   QueryContext(QueryGraph&& q, QueryConfig&& config, GraphBase* g, GraphMetadata* metadata,
-               std::chrono::time_point<std::chrono::system_clock> stop_time)
+               std::chrono::time_point<std::chrono::steady_clock> stop_time)
       : query_graph(std::move(q)),
         query_config(std::move(config)),
         data_graph(g),

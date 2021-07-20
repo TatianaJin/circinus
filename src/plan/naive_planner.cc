@@ -363,53 +363,162 @@ ExecutionPlan* NaivePlanner::generatePlanWithEagerDynamicCover(const std::vector
 
 unordered_map<VertexID, double> NaivePlanner::dfsComputeCost(QueryVertexID qid, const uint64_t cover_bits,
                                                              std::vector<bool>& visited, const GraphBase* data_graph,
-                                                             const std::vector<CandidateSetView>* candidate_views) {
+                                                             const std::vector<CandidateSetView>* candidate_views,
+                                                             const std::vector<QueryVertexID>& cc,
+                                                             bool with_traversal) {
   visited[qid] = true;
-
   unordered_map<VertexID, double> ret;
   for (VertexID v : (*candidate_views)[qid]) {
     ret[v] = 1;
   }
+
   auto[qnbrs, qcnt] = query_graph_->getOutNeighbors(qid);
-  for (uint32_t i = 0; i < qcnt; ++i) {
-    QueryVertexID nbr = qnbrs[i];
-    if ((cover_bits >> nbr & 1) == 0 || visited[nbr]) {
-      continue;
+  if (!with_traversal) {
+    for (uint32_t i = 0; i < qcnt; ++i) {
+      QueryVertexID nbr = qnbrs[i];
+      if (visited[nbr] || cc[nbr] == UINT32_MAX) {
+        continue;
+      }
+
+      auto child_ret = dfsComputeCost(nbr, cover_bits, visited, data_graph, candidate_views, cc, with_traversal);
+      for (VertexID v : (*candidate_views)[qid]) {
+        double sum = 0;
+        auto[nbrs, cnt] = data_graph->getOutNeighbors(v);
+        for (uint32_t j = 0; j < cnt; ++j) {
+          if (child_ret.find(nbrs[j]) != child_ret.end()) {
+            sum += child_ret[nbrs[j]];
+          }
+        }
+        ret[v] *= sum;
+      }
     }
-    auto child_ret = dfsComputeCost(nbr, cover_bits, visited, data_graph, candidate_views);
-    for (VertexID v : (*candidate_views)[qid]) {
-      double sum = 0;
-      auto[nbrs, cnt] = data_graph->getOutNeighbors(v);
-      for (uint32_t j = 0; j < cnt; ++j) {
-        if (child_ret.find(nbrs[j]) != child_ret.end()) {
-          sum += child_ret[nbrs[j]];
+  } else {
+    for (uint32_t i = 0; i < qcnt; ++i) {
+      QueryVertexID nbr = qnbrs[i];
+      if (visited[nbr] || cc[nbr] == UINT32_MAX) {
+        continue;
+      }
+      if ((cover_bits >> nbr & 1) == 0) {
+        visited[nbr] = true;
+        auto[set_nbrs, set_cnt] = query_graph_->getOutNeighbors(nbr);
+        unordered_set<VertexID> set_candidate((*candidate_views)[nbr].begin(), (*candidate_views)[nbr].end());
+        for (uint32_t j = 0; j < set_cnt; ++j) {
+          QueryVertexID set_nbr = set_nbrs[j];
+          if (visited[set_nbr]) {
+            continue;
+          }
+          auto child_ret =
+              dfsComputeCost(set_nbr, cover_bits, visited, data_graph, candidate_views, cc, with_traversal);
+          for (VertexID v : (*candidate_views)[qid]) {
+            unordered_set<VertexID> has_added;
+            double sum = 0;
+            auto[nbrs, cnt] = data_graph->getOutNeighbors(v);
+            for (uint32_t j = 0; j < cnt; ++j) {
+              if (set_candidate.find(nbrs[j]) != set_candidate.end()) {
+                auto[second_nbrs, second_cnt] = data_graph->getOutNeighbors(nbrs[j]);
+                for (uint32_t k = 0; k < cnt; ++k) {
+                  VertexID second_level_vid = second_nbrs[k];
+                  if (child_ret.find(second_level_vid) != child_ret.end() &&
+                      has_added.find(second_level_vid) == has_added.end()) {
+                    sum += child_ret[second_level_vid];
+                    has_added.insert(second_level_vid);
+                  }
+                }
+              }
+            }
+            ret[v] *= sum;
+          }
+        }
+      } else {
+        auto child_ret = dfsComputeCost(nbr, cover_bits, visited, data_graph, candidate_views, cc, with_traversal);
+        for (VertexID v : (*candidate_views)[qid]) {
+          double sum = 0;
+          auto[nbrs, cnt] = data_graph->getOutNeighbors(v);
+          for (uint32_t j = 0; j < cnt; ++j) {
+            if (child_ret.find(nbrs[j]) != child_ret.end()) {
+              sum += child_ret[nbrs[j]];
+            }
+          }
+          ret[v] *= sum;
         }
       }
-      ret[v] *= sum;
     }
   }
+
   return std::move(ret);
 }
 
-double NaivePlanner::estimateCardinality(const GraphBase* data_graph,
-                                         const std::vector<CandidateSetView>* candidate_views,
-                                         const uint64_t cover_bits, uint32_t level) {
-  double ret = 1;
-  std::vector<bool> visited(matching_order_.size(), false);
-  for (uint32_t i = level + 1; i < matching_order_.size(); ++i) {
-    visited[i] = true;
-  }
-
-  for (auto it = matching_order_.rbegin(); it != matching_order_.rend(); ++it) {
-    if ((cover_bits >> *it & 1) == 0 || visited[*it]) {
+void NaivePlanner::getCoverCC(QueryVertexID qid, QueryVertexID cc_id, const uint64_t cover_bits,
+                              std::vector<QueryVertexID>& cc) {
+  cc[qid] = cc_id;
+  auto[qnbrs, qcnt] = query_graph_->getOutNeighbors(qid);
+  for (uint32_t i = 0; i < qcnt; ++i) {
+    QueryVertexID nbr = qnbrs[i];
+    if ((cover_bits >> nbr & 1) == 0 || cc[nbr] != UINT32_MAX) {
       continue;
     }
-    auto current_candidate_cars = dfsComputeCost(*it, cover_bits, visited, data_graph, candidate_views);
-    double sum = 0;
-    for (auto candidate_car : current_candidate_cars) {
-      sum += candidate_car.second;
+    getCoverCC(nbr, cc_id, cover_bits, cc);
+  }
+}
+
+double NaivePlanner::estimateCardinality(const GraphBase* data_graph,
+                                         const std::vector<CandidateSetView>* candidate_views, uint64_t cover_bits,
+                                         uint32_t level) {
+  double ret = 1;
+  std::vector<bool> visited(matching_order_.size(), false);
+  std::vector<QueryVertexID> cc(matching_order_.size(), UINT32_MAX);
+  for (uint32_t i = 0; i <= level; ++i) {
+    auto qid = matching_order_[i];
+    if ((cover_bits >> qid & 1) == 0 || cc[qid] != UINT32_MAX) {
+      continue;
     }
-    ret *= sum;
+    getCoverCC(qid, qid, cover_bits, cc);
+  }
+  unordered_set<std::pair<QueryVertexID, QueryVertexID>> cc_connectivity;
+  double divide = 1;
+  for (uint32_t i = 0; i <= level; ++i) {
+    QueryVertexID qid = matching_order_[i];
+    if ((cover_bits >> qid & 1) == 0) {
+      auto[nbr, cnt] = query_graph_->getOutNeighbors(qid);
+      unordered_set<QueryVertexID> connecting_cover_cc;
+      for (uint32_t j = 0; j < cnt; ++j) {
+        if (cover_bits >> nbr[j] & 1) {
+          CHECK_NE(cc[nbr[j]], UINT32_MAX) << nbr[j];
+          connecting_cover_cc.insert(cc[nbr[j]]);
+        }
+      }
+      if (connecting_cover_cc.size() > 1) {
+        for (auto& cc_id : cc) {
+          if (connecting_cover_cc.count(cc_id) != 0) {
+            cc_id = qid;
+          }
+        }
+        cc[qid] = qid;
+        divide *= (*candidate_views)[qid].size();
+      }
+    }
+  }
+
+  // TODO(byli) FLAGS with traversal
+  bool with_traversal = true;
+
+  for (uint32_t i = level + 1; i < matching_order_.size(); ++i) {
+    visited[matching_order_[i]] = true;
+  }
+
+  for (auto qid : matching_order_) {
+    if ((cover_bits >> qid & 1) == 0 || visited[qid]) {
+      continue;
+    }
+    ret = 0;
+    auto current_candidate_cars =
+        dfsComputeCost(qid, cover_bits, visited, data_graph, candidate_views, cc, with_traversal);
+    for (auto candidate_car : current_candidate_cars) {
+      ret += candidate_car.second;
+    }
+  }
+  if (!with_traversal) {
+    ret /= divide;
   }
   return ret;
 }
@@ -421,10 +530,12 @@ ExecutionPlan* NaivePlanner::generatePlanWithDynamicCover(const GraphBase* data_
   std::vector<std::vector<double>> car(covers_.size());
 
   costs_car[0].resize(covers_[0].size(), 0);
+  std::stringstream ss;
   for (uint32_t i = 0; i < covers_.size(); ++i) {
     car[i].resize(covers_[i].size());
     for (uint32_t j = 0; j < covers_[i].size(); ++j) {
       car[i][j] = 1;
+
       if (candidate_views == nullptr) {
         for (QueryVertexID qid : covers_[i][j].cover) {
           car[i][j] = car[i][j] * (*candidate_cardinality_)[qid];
@@ -434,6 +545,9 @@ ExecutionPlan* NaivePlanner::generatePlanWithDynamicCover(const GraphBase* data_
       }
     }
   }
+
+  unordered_set<QueryVertexID> existing_vertices;
+  existing_vertices.insert(matching_order_[0]);
   for (uint32_t i = 1; i < covers_.size(); ++i) {
     costs_car[i].resize(covers_[i].size(), -1);
     pre[i].resize(covers_[i].size());
@@ -441,13 +555,26 @@ ExecutionPlan* NaivePlanner::generatePlanWithDynamicCover(const GraphBase* data_
       auto& cover_node = covers_[i][j];
       for (uint32_t par : cover_node.parents) {
         if (costs_car[i - 1][par] >= 0) {
-          if (costs_car[i][j] < 0 || costs_car[i - 1][par] + car[i - 1][par] < costs_car[i][j]) {
-            costs_car[i][j] = costs_car[i - 1][par] + car[i - 1][par];
+          auto[nbrs, cnt] = query_graph_->getOutNeighbors(matching_order_[i]);
+          double cost = car[i - 1][par];
+          uint64_t bits = 0;
+          for (uint32_t k = 0; k < cnt; ++k) {
+            if (existing_vertices.count(nbrs[k]) != 0 && (covers_[i - 1][par].cover_bits >> nbrs[k] & 1) == 0) {
+              bits |= 1 << nbrs[k];
+            }
+          }
+          if (bits != 0) {
+            bits |= covers_[i - 1][par].cover_bits;
+            cost = estimateCardinality(data_graph, candidate_views, bits, i - 1);
+          }
+          if (costs_car[i][j] < 0 || costs_car[i - 1][par] + cost < costs_car[i][j]) {
+            costs_car[i][j] = costs_car[i - 1][par] + cost;
             pre[i][j] = par;
           }
         }
       }
     }
+    existing_vertices.insert(matching_order_[i]);
   }
 
   CHECK_GT(covers_.size(), 0);
@@ -466,10 +593,10 @@ ExecutionPlan* NaivePlanner::generatePlanWithDynamicCover(const GraphBase* data_
     for (uint32_t j = 0; j < matching_order_.size(); ++j) {
       s += std::to_string(select_cover[j]) + ",";
     }
-    LOG(INFO) << i << " cover " << s << " cardinality " << car[last][i] << ", costs_car " << costs_car[last][i];
+    LOG(INFO) << i << " cover " << s << " costs_car " << costs_car[last][i];
 
-    if (car[last][i] >= 0 && (mini_cost < 0 || mini_cost > car[last][i])) {
-      mini_cost = car[last][i];
+    if (car[last][i] >= 0 && (mini_cost < 0 || mini_cost > costs_car[last][i])) {
+      mini_cost = costs_car[last][i];
       best_idx = i;
     }
   }
@@ -499,7 +626,7 @@ ExecutionPlan* NaivePlanner::generatePlanWithDynamicCover(const GraphBase* data_
       s += std::to_string(vid) + " ";
     }
     s += "]";
-    DLOG(INFO) << s << " " << covers_[last][best_idx].cover_bits;
+    LOG(INFO) << s << " " << covers_[last][best_idx].cover_bits;
     best_idx = pre[last][best_idx];
     best_path.emplace_back(best_idx);
     last--;
@@ -803,9 +930,10 @@ void NaivePlanner::generateCoverNode(const std::vector<std::vector<double>>& car
 
     if (i == matching_order_.size() - 1) {
       std::string s = "";
-      std::vector<uint32_t> mapped_cover(select_cover.size(), 0);
+      std::vector<uint32_t> mapped_cover(matching_order_.size(), 0);
       for (uint32_t j = 0; j < select_cover.size(); ++j) {
         if (select_cover[j] == 1) {
+          CHECK_LT(matching_order_[j], mapped_cover.size()) << matching_order_[j] << " " << mapped_cover.size();
           mapped_cover[matching_order_[j]] = 1;
         }
       }
@@ -815,6 +943,7 @@ void NaivePlanner::generateCoverNode(const std::vector<std::vector<double>>& car
       DLOG(INFO) << "subquery " << i << " cover " << s;
     }
 
+    DLOG(INFO) << "------------------- level = " << i;
     covers_[i].emplace_back(new_cover_node);
     CoverNode nxt_cover_node = new_cover_node;
     for (uint32_t j = i + 1; j < matching_order_.size(); ++j) {
@@ -850,6 +979,11 @@ void NaivePlanner::generateCoverNode(const std::vector<std::vector<double>>& car
           break;
         }
       }
+      std::stringstream ss;
+      for (auto x : nxt_cover_node.cover) {
+        ss << x << ", ";
+      }
+      DLOG(INFO) << j << " " << ss.str();
       if (!existing) {
         covers_[j].emplace_back(nxt_cover_node);
       }
@@ -896,6 +1030,11 @@ void NaivePlanner::generateCoverNode(const std::vector<std::vector<double>>& car
           break;
         }
       }
+      std::stringstream ss;
+      for (auto x : last_cover_node.cover) {
+        ss << x << ", ";
+      }
+      DLOG(INFO) << j - 1 << " " << ss.str();
       if (!existing) {
         covers_[j - 1].emplace_back(last_cover_node);
       }
@@ -930,7 +1069,21 @@ void NaivePlanner::generateCoverNode(const std::vector<std::vector<double>>& car
     for (auto& cover_node : covers_[i]) {
       for (uint32_t j = 0; j < covers_[i - 1].size(); ++j) {
         const auto& last_level_cover_node = covers_[i - 1][j];
+        // avoid enumerate key expand to key
         if ((cover_node.cover_bits | last_level_cover_node.cover_bits) == cover_node.cover_bits) {
+          if ((cover_node.cover_bits >> matching_order_[i] & 1) &&
+              (last_level_cover_node.cover_bits | (1 << matching_order_[i])) != cover_node.cover_bits) {
+            continue;
+          }
+          if ((cover_node.cover_bits >> matching_order_[i] & 1) == 0) {
+            auto mask = last_level_cover_node.cover_bits;
+            for (auto x : to_intersect_vertices[i]) {
+              mask |= 1 << x;
+            }
+            if (mask != cover_node.cover_bits) {
+              continue;
+            }
+          }
           cover_node.parents.emplace_back(j);
         }
       }

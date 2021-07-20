@@ -55,7 +55,9 @@ DEFINE_int32(profile, 0, "0 means no profiling, 1 means to profile the execution
 DEFINE_string(profile_prefix, "/data/share/users/byli/circinus/evaluation/profile/", "Profile file prefix");
 DEFINE_string(vertex_cover, "static", "Vertex cover strategy: static, dynamic, all");
 DEFINE_string(batch_file, "", "Batch query file");
+DEFINE_uint64(partition, 1, "Number of Graph Partitions");
 DEFINE_bool(bipartite_graph, false, "Use bipartite graph or not");  // TODO(exp): support for control experiment
+DEFINE_bool(batch_run, false, "Batch run");
 
 class QueryConfig {
  public:
@@ -156,8 +158,18 @@ class Benchmark {
     return circinus::Path::join(FLAGS_data_dir, dataset, "data_graph", dataset + ".graph.bin");
   }
 
-  void loadDataset(const std::string& dataset, double& load_time) {
-    server_->loadGraph(getGraphPath(dataset), std::string(dataset), "", ADDRESS);
+  static inline std::string getPartitionGraphPath(const std::string& dataset, const uint32_t partition) {
+    return circinus::Path::join(FLAGS_data_dir, dataset, "data_graph",
+                                dataset + ".graph_partition_" + std::to_string(partition) + ".bin");
+  }
+
+  void loadDataset(const std::string& dataset, double& load_time, const uint32_t partition = 1) {
+    if (partition == 1) {
+      server_->loadGraph(getGraphPath(dataset), std::string(dataset), "", ADDRESS);
+    } else {
+      server_->loadGraph(getPartitionGraphPath(dataset, partition), std::string(dataset),
+                         "partition=" + std::to_string(partition), ADDRESS);
+    }
     zmq::multipart_t reply;
     reply.recv(sock_);
     auto success = reply.poptyp<bool>();
@@ -206,6 +218,13 @@ class Benchmark {
     }
     (*out) << std::endl;
   }
+
+  void batch_run(const std::string& dataset, uint32_t query_size, const std::string& match_order, std::ostream* out) {
+    for (uint32_t i = 1; i <= 200; ++i) {
+      run(dataset, query_size, "dense", i, match_order, out);
+      run(dataset, query_size, "sparse", i, match_order, out);
+    }
+  }
 };
 
 void run_benchmark(const std::string& query_file, Benchmark& benchmark, std::ostream* out) {
@@ -226,7 +245,7 @@ void run_benchmark(const std::string& query_file, Benchmark& benchmark, std::ost
     // load graph if not cached
     if (config.dataset != dataset) {
       dataset = config.dataset;
-      benchmark.loadDataset(dataset, load_time);
+      benchmark.loadDataset(dataset, load_time, FLAGS_partition);
     }
     benchmark.run(config.dataset, config.query_size, config.query_mode, config.query_index, config.match_order, out);
   }
@@ -268,8 +287,12 @@ int main(int argc, char** argv) {
   }
 
   double load_time = 0;
-  benchmark.loadDataset(FLAGS_dataset, load_time);
-  benchmark.run(FLAGS_dataset, FLAGS_query_size, FLAGS_query_mode, FLAGS_query_index, FLAGS_match_order, out);
+  benchmark.loadDataset(FLAGS_dataset, load_time, FLAGS_partition);
+  if (FLAGS_batch_run) {
+    benchmark.batch_run(FLAGS_dataset, FLAGS_query_size, FLAGS_match_order, out);
+  } else {
+    benchmark.run(FLAGS_dataset, FLAGS_query_size, FLAGS_query_mode, FLAGS_query_index, FLAGS_match_order, out);
+  }
 
   fstream.close();
 
