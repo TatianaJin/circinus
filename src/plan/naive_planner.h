@@ -36,6 +36,7 @@ struct CoverNode {
 class NaivePlanner {
  private:
   const QueryGraph* query_graph_;
+  bool use_two_hop_traversal_;
   const std::vector<double>* candidate_cardinality_;
   ExecutionPlan plan_;
 
@@ -55,8 +56,12 @@ class NaivePlanner {
   NaivePlanner(QueryGraph* query_graph, std::vector<double>* candidate_cardinality)
       : query_graph_(query_graph), candidate_cardinality_(candidate_cardinality), plan_(GraphType::Normal) {}
 
-  NaivePlanner(QueryGraph* query_graph, std::vector<double>* candidate_cardinality, GraphType type)
-      : query_graph_(query_graph), candidate_cardinality_(candidate_cardinality), plan_(type) {}
+  NaivePlanner(QueryGraph* query_graph, bool use_two_hop_traversal, std::vector<double>* candidate_cardinality,
+               GraphType type)
+      : query_graph_(query_graph),
+        use_two_hop_traversal_(use_two_hop_traversal),
+        candidate_cardinality_(candidate_cardinality),
+        plan_(type) {}
 
   bool hasValidCandidate();
 

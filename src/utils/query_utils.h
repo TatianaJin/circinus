@@ -111,10 +111,11 @@ class QueryConfig {
   OrderStrategy order_strategy = OrderStrategy::CFL;
   CompressionStrategy compression_strategy = CompressionStrategy::Dynamic;
   bool use_auxiliary_index = false;
+  bool use_two_hop_traversal = true;
   bool use_partitioned_graph = true;
   std::string output = "count";
   uint64_t limit = ~0ull;
-  std::chrono::seconds time_limit = std::chrono::seconds(300);
+  std::chrono::seconds time_limit = std::chrono::seconds(600);
   QueryMode mode = QueryMode::Execute;
 
   explicit QueryConfig(const std::string& config_str = "") {
@@ -146,6 +147,8 @@ class QueryConfig {
         limit = std::stoull(value);
       } else if (key == "time_limit") {
         time_limit = std::chrono::seconds(std::stol(value));
+      } else if (key == "use_two_hop_traversal") {
+        use_two_hop_traversal = value == "true" || value == "1";
       } else if (key == "use_partitioned_graph" || key == "upg") {
         use_partitioned_graph = value == "true" || value == "1";
       } else if (key == "use_auxiliary_index" || key == "uai") {

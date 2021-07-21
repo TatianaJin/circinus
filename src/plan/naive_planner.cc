@@ -499,9 +499,6 @@ double NaivePlanner::estimateCardinality(const GraphBase* data_graph,
     }
   }
 
-  // TODO(byli) FLAGS with traversal
-  bool with_traversal = true;
-
   for (uint32_t i = level + 1; i < matching_order_.size(); ++i) {
     visited[matching_order_[i]] = true;
   }
@@ -512,12 +509,12 @@ double NaivePlanner::estimateCardinality(const GraphBase* data_graph,
     }
     ret = 0;
     auto current_candidate_cars =
-        dfsComputeCost(qid, cover_bits, visited, data_graph, candidate_views, cc, with_traversal);
+        dfsComputeCost(qid, cover_bits, visited, data_graph, candidate_views, cc, use_two_hop_traversal_);
     for (auto candidate_car : current_candidate_cars) {
       ret += candidate_car.second;
     }
   }
-  if (!with_traversal) {
+  if (!use_two_hop_traversal_) {
     ret /= divide;
   }
   return ret;
@@ -557,15 +554,27 @@ ExecutionPlan* NaivePlanner::generatePlanWithDynamicCover(const GraphBase* data_
         if (costs_car[i - 1][par] >= 0) {
           auto[nbrs, cnt] = query_graph_->getOutNeighbors(matching_order_[i]);
           double cost = car[i - 1][par];
-          uint64_t bits = 0;
+          uint64_t parent_set_bits = 0, parent_key_bits = 0;
           for (uint32_t k = 0; k < cnt; ++k) {
-            if (existing_vertices.count(nbrs[k]) != 0 && (covers_[i - 1][par].cover_bits >> nbrs[k] & 1) == 0) {
-              bits |= 1 << nbrs[k];
+            if (existing_vertices.count(nbrs[k]) != 0) {
+              if ((covers_[i - 1][par].cover_bits >> nbrs[k] & 1) == 0) {
+                parent_set_bits |= 1 << nbrs[k];
+              } else {
+                parent_key_bits |= 1 << nbrs[k];
+              }
             }
           }
-          if (bits != 0) {
-            bits |= covers_[i - 1][par].cover_bits;
-            cost = estimateCardinality(data_graph, candidate_views, bits, i - 1);
+
+          if (covers_[i][j].cover_bits >> matching_order_[i] & 1) {
+            parent_key_bits |= covers_[i - 1][par].cover_bits;
+            // including itself
+            parent_key_bits |= 1 << matching_order_[i];
+            cost = estimateCardinality(data_graph, candidate_views, parent_key_bits, i);
+          } else {
+            if (parent_set_bits != 0) {
+              parent_set_bits |= covers_[i - 1][par].cover_bits;
+              cost = estimateCardinality(data_graph, candidate_views, parent_set_bits, i - 1);
+            }
           }
           if (costs_car[i][j] < 0 || costs_car[i - 1][par] + cost < costs_car[i][j]) {
             costs_car[i][j] = costs_car[i - 1][par] + cost;
@@ -601,7 +610,7 @@ ExecutionPlan* NaivePlanner::generatePlanWithDynamicCover(const GraphBase* data_
     }
   }
   CHECK(best_idx != -1) << "ERROR: can not get best plan index.";
-  // best_idx = 1;
+  // best_idx = 0;
   LOG(INFO) << "best last level cover idx " << best_idx << "  " << car[last][best_idx];
   std::vector<int> select_cover(matching_order_.size(), 0);
   for (uint32_t i = 0; i < matching_order_.size(); ++i) {
@@ -620,13 +629,30 @@ ExecutionPlan* NaivePlanner::generatePlanWithDynamicCover(const GraphBase* data_
   unordered_map<QueryVertexID, uint32_t> level_become_key;
   std::vector<uint32_t> best_path;
   best_path.emplace_back(best_idx);
+  for (uint32_t idx = 0; idx < covers_[last].size(); ++idx) {
+    DLOG(INFO) << "----------------------------";
+    uint32_t last_idx = idx;
+    for (uint32_t i = 1; i < matching_order_.size(); ++i) {
+      std::string s = "[";
+      for (auto vid : covers_[last][last_idx].cover) {
+        s += std::to_string(vid) + " ";
+      }
+      s += "]";
+      DLOG(INFO) << s << " " << costs_car[last][last_idx];
+      last_idx = pre[last][last_idx];
+      last--;
+    }
+    last = matching_order_.size() - 1;
+  }
+
+  last = matching_order_.size() - 1;
   for (uint32_t i = 1; i < matching_order_.size(); ++i) {
     std::string s = "[";
     for (auto vid : covers_[last][best_idx].cover) {
       s += std::to_string(vid) + " ";
     }
     s += "]";
-    LOG(INFO) << s << " " << covers_[last][best_idx].cover_bits;
+    LOG(INFO) << s << " " << costs_car[last][best_idx];
     best_idx = pre[last][best_idx];
     best_path.emplace_back(best_idx);
     last--;
