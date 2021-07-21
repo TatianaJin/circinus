@@ -60,4 +60,58 @@ inline TraverseOperator* newTraverseOp(GraphType g_type, Args... args) {
 template <typename G>
 inline constexpr bool sensitive_to_hint = !std::is_same<G, Graph>::value;
 
+inline void removeExceptions(std::vector<VertexID>* set, const unordered_set<VertexID>& except = {}) {
+  if (except.empty()) return;
+  set->erase(std::remove_if(set->begin(), set->end(), [&except](VertexID v) { return except.count(v); }), set->end());
+}
+
+class IntersectionCache {
+ private:
+  VertexID cache_key_ = std::numeric_limits<VertexID>::max();
+  std::vector<VertexID> cache_value_;
+
+ public:
+  bool getIntersectionCache(VertexID parent, std::vector<VertexID>* res) {
+    if (parent == cache_key_) {
+      res->insert(res->end(), cache_value_.begin(), cache_value_.end());
+      return true;
+    }
+    return false;
+  }
+
+  void cacheIntersection(VertexID parent, const std::vector<VertexID>& res) {
+    cache_key_ = parent;
+    cache_value_ = res;
+  }
+};
+
+class MultiparentIntersectionCache {
+ private:
+  std::vector<VertexID> cache_keys_;
+  std::vector<std::vector<VertexID>> cache_values_;
+
+ public:
+  inline void initCacheSize(uint32_t size) {
+    cache_keys_.resize(size, std::numeric_limits<VertexID>::max());
+    cache_values_.resize(size);
+  }
+
+  inline bool intersectionIsNotCached(VertexID key, uint32_t cache_idx) { return cache_keys_[cache_idx] != key; }
+
+  inline const auto& getIntersectionCache(uint32_t cache_idx) const { return cache_values_[cache_idx]; }
+
+  inline auto& resetIntersectionCache(uint32_t cache_idx, VertexID key) {
+    CHECK_LT(cache_idx, cache_values_.size());
+    cache_values_[cache_idx].clear();
+    cache_keys_[cache_idx] = key;
+    return cache_values_[cache_idx];
+  }
+
+  inline void invalidateCache(uint32_t cache_idx) {
+    for (uint32_t i = cache_idx; i < cache_keys_.size(); ++i) {
+      cache_keys_[i] = std::numeric_limits<VertexID>::max();
+    }
+  }
+};
+
 }  // namespace circinus

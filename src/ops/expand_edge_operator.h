@@ -22,12 +22,17 @@
 #include "graph/types.h"
 #include "ops/filters/subgraph_filter.h"
 #include "ops/traverse_operator.h"
+#include "ops/traverse_operator_utils.h"
 #include "ops/types.h"
 #include "utils/hashmap.h"
 
 namespace circinus {
 
+#ifdef INTERSECTION_CACHE
+class ExpandEdgeTraverseContext : public TraverseContext, public IntersectionCache {
+#else
 class ExpandEdgeTraverseContext : public TraverseContext {
+#endif
   unordered_set<VertexID> parent_set_;  // for profile
 
  public:
@@ -122,6 +127,30 @@ class ExpandEdgeOperator : public TraverseOperator {
     ret.emplace_back(
         GraphPartitionBase::createGraphPartition(candidate_scopes[parent_id_], candidate_scopes[target_vertex_], g));
     return ret;
+  }
+
+  template <typename G, QueryType profile>
+  inline void expandFromParent(TraverseContext* ctx, VertexID parent_match, unordered_set<VertexID> candidate_set,
+                               unordered_set<VertexID> exceptions, std::vector<VertexID>* targets) const {
+    auto g = (const G*)(ctx->current_data_graph);
+#ifdef INTERSECTION_CACHE
+    auto dctx = dynamic_cast<ExpandEdgeTraverseContext*>(ctx);
+    if (dctx->getIntersectionCache(parent_match, targets)) {
+      if
+        constexpr(isProfileMode(profile)) { ++ctx->cache_hit; }
+    } else {
+      auto neighbors = g->getOutNeighborsWithHint(parent_match, target_label_, 0);
+      intersect(candidate_set, neighbors, targets);
+      dctx->updateIntersection<profile>(candidate_set.size() + neighbors.size(), targets->size(), parent_match);
+      dctx->cacheIntersection(parent_match, *targets);
+    }
+    removeExceptions(targets, exceptions);
+#else
+    auto neighbors = g->getOutNeighborsWithHint(parent_match, target_label_, 0);
+    intersect(candidate_set, neighbors, targets, exceptions);
+    ((ExpandEdgeTraverseContext*)ctx)
+        ->updateIntersection<profile>(candidate_set.size() + neighbors.size(), targets->size(), parent_match);
+#endif
   }
 
  protected:

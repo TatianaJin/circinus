@@ -186,6 +186,9 @@ class TraverseOperator : public Operator {
        << info.total_output_size << ',' << info.total_num_input_subgraphs << ',' << info.total_num_output_subgraphs
        << ',' << info.intersection_count << ',' << info.total_intersection_input_size << ','
        << info.total_intersection_output_size << ',' << info.distinct_intersection_count;
+#ifdef INTERSECTION_CACHE
+    ss << ',' << info.cache_hit;
+#endif
     return ss.str();
   }
 

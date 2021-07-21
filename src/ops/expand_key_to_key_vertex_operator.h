@@ -58,6 +58,17 @@ class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
     return ss.str();
   }
 
+#ifdef INTERSECTION_CACHE
+  std::unique_ptr<TraverseContext> initTraverseContext(const std::vector<CompressedSubgraphs>* inputs,
+                                                       const void* graph, uint32_t start, uint32_t end,
+                                                       QueryType profile) const override {
+    auto ret = std::make_unique<ExpandVertexTraverseContext>(inputs, graph, start, end, parents_.size());
+    ret->initCacheSize(parents_.size());
+    ret->query_type = profile;
+    return ret;
+  }
+#endif
+
  protected:
   template <QueryType profile>
   inline uint32_t expandInner(uint32_t batch_size, ExpandVertexTraverseContext* ctx) const {
@@ -67,6 +78,67 @@ class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
       std::vector<VertexID> new_keys;
       const auto& input = ctx->getCurrentInput();
       auto exceptions = input.getExceptions(same_label_key_indices_, same_label_set_indices_);
+
+#ifdef INTERSECTION_CACHE
+      uint32_t i = 0;
+      for (; i < parents_.size(); ++i) {
+        uint32_t key_vid = input.getKeyVal(query_vertex_indices_.at(parents_[i]));
+        if (ctx->intersectionIsNotCached(key_vid, i)) {
+          break;
+        }
+      }
+      if (i != 0) {
+        if
+          constexpr(isProfileMode(profile)) ctx->cache_hit += i;
+      } else {
+        uint32_t key_vid = input.getKeyVal(query_vertex_indices_.at(parents_[0]));
+        auto neighbors = data_graph->getOutNeighborsWithHint(key_vid, target_label_, 0);
+        if (intersect_candidates) {
+          auto& intersection = ctx->resetIntersectionCache(0, key_vid);
+          intersect(*candidates_, neighbors, &intersection);
+          i = 1;
+          if
+            constexpr(isProfileMode(profile)) {
+              ctx->updateIntersectInfo(candidates_->size() + neighbors.size(), intersection.size());
+            }
+        } else {
+          uint32_t second_key_vid = input.getKeyVal(query_vertex_indices_.at(parents_[1]));
+          auto second_parent_neighbors = data_graph->getOutNeighborsWithHint(second_key_vid, target_label_, 1);
+          ctx->resetIntersectionCache(0, key_vid);
+          auto& intersection = ctx->resetIntersectionCache(1, second_key_vid);
+          intersect(neighbors, second_parent_neighbors, &intersection);
+          i = 2;
+          if
+            constexpr(isProfileMode(profile)) {
+              ctx->updateIntersectInfo(neighbors.size() + second_parent_neighbors.size(), intersection.size());
+            }
+        }
+      }
+      if (ctx->getIntersectionCache(i - 1).empty() && (intersect_candidates || i != 1)) {
+        ctx->invalidateCache(i);
+        goto handle_output;
+      }
+      for (; i < parents_.size(); ++i) {
+        uint32_t key_vid = input.getKeyVal(query_vertex_indices_.at(parents_[i]));
+        auto neighbors = data_graph->getOutNeighborsWithHint(key_vid, target_label_, i);
+        const auto& last = ctx->getIntersectionCache(i - 1);
+        auto& current = ctx->resetIntersectionCache(i, key_vid);
+        intersect(last, neighbors, &current);
+        if
+          constexpr(isProfileMode(profile)) {
+            ctx->updateIntersectInfo(last.size() + neighbors.size(), current.size());
+          }
+        if (current.empty()) {
+          ctx->invalidateCache(i + 1);
+          break;
+        }
+      }
+      if (i == parents_.size()) {
+        new_keys = ctx->getIntersectionCache(i - 1);
+        removeExceptions(&new_keys, exceptions);
+      }
+    handle_output:
+#else
       for (uint32_t i = 0; i < parents_.size(); ++i) {
         uint32_t key = query_vertex_indices_.at(parents_[i]);
         DCHECK_LT(key, input.getNumKeys());
@@ -95,6 +167,8 @@ class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
           break;
         }
       }
+#endif
+
       if
         constexpr(isProfileMode(profile)) {
           ctx->total_num_input_subgraphs += ctx->getCurrentInput().getNumSubgraphs();

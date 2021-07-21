@@ -89,19 +89,13 @@ class ExpandEdgeKeyToSetOperator : public ExpandEdgeOperator {
   }
 
  private:
-  inline const G* getDataGraph(TraverseContext* ctx) const { return (const G*)(ctx->current_data_graph); }
-
   /** @returns True if one CompressedSubgraphs is generated, else false. */
   template <QueryType profile>
   inline bool expandInner(const CompressedSubgraphs& input, TraverseContext* ctx) const {
     std::vector<VertexID> targets;
     auto parent_match = input.getKeyVal(parent_index_);
-    auto neighbors = getDataGraph(ctx)->getOutNeighborsWithHint(parent_match, target_label_, 0);
-    intersect(candidate_set_, neighbors, &targets,
-              input.getExceptions(same_label_key_indices_, same_label_set_indices_));
-
-    auto dctx = dynamic_cast<ExpandEdgeTraverseContext*>(ctx);
-    dctx->updateIntersection<profile>(candidate_set_.size() + neighbors.size(), targets.size(), parent_match);
+    auto exceptions = input.getExceptions(same_label_key_indices_, same_label_set_indices_);
+    expandFromParent<G, profile>(ctx, parent_match, candidate_set_, exceptions, &targets);
 
     if (targets.empty()) {
       return false;
@@ -238,15 +232,12 @@ class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
   inline void expandInner(const CompressedSubgraphs& input, ExpandEdgeKeyToKeyTraverseContext* ctx) const {
     auto& current_targets = ctx->resetTargets();
     auto parent_match = input.getKeyVal(parent_index_);
-    auto neighbors = getDataGraph(ctx)->getOutNeighborsWithHint(parent_match, target_label_, 0);
+    auto exceptions = input.getExceptions(same_label_key_indices_, same_label_set_indices_);
     if (!intersect_candidates) {
-      removeExceptions(neighbors, &current_targets,
-                       input.getExceptions(same_label_key_indices_, same_label_set_indices_));
+      auto neighbors = getDataGraph(ctx)->getOutNeighborsWithHint(parent_match, target_label_, 0);
+      removeExceptions(neighbors, &current_targets, exceptions);
     } else {
-      intersect(candidate_set_, neighbors, &current_targets,
-                input.getExceptions(same_label_key_indices_, same_label_set_indices_));
-
-      ctx->updateIntersection<profile>(candidate_set_.size() + neighbors.size(), current_targets.size(), parent_match);
+      expandFromParent<G, profile>(ctx, parent_match, candidate_set_, exceptions, &current_targets);
     }
   }
 };
