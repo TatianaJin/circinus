@@ -42,9 +42,11 @@ class TraverseContext : public ProfileInfo {
   uint32_t input_end_index_ = 0;
   const std::vector<CompressedSubgraphs>* current_inputs_ = nullptr;
 
+  uint32_t output_idx_ = 0;
+  std::vector<CompressedSubgraphs>* outputs_;
+
  public:
   const void* current_data_graph = nullptr;
-  std::vector<CompressedSubgraphs>* outputs;
   QueryType query_type;
 
   TraverseContext() {}
@@ -66,10 +68,28 @@ class TraverseContext : public ProfileInfo {
   inline bool hasNextInput() const { return input_index_ < input_end_index_; }
   inline uint32_t getInputIndex() const { return input_index_; }
   inline uint32_t getTotalInputSize() const { return input_index_ - input_start_index_; }
-  inline const auto getOutputs() const { return outputs; }
+  inline auto getOutputs() const { return outputs_; }
+  inline auto getOutputSize() const { return output_idx_; }
 
   inline void nextInput() { ++input_index_; }
-  inline void clearOutputs() { outputs->clear(); }
+
+  inline void setOutputBuffer(std::vector<CompressedSubgraphs>& outputs) { outputs_ = &outputs; }
+  inline void popOutputs(uint32_t size) { output_idx_ -= size; }
+  inline void popOutput() { --output_idx_; }
+
+  template <typename... Args>
+  inline CompressedSubgraphs* newOutput(Args&&... args) {
+    DCHECK_LT(output_idx_, outputs_->size());
+    // do not increment output_idx_ if the current output is invalid
+    return (*outputs_)[output_idx_++].reset(std::forward<Args>(args)...);
+  }
+
+  inline CompressedSubgraphs& copyOutput(const CompressedSubgraphs& from) {
+    (*outputs_)[output_idx_] = from;
+    return (*outputs_)[output_idx_++];
+  }
+
+  inline void resetOutputs() { output_idx_ = 0; }
 };
 
 class TraverseOperator : public Operator {
@@ -146,6 +166,8 @@ class TraverseOperator : public Operator {
     return ret;
   }
 
+  virtual std::pair<uint32_t, uint32_t> getOutputSize(const std::pair<uint32_t, uint32_t>& input_key_size) const = 0;
+
   virtual uint32_t expand(uint32_t cap, TraverseContext* ctx) const = 0;
 
   uint32_t expandAndProfile(uint32_t cap, TraverseContext* ctx) const {
@@ -155,27 +177,27 @@ class TraverseOperator : public Operator {
     ctx->total_time_in_milliseconds += toMilliseconds(start, stop);
     if (false) {
       uint32_t size = 0;
-      auto offset = ctx->outputs->size() - n;
+      auto offset = ctx->getOutputSize() - n;
+      auto& outputs = *(ctx->getOutputs());
       for (uint32_t i = 0; i < n; ++i) {
-        if ((*(ctx->outputs))[offset + i].getNumIsomorphicSubgraphs(1) == 0) {
+        if ((*(ctx->getOutputs()))[offset + i].getNumIsomorphicSubgraphs(1) == 0) {
           // CHECK(false) << toString() << "\n\t" << (*outputs)[offset + i].toString();
           continue;
         }
         if (size != i) {
-          (*(ctx->outputs))[offset + size] = std::move((*(ctx->outputs))[offset + i]);
+          outputs[offset + size] = std::move(outputs[offset + i]);
         }
         ++size;
       }
-      ctx->outputs->erase(ctx->outputs->begin() + (offset + size), ctx->outputs->end());
+      ctx->popOutputs(n - size);
       n = size;
-    }
-    if (false) {
-      std::ofstream ss("output_" + std::to_string(ctx->outputs->front().getNumVertices()), std::ofstream::app);
-      for (auto& output : *(ctx->outputs)) {
+      std::ofstream ss("output_" + std::to_string(outputs.front().getNumVertices()), std::ofstream::app);
+      for (auto& output : outputs) {
         output.logEnumerated(ss, matching_order_indices_);
       }
     }
-    ctx->total_num_output_subgraphs += getNumSubgraphs(*(ctx->outputs), ctx->outputs->size() - n, ctx->outputs->size());
+    ctx->total_num_output_subgraphs +=
+        getNumSubgraphs(*(ctx->getOutputs()), ctx->getOutputSize() - n, ctx->getOutputSize());
     ctx->total_output_size += n;
     return n;
   }

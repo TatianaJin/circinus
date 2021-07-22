@@ -37,6 +37,7 @@ class EnumerateTraverseContext : public TraverseContext, public MultiparentInter
 #else
 class EnumerateTraverseContext : public TraverseContext {
 #endif
+
  private:
   std::vector<uint32_t> enumerate_key_idx_;                     // size = keys_to_enumerate_.size();
   std::vector<std::vector<VertexID>*> enumerate_key_pos_sets_;  // size = keys_to_enumerate_.size();
@@ -171,6 +172,10 @@ class EnumerateKeyExpandToSetOperator : public ExpandVertexOperator {
     }
     ss << ')';
     return ss.str();
+  }
+
+  std::pair<uint32_t, uint32_t> getOutputSize(const std::pair<uint32_t, uint32_t>& input_key_size) const override {
+    return {input_key_size.first + keys_to_enumerate_.size(), input_key_size.second + 1};
   }
 
  private:
@@ -330,7 +335,7 @@ uint32_t EnumerateKeyExpandToSetOperator<G>::expandInner(uint32_t batch_size, Tr
         }
         if (enumerate_key_depth == enumerate_key_size - 1) {  // the last key query vertex to enumerate, ready to output
           auto& target_set = ctx->target_sets.back();
-          auto output = ctx->getOutput();
+          auto& output = ctx->copyOutput(ctx->getOutput());
           // set the enumerated keys in the output
           bool skip = false;
           for (uint32_t key_i = 0; key_i < enumerate_key_size; ++key_i) {
@@ -354,6 +359,7 @@ uint32_t EnumerateKeyExpandToSetOperator<G>::expandInner(uint32_t batch_size, Tr
           }
           if (skip) {
             target_set.clear();
+            ctx->popOutput();
             ctx->nextKeyToEnumerate(enumerate_key_depth);
             continue;
           }
@@ -361,6 +367,7 @@ uint32_t EnumerateKeyExpandToSetOperator<G>::expandInner(uint32_t batch_size, Tr
           // set the target set
           output.UpdateSets(output.getNumSets() - 1, std::make_shared<std::vector<VertexID>>(std::move(target_set)));
           if (filter(output)) {
+            ctx->popOutput();
             ctx->nextKeyToEnumerate(enumerate_key_depth);
             continue;
           }
@@ -369,6 +376,7 @@ uint32_t EnumerateKeyExpandToSetOperator<G>::expandInner(uint32_t batch_size, Tr
           if (target_set.size() == 1) {
             auto indices = set_indices_;
             if (output.pruneExistingSets(target_set.front(), indices, set_pruning_threshold_)) {
+              ctx->popOutput();
               ctx->nextKeyToEnumerate(enumerate_key_depth);
               continue;
             }
@@ -376,7 +384,6 @@ uint32_t EnumerateKeyExpandToSetOperator<G>::expandInner(uint32_t batch_size, Tr
           output.UpdateSets(output.getNumSets() - 1, std::make_shared<std::vector<VertexID>>(std::move(target_set)));
 #endif
 
-          ctx->outputs->push_back(std::move(output));
           ctx->nextKeyToEnumerate(enumerate_key_depth);
           if (++n_outputs == batch_size) {
             return n_outputs;

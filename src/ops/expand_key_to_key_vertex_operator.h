@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -28,6 +29,13 @@
 
 namespace circinus {
 
+class ExpandKeyToKeyVertexTraverseContext : public ExpandVertexTraverseContext, public TargetBuffer {
+ public:
+  ExpandKeyToKeyVertexTraverseContext(const std::vector<CompressedSubgraphs>* inputs, const void* data_graph,
+                                      uint32_t input_index, uint32_t input_end_index, uint32_t parent_size)
+      : ExpandVertexTraverseContext(inputs, data_graph, input_index, input_end_index, parent_size) {}
+};
+
 template <typename G, bool intersect_candidates>
 class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
  public:
@@ -40,15 +48,15 @@ class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
                              same_label_set_indices, set_pruning_threshold, filter) {}
 
   uint32_t expand(uint32_t batch_size, TraverseContext* ctx) const override {
-    return expandInner<QueryType::Execute>(batch_size, (ExpandVertexTraverseContext*)ctx);
+    return expandInner<QueryType::Execute>(batch_size, (ExpandKeyToKeyVertexTraverseContext*)ctx);
   }
 
   uint32_t expandAndProfileInner(uint32_t batch_size, TraverseContext* ctx) const override {
     if (ctx->query_type == QueryType::Profile)
-      return expandInner<QueryType::Profile>(batch_size, (ExpandVertexTraverseContext*)ctx);
+      return expandInner<QueryType::Profile>(batch_size, (ExpandKeyToKeyVertexTraverseContext*)ctx);
     CHECK(ctx->query_type == QueryType::ProfileWithMiniIntersection) << "Unknown query type "
                                                                      << (uint32_t)ctx->query_type;
-    return expandInner<QueryType::ProfileWithMiniIntersection>(batch_size, (ExpandVertexTraverseContext*)ctx);
+    return expandInner<QueryType::ProfileWithMiniIntersection>(batch_size, (ExpandKeyToKeyVertexTraverseContext*)ctx);
   }
 
   std::string toString() const override {
@@ -58,24 +66,55 @@ class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
     return ss.str();
   }
 
-#ifdef INTERSECTION_CACHE
+  std::pair<uint32_t, uint32_t> getOutputSize(const std::pair<uint32_t, uint32_t>& input_key_size) const override {
+    return {input_key_size.first + 1, input_key_size.second + 1};
+  }
+
   std::unique_ptr<TraverseContext> initTraverseContext(const std::vector<CompressedSubgraphs>* inputs,
                                                        const void* graph, uint32_t start, uint32_t end,
                                                        QueryType profile) const override {
-    auto ret = std::make_unique<ExpandVertexTraverseContext>(inputs, graph, start, end, parents_.size());
+    auto ret = std::make_unique<ExpandKeyToKeyVertexTraverseContext>(inputs, graph, start, end, parents_.size());
+#ifdef INTERSECTION_CACHE
     ret->initCacheSize(parents_.size());
+#endif
     ret->query_type = profile;
     return ret;
   }
-#endif
 
  protected:
   template <QueryType profile>
-  inline uint32_t expandInner(uint32_t batch_size, ExpandVertexTraverseContext* ctx) const {
+  inline uint32_t expandInner(uint32_t batch_size, ExpandKeyToKeyVertexTraverseContext* ctx) const {
     auto data_graph = (G*)(ctx->current_data_graph);
     uint32_t output_num = 0;
-    while (ctx->hasNextInput()) {
-      std::vector<VertexID> new_keys;
+    while (true) {
+      if (ctx->hasTarget()) {
+        auto& input = ctx->getPreviousInput();
+        while (ctx->hasTarget()) {
+#ifdef USE_FILTER
+          auto output =
+              ctx->newOutput(input, ctx->currentTarget(), same_label_set_indices_, set_pruning_threshold_, false);
+          ctx->nextTarget();
+          if (output == nullptr) continue;
+          if (filter(*output)) {
+            ctx->popOutput();
+            continue;
+          }
+#else
+          auto output = ctx->newOutput(input, ctx->currentTarget(), same_label_set_indices_, set_pruning_threshold_);
+          ctx->nextTarget();
+          if (output == nullptr) continue;
+#endif
+          if (++output_num == batch_size) {
+            return output_num;
+          }
+        }
+      }
+      if (!ctx->hasNextInput()) {  // return if all inputs in the current batch are consumed
+        return output_num;
+      }
+
+      // consume the next input
+      auto& new_keys = ctx->resetTargets();
       const auto& input = ctx->getCurrentInput();
       auto exceptions = input.getExceptions(same_label_key_indices_, same_label_set_indices_);
 
@@ -183,24 +222,7 @@ class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
               }
             }
         }
-      if (new_keys.size() != 0) {
-        for (VertexID new_key : new_keys) {
-#ifdef USE_FILTER
-          CompressedSubgraphs output(input, new_key, same_label_set_indices_, set_pruning_threshold_, false);
-          if (output.empty() || filter(output)) continue;
-#else
-          CompressedSubgraphs output(input, new_key, same_label_set_indices_, set_pruning_threshold_);
-          if (output.empty()) continue;
-#endif
-          ctx->outputs->emplace_back(std::move(output));
-          ++output_num;
-        }
-      }
       ctx->nextInput();
-      if (output_num >= batch_size) {
-        break;
-      }
-      new_keys.clear();
     }
     return output_num;
   }

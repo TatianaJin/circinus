@@ -130,8 +130,9 @@ class ExpandEdgeOperator : public TraverseOperator {
   }
 
   template <typename G, QueryType profile>
-  inline void expandFromParent(TraverseContext* ctx, VertexID parent_match, unordered_set<VertexID> candidate_set,
-                               unordered_set<VertexID> exceptions, std::vector<VertexID>* targets) const {
+  inline void expandFromParent(TraverseContext* ctx, VertexID parent_match,
+                               const unordered_set<VertexID>& candidate_set, const unordered_set<VertexID>& exceptions,
+                               std::vector<VertexID>* targets) const {
     auto g = (const G*)(ctx->current_data_graph);
 #ifdef INTERSECTION_CACHE
     auto dctx = dynamic_cast<ExpandEdgeTraverseContext*>(ctx);

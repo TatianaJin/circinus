@@ -15,6 +15,7 @@
 #pragma once
 
 #include <memory>
+#include <queue>
 #include <string>
 #include <tuple>
 #include <unordered_map>
@@ -30,6 +31,57 @@
 #include "utils/hashmap.h"
 
 namespace circinus {
+
+class ExpandSetToKeyVertexTraverseContext : public ExpandVertexTraverseContext {
+ private:
+  unordered_set<VertexID> exceptions_;
+  bool from_candidate_ = false;  // init to be false since candidate_iter_ is not initialized before first use
+  // for fromCandidateStrategy
+  CandidateSetView::ConstIterator candidate_iter_;
+  // for fromSetNeighborStrategy
+  uint32_t min_parent_idx_ = 0;
+  uint32_t parent_match_idx_ = 0;
+  const std::vector<VertexID>* parent_matches_ = nullptr;  // not owned
+  unordered_set<VertexID> visited_;
+  std::queue<VertexID> extensions_;
+
+ public:
+  ExpandSetToKeyVertexTraverseContext(const std::vector<CompressedSubgraphs>* inputs, const void* data_graph,
+                                      uint32_t input_index, uint32_t input_end_index, uint32_t parent_size)
+      : ExpandVertexTraverseContext(inputs, data_graph, input_index, input_end_index, parent_size) {}
+
+  bool fromCandidate() const { return from_candidate_; }
+
+  inline const auto& getExceptions() const { return exceptions_; }
+  inline auto& resetExceptions() {
+    exceptions_.clear();
+    return exceptions_;
+  }
+
+  /* for fromCandidateStrategy */
+  inline void initCandidateIter(const CandidateSetView& view) {
+    candidate_iter_ = view.begin();
+    from_candidate_ = true;
+  }
+  inline auto& getCandidateIter() { return candidate_iter_; }
+
+  /* for fromSetNeighborStrategy */
+  inline auto getParentMatches() const { return parent_matches_; }
+  inline auto getMinParentIdx() const { return min_parent_idx_; }
+  inline auto& getParentMatchIdx() { return parent_match_idx_; }
+  inline auto& getExtensions() { return extensions_; }
+  inline bool visitOnce(VertexID target) { return visited_.insert(target).second; }
+  inline void initParentSet(const std::vector<VertexID>* parent_matches, uint32_t min_parent_idx) {
+    parent_matches_ = parent_matches;
+    min_parent_idx_ = min_parent_idx;
+    from_candidate_ = false;
+  }
+  inline void clearParentMatches() {
+    parent_match_idx_ = 0;
+    parent_matches_ = nullptr;
+    visited_.clear();
+  }
+};
 
 template <typename G>
 class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
@@ -48,6 +100,14 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
   }
 
   inline void setParentLabels(std::vector<LabelID>&& parent_labels) { parent_labels_ = std::move(parent_labels); }
+
+  std::unique_ptr<TraverseContext> initTraverseContext(const std::vector<CompressedSubgraphs>* inputs,
+                                                       const void* graph, uint32_t start, uint32_t end,
+                                                       QueryType profile) const override {
+    auto ret = std::make_unique<ExpandSetToKeyVertexTraverseContext>(inputs, graph, start, end, parents_.size());
+    ret->query_type = profile;
+    return ret;
+  }
 
   uint32_t expand(uint32_t batch_size, TraverseContext* ctx) const override {
     return expandInner<QueryType::Execute>(batch_size, ctx);
@@ -76,6 +136,10 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
     return ss.str();
   }
 
+  std::pair<uint32_t, uint32_t> getOutputSize(const std::pair<uint32_t, uint32_t>& input_key_size) const override {
+    return {input_key_size.first + 1, input_key_size.second + 1};
+  }
+
  protected:
   bool isInCandidates(VertexID key) const {
     auto lb = std::lower_bound(candidates_->begin(), candidates_->end(), key);
@@ -99,189 +163,206 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
       }
       ++idx;
     }
-    return std::make_tuple(size, parent, parent_idx);
+    return std::make_tuple(size / parents_.size(), parent, parent_idx);
   }
 
-  // TODO(tatiana): see if hard limit on output size is needed
   template <QueryType profile>
-  inline uint32_t expandInner(uint32_t batch_size, TraverseContext* ctx) const {
+  inline uint32_t expandInner(uint32_t batch_size, TraverseContext* base_ctx) const {
+    auto ctx = (ExpandSetToKeyVertexTraverseContext*)base_ctx;
     uint32_t output_num = 0;
-    while (ctx->hasNextInput()) {
+    decltype(std::declval<G>().getInNeighborsWithHint(0, 0, 0)) buffer;
+
+    // check remaining targets for the last input
+    if (ctx->fromCandidate()) {
+      if (ctx->getCandidateIter() != candidates_->end())
+        output_num = fromCandidateStrategy<profile>(ctx, ctx->getPreviousInput(), batch_size, buffer);
+    } else if (ctx->getParentMatches() != nullptr) {
+      output_num = fromSetNeighborStrategy<profile>(ctx, ctx->getPreviousInput(), batch_size, buffer);
+    }
+
+    if (output_num == batch_size) return output_num;
+
+    // compute targets for the current input and enumerate
+    while (ctx->hasNextInput() && output_num < batch_size) {
       auto[min_parent_set_size, min_parent_vertex, min_parent_idx] = getMinimumParent(ctx);
       if
         constexpr(isProfileWithMiniIntersectionMode(profile)) {
           updateDistinctSICount((ExpandVertexTraverseContext*)ctx);
         }
+      auto& input = ctx->getCurrentInput();
+      input.getExceptions(ctx->resetExceptions(), same_label_key_indices_, same_label_set_indices_);
       if (min_parent_set_size < candidates_->size()) {
-        // DLOG(INFO) << "fromSetNeighborStrategy";
-        output_num += fromSetNeighborStrategy<profile>(min_parent_vertex, min_parent_idx, ctx);
+        ctx->initParentSet(input.getSet(query_vertex_indices_.at(min_parent_vertex)).get(), min_parent_idx);
+        output_num += fromSetNeighborStrategy<profile>(ctx, input, batch_size - output_num, buffer);
       } else {
-        // DLOG(INFO) << "fromCandidateStrategy";
-        output_num += fromCandidateStrategy<profile>(ctx);
+        ctx->initCandidateIter(*candidates_);
+        output_num += fromCandidateStrategy<profile>(ctx, input, batch_size - output_num, buffer);
       }
       if
         constexpr(isProfileMode(profile)) {
           ctx->total_num_input_subgraphs += ctx->getCurrentInput().getNumSubgraphs();
         }
       ctx->nextInput();
-      if (output_num >= batch_size) {
+    }
+    return output_num;
+  }
+
+  /** @returns True if target is valid. */
+  template <QueryType profile, typename NeighborSet>
+  inline bool validateTarget(ExpandSetToKeyVertexTraverseContext* ctx, VertexID target,
+                             const CompressedSubgraphs& input, uint32_t source_parent_idx,
+                             NeighborSet& key_out_neighbors) const {
+    auto new_output = ctx->newOutput(input, target, same_label_set_indices_, set_pruning_threshold_);
+    if (new_output == nullptr) {
+      return false;
+    }
+#ifndef USE_FILTER
+    // TODO(tatiana): `ExpandSetToKey` requires different groups of same-label indices for the parent sets
+    // for active pruning, should use same-label set indices >>>
+    unordered_set<uint32_t> set_indices;
+    for (uint32_t i = 0; i < new_output->getNumSets(); ++i) {
+      set_indices.insert(i);
+    }  // <<< for active pruning, should use same-label set indices
+#endif
+    // TODO(by) hash key_out_neighbors?
+    if
+      constexpr(!sensitive_to_hint<G>) key_out_neighbors =
+          ((G*)(ctx->current_data_graph))->getInNeighborsWithHint(target, ALL_LABEL, source_parent_idx);
+    uint32_t parent_idx = 0;
+    for (uint32_t set_vid : parents_) {
+      std::vector<VertexID> new_set;
+      uint32_t id = query_vertex_indices_.at(set_vid);
+      if
+        constexpr(sensitive_to_hint<G>) {  // if graph provides different neighbors for hints, select neighbors from
+                                           // the right graph part
+          if
+            constexpr(std::is_same_v<G, ReorderedPartitionedGraph>)((G*)(ctx->current_data_graph))
+                ->getInNeighborsWithHint(target, parent_labels_[parent_idx], parent_idx, key_out_neighbors);
+          else
+            key_out_neighbors =
+                ((G*)(ctx->current_data_graph))->getInNeighborsWithHint(target, parent_labels_[parent_idx], parent_idx);
+        }
+      intersect(*input.getSet(id), key_out_neighbors, &new_set);  // No need for exceptions
+      if
+        constexpr(isProfileMode(profile)) {
+          ctx->updateIntersectInfo(input.getSet(id)->size() + key_out_neighbors.size(), new_set.size());
+        }
+      if (new_set.empty()) {
+        ctx->popOutput();
+        return false;
+      }
+#ifdef USE_FILTER
+      new_output->UpdateSets(id, std::make_shared<std::vector<VertexID>>(std::move(new_set)));
+      if (filter(*new_output)) {
+        ctx->popOutput();
+        return false;
+      }
+#else
+      if (new_set.size() == 1) {  // actively prune existing sets
+        auto pruning_set_indices = set_indices;
+        pruning_set_indices.erase(id);
+        if (new_output->pruneExistingSets(new_set.front(), pruning_set_indices, ~0u)) {
+          ctx->popOutput();
+          return false;
+        }
+      }
+      new_output->UpdateSets(id, std::make_shared<std::vector<VertexID>>(std::move(new_set)));
+#endif
+      ++parent_idx;
+    }
+
+    return true;
+  }
+
+  template <QueryType profile, typename NeighborSet>
+  uint32_t fromCandidateStrategy(ExpandSetToKeyVertexTraverseContext* ctx, const CompressedSubgraphs& input,
+                                 uint32_t batch_size, NeighborSet& buffer) const {
+    uint32_t output_num = 0;
+    auto& iter = ctx->getCandidateIter();
+    while (iter != candidates_->end()) {
+      auto vid = *iter;
+      ++iter;
+      if (ctx->getExceptions().count(vid)) {
+        continue;
+      }
+      output_num += validateTarget<profile>(ctx, vid, input, 0, buffer);
+      if (output_num == batch_size) {
         break;
       }
     }
     return output_num;
   }
 
-  template <QueryType profile>
-  uint32_t fromCandidateStrategy(TraverseContext* ctx) const {
-    auto& input = ctx->getCurrentInput();
+  template <QueryType profile, typename NeighborSet>
+  uint32_t fromSetNeighborStrategy(ExpandSetToKeyVertexTraverseContext* ctx, const CompressedSubgraphs& input,
+                                   uint32_t batch_size, NeighborSet& buffer) const {
     uint32_t output_num = 0;
-    auto exceptions = input.getExceptions(same_label_key_indices_, same_label_set_indices_);
-    for (VertexID key_vertex_id : *candidates_) {
-      if (exceptions.count(key_vertex_id)) {
-        continue;
-      }
-      auto key_out_neighbors = ((G*)(ctx->current_data_graph))->getInNeighborsWithHint(key_vertex_id, ALL_LABEL, 0);
-      // TODO(by) hash key_out_neighbors
-      CompressedSubgraphs new_output(input, key_vertex_id, same_label_set_indices_, set_pruning_threshold_);
-      if (new_output.empty()) {
-        continue;
-      }
-      bool add = true;
-#ifndef USE_FILTER
-      // TODO(tatiana): `ExpandSetToKey` requires different groups of same-label indices for the parent sets
-      // for active pruning, should use same-label set indices >>>
-      unordered_set<uint32_t> set_indices;
-      for (uint32_t i = 0; i < new_output.getNumSets(); ++i) {
-        set_indices.insert(i);
-      }  // <<< for active pruning, should use same-label set indices
-#endif
-      uint32_t parent_idx = 0;
-      for (uint32_t set_vid : parents_) {
-        std::vector<VertexID> new_set;
-        uint32_t id = query_vertex_indices_.at(set_vid);
-        if
-          constexpr(sensitive_to_hint<G>) {  // if graph provides different neighbors for hints, select neighbors from
-                                             // the right graph part
-            key_out_neighbors = ((G*)(ctx->current_data_graph))
-                                    ->getInNeighborsWithHint(key_vertex_id, parent_labels_[parent_idx], parent_idx);
-          }
-        intersect(*input.getSet(id), key_out_neighbors, &new_set);  // No need for exceptions
-        if
-          constexpr(isProfileMode(profile)) {
-            ctx->updateIntersectInfo(input.getSet(id)->size() + key_out_neighbors.size(), new_set.size());
-          }
-        if (new_set.empty()) {
-          add = false;
-          break;
-        }
-#ifdef USE_FILTER
-        new_output.UpdateSets(id, std::make_shared<std::vector<VertexID>>(std::move(new_set)));
-        if (filter(new_output)) {
-          add = false;
-          break;
-        }
-#else
-        if (new_set.size() == 1) {  // actively prune existing sets
-          set_indices.erase(id);
-          if (new_output.pruneExistingSets(new_set.front(), set_indices, ~0u)) {
-            add = false;
-            break;
-          }
-        }
-        new_output.UpdateSets(id, std::make_shared<std::vector<VertexID>>(std::move(new_set)));
-#endif
-        ++parent_idx;
-      }
+    auto min_parent_idx = ctx->getMinParentIdx();
+    auto& extensions = ctx->getExtensions();
 
-      if (add) {
-        ctx->outputs->emplace_back(std::move(new_output));
-        output_num++;
-      }
+    // enumerate remaining extensions from last parent_match_idx
+    while (!extensions.empty()) {
+      auto key_vertex_id = extensions.front();
+      extensions.pop();
+      output_num += validateTarget<profile>(ctx, key_vertex_id, input, min_parent_idx, buffer);
+      if (output_num == batch_size) return output_num;
     }
-    return output_num;
-  }
 
-  template <QueryType profile>
-  uint32_t fromSetNeighborStrategy(QueryVertexID min_parent, uint32_t min_parent_idx, TraverseContext* ctx) const {
-    unordered_set<VertexID> visited;
-    auto& input = ctx->getCurrentInput();
-    uint32_t output_num = 0;
-    const auto& parent_match = input.getSet(query_vertex_indices_.at(min_parent));
-    auto exceptions = input.getExceptions(same_label_key_indices_, same_label_set_indices_);
-
-    for (VertexID vid : *parent_match) {
+    auto& parent_match_idx = ctx->getParentMatchIdx();
+    auto& parent_matches = *ctx->getParentMatches();
+    while (parent_match_idx < parent_matches.size()) {
+      // find extensions and enumerate
+      auto vid = parent_matches[parent_match_idx++];
       auto out_neighbors = ((G*)(ctx->current_data_graph))->getOutNeighborsWithHint(vid, target_label_, min_parent_idx);
-      for (VertexID key_vertex_id : out_neighbors) {
-        if (exceptions.count(key_vertex_id)) {
-          continue;
+      if
+        constexpr(std::is_same_v<decltype(out_neighbors), VertexSetView>) {
+          auto& ranges = out_neighbors.getRanges();
+          for (uint32_t range_i = 0; range_i < ranges.size(); ++range_i) {
+            for (size_t idx = 0; idx < ranges[range_i].second; ++idx) {
+              VertexID key_vertex_id = ranges[range_i].first[idx];
+              if (ctx->getExceptions().count(key_vertex_id) == 0 && ctx->visitOnce(key_vertex_id) &&
+                  isInCandidates(key_vertex_id)) {
+                output_num += validateTarget<profile>(ctx, key_vertex_id, input, min_parent_idx, buffer);
+                if (output_num == batch_size) {
+                  // store the remaining extensions for next batch output
+                  for (++idx; idx < ranges[range_i].second; ++idx) {
+                    auto vid = ranges[range_i].first[idx];
+                    if (ctx->getExceptions().count(vid) == 0 && ctx->visitOnce(vid) && isInCandidates(vid))
+                      extensions.push(vid);
+                  }
+                  for (++range_i; range_i < ranges.size(); ++range_i) {
+                    for (size_t idx = 0; idx < ranges[range_i].second; ++idx) {
+                      auto vid = ranges[range_i].first[idx];
+                      if (ctx->getExceptions().count(vid) == 0 && ctx->visitOnce(vid) && isInCandidates(vid))
+                        extensions.push(vid);
+                    }
+                  }
+                  return output_num;
+                }
+              }
+            }
+          }
         }
-        if (visited.insert(key_vertex_id).second) {
-          if (!isInCandidates(key_vertex_id)) {
-            continue;
-          }
-          auto key_out_neighbors =
-              ((G*)(ctx->current_data_graph))->getInNeighborsWithHint(key_vertex_id, ALL_LABEL, min_parent_idx);
-          // TODO(by) hash key_out_neighbors
-          CompressedSubgraphs new_output(input, key_vertex_id, same_label_set_indices_, set_pruning_threshold_);
-          if (new_output.empty()) {
-            continue;
-          }
-          bool add = true;
-#ifndef USE_FILTER
-          // TODO(tatiana): `ExpandSetToKey` requires different groups of same-label indices for the parent sets
-          // for active pruning, should use same-label set indices >>>
-          unordered_set<uint32_t> set_indices;
-          for (uint32_t i = 0; i < new_output.getNumSets(); ++i) {
-            set_indices.insert(i);
-          }
-// <<< for active pruning, should use same-label set indices
-#endif
-          uint32_t parent_idx = 0;
-          for (uint32_t set_vid : parents_) {
-            std::vector<VertexID> new_set;
-            uint32_t id = query_vertex_indices_.at(set_vid);
-            if
-              constexpr(sensitive_to_hint<G>) {  // if graph provides different neighbors for hints, select neighbors
-                                                 // from the right graph part
-                key_out_neighbors = ((G*)(ctx->current_data_graph))
-                                        ->getInNeighborsWithHint(key_vertex_id, parent_labels_[parent_idx], parent_idx);
+      else {
+        for (auto iter = out_neighbors.begin(); iter != out_neighbors.end(); ++iter) {
+          VertexID key_vertex_id = *iter;
+          if (ctx->getExceptions().count(key_vertex_id) == 0 && ctx->visitOnce(key_vertex_id) &&
+              isInCandidates(key_vertex_id)) {
+            output_num += validateTarget<profile>(ctx, key_vertex_id, input, min_parent_idx, buffer);
+            if (output_num == batch_size) {
+              // store the remaining extensions for next batch output
+              for (++iter; iter != out_neighbors.end(); ++iter) {
+                auto vid = *iter;
+                if (ctx->getExceptions().count(vid) == 0 && ctx->visitOnce(vid) && isInCandidates(vid))
+                  extensions.push(vid);
               }
-            intersect(*input.getSet(id), key_out_neighbors, &new_set);
-            if
-              constexpr(isProfileMode(profile)) {
-                ctx->updateIntersectInfo(input.getSet(id)->size() + key_out_neighbors.size(), new_set.size());
-              }
-            if (new_set.empty()) {
-              add = false;
-              break;
+              return output_num;
             }
-#ifdef USE_FILTER
-            new_output.UpdateSets(id, std::make_shared<std::vector<VertexID>>(std::move(new_set)));
-            if (filter(new_output)) {
-              add = false;
-              break;
-            }
-#else
-            if (new_set.size() == 1) {  // actively prune existing sets
-              auto pruning_set_indices = set_indices;
-              pruning_set_indices.erase(id);
-              if (new_output.pruneExistingSets(new_set.front(), pruning_set_indices, ~0u)) {
-                add = false;
-                break;
-              }
-            }
-            new_output.UpdateSets(id, std::make_shared<std::vector<VertexID>>(std::move(new_set)));
-#endif
-            ++parent_idx;
-          }
-
-          if (add) {
-            ctx->outputs->emplace_back(std::move(new_output));
-            output_num++;
           }
         }
       }
     }
+    ctx->clearParentMatches();
     return output_num;
   }
 

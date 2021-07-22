@@ -39,6 +39,8 @@ class InputOperator : public Operator {
 
   virtual ~InputOperator() {}
 
+  inline std::pair<uint32_t, uint32_t> getOutputSize() const { return {inputs_are_keys_, 1}; }
+
   virtual std::vector<CompressedSubgraphs> getInputs(const void* g,
                                                      const std::vector<CandidateSetView>& candidates) const;
 

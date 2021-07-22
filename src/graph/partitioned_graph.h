@@ -44,6 +44,7 @@ class ReorderedPartitionedGraph : public GraphBase {
   /* index */
   std::vector<VertexID> vertex_ids_;         // the original vertex id of the i-th vertex in vlist_
   std::vector<VertexID> partition_offsets_;  // size n_partitions_ + 1
+  // TODO(tatiana): map label ids to a contiguous range from 0 and avoid hash in label_ranges_per_part_
   std::vector<unordered_map<LabelID, std::pair<VertexID, VertexID>>>
       label_ranges_per_part_;  // {partition, {label, {start, end}}}
 
@@ -120,7 +121,9 @@ class ReorderedPartitionedGraph : public GraphBase {
                                                                     VertexID range_r) {
     const VertexID* start = nullptr;
     const VertexID* end = nullptr;
-    if (std::distance(search_start, search_end) >= 32) {  // binary search
+    if (*search_start >= range_r) return {search_start, search_start};
+    if (std::distance(search_start, search_end) >= BINARY_SEARCH_THRESHOLD) {  // binary search
+      if (*(search_end - 1) < range_l) return {search_end, search_end};
       start = std::lower_bound(search_start, search_end, range_l);
       if (start < search_end) {
         end = std::lower_bound(start, search_end, range_r);
@@ -129,18 +132,32 @@ class ReorderedPartitionedGraph : public GraphBase {
       return {search_end, search_end};
     }
     // linear scan
+    if (search_start < search_end && *(search_end - 1) < range_l) return {search_end, search_end};
+    auto ptr = search_start;
+    while (ptr < search_end && *ptr < range_l) {
+      ++ptr;
+    }
+    start = ptr;
     end = search_end;
-    start = search_start - 1;
-    for (auto ptr = search_start; ptr < search_end; ++ptr) {
-      if (*ptr < range_l) {
-        start = ptr;
-      }
+    for (; ptr < search_end; ++ptr) {
       if (*ptr >= range_r) {
         end = ptr;
         break;
       }
     }
-    ++start;
+    // FIXME(debug): remove
+    // end = search_end;
+    // start = search_start - 1;
+    // for (auto ptr = search_start; ptr < search_end; ++ptr) {
+    //   if (*ptr < range_l) {
+    //     start = ptr;
+    //   }
+    //   if (*ptr >= range_r) {
+    //     end = ptr;
+    //     break;
+    //   }
+    // }
+    // ++start;
     return {start, end};
   }
 
@@ -168,15 +185,31 @@ class ReorderedPartitionedGraph : public GraphBase {
   }
 
   inline VertexSetView getOutNeighborsWithHint(VertexID id, LabelID nbr_label, uint32_t graph_idx = 0) const {
-    return getAllOutNeighborsWithHint(id, nbr_label);
+    VertexSetView res;
+    getAllOutNeighborsWithHint(id, nbr_label, res);
+    return res;
   }
 
   inline VertexSetView getInNeighborsWithHint(VertexID id, LabelID nbr_label, uint32_t graph_idx = 0) const {
-    return getAllOutNeighborsWithHint(id, nbr_label);
+    VertexSetView res;
+    getAllOutNeighborsWithHint(id, nbr_label, res);
+    return res;
   }
 
-  VertexSetView getAllOutNeighborsWithHint(VertexID id, LabelID nbr_label) const {
+  inline VertexSetView& getInNeighborsWithHint(VertexID id, LabelID nbr_label, uint32_t graph_idx,
+                                               VertexSetView& res) const {
+    res.clear();
+    getAllOutNeighborsWithHint(id, nbr_label, res);
+    return res;
+  }
+
+  inline VertexSetView getAllOutNeighborsWithHint(VertexID id, LabelID nbr_label) const {
     VertexSetView view;
+    getAllOutNeighborsWithHint(id, nbr_label, view);
+    return view;
+  }
+
+  VertexSetView& getAllOutNeighborsWithHint(VertexID id, LabelID nbr_label, VertexSetView& view) const {
     auto nbrs = getOutNeighbors(id);
     if (nbr_label == ALL_LABEL) {
       view.addRange(nbrs.first, nbrs.first + nbrs.second);
@@ -184,7 +217,7 @@ class ReorderedPartitionedGraph : public GraphBase {
     }
     const VertexID* search_start = nbrs.first;
     const VertexID* const search_end = nbrs.first + nbrs.second;
-    for (uint32_t partition = 0; partition < getNumPartitions(); ++partition) {
+    for (uint32_t partition = 0; partition < getNumPartitions() && search_start != search_end; ++partition) {
       // get the range of vertex ids that satisfy the hint
       auto[range_l, range_r] = label_ranges_per_part_[partition].at(nbr_label);
       if (range_l == range_r) continue;

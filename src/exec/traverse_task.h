@@ -32,6 +32,7 @@
 #include "ops/output_operator.h"
 #include "ops/traverse_operator.h"
 #include "ops/types.h"
+#include "utils/flags.h"
 
 namespace circinus {
 
@@ -48,6 +49,7 @@ class TraverseChainTask : public TaskBase {
 
   std::vector<ProfileInfo> profile_info_;
   QueryType query_type_;
+  std::vector<std::vector<CompressedSubgraphs>> outputs_;
 
  public:
   TraverseChainTask(QueryId qid, TaskId tid, std::chrono::time_point<std::chrono::steady_clock> stop_time,
@@ -67,27 +69,31 @@ class TraverseChainTask : public TaskBase {
   const auto& getProfileInfo() const { return profile_info_; }
 
   void run(uint32_t executor_idx) override {
-    // auto profile_output = "Task " + std::to_string(task_id_);
-    // ProfilerStart(profile_output.data());
     setupCandidateSets();
+    setupOutputs();
 
     auto old_count = dynamic_cast<OutputOperator*>(operators_.back())->getOutput()->getCount(executor_idx);
     // TODO(tatiana): support match limit
     auto inputs = input_op_->getInputs(graph_, *candidates_);
-    LOG(INFO) << "Task " << task_id_ << " input " << inputs.size();
-    execute<QueryType::Execute>(inputs, 0, executor_idx);
+    // auto profile_output = "Task_" + std::to_string(task_id_);
+    // ProfilerStart(profile_output.data());
+    execute<QueryType::Execute>(inputs, inputs.size(), 0, executor_idx);
+    // ProfilerStop();
     auto new_count = dynamic_cast<OutputOperator*>(operators_.back())->getOutput()->getCount(executor_idx);
     LOG(INFO) << "Task " << task_id_ << " input " << inputs.size() << " count " << (new_count - old_count);
-    // ProfilerStop();
   }
 
   void profile(uint32_t executor_idx) override {
     setupCandidateSets();
+    setupOutputs();
     profile_info_.resize(operators_.size() + 1);  // traverse chain + input operator
     std::vector<CompressedSubgraphs> inputs;
     input_op_->inputAndProfile(graph_, *candidates_, &inputs, &profile_info_.front());
+    // auto profile_output = "Task_" + std::to_string(task_id_);
+    // ProfilerStart(profile_output.data());
     // TODO(tatiana): support match limit
-    execute<QueryType::Profile>(inputs, 0, executor_idx);
+    execute<QueryType::Profile>(inputs, inputs.size(), 0, executor_idx);
+    // ProfilerStop();
   }
 
  protected:
@@ -104,40 +110,51 @@ class TraverseChainTask : public TaskBase {
     }
   }
 
+  void setupOutputs() {
+    auto output_size = input_op_->getOutputSize();
+    outputs_.resize(operators_.size() - 1);
+    for (uint32_t i = 0; i < outputs_.size(); ++i) {
+      output_size = ((const TraverseOperator*)operators_[i])->getOutputSize(output_size);
+      outputs_[i].resize(batch_size_, CompressedSubgraphs(output_size.first, output_size.second));
+    }
+  }
+
   virtual std::unique_ptr<TraverseContext> createTraverseContext(const std::vector<CompressedSubgraphs>& inputs,
+                                                                 uint32_t input_size,
                                                                  std::vector<CompressedSubgraphs>& outputs,
                                                                  uint32_t level, const TraverseOperator* op,
                                                                  QueryType profile) {
-    auto ctx = op->initTraverseContext(&inputs, graph_, 0, inputs.size(), profile);
-    ctx->outputs = &outputs;
+    auto ctx = op->initTraverseContext(&inputs, graph_, 0, input_size, profile);
+    ctx->setOutputBuffer(outputs);
     return ctx;
   }
 
   template <QueryType profile>
-  bool execute(const std::vector<CompressedSubgraphs>& inputs, uint32_t level, uint32_t executor_idx) {
+  bool execute(const std::vector<CompressedSubgraphs>& inputs, uint32_t input_size, uint32_t level,
+               uint32_t executor_idx) {
     if (isTimeOut()) {
       return true;
     }
-    // LOG(INFO) << "level " << level;
-    std::vector<CompressedSubgraphs> outputs;
     auto op = operators_[level];
     if (level == operators_.size() - 1) {
       auto output_op = dynamic_cast<OutputOperator*>(op);
       if
         constexpr(isProfileMode(profile)) {
-          return output_op->validateAndOutputAndProfile(inputs, 0, inputs.size(), executor_idx,
-                                                        &profile_info_[level + 1]);
+          return output_op->validateAndOutputAndProfile(inputs, 0, input_size, executor_idx, &profile_info_[level + 1]);
         }
-      return output_op->validateAndOutput(inputs, executor_idx);
+      uint32_t start = 0;
+      return output_op->validateAndOutput(inputs, start, input_size, executor_idx);
     }
+
+    auto& outputs = outputs_[level];
     auto traverse_op = dynamic_cast<TraverseOperator*>(op);
-    auto ctx = createTraverseContext(inputs, outputs, level, traverse_op, query_type_);
+    auto ctx = createTraverseContext(inputs, input_size, outputs, level, traverse_op, query_type_);
     bool finished = false;
     while (true) {
       if (isTimeOut()) {
         return true;
       }
-      outputs.clear();
+      ctx->resetOutputs();
       uint32_t size = 0;
       if
         constexpr(isProfileMode(profile)) size = traverse_op->expandAndProfile(batch_size_, ctx.get());
@@ -147,7 +164,7 @@ class TraverseChainTask : public TaskBase {
       if (size == 0) {
         break;
       }
-      if (execute<profile>(outputs, level + 1, executor_idx)) {
+      if (execute<profile>(outputs, size, level + 1, executor_idx)) {
         finished = true;
         break;
       }
@@ -181,10 +198,11 @@ class TraverseTask : public TraverseChainTask {
 
  protected:
   std::unique_ptr<TraverseContext> createTraverseContext(const std::vector<CompressedSubgraphs>& inputs,
-                                                         std::vector<CompressedSubgraphs>& outputs, uint32_t level,
-                                                         const TraverseOperator* op, QueryType profile) override {
-    auto ctx = op->initTraverseContext(&inputs, &graph_views_[level], 0, inputs.size(), profile);
-    ctx->outputs = &outputs;
+                                                         uint32_t input_size, std::vector<CompressedSubgraphs>& outputs,
+                                                         uint32_t level, const TraverseOperator* op,
+                                                         QueryType profile) override {
+    auto ctx = op->initTraverseContext(&inputs, &graph_views_[level], 0, input_size, profile);
+    ctx->setOutputBuffer(outputs);
     return ctx;
   }
 
@@ -257,6 +275,7 @@ class MatchingParallelTraverseTask : public MatchingParallelTask {
   std::unique_ptr<TraverseContext> traverse_ctx_;
   std::vector<CandidateSetView> candidates_;
   std::shared_ptr<std::vector<CompressedSubgraphs>> inputs_;
+  uint32_t batch_size_ = FLAGS_batch_size;  // FIXME(tatiana): use execution config
 
  public:
   MatchingParallelTraverseTask(QueryId qid, TaskId tid, std::chrono::time_point<std::chrono::steady_clock> stop_time,
@@ -267,7 +286,7 @@ class MatchingParallelTraverseTask : public MatchingParallelTask {
         traverse_ctx_(std::move(traverse_ctx)),
         inputs_(inputs) {
     DCHECK(traverse_op_ != nullptr);
-    traverse_ctx_->outputs = &outputs_;
+    traverse_ctx_->setOutputBuffer(outputs_);
   }
 
   const GraphBase* getDataGraph() const override {
@@ -279,9 +298,32 @@ class MatchingParallelTraverseTask : public MatchingParallelTask {
     agg += *traverse_ctx_;
   }
 
-  void run(uint32_t executor_idx) override { traverse_op_->expand(UINT32_MAX, traverse_ctx_.get()); }
+  void run(uint32_t executor_idx) override {
+    uint64_t output_size = 0;
+    auto[nkey, size] = traverse_op_->getOutputSize(
+        {traverse_ctx_->getCurrentInput().getNumKeys(), traverse_ctx_->getCurrentInput().getNumVertices()});
+    CompressedSubgraphs placeholder(nkey, size);
+    while (true) {
+      outputs_.resize((output_size + batch_size_) / batch_size_ * batch_size_, placeholder);
+      auto add = traverse_op_->expand(batch_size_, traverse_ctx_.get());
+      if (add == 0) break;
+      output_size += add;
+    }
+    outputs_.erase(outputs_.begin() + traverse_ctx_->getOutputSize(), outputs_.end());
+  }
+
   void profile(uint32_t executor_idx) override {
-    traverse_op_->expandAndProfile(UINT32_MAX, traverse_ctx_.get());
+    uint64_t output_size = 0;
+    auto[nkey, size] = traverse_op_->getOutputSize(
+        {traverse_ctx_->getCurrentInput().getNumKeys(), traverse_ctx_->getCurrentInput().getNumVertices()});
+    CompressedSubgraphs placeholder(nkey, size);
+    while (true) {
+      outputs_.resize((output_size + batch_size_) / batch_size_ * batch_size_, placeholder);
+      auto add = traverse_op_->expandAndProfile(batch_size_, traverse_ctx_.get());
+      if (add == 0) break;
+      output_size += add;
+    }
+    outputs_.erase(outputs_.begin() + traverse_ctx_->getOutputSize(), outputs_.end());
     traverse_ctx_->total_input_size = traverse_ctx_->getTotalInputSize();
   }
 

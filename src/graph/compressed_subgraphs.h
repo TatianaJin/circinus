@@ -76,18 +76,29 @@ class CompressedSubgraphs {
                       const std::vector<uint32_t>& pruning_set_indices, uint64_t set_pruning_threshold,
                       bool recursive_prune = true)
       : keys_(subgraphs.getNumKeys() + 1), sets_(subgraphs.getNumSets()) {
-    unordered_set<uint32_t> set_indices(pruning_set_indices.begin(), pruning_set_indices.end());
+    if (reset(subgraphs, key, pruning_set_indices, set_pruning_threshold, recursive_prune) == nullptr) {
+      keys_.clear();
+    }
+  }
+
+  inline CompressedSubgraphs* reset(const CompressedSubgraphs& subgraphs, VertexID key,
+                                    const std::vector<uint32_t>& pruning_set_indices, uint64_t set_pruning_threshold,
+                                    bool recursive_prune = true) {
+    DCHECK_EQ(sets_.size(), subgraphs.sets_.size());
+    DCHECK_EQ(keys_.size(), subgraphs.keys_.size() + 1);
     sets_ = subgraphs.sets_;
+    unordered_set<uint32_t> set_indices(pruning_set_indices.begin(), pruning_set_indices.end());
     // isomorphism check for pruning sets that are completely conflicting with keys
     if (pruneExistingSets(key, set_indices, set_pruning_threshold, recursive_prune)) {
-      keys_.clear();
-      return;
+      return nullptr;
     }
     std::copy(subgraphs.keys_.begin(), subgraphs.keys_.end(), keys_.begin());
     keys_.back() = key;
+    return this;
   }
 
   /**
+   * For pruning using size-one set
    * @param subgraphs The compressed subgraphs that can extend to this CompressedSubraphs. They are one vertex smaller.
    * @param new_set The set of new vertices expanded in this CompressedSubgraphs, which is not in key.
    * @param pruning_set_indices The indices of the existing sets to prune.
@@ -96,17 +107,24 @@ class CompressedSubgraphs {
   CompressedSubgraphs(const CompressedSubgraphs& subgraphs, std::vector<VertexID>&& new_set,
                       const std::vector<uint32_t>& pruning_set_indices, uint64_t set_pruning_threshold)
       : keys_(subgraphs.getNumKeys()), sets_(subgraphs.getNumSets() + 1) {
+    if (reset(subgraphs, std::move(new_set), pruning_set_indices, set_pruning_threshold) == nullptr) {
+      keys_.clear();
+      sets_.clear();
+    }
+  }
+
+  inline CompressedSubgraphs* reset(const CompressedSubgraphs& subgraphs, std::vector<VertexID>&& new_set,
+                                    const std::vector<uint32_t>& pruning_set_indices, uint64_t set_pruning_threshold) {
     std::copy(subgraphs.sets_.begin(), subgraphs.sets_.end(), sets_.begin());
     if (new_set.size() == 1) {
       unordered_set<uint32_t> set_indices(pruning_set_indices.begin(), pruning_set_indices.end());
       if (pruneExistingSets(new_set.front(), set_indices, set_pruning_threshold)) {
-        keys_.clear();
-        sets_.clear();
-        return;
+        return nullptr;
       }
     }
     keys_ = subgraphs.keys_;
     sets_.back() = std::make_shared<std::vector<VertexID>>(std::move(new_set));
+    return this;
   }
 
   /** This constructor is used when expanding from a non-key vertex to a new key vertex, and the matches of the parent
@@ -124,19 +142,28 @@ class CompressedSubgraphs {
                       VertexID key, const std::vector<uint32_t>& pruning_set_indices, uint64_t set_pruning_threshold,
                       bool prune_by_set)
       : keys_(subgraphs.getNumKeys() + 1), sets_(subgraphs.getNumSets()) {
+    if (reset(subgraphs, replacing_set_index, std::move(new_set), key, pruning_set_indices, set_pruning_threshold,
+              prune_by_set) == nullptr) {
+      keys_.clear();
+      sets_.clear();
+    }
+  }
+
+  inline CompressedSubgraphs* reset(const CompressedSubgraphs& subgraphs, uint32_t replacing_set_index,
+                                    VertexSet&& new_set, VertexID key, const std::vector<uint32_t>& pruning_set_indices,
+                                    uint64_t set_pruning_threshold, bool prune_by_set) {
     sets_ = subgraphs.sets_;
     unordered_set<uint32_t> set_indices(pruning_set_indices.begin(), pruning_set_indices.end());
     if (pruneExistingSets(key, set_indices, set_pruning_threshold)) {
       // TODO(tatiana): set label may not be the same as the new key
       // (prune_by_set && new_set->size() == 1 && pruneExistingSets(new_set->front(), set_indices,
       // set_pruning_threshold))
-      keys_.clear();
-      sets_.clear();
-      return;
+      return nullptr;
     }
     std::copy(subgraphs.keys_.begin(), subgraphs.keys_.end(), keys_.begin());
     keys_.back() = key;
     sets_[replacing_set_index] = std::move(new_set);
+    return this;
   }
 
   /**
@@ -158,9 +185,14 @@ class CompressedSubgraphs {
    */
   CompressedSubgraphs(const CompressedSubgraphs& subgraphs, std::vector<VertexID>&& new_set)
       : keys_(subgraphs.getNumKeys()), sets_(subgraphs.getNumSets() + 1) {
+    reset(subgraphs, std::move(new_set));
+  }
+
+  inline CompressedSubgraphs* reset(const CompressedSubgraphs& subgraphs, std::vector<VertexID>&& new_set) {
     keys_ = subgraphs.keys_;
     std::copy(subgraphs.sets_.begin(), subgraphs.sets_.end(), sets_.begin());
     sets_.back() = std::make_shared<std::vector<VertexID>>(std::move(new_set));
+    return this;
   }
 
   /** This constructor is used when expanding from a non-key vertex to a new key vertex, and the matches of the parent

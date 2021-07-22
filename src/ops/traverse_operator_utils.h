@@ -14,7 +14,10 @@
 
 #pragma once
 
+#include <limits>
+#include <unordered_set>
 #include <utility>
+#include <vector>
 
 #include "graph/bipartite_graph.h"
 #include "graph/graph.h"
@@ -64,6 +67,24 @@ inline void removeExceptions(std::vector<VertexID>* set, const unordered_set<Ver
   if (except.empty()) return;
   set->erase(std::remove_if(set->begin(), set->end(), [&except](VertexID v) { return except.count(v); }), set->end());
 }
+
+class TargetBuffer {
+ private:
+  std::vector<VertexID> current_targets_;  // calculated from current_inputs_[input_index_]
+  uint32_t current_target_index_ = 0;
+
+ public:
+  // for key to key
+  inline bool hasTarget() const { return current_target_index_ < current_targets_.size(); }
+  inline VertexID currentTarget() const { return current_targets_[current_target_index_]; }
+  inline void nextTarget() { ++current_target_index_; }
+
+  inline auto& resetTargets() {
+    current_target_index_ = 0;
+    current_targets_.clear();
+    return current_targets_;
+  }
+};
 
 class IntersectionCache {
  private:
