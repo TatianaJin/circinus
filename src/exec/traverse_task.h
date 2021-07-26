@@ -89,7 +89,7 @@ class TraverseChainTask : public TaskBase {
     profile_info_.resize(operators_.size() + 1);  // traverse chain + input operator
     std::vector<CompressedSubgraphs> inputs;
     input_op_->inputAndProfile(graph_, *candidates_, &inputs, &profile_info_.front());
-    // auto profile_output = "Task_" + std::to_string(task_id_);
+    // auto profile_output = "Profile_Task_" + std::to_string(task_id_);
     // ProfilerStart(profile_output.data());
     // TODO(tatiana): support match limit
     execute<QueryType::Profile>(inputs, inputs.size(), 0, executor_idx);

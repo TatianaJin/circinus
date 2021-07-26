@@ -314,36 +314,34 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
       // find extensions and enumerate
       auto vid = parent_matches[parent_match_idx++];
       auto out_neighbors = ((G*)(ctx->current_data_graph))->getOutNeighborsWithHint(vid, target_label_, min_parent_idx);
-      if
-        constexpr(std::is_same_v<decltype(out_neighbors), VertexSetView>) {
-          auto& ranges = out_neighbors.getRanges();
-          for (uint32_t range_i = 0; range_i < ranges.size(); ++range_i) {
-            for (size_t idx = 0; idx < ranges[range_i].second; ++idx) {
-              VertexID key_vertex_id = ranges[range_i].first[idx];
-              if (ctx->getExceptions().count(key_vertex_id) == 0 && ctx->visitOnce(key_vertex_id) &&
-                  isInCandidates(key_vertex_id)) {
-                output_num += validateTarget<profile>(ctx, key_vertex_id, input, min_parent_idx, buffer);
-                if (output_num == batch_size) {
-                  // store the remaining extensions for next batch output
-                  for (++idx; idx < ranges[range_i].second; ++idx) {
+      if (std::is_same_v<decltype(out_neighbors), VertexSetView>) {
+        auto& ranges = out_neighbors.getRanges();
+        for (uint32_t range_i = 0; range_i < ranges.size(); ++range_i) {
+          for (size_t idx = 0; idx < ranges[range_i].second; ++idx) {
+            VertexID key_vertex_id = ranges[range_i].first[idx];
+            if (ctx->getExceptions().count(key_vertex_id) == 0 && ctx->visitOnce(key_vertex_id) &&
+                isInCandidates(key_vertex_id)) {
+              output_num += validateTarget<profile>(ctx, key_vertex_id, input, min_parent_idx, buffer);
+              if (output_num == batch_size) {
+                // store the remaining extensions for next batch output
+                for (++idx; idx < ranges[range_i].second; ++idx) {
+                  auto vid = ranges[range_i].first[idx];
+                  if (ctx->getExceptions().count(vid) == 0 && ctx->visitOnce(vid) && isInCandidates(vid))
+                    extensions.push(vid);
+                }
+                for (++range_i; range_i < ranges.size(); ++range_i) {
+                  for (size_t idx = 0; idx < ranges[range_i].second; ++idx) {
                     auto vid = ranges[range_i].first[idx];
                     if (ctx->getExceptions().count(vid) == 0 && ctx->visitOnce(vid) && isInCandidates(vid))
                       extensions.push(vid);
                   }
-                  for (++range_i; range_i < ranges.size(); ++range_i) {
-                    for (size_t idx = 0; idx < ranges[range_i].second; ++idx) {
-                      auto vid = ranges[range_i].first[idx];
-                      if (ctx->getExceptions().count(vid) == 0 && ctx->visitOnce(vid) && isInCandidates(vid))
-                        extensions.push(vid);
-                    }
-                  }
-                  return output_num;
                 }
+                return output_num;
               }
             }
           }
         }
-      else {
+      } else {
         for (auto iter = out_neighbors.begin(); iter != out_neighbors.end(); ++iter) {
           VertexID key_vertex_id = *iter;
           if (ctx->getExceptions().count(key_vertex_id) == 0 && ctx->visitOnce(key_vertex_id) &&
