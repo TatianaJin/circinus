@@ -58,6 +58,10 @@ class ExpandKeyToSetVertexOperator : public ExpandVertexOperator {
     return ss.str();
   }
 
+  std::pair<uint32_t, uint32_t> getOutputSize(const std::pair<uint32_t, uint32_t>& input_key_size) const override {
+    return {input_key_size.first, input_key_size.second + 1};
+  }
+
  protected:
   template <QueryType profile>
   inline uint32_t expandInner(uint32_t batch_size, TraverseContext* base_ctx) const {
@@ -105,17 +109,17 @@ class ExpandKeyToSetVertexOperator : public ExpandVertexOperator {
         }
       if (!new_set.empty()) {
 #ifdef USE_FILTER
-        CompressedSubgraphs output(input, std::move(new_set));
-        if (filter(output)) {
+        auto output = ctx->newOutput(input, std::move(new_set));
+        if (filter(*output)) {
+          ctx->popOutput();
           continue;
         }
 #else
-        CompressedSubgraphs output(input, std::move(new_set), same_label_set_indices_, set_pruning_threshold_);
-        if (output.empty()) {
+        auto output = ctx->newOutput(input, std::move(new_set), same_label_set_indices_, set_pruning_threshold_);
+        if (output == nullptr) {
           continue;
         }
 #endif
-        ctx->outputs->emplace_back(std::move(output));
         ++output_num;
         // TODO(by) break if batch_size is reached
       }

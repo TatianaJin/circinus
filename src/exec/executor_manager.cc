@@ -18,6 +18,7 @@
 #include <utility>
 
 #include "exec/result.h"
+#include "utils/thread_affinity.h"
 
 namespace circinus {
 
@@ -82,6 +83,7 @@ void ExecutorManager::ExecutorPool::start(ThreadsafeTaskQueue* task_queue,
       }
     }));
   }
+  if (n_threads_ > 1) pinToCores(pool_);
 }
 
 // TODO(tatiana): setup ExecutionConfig

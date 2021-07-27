@@ -26,12 +26,18 @@
 #include "algorithms/intersect.h"
 #include "graph/types.h"
 #include "ops/expand_vertex_operator.h"
+#include "ops/traverse_operator_utils.h"
 #include "ops/types.h"
 #include "utils/hashmap.h"
 
 namespace circinus {
 
+#ifdef INTERSECTION_CACHE
+class EnumerateTraverseContext : public TraverseContext, public MultiparentIntersectionCache {
+#else
 class EnumerateTraverseContext : public TraverseContext {
+#endif
+
  private:
   std::vector<uint32_t> enumerate_key_idx_;                     // size = keys_to_enumerate_.size();
   std::vector<std::vector<VertexID>*> enumerate_key_pos_sets_;  // size = keys_to_enumerate_.size();
@@ -147,6 +153,9 @@ class EnumerateKeyExpandToSetOperator : public ExpandVertexOperator {
         query_vertex_indices_.size() - 1 - query_vertex_indices_.at(target_vertex_),
         isProfileWithMiniIntersectionMode(profile) ? parents_.size() : 0);
     ret->query_type = profile;
+#ifdef INTERSECTION_CACHE
+    ret->initCacheSize(parents_.size() - keys_to_enumerate_.size());
+#endif
     return ret;
   }
 
@@ -163,6 +172,10 @@ class EnumerateKeyExpandToSetOperator : public ExpandVertexOperator {
     }
     ss << ')';
     return ss.str();
+  }
+
+  std::pair<uint32_t, uint32_t> getOutputSize(const std::pair<uint32_t, uint32_t>& input_key_size) const override {
+    return {input_key_size.first + keys_to_enumerate_.size(), input_key_size.second + 1};
   }
 
  private:
@@ -322,7 +335,7 @@ uint32_t EnumerateKeyExpandToSetOperator<G>::expandInner(uint32_t batch_size, Tr
         }
         if (enumerate_key_depth == enumerate_key_size - 1) {  // the last key query vertex to enumerate, ready to output
           auto& target_set = ctx->target_sets.back();
-          auto output = ctx->getOutput();
+          auto& output = ctx->copyOutput(ctx->getOutput());
           // set the enumerated keys in the output
           bool skip = false;
           for (uint32_t key_i = 0; key_i < enumerate_key_size; ++key_i) {
@@ -346,6 +359,7 @@ uint32_t EnumerateKeyExpandToSetOperator<G>::expandInner(uint32_t batch_size, Tr
           }
           if (skip) {
             target_set.clear();
+            ctx->popOutput();
             ctx->nextKeyToEnumerate(enumerate_key_depth);
             continue;
           }
@@ -353,6 +367,7 @@ uint32_t EnumerateKeyExpandToSetOperator<G>::expandInner(uint32_t batch_size, Tr
           // set the target set
           output.UpdateSets(output.getNumSets() - 1, std::make_shared<std::vector<VertexID>>(std::move(target_set)));
           if (filter(output)) {
+            ctx->popOutput();
             ctx->nextKeyToEnumerate(enumerate_key_depth);
             continue;
           }
@@ -361,6 +376,7 @@ uint32_t EnumerateKeyExpandToSetOperator<G>::expandInner(uint32_t batch_size, Tr
           if (target_set.size() == 1) {
             auto indices = set_indices_;
             if (output.pruneExistingSets(target_set.front(), indices, set_pruning_threshold_)) {
+              ctx->popOutput();
               ctx->nextKeyToEnumerate(enumerate_key_depth);
               continue;
             }
@@ -368,7 +384,6 @@ uint32_t EnumerateKeyExpandToSetOperator<G>::expandInner(uint32_t batch_size, Tr
           output.UpdateSets(output.getNumSets() - 1, std::make_shared<std::vector<VertexID>>(std::move(target_set)));
 #endif
 
-          ctx->outputs->push_back(std::move(output));
           ctx->nextKeyToEnumerate(enumerate_key_depth);
           if (++n_outputs == batch_size) {
             return n_outputs;
@@ -404,11 +419,52 @@ bool EnumerateKeyExpandToSetOperator<G>::expandInner(
   input.getExceptions(ctx->existing_vertices, {}, same_label_set_indices_);
   ctx->n_exceptions = ctx->existing_vertices.size();
 
+#ifdef INTERSECTION_CACHE
+  if (existing_key_parent_indices_.empty()) {
+    return candidates_->empty();
+  }
+  uint32_t i = 0;
+  // lookup cache
+  for (; i < existing_key_parent_indices_.size(); ++i) {
+    uint32_t key_vid = input.getKeyVal(existing_key_parent_indices_[i]);
+    if (ctx->intersectionIsNotCached(key_vid, i)) {
+      break;
+    }
+  }
+  if (i != 0) {
+    ctx->cache_hit += i;
+  } else {
+    uint32_t key_vid = input.getKeyVal(existing_key_parent_indices_[0]);
+    auto neighbors = getDataGraph(ctx)->getOutNeighborsWithHint(key_vid, target_label_, 0);
+    auto& intersection = ctx->resetIntersectionCache(0, key_vid);
+    intersect(*candidates_, neighbors, &intersection);
+    ctx->updateIntersection<profile>(candidates_->size() + neighbors.size(), intersection.size(), i, key_vid);
+    i = 1;
+  }
+  if (ctx->getIntersectionCache(i - 1).empty()) {
+    return true;
+  }
+
+  for (; i < existing_key_parent_indices_.size(); ++i) {
+    uint32_t key_vid = input.getKeyVal(existing_key_parent_indices_[i]);
+    auto neighbors = getDataGraph(ctx)->getOutNeighborsWithHint(key_vid, target_label_, i);
+    auto& last = ctx->getIntersectionCache(i - 1);
+    auto& current = ctx->resetIntersectionCache(i, key_vid);
+    intersect(last, neighbors, &current);
+    ctx->updateIntersection<profile>(last.size() + neighbors.size(), current.size(), i, key_vid);
+    if (current.empty()) {
+      return true;
+    }
+  }
+  target_set = ctx->getIntersectionCache(i - 1);
+  removeExceptions(&target_set, ctx->existing_vertices);
+#else
   for (uint32_t i = 0; i < existing_key_parent_indices_.size(); ++i) {
     uint32_t key_vid = input.getKeyVal(existing_key_parent_indices_[i]);
     auto neighbors = getDataGraph(ctx)->getOutNeighborsWithHint(key_vid, target_label_, i);
     auto input_size = target_set.size() + neighbors.size();
     if (i == 0) {
+      input_size = candidates_->size() + neighbors.size();
       intersect(*candidates_, neighbors, &target_set, ctx->existing_vertices);
     } else {
       intersectInplace(target_set, neighbors, &target_set);
@@ -418,6 +474,7 @@ bool EnumerateKeyExpandToSetOperator<G>::expandInner(
       return true;
     }
   }
+#endif
 
   return candidates_->empty() || (target_set.empty() && existing_key_parent_indices_.size() > 0);
 }

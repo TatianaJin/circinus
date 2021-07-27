@@ -46,7 +46,14 @@ class ExecutorManager {
     uint32_t n_threads_;
 
    public:
-    explicit ExecutorPool(uint32_t n_threads = FLAGS_num_cores) : n_threads_(n_threads) {}
+    explicit ExecutorPool(uint32_t n_threads = FLAGS_num_cores) : n_threads_(n_threads) {
+      auto n_cores = std::thread::hardware_concurrency();
+      if (n_threads_ > n_cores) {
+        LOG(WARNING) << "FLAGS_num_cores=" << n_threads_ << " is larger than the hardware concurrency, changing to "
+                     << n_cores;
+        n_threads_ = n_cores;
+      }
+    }
 
     ~ExecutorPool() {
       for (auto& t : pool_) {

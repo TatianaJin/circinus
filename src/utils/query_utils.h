@@ -235,6 +235,9 @@ struct ProfileInfo {
   uint64_t total_intersection_output_size = 0;
   /** The minimal number of intersection needed if all intersection function call results can be cached */
   uint64_t distinct_intersection_count = 0;
+#ifdef INTERSECTION_CACHE
+  uint64_t cache_hit = 0;
+#endif
 
   void updateIntersectInfo(uint32_t input_size, uint32_t output_size) {
     ++intersection_count;
@@ -251,6 +254,9 @@ struct ProfileInfo {
     total_intersection_input_size += update.total_intersection_input_size;
     total_intersection_output_size += update.total_intersection_output_size;
     distinct_intersection_count += update.distinct_intersection_count;
+#ifdef INTERSECTION_CACHE
+    cache_hit += update.cache_hit;
+#endif
   }
 };
 

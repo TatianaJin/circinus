@@ -19,10 +19,15 @@
 #include <vector>
 
 #include "ops/traverse_operator.h"
+#include "ops/traverse_operator_utils.h"
 
 namespace circinus {
 
+#ifdef INTERSECTION_CACHE
+class ExpandVertexTraverseContext : public TraverseContext, public MultiparentIntersectionCache {
+#else
 class ExpandVertexTraverseContext : public TraverseContext {
+#endif
   // for profiling
   std::vector<unordered_set<std::string>> parent_tuple_sets_;
 

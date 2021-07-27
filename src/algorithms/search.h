@@ -14,7 +14,7 @@
 
 #pragma once
 
-#define BINARY_SEARCH_THRESHOLD 32
+#define BINARY_SEARCH_THRESHOLD 256
 
 #include <algorithm>
 #include <type_traits>

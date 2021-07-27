@@ -88,59 +88,43 @@ class ExpandEdgeKeyToSetOperator : public ExpandEdgeOperator {
     return ss.str();
   }
 
- private:
-  inline const G* getDataGraph(TraverseContext* ctx) const { return (const G*)(ctx->current_data_graph); }
+  std::pair<uint32_t, uint32_t> getOutputSize(const std::pair<uint32_t, uint32_t>& input_key_size) const override {
+    return {input_key_size.first, input_key_size.second + 1};
+  }
 
+ private:
   /** @returns True if one CompressedSubgraphs is generated, else false. */
   template <QueryType profile>
   inline bool expandInner(const CompressedSubgraphs& input, TraverseContext* ctx) const {
     std::vector<VertexID> targets;
     auto parent_match = input.getKeyVal(parent_index_);
-    auto neighbors = getDataGraph(ctx)->getOutNeighborsWithHint(parent_match, target_label_, 0);
-    intersect(candidate_set_, neighbors, &targets,
-              input.getExceptions(same_label_key_indices_, same_label_set_indices_));
-
-    auto dctx = dynamic_cast<ExpandEdgeTraverseContext*>(ctx);
-    dctx->updateIntersection<profile>(candidate_set_.size() + neighbors.size(), targets.size(), parent_match);
+    auto exceptions = input.getExceptions(same_label_key_indices_, same_label_set_indices_);
+    expandFromParent<G, profile>(ctx, parent_match, candidate_set_, exceptions, &targets);
 
     if (targets.empty()) {
       return false;
     }
 #ifdef USE_FILTER
-    CompressedSubgraphs output(input, std::move(targets));
-    if (filter(output)) {  // actively prune existing sets
+    auto output = ctx->newOutput(input, std::move(targets));
+    if (filter(*output)) {  // actively prune existing sets
+      ctx->popOutput();
       return false;
     }
 #else
-    CompressedSubgraphs output(input, std::move(targets), same_label_set_indices_, set_pruning_threshold_);
-    if (output.empty()) {  // actively prune existing sets
+    auto output = ctx->newOutput(input, std::move(targets), same_label_set_indices_, set_pruning_threshold_);
+    if (output == nullptr) {  // actively prune existing sets
       return false;
     }
 #endif
-    ctx->outputs->emplace_back(std::move(output));
     return true;
   }
 };
 
-class ExpandEdgeKeyToKeyTraverseContext : public ExpandEdgeTraverseContext {
-  std::vector<VertexID> current_targets_;  // calculated from current_inputs_[input_index_]
-  uint32_t current_target_index_ = 0;
-
+class ExpandEdgeKeyToKeyTraverseContext : public ExpandEdgeTraverseContext, public TargetBuffer {
  public:
   ExpandEdgeKeyToKeyTraverseContext(const std::vector<CompressedSubgraphs>* inputs, const void* data_graph,
                                     uint32_t input_index, uint32_t input_end_index)
       : ExpandEdgeTraverseContext(inputs, data_graph, input_index, input_end_index) {}
-
-  // for key to key
-  inline bool hasTarget() const { return current_target_index_ < current_targets_.size(); }
-  inline VertexID currentTarget() const { return current_targets_[current_target_index_]; }
-  inline void nextTarget() { ++current_target_index_; }
-
-  inline auto& resetTargets() {
-    current_target_index_ = 0;
-    current_targets_.clear();
-    return current_targets_;
-  }
 };
 
 template <typename G, bool intersect_candidates>
@@ -180,6 +164,10 @@ class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
     return ss.str();
   }
 
+  std::pair<uint32_t, uint32_t> getOutputSize(const std::pair<uint32_t, uint32_t>& input_key_size) const override {
+    return {input_key_size.first + 1, input_key_size.second + 1};
+  }
+
   std::unique_ptr<TraverseContext> initTraverseContext(const std::vector<CompressedSubgraphs>* inputs,
                                                        const void* graph, uint32_t input_start, uint32_t input_end,
                                                        QueryType profile) const override {
@@ -201,23 +189,22 @@ class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
         auto& input = ctx->getPreviousInput();
         while (ctx->hasTarget()) {
 #ifdef USE_FILTER
-          CompressedSubgraphs output(input, ctx->currentTarget(), same_label_set_indices_, set_pruning_threshold_,
-                                     false);
+          auto output =
+              ctx->newOutput(input, ctx->currentTarget(), same_label_set_indices_, set_pruning_threshold_, false);
 #else
-          CompressedSubgraphs output(input, ctx->currentTarget(), same_label_set_indices_, set_pruning_threshold_);
+          auto output = ctx->newOutput(input, ctx->currentTarget(), same_label_set_indices_, set_pruning_threshold_);
 #endif
           ctx->nextTarget();
-          if (output.empty()) continue;
+          if (output == nullptr) continue;
 #ifdef USE_FILTER
-          if (filter(output)) continue;
+          if (filter(*output)) {
+            ctx->popOutput();
+            continue;
+          }
 #endif
-          ctx->outputs->emplace_back(std::move(output));
           if (++n == cap) {
             return n;
           }
-        }
-        if (n == cap) {
-          return n;
         }
       }
       // return if all inputs in the current batch are consumed
@@ -238,15 +225,12 @@ class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
   inline void expandInner(const CompressedSubgraphs& input, ExpandEdgeKeyToKeyTraverseContext* ctx) const {
     auto& current_targets = ctx->resetTargets();
     auto parent_match = input.getKeyVal(parent_index_);
-    auto neighbors = getDataGraph(ctx)->getOutNeighborsWithHint(parent_match, target_label_, 0);
+    auto exceptions = input.getExceptions(same_label_key_indices_, same_label_set_indices_);
     if (!intersect_candidates) {
-      removeExceptions(neighbors, &current_targets,
-                       input.getExceptions(same_label_key_indices_, same_label_set_indices_));
+      auto neighbors = getDataGraph(ctx)->getOutNeighborsWithHint(parent_match, target_label_, 0);
+      removeExceptions(neighbors, &current_targets, exceptions);
     } else {
-      intersect(candidate_set_, neighbors, &current_targets,
-                input.getExceptions(same_label_key_indices_, same_label_set_indices_));
-
-      ctx->updateIntersection<profile>(candidate_set_.size() + neighbors.size(), current_targets.size(), parent_match);
+      expandFromParent<G, profile>(ctx, parent_match, candidate_set_, exceptions, &current_targets);
     }
   }
 };
@@ -265,7 +249,7 @@ class CurrentResults {
 
   virtual ~CurrentResults() {}
 
-  virtual uint32_t getResults(std::vector<CompressedSubgraphs>* outputs, uint32_t cap) = 0;
+  virtual uint32_t getResults(uint32_t cap) = 0;
 };
 
 class ExpandEdgeSetToKeyTraverseContext : public ExpandEdgeTraverseContext {
@@ -279,9 +263,7 @@ class ExpandEdgeSetToKeyTraverseContext : public ExpandEdgeTraverseContext {
 
   inline uint64_t getCandidateNeighborSize() const { return candidates_neighbor_size_; }
   inline bool hasRemainingResults() const { return current_results_ != nullptr; }
-  inline uint32_t getResults(std::vector<CompressedSubgraphs>* outputs, uint32_t cap) const {
-    return current_results_->getResults(outputs, cap);
-  }
+  inline uint32_t getResults(uint32_t cap) { return current_results_->getResults(cap); }
   inline void setResults(CurrentResults* ptr) { current_results_.reset(ptr); }
 
   template <typename G>
@@ -308,7 +290,7 @@ class CurrentResultsByCandidate : public CurrentResults {
         candidate_iter_(owner->getCandidateSet()->begin()),
         parent_label_(parent_label) {}
 
-  uint32_t getResults(std::vector<CompressedSubgraphs>* outputs, uint32_t cap) override {
+  uint32_t getResults(uint32_t cap) override {
     uint32_t n = 0;
     auto& parent_set = input_->getSet(parent_index_);
 
@@ -329,14 +311,16 @@ class CurrentResultsByCandidate : public CurrentResults {
       if (parents.empty()) {
         continue;
       }
-      CompressedSubgraphs output(*input_, parent_index_, makeShared(parents), candidate,
-                                 owner_->getSameLabelSetIndices(), owner_->getSetPruningThreshold(), true);
-      if (output.empty()) continue;
+      auto output = ctx_->newOutput(*input_, parent_index_, makeShared(parents), candidate,
+                                    owner_->getSameLabelSetIndices(), owner_->getSetPruningThreshold(), true);
+      if (output == nullptr) continue;
 #ifdef USE_FILTER
-      if (owner_->filter(output)) continue;
+      if (owner_->filter(*output)) {
+        ctx_->popOutput();
+        continue;
+      }
 #endif
       ++n;
-      outputs->emplace_back(std::move(output));
     }
     return n;
   }
@@ -353,7 +337,7 @@ class CurrentResultsByParent : public CurrentResults {
     exceptions_ = input_->getExceptions(owner_->getSameLabelKeyIndices(), owner_->getSameLabelSetIndices());
   }
 
-  uint32_t getResults(std::vector<CompressedSubgraphs>* outputs, uint32_t cap) override {
+  uint32_t getResults(uint32_t cap) override {
     auto& parent_set = *input_->getSet(parent_index_);
     unordered_map<VertexID, int> group_index;
     uint32_t n = 0;
@@ -371,21 +355,22 @@ class CurrentResultsByParent : public CurrentResults {
       for (auto target : targets) {
         auto pos = group_index.find(target);
         if (pos == group_index.end()) {
-          group_index[target] = outputs->size();
-          outputs->emplace_back(*input_, parent_index_, makeVertexSet(parent_match), target,
-                                owner_->getSameLabelSetIndices(), owner_->getSetPruningThreshold(), false);
-          if (outputs->back().empty()) {
-            outputs->pop_back();
+          group_index[target] = ctx_->getOutputSize();
+          auto output = ctx_->newOutput(*input_, parent_index_, makeVertexSet(parent_match), target,
+                                        owner_->getSameLabelSetIndices(), owner_->getSetPruningThreshold(), false);
+          if (output == nullptr) {
             group_index[target] = -1;
           }
           ++n;
         } else if (pos->second != -1) {  // the target is invalid if the group index is -1
-          (*outputs)[pos->second].UpdateSet(parent_index_, parent_match);
+          (*ctx_->getOutputs())[pos->second].UpdateSet(parent_index_, parent_match);
         }
       }
     }
 #ifdef USE_FILTER
-    n -= owner_->filter(*outputs, outputs->size() - n, outputs->size());
+    auto n_pruned = owner_->filter((*ctx_->getOutputs()), ctx_->getOutputSize() - n, ctx_->getOutputSize());
+    n -= n_pruned;
+    ctx_->popOutputs(n_pruned);
 #endif
     return n;
   }
@@ -407,7 +392,7 @@ class CurrentResultsByExtension : public CurrentResults {
     current_exceptions_ = input_->getExceptions(owner->getSameLabelKeyIndices(), owner->getSameLabelSetIndices());
   }
 
-  uint32_t getResults(std::vector<CompressedSubgraphs>* outputs, uint32_t cap) override {
+  uint32_t getResults(uint32_t cap) override {
     uint32_t n = 0;
     auto& parent_set = *input_->getSet(parent_index_);
     auto g = ((const G*)ctx_->current_data_graph);
@@ -423,15 +408,19 @@ class CurrentResultsByExtension : public CurrentResults {
           constexpr(isProfileMode(profile)) {
             ctx_->updateIntersectInfo(parent_set.size() + neighbors.size(), parents.size());
           }
-        CompressedSubgraphs output(*input_, parent_index_, std::make_shared<std::vector<VertexID>>(std::move(parents)),
-                                   candidate, owner_->getSameLabelSetIndices(), owner_->getSetPruningThreshold(), true);
-        if (output.empty()) {
+
+        auto output =
+            ctx_->newOutput(*input_, parent_index_, std::make_shared<std::vector<VertexID>>(std::move(parents)),
+                            candidate, owner_->getSameLabelSetIndices(), owner_->getSetPruningThreshold(), true);
+        if (output == nullptr) {
           continue;
         }
 #ifdef USE_FILTER
-        if (owner_->filter(output)) continue;
+        if (owner_->filter(*output)) {
+          ctx_->popOutput();
+          continue;
+        }
 #endif
-        outputs->emplace_back(std::move(output));
         if (++n == cap) return n;
       }
       // all parent match extended
@@ -491,6 +480,10 @@ class ExpandEdgeSetToKeyOperator : public ExpandEdgeOperator {
     return ss.str();
   }
 
+  std::pair<uint32_t, uint32_t> getOutputSize(const std::pair<uint32_t, uint32_t>& input_key_size) const override {
+    return {input_key_size.first + 1, input_key_size.second + 1};
+  }
+
   std::unique_ptr<TraverseContext> initTraverseContext(const std::vector<CompressedSubgraphs>* inputs,
                                                        const void* graph, uint32_t input_start, uint32_t input_end,
                                                        QueryType profile) const override {
@@ -543,7 +536,7 @@ class ExpandEdgeSetToKeyOperator : public ExpandEdgeOperator {
     uint32_t needed = cap;
     while (true) {
       if (ctx->hasRemainingResults()) {
-        uint32_t got = ctx->getResults(ctx->outputs, needed);
+        uint32_t got = ctx->getResults(needed);
         DCHECK_LE(got, needed);
         needed -= got;
 

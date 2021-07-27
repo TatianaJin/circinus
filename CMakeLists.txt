@@ -76,6 +76,12 @@ add_dependencies(circinus_no_filter ${EXTERNAL_DEPENDENCY})
 add_executable(Circinus src/circinus_main.cc)
 target_link_libraries(Circinus circinus ${EXTERNAL_LIBRARY})
 
+add_executable(CircinusIntersectionCache src/circinus_main.cc ${circinus_sources})
+target_compile_definitions(CircinusIntersectionCache PUBLIC "USE_FILTER")
+target_compile_definitions(CircinusIntersectionCache PUBLIC "INTERSECTION_CACHE")
+target_link_libraries(CircinusIntersectionCache ${EXTERNAL_LIBRARY})
+add_dependencies(CircinusIntersectionCache ${EXTERNAL_DEPENDENCY})
+
 add_executable(GraphToBinary src/tools/graph_to_binary_main.cc)
 target_link_libraries(GraphToBinary circinus ${EXTERNAL_LIBRARY})
 

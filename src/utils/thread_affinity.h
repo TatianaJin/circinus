@@ -14,24 +14,24 @@
 
 #pragma once
 
-#include <utility>
-
-#include "exec/task.h"
+#include <errno.h>
+#include <pthread.h>
+#include <thread>
+#include <vector>
 
 namespace circinus {
 
-template <typename T>
-class ProfileTask : public T {
-  static_assert(std::is_base_of<TaskBase, T>::value, "T should inherit from TaskBase");
-
- public:
-  template <typename... Args>
-  ProfileTask(QueryId qid, TaskId tid, std::chrono::time_point<std::chrono::steady_clock> stop_time, Args&&... args)
-      : T(qid, tid, stop_time, std::forward<Args>(args)...) {}
-
-  void run(uint32_t executor_idx) override { T::profile(executor_idx); }
-
-  const GraphBase* getDataGraph() const override { return T::getDataGraph(); }
-};
+inline bool pinToCores(std::vector<std::thread>& threads) {
+  cpu_set_t cpuset;
+  for (uint32_t cpu_idx = 0; cpu_idx < threads.size(); ++cpu_idx) {
+    CPU_ZERO(&cpuset);
+    CPU_SET(cpu_idx, &cpuset);
+    int rc = pthread_setaffinity_np(threads[cpu_idx].native_handle(), sizeof(cpu_set_t), &cpuset);
+    if (rc != 0) {
+      return false;
+    }
+  }
+  return true;
+}
 
 }  // namespace circinus

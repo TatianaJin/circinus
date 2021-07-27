@@ -93,7 +93,7 @@ class NeighborhoodFilter : public Operator {
 
   static inline bool intersectionNotNull(const std::pair<const VertexID*, uint32_t>& set1,
                                          const std::pair<const VertexID*, uint32_t>& set2) {
-    if (std::max(set1.second, set2.second) >= 32) {
+    if (std::max(set1.second, set2.second) >= BINARY_SEARCH_THRESHOLD) {
       return intersectionNotNullBS(set1, set2);
     }
     if (set1.second <= set2.second) {

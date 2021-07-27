@@ -109,6 +109,10 @@ class ExpandIntoOperator : public TraverseOperator {
     return ss.str();
   }
 
+  std::pair<uint32_t, uint32_t> getOutputSize(const std::pair<uint32_t, uint32_t>& input_key_size) const override {
+    return input_key_size;
+  }
+
  protected:
   template <QueryType profile>
   inline uint32_t expandInner(uint32_t batch_size, TraverseContext* ctx) const {
@@ -121,7 +125,7 @@ class ExpandIntoOperator : public TraverseOperator {
         parent_tuple.resize(key_parents_.size() + parents_.size());
       }
     while (ctx->hasNextInput()) {
-      auto input = ctx->getCurrentInput();
+      auto& input = ctx->copyOutput(ctx->getCurrentInput());
       auto key_vertex_id = input.getKeyVal(query_vertex_indices_.at(target_vertex_));
       auto key_neighbors = ((G*)ctx->current_data_graph)->getInNeighborsWithHint(key_vertex_id, ALL_LABEL, 0);
       bool add = true;
@@ -220,8 +224,9 @@ class ExpandIntoOperator : public TraverseOperator {
       }
 
       if (add) {
-        ctx->outputs->emplace_back(std::move(input));
-        output_num++;
+        ++output_num;
+      } else {
+        ctx->popOutput();
       }
       ctx->nextInput();
 

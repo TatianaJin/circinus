@@ -111,7 +111,9 @@ class VertexSetView {
   explicit VertexSetView(const std::vector<VertexID>& vec) { addRange(vec.data(), vec.data() + vec.size()); }
 
   inline void addRange(const VertexID* start, const VertexID* end) {
-    if (start >= end || start == nullptr || end == nullptr) return;
+    DCHECK(start != nullptr);
+    DCHECK(end != nullptr);
+    if (start >= end) return;
     auto size = std::distance(start, end);
     size_ += size;
     if (!ranges_.empty() && ranges_.back().first + ranges_.back().second == start) {
@@ -124,6 +126,10 @@ class VertexSetView {
   inline size_t size() const { return size_; }
   inline bool empty() const { return size_ == 0; }
   inline const auto& getRanges() const { return ranges_; }
+  inline void clear() {
+    ranges_.clear();
+    size_ = 0;
+  }
 
   inline ConstIterator begin() const { return ConstIterator(ranges_); }
   inline ConstIterator end() const { return ConstIterator(ranges_, true); }
@@ -145,6 +151,7 @@ class VertexSetView {
 class SingleRangeVertexSetView : public VertexSetView {
  public:
   using ConstIterator = const VertexID*;
+  SingleRangeVertexSetView() {}
   SingleRangeVertexSetView(const VertexID* start, size_t size) { addRange(start, start + size); }
 
   inline ConstIterator begin() const { return ranges_.empty() ? nullptr : ranges_.front().first; }
