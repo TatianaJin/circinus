@@ -145,19 +145,6 @@ class ReorderedPartitionedGraph : public GraphBase {
         break;
       }
     }
-    // FIXME(debug): remove
-    // end = search_end;
-    // start = search_start - 1;
-    // for (auto ptr = search_start; ptr < search_end; ++ptr) {
-    //   if (*ptr < range_l) {
-    //     start = ptr;
-    //   }
-    //   if (*ptr >= range_r) {
-    //     end = ptr;
-    //     break;
-    //   }
-    // }
-    // ++start;
     return {start, end};
   }
 

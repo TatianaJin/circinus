@@ -100,7 +100,7 @@ class TraverseOperator : public Operator {
  protected:
   const CandidateSetView* candidates_ = nullptr;
   const QueryVertexID target_vertex_;
-  LabelID target_label_ = ALL_LABEL;  // FIXME(tatiana): try using label when get neighbors for intersection
+  LabelID target_label_ = ALL_LABEL;
 
   /* for non-repeated-vertex check */
   uint64_t set_pruning_threshold_ = ~0u;
