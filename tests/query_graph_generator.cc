@@ -45,6 +45,7 @@ class QueryGraphGenerator {
   std::set<VertexID> vset_;
   std::set<std::pair<VertexID, VertexID>> eset_;
   double avg_deg;
+  const uint32_t dense_bound_ = 5;
 
  public:
   QueryGraphGenerator(std::string data_graph, uint32_t target_query_graph_cnt, uint32_t target_vertex_cnt,
@@ -93,7 +94,7 @@ class QueryGraphGenerator {
                         std::back_inserter(diff_vec));
     int all_edge_cnt = diff_vec.size() + eset_.size();
     avg_deg += 2.0 * all_edge_cnt / vset_.size();
-    if (vset_.size() < target_vertex_cnt_ || !if_dense_ || target_vertex_cnt_ < 8) return;
+    if (vset_.size() < target_vertex_cnt_ || !if_dense_ || target_vertex_cnt_ < dense_bound_) return;
     // can be changed according to generating rules
     // deal with the situation: 1.enough vertex 2.target dense qg(normally means not enough edges)
     int d = 2 * all_edge_cnt - 3 * target_vertex_cnt_;
@@ -109,7 +110,7 @@ class QueryGraphGenerator {
   bool check() {
     // can be changed according to generating rules
     if (vset_.size() != target_vertex_cnt_) return 0;
-    if (target_vertex_cnt_ < 8) return 1;
+    if (target_vertex_cnt_ < dense_bound_) return 1;
     if (if_dense_) {
       if (2 * eset_.size() < 3 * target_vertex_cnt_) return 0;
     } else {
@@ -121,7 +122,7 @@ class QueryGraphGenerator {
     // can be changed according to generating rules`
     std::stringstream output_filename;
     output_filename << output_dir_ << "/query_";
-    if (target_vertex_cnt_ < 8 || if_dense_)
+    if (target_vertex_cnt_ < dense_bound_ || if_dense_)
       output_filename << "dense_";
     else
       output_filename << "sparse_";
