@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -41,6 +42,8 @@ class GraphBase {
   std::vector<VertexID> elist_;  // size n_edges_, { i : the destination vertex id of edge i}
 
  public:
+  static std::unique_ptr<GraphBase> loadGraphFromBinary(std::istream& input);
+
   GraphBase() {}
   virtual ~GraphBase() {}
 
@@ -125,7 +128,6 @@ class GraphBase {
     saveAsBinaryInner(output);
     output.close();
   }
-  virtual void loadUndirectedGraphFromBinary(std::istream& input);
 
   /* end of persistence functions */
 
@@ -135,6 +137,7 @@ class GraphBase {
   virtual std::pair<double, double> getMemoryUsage() const;
 
  protected:
+  virtual void loadUndirectedGraphFromBinary(std::istream& input);
   virtual void saveAsBinaryInner(std::ostream& output) const;
 
   template <typename T>

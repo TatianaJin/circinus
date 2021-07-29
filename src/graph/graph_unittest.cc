@@ -84,9 +84,10 @@ TEST_F(TestGraph, BinarySerDe) {
 
   Graph g(graph_path);
   g.saveAsBinary(graph_path + ".bin");
-  Graph b;
   std::ifstream input(graph_path + ".bin", std::ios::binary);
-  b.loadUndirectedGraphFromBinary(input);
+  auto b_ptr = Graph::loadGraphFromBinary(input);
+  ASSERT_TRUE(dynamic_cast<Graph*>(b_ptr.get()) != nullptr);
+  auto& b = *((Graph*)b_ptr.get());
   b.buildLabelIndex();
 
   ASSERT_EQ(g.getNumVertices(), b.getNumVertices());

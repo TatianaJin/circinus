@@ -130,8 +130,6 @@ class CircinusServer {
    */
   double loadGraphFromBinary(const std::string& graph_path, const std::string& name);
 
-  double loadPartitionedGraphFromBinary(const std::string& graph_path, const std::string& name, uint32_t n_partitions);
-
   /** Handles new Query, used together with prepareQuery(uint32_t).
    * @param graph_name The graph queried.
    * @param query_file The file storing the query graph.

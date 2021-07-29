@@ -43,6 +43,8 @@ class GraphMetadata {
   std::vector<GraphMetadata> partitioned_metadata_;
 
  public:
+  GraphMetadata() {}
+
   GraphMetadata(bool directed, bool labeled, bool sorted_by_degree, bool sorted_by_label, bool has_label_index,
                 VertexID n_vertices, VertexID vertex_offset = 0)
       : directed_(directed),
@@ -70,12 +72,15 @@ class GraphMetadata {
         // set label frequency in metadata
         auto& pm = partitioned_metadata_.back();
         auto& offsets = g.getLabelOffsetsInPartition(partition);
-        for (auto& pair : offsets) {
-          pm.label_frequency_.insert({pair.first, pair.second.second - pair.second.first});
-          if (label_frequency_.find(pair.first) != label_frequency_.end()) {
-            label_frequency_[pair.first] += pair.second.second - pair.second.first;
+        auto& labels = g.getLabels();
+        for (uint32_t i = 1; i < offsets.size(); ++i) {
+          auto label = labels[i - 1];
+          auto count = offsets[i] - offsets[i - 1];
+          pm.label_frequency_.insert({label, count});
+          if (label_frequency_.find(label) != label_frequency_.end()) {
+            label_frequency_[label] += count;
           } else {
-            label_frequency_.insert({pair.first, pair.second.second - pair.second.first});
+            label_frequency_.insert({label, count});
           }
         }
       }

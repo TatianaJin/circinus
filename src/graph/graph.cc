@@ -68,6 +68,8 @@ void Graph::loadUndirectedGraphFromBinary(std::istream& input) {
 }
 
 void Graph::saveAsBinaryInner(std::ostream& output) const {
+  bool partitioned_graph = false;
+  output.write(reinterpret_cast<const char*>(&partitioned_graph), sizeof(bool));
   GraphBase::saveAsBinaryInner(output);
   vectorToBinaryStream(output, labels_);
 }

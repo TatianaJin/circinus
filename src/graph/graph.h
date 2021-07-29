@@ -97,11 +97,11 @@ class Graph : public GraphBase {
 
   /// persistence
   void dumpToFile(const std::string& path) const override;
-  void loadUndirectedGraphFromBinary(std::istream& input) override;
 
   std::pair<double, double> getMemoryUsage() const override;
 
  protected:
+  void loadUndirectedGraphFromBinary(std::istream& input) override;
   void saveAsBinaryInner(std::ostream& output) const override;
 };
 

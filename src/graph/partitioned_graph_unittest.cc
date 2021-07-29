@@ -71,15 +71,17 @@ class TestReorderedPartitionedGraph : public testing::Test {
     for (auto label : g.getLabels()) {
       ASSERT_EQ(g.getVertexCardinalityByLabel(label), b.getVertexCardinalityByLabel(label));
       VertexID label_frequency = 0;
+      std::stringstream ss;
       for (uint32_t i = 0; i < n_partitions_; ++i) {
         auto gv = g.getVertexRangeByLabel(label, i);
+        ss << gv.first << '~' << gv.second << '\n';
         label_frequency += gv.second - gv.first;
         for (auto j = gv.first; j < gv.second; ++j) {
           label_mask[g.getOriginalVertexId(j)] = true;
         }
       }
       auto bv = b.getVerticesByLabel(label);
-      ASSERT_EQ(label_frequency, bv->size());
+      ASSERT_EQ(label_frequency, bv->size()) << ss.str();
       ASSERT_EQ(g.getVertexCardinalityByLabel(label), b.getVertexCardinalityByLabel(label));
       for (uint32_t i = 0; i < label_frequency; ++i) {
         ASSERT_TRUE(label_mask[(*bv)[i]]) << "label " << label << " idx " << i;
@@ -122,9 +124,10 @@ TEST_F(TestReorderedPartitionedGraph, BinarySerDe) {
 
   ReorderedPartitionedGraph g(graph_path);
   g.saveAsBinary(graph_path + ".bin");
-  ReorderedPartitionedGraph b;
   std::ifstream input(graph_path + ".bin", std::ios::binary);
-  b.loadUndirectedGraphFromBinary(input);
+  auto b_ptr = Graph::loadGraphFromBinary(input);
+  ASSERT_TRUE(dynamic_cast<ReorderedPartitionedGraph*>(b_ptr.get()) != nullptr);
+  auto& b = *((ReorderedPartitionedGraph*)b_ptr.get());
 
   ASSERT_EQ(g.getNumVertices(), b.getNumVertices());
   ASSERT_EQ(g.getNumEdges(), b.getNumEdges());

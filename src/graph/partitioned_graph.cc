@@ -15,6 +15,7 @@
 #include "graph/partitioned_graph.h"
 
 #include <algorithm>
+#include <set>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -24,6 +25,7 @@
 
 #include "graph/types.h"
 #include "utils/file_utils.h"
+#include "utils/utils.h"
 
 namespace circinus {
 
@@ -31,7 +33,7 @@ const std::pair<VertexID, VertexID> ReorderedPartitionedGraph::ZERO_RANGE = {0, 
 
 ReorderedPartitionedGraph::ReorderedPartitionedGraph(const std::string& path, uint32_t n_partitions,
                                                      bool sort_by_degree)
-    : n_partitions_(n_partitions), partition_offsets_(n_partitions + 1, 0), label_ranges_per_part_(n_partitions) {
+    : n_partitions_(n_partitions), partition_offsets_(n_partitions + 1, 0), label_offsets_per_part_(n_partitions) {
   auto labels = loadUndirectedGraph(path);
   vertex_ids_.resize(getNumVertices());
   std::iota(vertex_ids_.begin(), vertex_ids_.end(), 0);
@@ -52,7 +54,7 @@ ReorderedPartitionedGraph::ReorderedPartitionedGraph(const Graph& graph, uint32_
     : n_partitions_(n_partitions),
       vertex_ids_(graph.getNumVertices()),
       partition_offsets_(n_partitions + 1, 0),
-      label_ranges_per_part_(n_partitions) {
+      label_offsets_per_part_(n_partitions) {
   copyMetadata(graph);
   auto& labels = graph.getVertexLabels();
   std::iota(vertex_ids_.begin(), vertex_ids_.end(), 0);
@@ -112,17 +114,41 @@ void ReorderedPartitionedGraph::reorder(bool sort_by_degree, const std::vector<L
 }
 
 void ReorderedPartitionedGraph::computeLabelOffsets(const std::vector<LabelID>& labels) {
+  std::set<LabelID> label_set;
+  for (auto& pair : vertex_cardinality_by_label_) {
+    label_set.insert(pair.first);
+  }
+  LabelID n_labels = label_set.size();
+  label_idx_.reserve(n_labels);
+  label_set_.resize(n_labels);
+  LabelID idx = 0;
+  for (auto l : label_set) {
+    label_set_[idx] = l;
+    label_idx_.insert({l, idx++});
+  }
+
   auto start = vertex_ids_.begin();
   for (uint32_t i = 0; i < n_partitions_; ++i) {
+    label_offsets_per_part_[i].resize(label_idx_.size() + 1, INVALID_VERTEX_ID);
     auto end = vertex_ids_.begin() + partition_offsets_[i + 1];
 
+    label_offsets_per_part_[i][0] = partition_offsets_[i];
+    LabelID last_label_idx = 0;  // last label whose offset is set
+    VertexID last_offset = partition_offsets_[i];
     while (start < end) {
       LabelID current_label = labels[*start];
       auto range_end = std::lower_bound(start + 1, end, current_label + 1,
                                         [&labels](VertexID v, LabelID label) { return labels[v] < label; });
-      label_ranges_per_part_[i].insert(
-          {labels[*start], {start - vertex_ids_.begin(), range_end - vertex_ids_.begin()}});
+      auto label_idx = label_idx_.at(labels[*start]);
+      while (last_label_idx < label_idx) {
+        label_offsets_per_part_[i][++last_label_idx] = last_offset;
+      }
+      last_label_idx = label_idx + 1;
+      last_offset = label_offsets_per_part_[i][last_label_idx] = range_end - vertex_ids_.begin();
       start = range_end;
+    }
+    while (last_label_idx < label_idx_.size()) {
+      label_offsets_per_part_[i][++last_label_idx] = last_offset;
     }
   }
 }
@@ -207,31 +233,40 @@ void ReorderedPartitionedGraph::dumpToFile(const std::string& path) const {
 }
 
 void ReorderedPartitionedGraph::saveAsBinaryInner(std::ostream& output) const {
-  GraphBase::saveAsBinaryInner(output);
+  bool partitioned_graph = true;
+  output.write(reinterpret_cast<const char*>(&partitioned_graph), sizeof(bool));
+  // put at the beginning to faliciate parallel loading when needed
   output.write(reinterpret_cast<const char*>(&n_partitions_), sizeof(n_partitions_));
+
+  GraphBase::saveAsBinaryInner(output);
   output.write(reinterpret_cast<const char*>(&n_edge_cuts_), sizeof(n_edge_cuts_));
 
   vectorToBinaryStream(output, vertex_ids_);
   vectorToBinaryStream(output, partition_offsets_);
 
-  {  // label ranges per partition
-    auto size = label_ranges_per_part_.size();
+  {  // label_idx_
+    auto size = label_idx_.size();
     output.write(reinterpret_cast<const char*>(&size), sizeof(size));
-    for (const auto& map : label_ranges_per_part_) {
-      auto size = map.size();
-      output.write(reinterpret_cast<const char*>(&size), sizeof(size));
-      for (const auto& pair : map) {
-        output.write(reinterpret_cast<const char*>(&pair.first), sizeof(pair.first));
-        output.write(reinterpret_cast<const char*>(&pair.second.first), sizeof(pair.second.first));
-        output.write(reinterpret_cast<const char*>(&pair.second.second), sizeof(pair.second.second));
-      }
+    for (const auto& pair : label_idx_) {
+      output.write(reinterpret_cast<const char*>(&pair.first), sizeof(pair.first));
+      output.write(reinterpret_cast<const char*>(&pair.second), sizeof(pair.second));
+    }
+  }
+  vectorToBinaryStream(output, label_set_);  // label_set_
+  {                                          // label ranges per partition
+    auto size = label_offsets_per_part_.size();
+    output.write(reinterpret_cast<const char*>(&size), sizeof(size));
+    for (const auto& vec : label_offsets_per_part_) {
+      vectorToBinaryStream(output, vec);
     }
   }
 }
 
 void ReorderedPartitionedGraph::loadUndirectedGraphFromBinary(std::istream& input) {
+  uint32_t n_partitions;
+  input.read(reinterpret_cast<char*>(&n_partitions), sizeof(n_partitions));
   GraphBase::loadUndirectedGraphFromBinary(input);
-  input.read(reinterpret_cast<char*>(&n_partitions_), sizeof(n_partitions_));
+  n_partitions_ = n_partitions;
   input.read(reinterpret_cast<char*>(&n_edge_cuts_), sizeof(n_edge_cuts_));
 
   binaryStreamToVector(input, vertex_ids_);
@@ -239,22 +274,24 @@ void ReorderedPartitionedGraph::loadUndirectedGraphFromBinary(std::istream& inpu
   binaryStreamToVector(input, partition_offsets_);
   CHECK_EQ(partition_offsets_.size(), n_partitions_ + 1);
 
-  {  // label ranges per partition
+  {  // label_idx_
     size_t size;
     input.read(reinterpret_cast<char*>(&size), sizeof(size));
-    label_ranges_per_part_.resize(size);
+    label_idx_.reserve(size);
+    for (size_t i = 0; i < size; ++i) {
+      LabelID label, idx;
+      input.read(reinterpret_cast<char*>(&label), sizeof(LabelID));
+      input.read(reinterpret_cast<char*>(&idx), sizeof(LabelID));
+      label_idx_.insert({label, idx});
+    }
+  }
+  binaryStreamToVector(input, label_set_);  // label_set_
+  {                                         // label ranges per partition
+    size_t size;
+    input.read(reinterpret_cast<char*>(&size), sizeof(size));
+    label_offsets_per_part_.resize(size);
     for (size_t j = 0; j < size; ++j) {
-      size_t map_size;
-      input.read(reinterpret_cast<char*>(&map_size), sizeof(map_size));
-      auto& map = label_ranges_per_part_[j];
-      for (size_t i = 0; i < map_size; ++i) {
-        LabelID l;
-        VertexID start, end;
-        input.read(reinterpret_cast<char*>(&l), sizeof(l));
-        input.read(reinterpret_cast<char*>(&start), sizeof(VertexID));
-        input.read(reinterpret_cast<char*>(&end), sizeof(VertexID));
-        map.insert({l, {start, end}});
-      }
+      binaryStreamToVector(input, label_offsets_per_part_[j]);
     }
   }
 }
@@ -267,13 +304,19 @@ std::pair<double, double> ReorderedPartitionedGraph::getMemoryUsage() const {
   ret.second += vertex_ids_.size() * sizeof(VertexID);
   ret.first += partition_offsets_.capacity() * sizeof(VertexID);
   ret.second += partition_offsets_.size() * sizeof(VertexID);
-  auto hashmap_size = sizeof(unordered_map<LabelID, std::pair<VertexID, VertexID>>);
-  ret.first += label_ranges_per_part_.capacity() * hashmap_size;
-  ret.second += label_ranges_per_part_.size() * hashmap_size;
-  auto pair_size = sizeof(unordered_map<LabelID, std::pair<VertexID, VertexID>>::value_type);
-  for (auto& hashmap : label_ranges_per_part_) {
-    ret.first += hashmap.bucket_count() * (pair_size + 1);
-    ret.second += hashmap.bucket_count() * (pair_size + 1);
+
+  auto pair_size = sizeof(unordered_map<LabelID, LabelID>::value_type);
+  ret.first += label_idx_.bucket_count() * (pair_size + 1);
+  ret.second += label_idx_.bucket_count() * (pair_size + 1);
+  ret.first += label_set_.capacity() * sizeof(LabelID);
+  ret.second += label_set_.size() * sizeof(LabelID);
+
+  auto vec_size = sizeof(std::vector<VertexID>);
+  ret.first += label_offsets_per_part_.capacity() * vec_size;
+  ret.second += label_offsets_per_part_.size() * vec_size;
+  for (auto& vec : label_offsets_per_part_) {
+    ret.first += vec.capacity() * sizeof(VertexID);
+    ret.second += vec.size() * sizeof(VertexID);
   }
   return ret;
 }

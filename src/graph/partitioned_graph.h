@@ -42,11 +42,11 @@ class ReorderedPartitionedGraph : public GraphBase {
   uint64_t n_edge_cuts_ = 0;
 
   /* index */
-  std::vector<VertexID> vertex_ids_;         // the original vertex id of the i-th vertex in vlist_
-  std::vector<VertexID> partition_offsets_;  // size n_partitions_ + 1
-  // TODO(tatiana): map label ids to a contiguous range from 0 and avoid hash in label_ranges_per_part_
-  std::vector<unordered_map<LabelID, std::pair<VertexID, VertexID>>>
-      label_ranges_per_part_;  // {partition, {label, {start, end}}}
+  std::vector<VertexID> vertex_ids_;           // the original vertex id of the i-th vertex in vlist_
+  std::vector<VertexID> partition_offsets_;    // size n_partitions_ + 1
+  unordered_map<LabelID, LabelID> label_idx_;  // { label id, label idx }
+  std::vector<LabelID> label_set_;
+  std::vector<std::vector<VertexID>> label_offsets_per_part_;  // {partition: {label: start_offset}}}
 
  public:
   explicit ReorderedPartitionedGraph(const std::string& path, uint32_t n_partitions = 20, bool sort_by_degree = true);
@@ -79,7 +79,9 @@ class ReorderedPartitionedGraph : public GraphBase {
       range_l = partition_offsets_[partition];
       range_r = partition_offsets_[partition + 1];
     } else {
-      std::tie(range_l, range_r) = label_ranges_per_part_[partition].at(nbr_label);
+      auto label_idx = label_idx_.at(nbr_label);
+      range_l = label_offsets_per_part_[partition][label_idx];
+      range_r = label_offsets_per_part_[partition][label_idx + 1];
     }
     if (first_neighbor >= range_r || last_neighbor < range_l) {
       return 0;
@@ -106,14 +108,19 @@ class ReorderedPartitionedGraph : public GraphBase {
   inline LabelID getVertexLabel(VertexID id) const { return getVertexLabelInPartition(id, getVertexPartition(id)); }
 
   LabelID getVertexLabelInPartition(VertexID id, uint32_t partition) const {
-    auto& label_ranges = label_ranges_per_part_[partition];
-    for (auto& pair : label_ranges) {
-      if (pair.second.first <= id && id < pair.second.second) {
-        return pair.first;
-      }
+    auto& label_offsets = label_offsets_per_part_[partition];
+    if (label_offsets.front() > id) {
+      LOG(FATAL) << "cannot find label range for vertex " << id << " partition " << partition;
     }
-    LOG(FATAL) << "cannot find label range for vertex " << id << " partition " << partition;
-    return 0;
+    auto end = label_offsets.size();
+    LabelID label_idx = 1;
+    while (label_idx < end && label_offsets[label_idx] <= id) {
+      ++label_idx;
+    }
+    if (label_idx == end) {
+      LOG(FATAL) << "cannot find label range for vertex " << id << " partition " << partition;
+    }
+    return label_set_[label_idx - 1];
   }
 
   static std::pair<const VertexID*, const VertexID*> getVertexRange(const VertexID* search_start,
@@ -159,7 +166,9 @@ class ReorderedPartitionedGraph : public GraphBase {
       range_l = partition_offsets_[partition];
       range_r = partition_offsets_[partition + 1];
     } else {
-      std::tie(range_l, range_r) = label_ranges_per_part_[partition].at(nbr_label);
+      auto label_idx = label_idx_.at(nbr_label);
+      range_l = label_offsets_per_part_[partition][label_idx];
+      range_r = label_offsets_per_part_[partition][label_idx + 1];
     }
 
     auto[start, end] = getVertexRange(nbrs.first, nbrs.first + nbrs.second, range_l, range_r);
@@ -202,11 +211,13 @@ class ReorderedPartitionedGraph : public GraphBase {
       view.addRange(nbrs.first, nbrs.first + nbrs.second);
       return view;
     }
+    auto label_idx = label_idx_.at(nbr_label);
     const VertexID* search_start = nbrs.first;
     const VertexID* const search_end = nbrs.first + nbrs.second;
     for (uint32_t partition = 0; partition < getNumPartitions() && search_start != search_end; ++partition) {
       // get the range of vertex ids that satisfy the hint
-      auto[range_l, range_r] = label_ranges_per_part_[partition].at(nbr_label);
+      auto range_l = label_offsets_per_part_[partition][label_idx];
+      auto range_r = label_offsets_per_part_[partition][label_idx + 1];
       if (range_l == range_r) continue;
       auto[start, end] = getVertexRange(search_start, search_end, range_l, range_r);
       if (start == search_end) {
@@ -232,7 +243,8 @@ class ReorderedPartitionedGraph : public GraphBase {
     GraphBase::clear();
     vertex_ids_.clear();
     partition_offsets_.clear();
-    label_ranges_per_part_.clear();
+    label_idx_.clear();
+    label_offsets_per_part_.clear();
     n_partitions_ = 0;
     n_edge_cuts_ = 0;
   }
@@ -252,25 +264,27 @@ class ReorderedPartitionedGraph : public GraphBase {
 
   inline const auto& getLabelOffsetsInPartition(uint32_t partition) const {
     DCHECK_LT(partition, n_partitions_);
-    return label_ranges_per_part_[partition];
+    return label_offsets_per_part_[partition];
   }
 
-  inline const std::pair<VertexID, VertexID>& getVertexRangeByLabel(LabelID lid, uint32_t partition) const {
-    auto& label_ranges = label_ranges_per_part_[partition];
-    auto pos = label_ranges.find(lid);
-    if (pos == label_ranges.end()) {
+  inline const auto& getLabels() const { return label_set_; }
+
+  inline std::pair<VertexID, VertexID> getVertexRangeByLabel(LabelID lid, uint32_t partition) const {
+    auto label_idx = label_idx_.find(lid);
+    if (label_idx == label_idx_.end()) {
       return ZERO_RANGE;
     }
-    return pos->second;
+    return {label_offsets_per_part_[partition][label_idx->second],
+            label_offsets_per_part_[partition][label_idx->second + 1]};
   }
 
   /* persistence */
   void dumpToFile(const std::string& path) const override;
-  void loadUndirectedGraphFromBinary(std::istream& input) override;
 
   std::pair<double, double> getMemoryUsage() const override;
 
  protected:
+  void loadUndirectedGraphFromBinary(std::istream& input) override;
   void saveAsBinaryInner(std::ostream& output) const override;
 
   template <bool by_partition, bool by_degree>

@@ -19,6 +19,8 @@
 #include <unordered_map>
 #include <vector>
 
+#include "graph/graph.h"
+#include "graph/partitioned_graph.h"
 #include "utils/file_utils.h"
 
 namespace circinus {
@@ -81,6 +83,19 @@ std::vector<LabelID> GraphBase::loadUndirectedGraph(const std::string& path) {
     std::sort(elist_.begin() + vlist_[i], elist_.begin() + vlist_[i + 1]);
   }
   return labels;
+}
+
+std::unique_ptr<GraphBase> GraphBase::loadGraphFromBinary(std::istream& input) {
+  bool partitioned_graph = false;
+  input.read(reinterpret_cast<char*>(&partitioned_graph), sizeof(bool));
+  std::unique_ptr<GraphBase> res;
+  if (partitioned_graph) {
+    res = std::make_unique<ReorderedPartitionedGraph>();
+  } else {
+    res = std::make_unique<Graph>();
+  }
+  res->loadUndirectedGraphFromBinary(input);
+  return res;
 }
 
 void GraphBase::loadUndirectedGraphFromBinary(std::istream& input) {

@@ -76,10 +76,10 @@ class TestExpandEdgeCosts : public testing::Test {
     }
   }
 
-  static uint64_t getNumSubgraphs(const std::vector<CompressedSubgraphs>& outputs) {
+  static uint64_t getNumSubgraphs(const std::vector<CompressedSubgraphs>& outputs, size_t size) {
     uint64_t n = 0;
-    for (auto& output : outputs) {
-      n += output.getNumIsomorphicSubgraphs();
+    for (uint32_t i = 0; i < size; ++i) {
+      n += outputs[i].getNumIsomorphicSubgraphs();
     }
     return n;
   }
@@ -141,19 +141,22 @@ class TestExpandEdgeCosts : public testing::Test {
     circinus::CandidateSetView view(candidates[target]);
     op->setCandidateSets(&view);
     auto ctx = op->initTraverseContext(&seeds, &g, 0, seeds.size(), QueryType::Execute);
-    std::vector<CompressedSubgraphs> outputs;
-    ctx->outputs = &outputs;
-    while (op->expand(BATCH_SIZE, ctx.get()) > 0) {
+    std::vector<CompressedSubgraphs> outputs(BATCH_SIZE, CompressedSubgraphs(cover[target] + cover[parent], 2));
+    ctx->setOutputBuffer(outputs);
+    size_t output_size = 0, ret = 0, current_size = 0;
+    while ((current_size = op->expand(BATCH_SIZE, ctx.get())) > 0) {
+      ctx->resetOutputs();
+      output_size += current_size;
+      ret += getNumSubgraphs(outputs, current_size);
     }
     auto end = std::chrono::high_resolution_clock::now();
     delete op;
 #ifdef USE_FILTER
     delete op_filter.second;
 #endif
-    auto ret = getNumSubgraphs(outputs);
     LOG(INFO) << ((cover[parent] == 1) ? "key" : "set") << "to" << ((cover[target] == 1) ? "key " : "set ") << parent
               << "->" << target << ' ' << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count()
-              << "ms " << ret << '/' << outputs.size();
+              << "ms " << ret << '/' << output_size;
     return ret;
   }
 
@@ -204,13 +207,15 @@ class TestExpandEdgeCosts : public testing::Test {
           ctx = op->initTraverseContext(&seeds, bg, 0, seeds.size(), QueryType::Execute);
         }
       }
-    std::vector<CompressedSubgraphs> outputs;
-    ctx->outputs = &outputs;
-    while (op->expand(BATCH_SIZE, ctx.get()) > 0) {
+    std::vector<CompressedSubgraphs> outputs(BATCH_SIZE, CompressedSubgraphs(cover[target] + cover[parent], 2));
+    ctx->setOutputBuffer(outputs);
+    size_t output_size = 0, ret = 0, current_size = 0;
+    while ((current_size = op->expand(BATCH_SIZE, ctx.get())) > 0) {
+      ctx->resetOutputs();
+      output_size += current_size;
+      ret += getNumSubgraphs(outputs, current_size);
     }
     auto end = std::chrono::high_resolution_clock::now();
-    auto ret = getNumSubgraphs(outputs);
-    outputs.clear();
     auto expand_vertex_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
     delete op;
     if (bg != nullptr) {
@@ -235,11 +240,14 @@ class TestExpandEdgeCosts : public testing::Test {
         }
       }
 
-    ctx->outputs = &outputs;
-    while (op_expand_edge->expand(BATCH_SIZE, ctx.get()) > 0) {
+    ctx->setOutputBuffer(outputs);
+    size_t check_n_subgraphs = 0;
+    while ((current_size = op_expand_edge->expand(BATCH_SIZE, ctx.get())) > 0) {
+      ctx->resetOutputs();
+      check_n_subgraphs += getNumSubgraphs(outputs, current_size);
     }
     end = std::chrono::high_resolution_clock::now();
-    EXPECT_EQ(ret, getNumSubgraphs(outputs));
+    EXPECT_EQ(ret, check_n_subgraphs);
     auto expand_edge_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
     delete op_expand_edge;
     if (bg != nullptr) {
@@ -253,15 +261,15 @@ class TestExpandEdgeCosts : public testing::Test {
     if (expand_vertex_time < expand_edge_time) {
       LOG(INFO) << ((cover[parent] == 1) ? "key" : "set") << "to" << ((cover[target] == 1) ? "key " : "set ") << parent
                 << "->" << target << " vertex/edge " << GREEN(expand_vertex_time << '/' << expand_edge_time) << "ms "
-                << ret << '/' << outputs.size();
+                << ret << '/' << output_size;
     } else if (expand_vertex_time > expand_edge_time) {
       LOG(INFO) << ((cover[parent] == 1) ? "key" : "set") << "to" << ((cover[target] == 1) ? "key " : "set ") << parent
                 << "->" << target << " vertex/edge " << RED(expand_vertex_time << '/' << expand_edge_time) << "ms "
-                << ret << '/' << outputs.size();
+                << ret << '/' << output_size;
     } else {
       LOG(INFO) << ((cover[parent] == 1) ? "key" : "set") << "to" << ((cover[target] == 1) ? "key " : "set ") << parent
                 << "->" << target << " vertex/edge " << expand_vertex_time << '/' << expand_edge_time << "ms " << ret
-                << '/' << outputs.size();
+                << '/' << output_size;
     }
     return ret;
   }

@@ -76,7 +76,7 @@ class SDGraphPartition : public GraphPartitionBase {
   /* start of vertex accessors within src-dst partition */
 
   /** @returns The range of (reordered) vertex ids within src_partition_. */
-  inline const std::pair<VertexID, VertexID>& getVertexRangeByLabel(LabelID lid) const {
+  inline std::pair<VertexID, VertexID> getVertexRangeByLabel(LabelID lid) const {
     return original_graph_->getVertexRangeByLabel(lid, src_partition_);
   }
 

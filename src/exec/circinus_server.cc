@@ -164,16 +164,7 @@ void CircinusServer::handleLoadGraph(const Event& event) {
     // Graph loading is blocking, the server does not handle new requests when loading the graph
     load_time = loadGraphFromBinary(event.args[0], event.args[1]);
   } else {
-    if (event.args.back().substr(0, 10) == "partition=") {
-      uint32_t partition = std::stoi(event.args.back().substr(10));
-      if (partition == 0) {
-        load_time = loadGraphFromBinary(event.args[0], event.args[1]);
-      } else {
-        load_time = loadPartitionedGraphFromBinary(event.args[0], event.args[1], partition);
-      }
-    } else {
-      LOG(WARNING) << "The graph loading option is not implemented yet";
-    }
+    LOG(WARNING) << "The graph loading option is not implemented yet";
   }
   if (!event.client_addr.empty()) {
     replyToClient(event.client_addr, &load_time, sizeof(load_time));
@@ -247,39 +238,18 @@ double CircinusServer::loadGraphFromBinary(const std::string& graph_path, const 
     throw std::runtime_error(ss.str());
   }
   auto start_loading = std::chrono::steady_clock::now();
-  auto data_graph = std::make_unique<Graph>();
-  data_graph->loadUndirectedGraphFromBinary(input);
-  data_graph->buildLabelIndex();  // TODO(tatiana): construct label index only when suitable
-  GraphMetadata meta(*data_graph);
+  auto data_graph = GraphBase::loadGraphFromBinary(input);
+  auto graph = dynamic_cast<Graph*>(data_graph.get());
+  GraphMetadata meta;
+  if (graph != nullptr) {
+    graph->buildLabelIndex();  // TODO(tatiana): construct label index only when suitable
+    meta = GraphMetadata(*graph, true);
+  } else {
+    meta = GraphMetadata(*dynamic_cast<ReorderedPartitionedGraph*>(data_graph.get()));
+  }
   auto end_loading = std::chrono::steady_clock::now();
   auto memory = data_graph->getMemoryUsage();
   LOG(INFO) << "graph " << name << " takes " << memory.first / 1024 / 1024 << "MB";
-  data_graphs_.insert({name, std::make_pair(std::move(data_graph), std::move(meta))});
-  return ((double)std::chrono::duration_cast<std::chrono::microseconds>(end_loading - start_loading).count()) / 1e6;
-}
-
-double CircinusServer::loadPartitionedGraphFromBinary(const std::string& graph_path, const std::string& name,
-                                                      uint32_t n_partitions) {
-  LOG(INFO) << graph_path;
-  std::ifstream input(graph_path, std::ios::binary);
-  if (!input.is_open()) {                // cannot open file
-    if (Path::isRelative(graph_path)) {  // if relative path, try search under FLAGS_data_dir
-      return loadPartitionedGraphFromBinary(Path::join(FLAGS_data_dir, graph_path), name, n_partitions);
-    }
-    std::stringstream ss;
-    ss << std::strerror(errno) << ": " << graph_path;
-    throw std::runtime_error(ss.str());
-  }
-  auto start_loading = std::chrono::steady_clock::now();
-  auto data_graph = std::make_unique<ReorderedPartitionedGraph>();
-  data_graph->loadUndirectedGraphFromBinary(input);
-
-  GraphMetadata meta(*data_graph);
-  auto end_loading = std::chrono::steady_clock::now();
-  auto memory = data_graph->getMemoryUsage();
-  LOG(INFO) << "graph " << name << " takes " << memory.first / 1024 / 1024 << "MB, edge cut "
-            << data_graph->getNumEdgeCuts() << '/' << data_graph->getNumEdges() << '='
-            << data_graph->getNumEdgeCuts() / (double)data_graph->getNumEdges();
   data_graphs_.insert({name, std::make_pair(std::move(data_graph), std::move(meta))});
   return ((double)std::chrono::duration_cast<std::chrono::microseconds>(end_loading - start_loading).count()) / 1e6;
 }
