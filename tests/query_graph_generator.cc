@@ -45,8 +45,11 @@ class QueryGraphGenerator {
   std::set<VertexID> vset_;
   std::set<std::pair<VertexID, VertexID>> eset_;
   double avg_deg_;
-  const uint32_t dense_sparse_option_bound_ = 5; // there is an option for dense/sparse only when the amount of query vertices reach this bound
-  const uint32_t dense_deg_bound_ = 3; // the minimum average degree of a dense query graph
+  
+  const uint32_t dense_sparse_option_bound_ = 5;
+  // there is an option for dense/sparse only when the amount of query vertices reach this bound
+  const uint32_t dense_deg_bound_ = 3;
+  // the minimum average degree of a dense query graph
 
  public:
   QueryGraphGenerator(std::string data_graph, uint32_t target_query_graph_cnt, uint32_t target_vertex_cnt,
@@ -94,7 +97,8 @@ class QueryGraphGenerator {
     std::set_difference(extra_edge_set.begin(), extra_edge_set.end(), eset_.begin(), eset_.end(),
                         std::back_inserter(diff_vec));
     int all_edge_cnt = diff_vec.size() + eset_.size();
-    avg_deg_ += 2.0 * all_edge_cnt / vset_.size(); // calculate the maximum possible degree (if all edges between pairs in vset_ were selected)
+    avg_deg_ += 2.0 * all_edge_cnt / vset_.size();
+    // calculate the maximum possible degree (if all edges between pairs in vset_ were selected)
     if (vset_.size() < target_vertex_cnt_ || !if_dense_ || target_vertex_cnt_ < dense_sparse_option_bound_) return;
     // can be changed according to generating rules
     // deal with the situation: 1.enough vertex 2.target dense qg(normally means not enough edges)
