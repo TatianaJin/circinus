@@ -32,7 +32,7 @@ const LabelID ALL_LABEL = ~0u;
 
 enum class GraphType : uint32_t { Normal, Partitioned, GraphView, BipartiteGraphView };
 
-enum class CandidateScopeType : uint8_t { All, Partition, Inverse };
+enum class CandidateScopeType : uint8_t { All, Partition, Inverse, Range };
 
 class CandidateScope {
  private:
@@ -40,6 +40,11 @@ class CandidateScope {
   uint32_t partition_ = 0;
 
  public:
+  void addRange(uint32_t partition, uint32_t start, uint32_t end) {
+    partition_ = partition;
+    type_ = CandidateScopeType::Range;
+  }
+
   void usePartition(uint32_t partition) {
     partition_ = partition;
     type_ = CandidateScopeType::Partition;

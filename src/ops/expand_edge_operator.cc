@@ -195,7 +195,9 @@ class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
           auto output = ctx->newOutput(input, ctx->currentTarget(), same_label_set_indices_, set_pruning_threshold_);
 #endif
           ctx->nextTarget();
-          if (output == nullptr) continue;
+          if (output == nullptr) {
+            continue;
+          }
 #ifdef USE_FILTER
           if (filter(*output)) {
             ctx->popOutput();

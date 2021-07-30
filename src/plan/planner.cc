@@ -20,6 +20,7 @@
 #include <utility>
 #include <vector>
 
+#include "algorithms/centrality.h"
 #include "ops/logical/compressed_input.h"
 #include "ops/order_generator.h"
 #include "plan/backtracking_plan.h"
@@ -171,7 +172,7 @@ std::vector<QueryVertexID> Planner::getPartitioningQueryVertices() {
   std::iota(order_by_cover_occurrence.begin(), order_by_cover_occurrence.end(), 0);
   std::sort(order_by_cover_occurrence.begin(), order_by_cover_occurrence.end(),
             [&qv_frequency_in_cover](QueryVertexID a, QueryVertexID b) {
-              return qv_frequency_in_cover[a] >= qv_frequency_in_cover[b];
+              return qv_frequency_in_cover[a] > qv_frequency_in_cover[b];
             });
 
   uint32_t common_cover_vertex_count = 0;
@@ -188,24 +189,84 @@ std::vector<QueryVertexID> Planner::getPartitioningQueryVertices() {
   if (common_cover_vertex_count != 0) {
     // TODO(tatiana): pick the indicator by considering the closeness centrality?
   }
+
   // TODO(tatiana): now we use only one partitioning query vertex to test the pipeline, later may consider
   // parallelism for deciding partitioning vertices
   order_by_cover_occurrence.resize(1);
+
   return order_by_cover_occurrence;
+}
+
+std::vector<QueryVertexID> Planner::getPartitioningQueryVerticesByClosenessCentrality() {
+  auto& q = query_context_->query_graph;
+  auto centrality_gen = ClosenessCentrality(&q);
+  auto centrality = centrality_gen.getClosenessCentrality();
+
+  std::vector<QueryVertexID> order_by_closeness_centrality(q.getNumVertices());
+  std::iota(order_by_closeness_centrality.begin(), order_by_closeness_centrality.end(), 0);
+  std::sort(order_by_closeness_centrality.begin(), order_by_closeness_centrality.end(),
+            [&centrality](QueryVertexID a, QueryVertexID b) { return centrality[a] > centrality[b]; });
+  std::stringstream ss;
+  for (auto v : order_by_closeness_centrality) {
+    ss << ' ' << v << ": " << centrality[v] << ",  ";
+  }
+  LOG(INFO) << "Query vertex centrality: [" << ss.str() << ']';
+
+  order_by_closeness_centrality.resize(1);
+
+  return order_by_closeness_centrality;
+}
+
+void Planner::exhaustivePartitionPlan(std::vector<std::vector<CandidateScope>>& partitioned_plans, uint32_t level,
+                                      uint32_t partition_num, const std::vector<QueryVertexID>& partitioning_qv,
+                                      std::vector<CandidateScope> partitioned_plan) {
+  if (level == partitioning_qv.size()) {
+    std::stringstream ss;
+    for (auto x : partitioned_plan) {
+      x.print(ss);
+    }
+    LOG(INFO) << ss.str();
+    partitioned_plans.emplace_back(std::move(partitioned_plan));
+    return;
+  }
+
+  for (uint32_t i = 0; i < partition_num; ++i) {
+    std::vector<CandidateScope> new_partitioned_plan(partitioned_plan.begin(), partitioned_plan.end());
+    new_partitioned_plan[partitioning_qv[level]].usePartition(i);
+    exhaustivePartitionPlan(partitioned_plans, level + 1, partition_num, partitioning_qv, new_partitioned_plan);
+  }
 }
 
 std::vector<std::pair<uint32_t, std::vector<CandidateScope>>> Planner::generatePartitionedPlans(
     const std::vector<QueryVertexID>& partitioning_qv) {
-  CHECK_EQ(partitioning_qv.size(), 1);  // consider the locality indicator only, no. tasks equal to no. partitions
+  // CHECK_EQ(partitioning_qv.size(), 1);  // consider the locality indicator only, no. tasks equal to no. partitions
   DLOG(INFO) << "partitioning_qv = " << partitioning_qv.front();
   std::vector<std::pair<uint32_t, std::vector<CandidateScope>>> ret;
-  ret.reserve(backtracking_plan_->getPlans().size());
+  ret.reserve(backtracking_plan_->getPlans().size() * ((1 << partitioning_qv.size()) - 1));
 
   auto n_qvs = query_context_->query_graph.getNumVertices();
+
   for (uint32_t i = 0; i < backtracking_plan_->getPlans().size(); ++i) {
     ret.emplace_back(i, std::vector<CandidateScope>(n_qvs));
-    ret.back().second[partitioning_qv[0]].usePartition(backtracking_plan_->getPlan(i)->getPartitionId());
+    // for (uint32_t j = 0; j < n_qvs; ++j)
+    ret.back().second[partitioning_qv.front()].usePartition(backtracking_plan_->getPlan(i)->getPartitionId());
+    // for (uint64_t j = 1; j < all; ++j) {
+    //   uint64_t tmp = j;
+    //   ret.emplace_back(i, std::vector<CandidateScope>(n_qvs));
+    //   uint32_t idx = 0;
+    //   while (tmp) {
+    //     if (tmp % 3 == 0) {
+    //       ret.back().second[partitioning_qv[idx]].beforePartition(backtracking_plan_->getPlan(i)->getPartitionId());
+    //     } else if (tmp % 3 == 1) {
+    //       ret.back().second[partitioning_qv[idx]].usePartition(backtracking_plan_->getPlan(i)->getPartitionId());
+    //     } else if (tmp % 3 == 2) {
+    //       ret.back().second[partitioning_qv[idx]].afterPartition(backtracking_plan_->getPlan(i)->getPartitionId());
+    //     }
+    //     idx++;
+    //   }
+    // }
   }
+  LOG(INFO) << "Partition qeury vertex size: " << partitioning_qv.size() << ",  partition plan size:" << ret.size();
   return ret;
 }
 
@@ -255,31 +316,66 @@ BacktrackingPlan* Planner::generateExecutionPlan(const CandidateResult* result, 
 
   backtracking_plan_ = std::make_unique<BacktrackingPlan>();
   // generate a logical plan for each partition
+  uint32_t n_qvs = query_context_->query_graph.getNumVertices();
   result = (PartitionedCandidateResult*)result;
-  auto n_qvs = query_context_->query_graph.getNumVertices();
-  for (uint32_t i = 0; i < candidate_cardinality.size(); ++i) {
-    LOG(INFO) << "Generate Plan " << i;
-    auto& stats = candidate_cardinality[i];
-    // TODO(tatiana): apply the state-of-the-art matching order strategies, compute the orders only
-    std::vector<CandidateScope> scopes(n_qvs);
-    for (auto& scope : scopes) {
-      scope.usePartition(i);
+  if (false) {
+    auto partitioning_qv = getPartitioningQueryVerticesByClosenessCentrality();
+    std::vector<std::vector<CandidateScope>> partitioned_plans;
+    exhaustivePartitionPlan(partitioned_plans, 0, candidate_cardinality.size(), partitioning_qv,
+                            std::vector<CandidateScope>(n_qvs));
+    std::vector<std::pair<uint32_t, std::vector<CandidateScope>>> partition_plans;
+    partition_plans.reserve(partitioned_plans.size());
+    uint32_t partition_plan_num = 0;
+    for (auto& scopes : partitioned_plans) {
+      LOG(INFO) << "Generate Plan " << partition_plan_num;
+      std::vector<uint64_t> stats(n_qvs);
+      auto candidate_views = ((PartitionedCandidateResult*)result)->getCandidatesByScopes(scopes);
+      for (uint32_t i = 0; i < n_qvs; ++i) {
+        stats[i] = candidate_views[i].size();
+      }
+      auto order_generator = OrderGenerator(query_context_->data_graph, *query_context_->graph_metadata,
+                                            &query_context_->query_graph, candidate_views, stats);
+      auto use_order = order_generator.getOrder(query_context_->query_config.order_strategy);
+      auto plan = generateExecutionPlan(stats, use_order, multithread, 0, &candidate_views);
+      if (plan == nullptr) {
+        continue;
+      }
+      backtracking_plan_->addPlan(plan);
+      partition_plans.emplace_back(partition_plan_num++, scopes);
     }
-    auto candidate_views = ((PartitionedCandidateResult*)result)->getCandidatesByScopes(scopes);
-    auto order_generator = OrderGenerator(query_context_->data_graph, query_context_->graph_metadata->getPartition(i),
-                                          &query_context_->query_graph, candidate_views, stats);
-    auto use_order = order_generator.getOrder(query_context_->query_config.order_strategy);
-    auto plan = generateExecutionPlan(stats, use_order, multithread, i, &candidate_views);
-    if (plan == nullptr) {
-      continue;
-    }
-    backtracking_plan_->addPlan(plan);
-  }
-  auto partitioning_qv = getPartitioningQueryVertices();
-  backtracking_plan_->addPartitionedPlans(generatePartitionedPlans(partitioning_qv));
 
-  // one logical input operator for each logical plan
-  newInputOperators(query_context_->query_graph, partitioning_qv);
+    backtracking_plan_->addPartitionedPlans(std::move(partition_plans));
+    // one logical input operator for each logical plan
+    LOG(INFO) << backtracking_plan_->getPartitionedPlan(0).second.size();
+    newInputOperators(query_context_->query_graph, partitioning_qv);
+  } else {
+    LOG(INFO) << "-----------------";
+    for (uint32_t i = 0; i < candidate_cardinality.size(); ++i) {
+      LOG(INFO) << "Generate Plan " << i;
+      // TODO(tatiana): apply the state-of-the-art matching order strategies, compute the orders only
+      std::vector<CandidateScope> scopes(n_qvs);
+      auto& stats = candidate_cardinality[i];
+      // scopes[5].usePartition(i);
+      for (auto& scope : scopes) {
+        scope.usePartition(i);
+      }
+      auto candidate_views = ((PartitionedCandidateResult*)result)->getCandidatesByScopes(scopes);
+
+      auto order_generator = OrderGenerator(query_context_->data_graph, query_context_->graph_metadata->getPartition(i),
+                                            &query_context_->query_graph, candidate_views, stats);
+      auto use_order = order_generator.getOrder(query_context_->query_config.order_strategy);
+      auto plan = generateExecutionPlan(stats, use_order, multithread, i, &candidate_views);
+      if (plan == nullptr) {
+        continue;
+      }
+      backtracking_plan_->addPlan(plan);
+    }
+    auto partitioning_qv = getPartitioningQueryVertices();
+    // partitioning_qv.front() = matching_order_.front();
+    backtracking_plan_->addPartitionedPlans(generatePartitionedPlans(partitioning_qv));
+    // one logical input operator for each logical plan
+    newInputOperators(query_context_->query_graph, partitioning_qv);
+  }
   LOG(INFO) << "Generated plan";
   return backtracking_plan_.get();
 }
@@ -298,7 +394,8 @@ BacktrackingPlan* Planner::generateExecutionPlan(const std::vector<std::vector<V
       }
       backtracking_plan_->addPlan(generateExecutionPlan(sum, use_order, multithread));
     } else {
-      backtracking_plan_->addPlan(generateExecutionPlan(candidate_cardinality->front(), use_order, multithread));
+      auto car = candidate_cardinality->front();
+      backtracking_plan_->addPlan(generateExecutionPlan(car, use_order, multithread));
     }
     // one logical input operator
     newInputOperators();
@@ -308,7 +405,7 @@ BacktrackingPlan* Planner::generateExecutionPlan(const std::vector<std::vector<V
   backtracking_plan_ = std::make_unique<BacktrackingPlan>();
   // generate a logical plan for each partition
   for (uint32_t i = 0; i < candidate_cardinality->size(); ++i) {
-    auto& stats = (*candidate_cardinality)[i];
+    auto stats = (*candidate_cardinality)[i];
     auto plan = generateExecutionPlan(stats, use_order, multithread, i);
     if (plan == nullptr) {
       continue;
@@ -324,7 +421,7 @@ BacktrackingPlan* Planner::generateExecutionPlan(const std::vector<std::vector<V
   return backtracking_plan_.get();
 }
 
-ExecutionPlan* Planner::generateExecutionPlan(const std::vector<VertexID>& candidate_cardinality,
+ExecutionPlan* Planner::generateExecutionPlan(std::vector<VertexID>& candidate_cardinality,
                                               const std::vector<QueryVertexID>& use_order, bool multithread,
                                               uint32_t partition_id,
                                               const std::vector<CandidateSetView>* candidate_views) {
@@ -334,9 +431,9 @@ ExecutionPlan* Planner::generateExecutionPlan(const std::vector<VertexID>& candi
     ss << c << " ";
   }
   LOG(INFO) << ss.str();
-  for (auto c : candidate_cardinality) {
+  for (auto& c : candidate_cardinality) {
     if (c == 0) {
-      return nullptr;
+      c = 1;
     }
   }
   std::vector<double> cardinality{candidate_cardinality.begin(), candidate_cardinality.end()};

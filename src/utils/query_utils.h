@@ -115,7 +115,7 @@ class QueryConfig {
   bool use_partitioned_graph = true;
   std::string output = "count";
   uint64_t limit = ~0ull;
-  std::chrono::seconds time_limit = std::chrono::seconds(600);
+  std::chrono::seconds time_limit = std::chrono::seconds(36000);
   QueryMode mode = QueryMode::Execute;
 
   explicit QueryConfig(const std::string& config_str = "") {

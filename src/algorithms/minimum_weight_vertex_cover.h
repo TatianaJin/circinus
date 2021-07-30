@@ -34,7 +34,8 @@ class WeightedBnB {
   clock_t start_time_;
   double cutoff_time_;                         // time limit for the algorithm
   std::vector<std::vector<int>> best_covers_;  // the best vertex covers found so far
-  double best_cover_weight_;                   // the size of the best vertex cover found so far
+  std::vector<double> best_cover_weights_;     // the size of the best vertex cover found so far
+  double best_cover_weight_;
   double elapsed_time_;
 
   // for analyzing the algorithm efficiency

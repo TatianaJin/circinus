@@ -79,9 +79,13 @@ class TraverseContext : public ProfileInfo {
 
   template <typename... Args>
   inline CompressedSubgraphs* newOutput(Args&&... args) {
-    DCHECK_LT(output_idx_, outputs_->size());
+    DCHECK_LT(output_idx_, outputs_->size()) << output_idx_ << " " << outputs_->size();
     // do not increment output_idx_ if the current output is invalid
-    return (*outputs_)[output_idx_++].reset(std::forward<Args>(args)...);
+    auto ret = (*outputs_)[output_idx_].reset(std::forward<Args>(args)...);
+    if (ret != nullptr) {
+      output_idx_++;
+    }
+    return ret;
   }
 
   inline CompressedSubgraphs& copyOutput(const CompressedSubgraphs& from) {

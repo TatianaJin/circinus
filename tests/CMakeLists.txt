@@ -50,8 +50,8 @@ if(GTEST_FOUND)
   add_executable(TestFilterAndMWVC unittest_main.cc test_filter_and_mwvc.cc)
   target_link_libraries(TestFilterAndMWVC circinus ${GTEST_LIBRARY} ${EXTERNAL_LIBRARY})
 
-  add_executable(TestExpandEdgeCosts unittest_main.cc test_expand_edge_costs.cc)
-  target_link_libraries(TestExpandEdgeCosts circinus ${GTEST_LIBRARY} ${EXTERNAL_LIBRARY})
+  #add_executable(TestExpandEdgeCosts unittest_main.cc test_expand_edge_costs.cc)
+  #target_link_libraries(TestExpandEdgeCosts circinus ${GTEST_LIBRARY} ${EXTERNAL_LIBRARY})
 
   add_executable(PrintExecutionPlan unittest_main.cc print_execution_plan.cc)
   target_link_libraries(PrintExecutionPlan circinus ${GTEST_LIBRARY} ${EXTERNAL_LIBRARY})

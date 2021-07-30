@@ -71,7 +71,7 @@ void ExecutionPlanDriverBase::finishPlan(ThreadsafeQueue<ServerEvent>* reply_que
     auto size = plan_->getPlans().size();
     std::stringstream ss;
     for (uint32_t i = 0; i < size; ++i) {
-      ss << "[ Plan " << i << " ]\n";
+      ss << "[ Plan " << plan_->getPlan(i)->getPartitionId() << " ]\n";
       auto input_op = plan_->getInputOperator(i);
       profiled->setProfiledPlan(i, plan_->getOperators(i), input_op.get());
       uint32_t op_idx = 0;
@@ -110,9 +110,12 @@ void ExecutionPlanDriver::init(QueryId qid, QueryContext* query_ctx, ExecutionCo
   ExecutionPlanDriverBase::init(qid, query_ctx, ctx, task_queue);
 
   auto n_plans = plan_->getNumPartitionedPlans();
-  CHECK_EQ(plan_->getPlans().size(), n_plans) << "now one partitioned plan per graph partition";
-  task_counters_.resize(plan_->getPlans().size(), 1);  // one task per partition
+  // CHECK_EQ(plan_->getPlans().size(), n_plans) << "now one partitioned plan per graph partition";
+  task_counters_.resize(n_plans, 1);  // one task per partition
   candidates_.resize(n_plans);
+  for (uint32_t i = 0; i < plan_->getPlans().size(); ++i) {
+    LOG(INFO) << "Task " << i << " use plan " << plan_->getPlan(i)->getPartitionId();
+  }
   for (uint32_t i = 0; i < n_plans; ++i) {
     auto plan_idx = plan_->getPartitionedPlan(i).first;
     dynamic_cast<OutputOperator*>(plan_->getOutputOperator(plan_idx))
