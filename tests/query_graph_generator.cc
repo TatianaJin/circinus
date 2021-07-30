@@ -44,8 +44,9 @@ class QueryGraphGenerator {
   uint32_t attempt_cnt_bound_;
   std::set<VertexID> vset_;
   std::set<std::pair<VertexID, VertexID>> eset_;
-  double avg_deg;
-  const uint32_t dense_bound_ = 5;
+  double avg_deg_;
+  const uint32_t dense_sparse_option_bound_ = 5; // there is an option for dense/sparse only when the amount of query vertices reach this bound
+  const uint32_t dense_deg_bound_ = 3; // the minimum average degree of a dense query graph
 
  public:
   QueryGraphGenerator(std::string data_graph, uint32_t target_query_graph_cnt, uint32_t target_vertex_cnt,
@@ -59,7 +60,7 @@ class QueryGraphGenerator {
         attempt_cnt_(0),
         success_cnt_(0),
         attempt_cnt_bound_(1e8),
-        avg_deg(0) {}
+        avg_deg_(0) {}
   void generate() {
     std::mt19937 mt_rand(std::chrono::system_clock::now().time_since_epoch().count());
     vset_.clear();
@@ -93,11 +94,11 @@ class QueryGraphGenerator {
     std::set_difference(extra_edge_set.begin(), extra_edge_set.end(), eset_.begin(), eset_.end(),
                         std::back_inserter(diff_vec));
     int all_edge_cnt = diff_vec.size() + eset_.size();
-    avg_deg += 2.0 * all_edge_cnt / vset_.size();
-    if (vset_.size() < target_vertex_cnt_ || !if_dense_ || target_vertex_cnt_ < dense_bound_) return;
+    avg_deg_ += 2.0 * all_edge_cnt / vset_.size(); // calculate the maximum possible degree (if all edges between pairs in vset_ were selected)
+    if (vset_.size() < target_vertex_cnt_ || !if_dense_ || target_vertex_cnt_ < dense_sparse_option_bound_) return;
     // can be changed according to generating rules
     // deal with the situation: 1.enough vertex 2.target dense qg(normally means not enough edges)
-    int d = 2 * all_edge_cnt - 3 * target_vertex_cnt_;
+    int d = 2 * all_edge_cnt - dense_deg_bound_ * target_vertex_cnt_;
     if (d < 0) return;
     d /= 2;
     std::random_shuffle(diff_vec.begin(), diff_vec.end());
@@ -110,19 +111,19 @@ class QueryGraphGenerator {
   bool check() {
     // can be changed according to generating rules
     if (vset_.size() != target_vertex_cnt_) return 0;
-    if (target_vertex_cnt_ < dense_bound_) return 1;
+    if (target_vertex_cnt_ < dense_sparse_option_bound_) return 1;
     if (if_dense_) {
-      if (2 * eset_.size() < 3 * target_vertex_cnt_) return 0;
+      if (2 * eset_.size() < dense_deg_bound_ * target_vertex_cnt_) return 0;
     } else {
-      if (2 * eset_.size() >= 3 * target_vertex_cnt_) return 0;
+      if (2 * eset_.size() >= dense_deg_bound_ * target_vertex_cnt_) return 0;
     }
     return 1;
   }
   std::string getFilename() {
-    // can be changed according to generating rules`
+    // can be changed according to generating rules
     std::stringstream output_filename;
     output_filename << output_dir_ << "/query_";
-    if (target_vertex_cnt_ < dense_bound_ || if_dense_)
+    if (target_vertex_cnt_ < dense_sparse_option_bound_ || if_dense_)
       output_filename << "dense_";
     else
       output_filename << "sparse_";
@@ -168,7 +169,7 @@ class QueryGraphGenerator {
       }
     }
     std::cout << "Tried " << attempt_cnt_ << " times to get " << success_cnt_ << " queries.\n";
-    std::cout << "Avg degree of all tried random walk induced subgraphs: " << avg_deg / attempt_cnt_ << "\n";
+    std::cout << "Avg degree of all tried random walk induced subgraphs: " << avg_deg_ / attempt_cnt_ << "\n";
   }
 };
 }  // namespace circinus
