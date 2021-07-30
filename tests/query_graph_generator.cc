@@ -29,6 +29,7 @@ DEFINE_bool(if_dense, false, "if dense query graph");
 DEFINE_string(output_dir, "/data/share/users/qlma/query-graph-output/", "where to put the result");
 DEFINE_string(data_graph, "/data/share/project/haxe/data/subgraph_matching_datasets/yeast/data_graph/yeast.graph",
               "input data graph");
+DEFINE_uint64(strategy, 1, "which strategy: 1,2");
 namespace circinus {
 
 class QueryGraphGenerator {
@@ -38,6 +39,7 @@ class QueryGraphGenerator {
   uint32_t target_vertex_cnt_;
   bool if_dense_;
   std::string output_dir_;
+  uint32_t generate_strategy_;
   uint32_t max_random_walk_step;
   uint32_t attempt_cnt_;
   uint32_t success_cnt_;
@@ -45,7 +47,7 @@ class QueryGraphGenerator {
   std::set<VertexID> vset_;
   std::set<std::pair<VertexID, VertexID>> eset_;
   double avg_deg_;
-  
+
   const uint32_t dense_sparse_option_bound_ = 5;
   // there is an option for dense/sparse only when the amount of query vertices reach this bound
   const uint32_t dense_deg_bound_ = 3;
@@ -53,55 +55,23 @@ class QueryGraphGenerator {
 
  public:
   QueryGraphGenerator(std::string data_graph, uint32_t target_query_graph_cnt, uint32_t target_vertex_cnt,
-                      bool if_dense, std::string output_dir)
+                      bool if_dense, std::string output_dir, uint32_t generate_strategy)
       : g_(data_graph),
         target_query_graph_cnt_(target_query_graph_cnt),
         target_vertex_cnt_(target_vertex_cnt),
         if_dense_(if_dense),
         output_dir_(output_dir),
+        generate_strategy_(generate_strategy),
         max_random_walk_step(5 * target_vertex_cnt),
         attempt_cnt_(0),
         success_cnt_(0),
         attempt_cnt_bound_(1e8),
         avg_deg_(0) {}
-  void generate() {
+
+  void generateToDense(const std::vector<std::pair<VertexID, VertexID>>& diff_vec)
+  {
     std::mt19937 mt_rand(std::chrono::system_clock::now().time_since_epoch().count());
-    vset_.clear();
-    eset_.clear();
-    uint32_t step_cnt = 0;
-    VertexID current_vertex = mt_rand() % g_.getNumVertices();
-    vset_.insert(current_vertex);
-    std::set<std::pair<VertexID, VertexID>> extra_edge_set;
-    while (step_cnt < max_random_walk_step) {
-      auto[neighbors, neighbors_cnt] = g_.getOutNeighbors(current_vertex);
-      if (neighbors_cnt == 0) break;
-      for (auto neighbor_v : vset_) {
-        if (std::binary_search(neighbors, neighbors + neighbors_cnt, neighbor_v)) {
-          if (current_vertex < neighbor_v)
-            extra_edge_set.insert({current_vertex, neighbor_v});
-          else
-            extra_edge_set.insert({neighbor_v, current_vertex});
-        }
-      }
-      if (vset_.size() >= target_vertex_cnt_) break;
-      VertexID new_vertex = neighbors[mt_rand() % neighbors_cnt];
-      vset_.insert(new_vertex);
-      if (current_vertex < new_vertex)
-        eset_.insert({current_vertex, new_vertex});
-      else
-        eset_.insert({new_vertex, current_vertex});
-      current_vertex = new_vertex;
-      ++step_cnt;
-    }
-    std::vector<std::pair<VertexID, VertexID>> diff_vec;
-    std::set_difference(extra_edge_set.begin(), extra_edge_set.end(), eset_.begin(), eset_.end(),
-                        std::back_inserter(diff_vec));
     int all_edge_cnt = diff_vec.size() + eset_.size();
-    avg_deg_ += 2.0 * all_edge_cnt / vset_.size();
-    // calculate the maximum possible degree (if all edges between pairs in vset_ were selected)
-    if (vset_.size() < target_vertex_cnt_ || !if_dense_ || target_vertex_cnt_ < dense_sparse_option_bound_) return;
-    // can be changed according to generating rules
-    // deal with the situation: 1.enough vertex 2.target dense qg(normally means not enough edges)
     int d = 2 * all_edge_cnt - dense_deg_bound_ * target_vertex_cnt_;
     if (d < 0) return;
     d /= 2;
@@ -112,6 +82,86 @@ class QueryGraphGenerator {
       eset_.insert(diff_vec[i]);
     }
   }
+
+  void generate() {
+    std::mt19937 mt_rand(std::chrono::system_clock::now().time_since_epoch().count());
+    vset_.clear();
+    eset_.clear();
+    uint32_t step_cnt = 0;
+    VertexID current_vertex = mt_rand() % g_.getNumVertices();
+    std::set<std::pair<VertexID, VertexID>> extra_edge_set;
+    std::vector<std::pair<VertexID, VertexID>> candidate_edge_list;
+    if(generate_strategy_==1)
+    {
+      while (true) {
+        vset_.insert(current_vertex);
+        auto[neighbors, neighbors_cnt] = g_.getOutNeighbors(current_vertex);
+        if (neighbors_cnt == 0) break;
+        for (auto neighbor_v : vset_) {
+          if (std::binary_search(neighbors, neighbors + neighbors_cnt, neighbor_v)) {
+            if (current_vertex < neighbor_v)
+              extra_edge_set.insert({current_vertex, neighbor_v});
+            else
+              extra_edge_set.insert({neighbor_v, current_vertex});
+          }
+        }
+        ++step_cnt;
+        if (vset_.size() >= target_vertex_cnt_ || step_cnt >= max_random_walk_step) break;
+        VertexID new_vertex = neighbors[mt_rand() % neighbors_cnt];
+        if (current_vertex < new_vertex)
+          eset_.insert({current_vertex, new_vertex});
+        else
+          eset_.insert({new_vertex, current_vertex});
+        current_vertex = new_vertex;
+      }
+    }
+    else if(generate_strategy_==2)
+    {
+      while(true)
+      {
+        if((vset_.insert(current_vertex)).second==true)
+        {
+          auto[neighbors, neighbors_cnt] = g_.getOutNeighbors(current_vertex);
+          for (auto neighbor_v : vset_) {
+            if (std::binary_search(neighbors, neighbors + neighbors_cnt, neighbor_v)) {
+              if (current_vertex < neighbor_v)
+                extra_edge_set.insert({current_vertex, neighbor_v});
+              else
+                extra_edge_set.insert({neighbor_v, current_vertex});
+            }
+          }
+          for(uint32_t i=0;i<neighbors_cnt;++i)
+            candidate_edge_list.push_back({current_vertex,neighbors[i]});
+        }
+        if (vset_.size() >= target_vertex_cnt_||step_cnt >= max_random_walk_step||candidate_edge_list.empty()) break;
+        std::pair<VertexID, VertexID> new_edge=candidate_edge_list[mt_rand()%candidate_edge_list.size()];
+        if(new_edge.first<new_edge.second)
+        {
+          eset_.insert({new_edge.first,new_edge.second});
+          current_vertex=new_edge.second;
+        }
+        else
+        {
+          eset_.insert({new_edge.second,new_edge.first});
+          current_vertex=new_edge.first;
+        }
+      }
+    }
+    else break;
+    
+    std::vector<std::pair<VertexID, VertexID>> diff_vec;
+    std::set_difference(extra_edge_set.begin(), extra_edge_set.end(), eset_.begin(), eset_.end(),
+                        std::back_inserter(diff_vec));
+    int all_edge_cnt = diff_vec.size() + eset_.size();
+    avg_deg_ += 2.0 * all_edge_cnt / vset_.size();
+    // calculate the maximum possible degree (if all edges between pairs in vset_ were selected)
+    if (vset_.size() < target_vertex_cnt_ || !if_dense_ || target_vertex_cnt_ < dense_sparse_option_bound_) return;
+    // can be changed according to generating rules
+    // deal with the situation: 1.enough vertex 2.target dense qg(normally means not enough edges)
+    generateToDense(diff_vec);
+  }
+
+  
   bool check() {
     // can be changed according to generating rules
     if (vset_.size() != target_vertex_cnt_) return 0;
@@ -180,6 +230,6 @@ class QueryGraphGenerator {
 
 int main(int argc, char** argv) {
   gflags::ParseCommandLineFlags(&argc, &argv, false);
-  circinus::QueryGraphGenerator qgg(FLAGS_data_graph, FLAGS_qg_cnt, FLAGS_v_cnt, FLAGS_if_dense, FLAGS_output_dir);
+  circinus::QueryGraphGenerator qgg(FLAGS_data_graph, FLAGS_qg_cnt, FLAGS_v_cnt, FLAGS_if_dense, FLAGS_output_dir,FLAGS_strategy);
   qgg.run();
 }
