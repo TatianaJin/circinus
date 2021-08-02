@@ -56,6 +56,13 @@ class ExpandEdgeKeyToSetOperator : public ExpandEdgeOperator {
   CONSTRUCT(KeyToSet)
 
   void setCandidateSets(const CandidateSetView* candidates) override {
+    if (target_vertex_ == 0) {
+      std::stringstream ss;
+      for (auto x : *candidates) {
+        ss << x << ",";
+      }
+      LOG(INFO) << ss.str();
+    }
     candidates_ = candidates;
     candidate_set_.insert(candidates->begin(), candidates->end());
   }
@@ -135,6 +142,13 @@ class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
   CONSTRUCT(KeyToKey)
 
   void setCandidateSets(const CandidateSetView* candidates) override {
+    if (target_vertex_ == 0) {
+      std::stringstream ss;
+      for (auto x : *candidates) {
+        ss << x << ",";
+      }
+      LOG(INFO) << ss.str();
+    }
     candidates_ = candidates;
     candidate_set_.insert(candidates->begin(), candidates->end());
   }

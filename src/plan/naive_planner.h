@@ -73,7 +73,8 @@ class NaivePlanner {
   ExecutionPlan* generatePlanWithEagerDynamicCover(const std::vector<QueryVertexID>& use_order = {});
   ExecutionPlan* generatePlanWithoutCompression(const std::vector<QueryVertexID>& use_order = {});
   ExecutionPlan* generatePlanWithDynamicCover(const GraphBase* data_graph,
-                                              const std::vector<CandidateSetView>* candidate_views);
+                                              const std::vector<CandidateSetView>* candidate_views,
+                                              QueryVertexID partition_qv);
 
   ExecutionPlan* generatePlanWithSampleExecution(const std::vector<std::vector<double>>& cardinality,
                                                  const std::vector<double>& level_cost);
@@ -85,9 +86,13 @@ class NaivePlanner {
       const std::vector<QueryVertexID>& use_order = {});
 
  private:
-  std::pair<std::vector<double>, double> estimateCardinality(const GraphBase* data_graph,
-                                                             const std::vector<CandidateSetView>* candidate_views,
-                                                             uint64_t cover_bits, uint32_t level);
+  void getMinimalConectedSubgraphWithAllKeys(std::vector<QueryVertexID>& cc, uint32_t level, uint64_t cover_bits);
+
+  std::vector<double> getPartitionQueryVertexWeights(QueryVertexID partition_qv, const GraphBase* data_graph,
+                                                     const std::vector<CandidateSetView>* candidate_views,
+                                                     uint64_t cover_bits);
+  double estimateCardinality(const GraphBase* data_graph, const std::vector<CandidateSetView>* candidate_views,
+                             uint64_t cover_bits, uint32_t level);
 
   void getCoverCC(QueryVertexID qid, QueryVertexID cc_id, const uint64_t cover_bits, std::vector<QueryVertexID>& cc);
   unordered_map<VertexID, double> dfsComputeCost(QueryVertexID qid, uint64_t cover_bits, std::vector<bool>& visited,

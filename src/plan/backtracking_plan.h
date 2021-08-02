@@ -61,6 +61,10 @@ class BacktrackingPlan {
     partitioned_plans_ = std::move(partitioned_plans);
   }
 
+  inline void addPartitionedPlan(std::pair<uint32_t, std::vector<CandidateScope>>&& partitioned_plan) {
+    partitioned_plans_.emplace_back(std::move(partitioned_plan));
+  }
+
   inline void addInputOperator(std::unique_ptr<LogicalCompressedInputOperator>&& op) {
     input_operators_.push_back(std::move(op));
   }

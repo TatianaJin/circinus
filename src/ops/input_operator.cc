@@ -32,6 +32,7 @@ std::vector<CompressedSubgraphs> InputOperator::getInputs(const void* g,
 
 std::vector<CompressedSubgraphs> PartitionedInputOperator::getInputs(
     const void* data_graph, const std::vector<CandidateSetView>& candidates) const {
+  LOG(INFO) << "----------------------------- " << qv_pivots_->empty();
   if (!qv_pivots_->empty()) {
 #ifndef NDEBUG
     std::stringstream ss;
@@ -47,7 +48,7 @@ std::vector<CompressedSubgraphs> PartitionedInputOperator::getInputs(
     for (uint32_t i = 1; i < qv_pivots_->size(); ++i) {
       CHECK_EQ((*qv_pivots_)[i].second, (*qv_pivots_)[i - 1].first) << "qv pivots is not a path.";
     }
-
+    
     candidate[cur_idx].assign(candidates[qv_pivots_->front().second].begin(),
                               candidates[qv_pivots_->front().second].end());
     for (auto& qv_pivot_pair : *qv_pivots_) {

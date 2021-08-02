@@ -38,10 +38,14 @@ class CandidateScope {
  private:
   CandidateScopeType type_ = CandidateScopeType::All;
   uint32_t partition_ = 0;
+  // for range type
+  uint32_t start_ = 0, end_ = 0;
 
  public:
   void addRange(uint32_t partition, uint32_t start, uint32_t end) {
     partition_ = partition;
+    start_ = start;
+    end_ = end;
     type_ = CandidateScopeType::Range;
   }
 
@@ -57,6 +61,8 @@ class CandidateScope {
 
   inline auto getType() const { return type_; }
   inline uint32_t getPartition() const { return partition_; }
+  inline uint32_t getRangeStart() const { return start_; }
+  inline uint32_t getRangeEnd() const { return end_; }
 
   void print(std::ostream& oss) const {
     if (type_ == CandidateScopeType::All) {

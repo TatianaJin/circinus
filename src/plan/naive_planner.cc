@@ -473,12 +473,8 @@ void NaivePlanner::getCoverCC(QueryVertexID qid, QueryVertexID cc_id, const uint
   }
 }
 
-std::pair<std::vector<double>, double> NaivePlanner::estimateCardinality(
-    const GraphBase* data_graph, const std::vector<CandidateSetView>* candidate_views, uint64_t cover_bits,
-    uint32_t level) {
-  double ret = 1;
-  std::vector<bool> visited(matching_order_.size(), false);
-  std::vector<QueryVertexID> cc(matching_order_.size(), UINT32_MAX);
+void NaivePlanner::getMinimalConectedSubgraphWithAllKeys(std::vector<QueryVertexID>& cc, uint32_t level,
+                                                         uint64_t cover_bits) {
   std::stringstream ss;
   for (uint32_t i = 0; i <= level; ++i) {
     ss << matching_order_[i] << ", ";
@@ -534,6 +530,15 @@ std::pair<std::vector<double>, double> NaivePlanner::estimateCardinality(
     }
   }
   DLOG(INFO) << "after adding set: " << ss.str();
+}
+
+double NaivePlanner::estimateCardinality(const GraphBase* data_graph,
+                                         const std::vector<CandidateSetView>* candidate_views, uint64_t cover_bits,
+                                         uint32_t level) {
+  double ret = 1;
+  std::vector<bool> visited(matching_order_.size(), false);
+  std::vector<QueryVertexID> cc(matching_order_.size(), UINT32_MAX);
+  getMinimalConectedSubgraphWithAllKeys(cc, level, cover_bits);
 
   for (uint32_t i = level + 1; i < matching_order_.size(); ++i) {
     visited[matching_order_[i]] = true;
@@ -552,30 +557,44 @@ std::pair<std::vector<double>, double> NaivePlanner::estimateCardinality(
     }
   }
 
-  std::vector<double> first_candidate_weights((*candidate_views)[matching_order_[0]].size(), 0.0);
-  if (!(cover_bits >> matching_order_[0] & 1)) {
-    for (VertexID v : (*candidate_views)[matching_order_[0]]) {
-      auto[nbrs, cnt] = data_graph->getOutNeighbors(v);
-      for (uint32_t i = 0; i < cnt; ++i) {
-        VertexID nbr_v = nbrs[i];
-        if (current_candidate_cars.find(nbr_v) != current_candidate_cars.end()) {
-          first_candidate_weights[v] += current_candidate_cars[nbr_v];
-        }
-      }
-    }
-  } else {
-    for (VertexID v : (*candidate_views)[matching_order_[0]]) {
-      if (current_candidate_cars.find(v) != current_candidate_cars.end()) {
-        first_candidate_weights[v] += current_candidate_cars[v];
-      }
-    }
-  }
   DLOG(INFO) << "cost: " << ret;
-  return std::pair(std::move(first_candidate_weights), ret);
+  return ret;
+}
+
+std::vector<double> NaivePlanner::getPartitionQueryVertexWeights(QueryVertexID partition_qv,
+                                                                 const GraphBase* data_graph,
+                                                                 const std::vector<CandidateSetView>* candidate_views,
+                                                                 uint64_t cover_bits) {
+  std::vector<bool> visited(matching_order_.size(), false);
+  std::vector<QueryVertexID> cc(matching_order_.size(), UINT32_MAX);
+  LOG(INFO) << cover_bits;
+  getMinimalConectedSubgraphWithAllKeys(cc, matching_order_.size() - 1, cover_bits);
+
+  // use partition qv as the starting vertex.
+  //  1) partition qv is in the connected subgraph;
+  //  2) partition qv is not in the connected subgraph:
+  //     there must be a neighbor of pqv in the connected subgraph
+  unordered_map<VertexID, double> current_candidate_cars;
+  current_candidate_cars =
+      dfsComputeCost(partition_qv, cover_bits, visited, data_graph, candidate_views, cc, use_two_hop_traversal_);
+
+  std::vector<double> weights((*candidate_views)[partition_qv].size(), 0.0);
+  uint32_t idx = 0;
+  double sum = 0;
+  for (VertexID v : (*candidate_views)[partition_qv]) {
+    if (current_candidate_cars.find(v) != current_candidate_cars.end()) {
+      weights[idx] = current_candidate_cars[v];
+      sum += weights[idx];
+    }
+    idx++;
+  }
+  LOG(INFO) << sum;
+  return std::move(weights);
 }
 
 ExecutionPlan* NaivePlanner::generatePlanWithDynamicCover(const GraphBase* data_graph,
-                                                          const std::vector<CandidateSetView>* candidate_views) {
+                                                          const std::vector<CandidateSetView>* candidate_views,
+                                                          QueryVertexID partition_qv) {
   std::vector<std::vector<double>> costs_car(covers_.size());
   std::vector<std::vector<uint32_t>> pre(covers_.size());
   std::vector<std::vector<double>> car(covers_.size());
@@ -597,7 +616,7 @@ ExecutionPlan* NaivePlanner::generatePlanWithDynamicCover(const GraphBase* data_
           car[i][j] = car[i][j] * (*candidate_cardinality_)[qid];
         }
       } else {
-        car[i][j] = estimateCardinality(data_graph, candidate_views, covers_[i][j].cover_bits, i).second;
+        car[i][j] = estimateCardinality(data_graph, candidate_views, covers_[i][j].cover_bits, i);
       }
     }
   }
@@ -613,26 +632,28 @@ ExecutionPlan* NaivePlanner::generatePlanWithDynamicCover(const GraphBase* data_
         if (costs_car[i - 1][par] >= 0) {
           auto[nbrs, cnt] = query_graph_->getOutNeighbors(matching_order_[i]);
           double cost = car[i - 1][par];
-          uint64_t parent_set_bits = 0, parent_key_bits = 0;
-          for (uint32_t k = 0; k < cnt; ++k) {
-            if (existing_vertices.count(nbrs[k]) != 0) {
-              if ((covers_[i - 1][par].cover_bits >> nbrs[k] & 1) == 0) {
-                parent_set_bits |= 1 << nbrs[k];
-              } else {
-                parent_key_bits |= 1 << nbrs[k];
+          if (candidate_views != nullptr) {
+            uint64_t parent_set_bits = 0, parent_key_bits = 0;
+            for (uint32_t k = 0; k < cnt; ++k) {
+              if (existing_vertices.count(nbrs[k]) != 0) {
+                if ((covers_[i - 1][par].cover_bits >> nbrs[k] & 1) == 0) {
+                  parent_set_bits |= 1 << nbrs[k];
+                } else {
+                  parent_key_bits |= 1 << nbrs[k];
+                }
               }
             }
-          }
 
-          if (covers_[i][j].cover_bits >> matching_order_[i] & 1) {
-            parent_key_bits |= covers_[i - 1][par].cover_bits;
-            // including itself
-            parent_key_bits |= 1 << matching_order_[i];
-            cost = estimateCardinality(data_graph, candidate_views, parent_key_bits, i).second;
-          } else {
-            if (parent_set_bits != 0) {
-              parent_set_bits |= covers_[i - 1][par].cover_bits;
-              cost = estimateCardinality(data_graph, candidate_views, parent_set_bits, i - 1).second;
+            if (covers_[i][j].cover_bits >> matching_order_[i] & 1) {
+              parent_key_bits |= covers_[i - 1][par].cover_bits;
+              // including itself
+              parent_key_bits |= 1 << matching_order_[i];
+              cost = estimateCardinality(data_graph, candidate_views, parent_key_bits, i);
+            } else {
+              if (parent_set_bits != 0) {
+                parent_set_bits |= covers_[i - 1][par].cover_bits;
+                cost = estimateCardinality(data_graph, candidate_views, parent_set_bits, i - 1);
+              }
             }
           }
           if (costs_car[i][j] < 0 || costs_car[i - 1][par] + cost < costs_car[i][j]) {
@@ -668,11 +689,16 @@ ExecutionPlan* NaivePlanner::generatePlanWithDynamicCover(const GraphBase* data_
       best_idx = i;
     }
   }
+
+  // calculate the weights of partition_qv's candidates
+  if (candidate_views != nullptr) {
+    plan_.addPartitionQueryVertexWeights(
+        getPartitionQueryVertexWeights(partition_qv, data_graph, candidate_views, covers_[last][best_idx].cover_bits));
+  }
+
   CHECK(best_idx != -1) << "ERROR: can not get best plan index.";
   // best_idx = 3;
   LOG(INFO) << "best last level cover idx " << best_idx << "  " << costs_car[last][best_idx];
-  auto first_candidate_weights =
-      estimateCardinality(data_graph, candidate_views, covers_[last][best_idx].cover_bits, last).first;
   std::vector<int> select_cover(matching_order_.size(), 0);
   for (uint32_t i = 0; i < matching_order_.size(); ++i) {
     if (covers_[last][best_idx].cover_bits >> i & 1) {

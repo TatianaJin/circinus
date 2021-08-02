@@ -117,9 +117,11 @@ void ExecutionPlanDriver::init(QueryId qid, QueryContext* query_ctx, ExecutionCo
     LOG(INFO) << "Task " << i << " use plan " << plan_->getPlan(i)->getPartitionId();
   }
   for (uint32_t i = 0; i < n_plans; ++i) {
+    // if (i != 5) continue;
     auto plan_idx = plan_->getPartitionedPlan(i).first;
     dynamic_cast<OutputOperator*>(plan_->getOutputOperator(plan_idx))
         ->setOutput(&result_->getOutputs());  // all plans share the same output
+    plan_->getPlan(plan_idx)->printPhysicalPlan();
     auto input_operator = plan_->getInputOperator(plan_idx);
 
     auto& scopes = plan_->getPartitionedPlan(i).second;

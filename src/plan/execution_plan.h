@@ -55,7 +55,9 @@ class ExecutionPlan {
    * For non-key vertices, the index n_sets-th key following the matching order */
   unordered_map<QueryVertexID, uint32_t> query_vertex_indices_;
 
+  /* partition query vertex's candidate search space */
   uint32_t partition_id_ = 0;
+  std::vector<double> partition_qv_weights_;
 
   void addKeys(const std::vector<QueryVertexID>& keys_to_add, std::vector<QueryVertexID>& set_vertices,
                uint32_t& n_keys) {
@@ -90,6 +92,16 @@ class ExecutionPlan {
   void populatePhysicalPlan(const QueryGraph* g, const std::vector<QueryVertexID>& matching_order,
                             const std::vector<int>& cover_table,
                             const unordered_map<QueryVertexID, uint32_t>& level_become_key);
+
+  void addPartitionQueryVertexWeights(std::vector<double>&& weights) { partition_qv_weights_ = std::move(weights); }
+  const auto& getPartitionQueryVertexWeights() { return partition_qv_weights_; }
+  double getPartitionQueryVertexWeightsSum() {
+    double sum = 0;
+    for (auto w : partition_qv_weights_) {
+      sum += w;
+    }
+    return sum;
+  }
 
   void setInputAreKeys(bool flag) { inputs_are_keys_ = flag; }
   void setPartitionId(uint32_t partition_id) { partition_id_ = partition_id; }

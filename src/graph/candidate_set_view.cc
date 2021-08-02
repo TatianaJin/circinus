@@ -50,6 +50,11 @@ CandidateSetView::CandidateSetView(const std::vector<VertexID>* candidates, cons
       addRange(candidates->data() + partition_offsets[scope.getPartition() + 1],
                candidates->data() + candidates->size());
     }
+    return;
+  }
+  case CandidateScopeType::Range: {
+    addRange(candidates->data() + partition_offsets[scope.getPartition()] + scope.getRangeStart(),
+             candidates->data() + partition_offsets[scope.getPartition()] + scope.getRangeEnd() + 1);
   }
   }
   CHECK_EQ(ranges_.size(), 1) << "For CandidateSetView, only 1 range is supported for efficiency reason";
@@ -76,6 +81,11 @@ CandidateSetView::CandidateSetView(const std::vector<std::vector<VertexID>>& par
       addRange(partitioned_candidates[partition].data(),
                partitioned_candidates[partition].data() + partitioned_candidates[partition].size());
     }
+    return;
+  }
+  case CandidateScopeType::Range: {
+    addRange(partitioned_candidates[scope.getPartition()].data() + scope.getRangeStart(),
+             partitioned_candidates[scope.getPartition()].data() + scope.getRangeEnd() + 1);
   }
   }
 
