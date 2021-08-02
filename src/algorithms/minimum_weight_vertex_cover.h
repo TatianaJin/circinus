@@ -78,6 +78,7 @@ class WeightedBnB {
 
   // getters
   inline const auto& getBestCovers() const { return best_covers_; }
+  inline auto& getBestCovers() { return best_covers_; }
   inline double getBestObjective() const { return best_cover_weight_; }
   /** * @returns Time used to find the first best cover */
   inline double getTimeToBest() const { return history_time_.back(); }

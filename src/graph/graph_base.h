@@ -92,13 +92,22 @@ class GraphBase {
   std::pair<std::vector<idx_t>, idx_t> getMetisParts(idx_t nparts) const {
     std::vector<idx_t> parts;
     parts.resize(n_vertices_);
+    std::vector<idx_t> vertex_degrees_count(n_vertices_ * 2, 1);
+    for (VertexID id = 0; id < n_vertices_; ++id) {
+      vertex_degrees_count[id * 2] = getVertexOutDegree(id);
+    }
     idx_t* xadj = (idx_t*)getVList();
     idx_t* adjncy = (idx_t*)getEList();
     idx_t nvtxs = getNumVertices();
     idx_t ncon = 1;
     idx_t objval;
     idx_t* part = &parts[0];
-    METIS_PartGraphKway(&nvtxs, &ncon, xadj, adjncy, NULL, NULL, NULL, &nparts, NULL, NULL, NULL, &objval, part);
+    auto vwgt = vertex_degrees_count.data();
+    idx_t options[METIS_NOPTIONS];
+    METIS_SetDefaultOptions(options);
+    options[METIS_OPTION_OBJTYPE] = METIS_OBJTYPE_VOL;  // Total communication volume minimization.
+    options[METIS_OPTION_MINCONN] = 1;                  // Explicitly minimize the maximum connectivity
+    METIS_PartGraphKway(&nvtxs, &ncon, xadj, adjncy, vwgt, NULL, NULL, &nparts, NULL, NULL, options, &objval, part);
     return std::make_pair(std::move(parts), objval);
   }
 

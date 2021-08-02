@@ -127,7 +127,7 @@ class CircinusCommandCompleter:
           for i in range(1, len(msgs) - 1):
             print(unpack(msgs[i], 'str'))
           idx = len(msgs) - 1
-        title = ["elapsed_execution_time", "filter_time", "plan_time", "enumerate_time", "embedding_count", "matching_order"]
+        title = ["elapsed_execution_time", "filter_time", "plan_time", "enumerate_time", "embedding_count", "matching_order", "max_task_time"]
         format_str = ""
         for i in range(len(title)):
           format_str = "{0}{{{2}:>{1}}} ".format(format_str, len(title[i]), i)

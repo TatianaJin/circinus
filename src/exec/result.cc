@@ -144,6 +144,7 @@ void PartitionedCandidateResult::removeInvalid(QueryVertexID query_vertex) {
 void ProfiledExecutionResult::collect(TaskBase* task) {
   auto traverse_task = dynamic_cast<TraverseChainTask*>(task);
   if (traverse_task != nullptr) {
+    DCHECK_LT(traverse_task->getTaskId(), profiles_.size());
     // assume one plan has only one task here! use += if there are parallel tasks for one plan
     profiles_[traverse_task->getTaskId()] = traverse_task->getProfileInfo();
   } else {

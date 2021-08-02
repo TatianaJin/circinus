@@ -259,12 +259,15 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
         parents[cover_table_[neighbors.first[j]] == 1].push_back(neighbors.first[j]);
       }
     }
-    // print cover for current subquery
-    std::stringstream cover_ss;
-    for (uint32_t k = 0; k <= i; ++k) {
-      cover_ss << ' ' << matching_order_[k] << ':' << cover_table_[matching_order_[k]];
+
+    if (verbosePlannerLog()) {
+      // print cover for current subquery
+      std::stringstream cover_ss;
+      for (uint32_t k = 0; k <= i; ++k) {
+        cover_ss << ' ' << matching_order_[k] << ':' << cover_table_[matching_order_[k]];
+      }
+      LOG(INFO) << (i + 1) << "-cover>" << cover_ss.str();
     }
-    LOG(INFO) << (i + 1) << "-cover>" << cover_ss.str();
 
     if (i == 1) {  // the first edge: target has one and only one parent
       if (cover_table_[target_vertex] != 1 && !add_keys_at_level[i].empty()) {

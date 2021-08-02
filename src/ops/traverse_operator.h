@@ -82,9 +82,7 @@ class TraverseContext : public ProfileInfo {
     DCHECK_LT(output_idx_, outputs_->size()) << output_idx_ << " " << outputs_->size();
     // do not increment output_idx_ if the current output is invalid
     auto ret = (*outputs_)[output_idx_].reset(std::forward<Args>(args)...);
-    if (ret != nullptr) {
-      output_idx_++;
-    }
+    output_idx_ += (ret != nullptr);
     return ret;
   }
 

@@ -84,6 +84,8 @@ add_dependencies(CircinusIntersectionCache ${EXTERNAL_DEPENDENCY})
 
 add_executable(GraphToBinary src/tools/graph_to_binary_main.cc)
 target_link_libraries(GraphToBinary circinus ${EXTERNAL_LIBRARY})
+add_executable(GraphPartitionAnalysis src/tools/graph_partition_analysis.cc)
+target_link_libraries(GraphPartitionAnalysis circinus ${EXTERNAL_LIBRARY})
 
 # Tests
 if (BUILD_TESTS)

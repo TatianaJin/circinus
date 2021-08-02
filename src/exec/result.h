@@ -142,7 +142,10 @@ class ExecutionResult : public Result {
   virtual ~ExecutionResult() {}
 
   inline void setCount() { result_.embedding_count = outputs_.getCount(); }
-  inline void addEnumerateTime(double time) { result_.enumerate_time += time; }
+  inline void addEnumerateTime(double time) {
+    result_.enumerate_time += time;
+    result_.max_task_time = std::max(result_.max_task_time, time);
+  }
   inline void setElapsedExecutionTime(double time) { result_.elapsed_execution_time = time; }
   inline void setMatchingOrder(std::string&& order) { result_.matching_order = std::move(order); }
 

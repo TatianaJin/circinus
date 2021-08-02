@@ -72,26 +72,26 @@ class TraverseChainTask : public TaskBase {
     auto start = std::chrono::steady_clock::now();
     setupCandidateSets();
     setupOutputs();
-    double total = 1;
-    std::stringstream ss;
-    for (auto& x : *candidates_) {
-      ss << x.size() << " ";
+    if (verboseExecutionLog()) {
+      std::stringstream ss;
+      for (auto& x : *candidates_) {
+        ss << x.size() << " ";
+      }
+      LOG(INFO) << "-------- Task " << task_id_ << " candidate sizes" << ss.str();
     }
-    LOG(INFO) << "-------- " << ss.str();
     auto old_count = dynamic_cast<OutputOperator*>(operators_.back())->getOutput()->getCount(executor_idx);
     // TODO(tatiana): support match limit
     auto inputs = input_op_->getInputs(graph_, *candidates_);
     // auto profile_output = "Task_" + std::to_string(task_id_);
     // ProfilerStart(profile_output.data());
-    LOG(INFO) << "Task " << task_id_ << "  ";
     execute<QueryType::Execute>(inputs, inputs.size(), 0, executor_idx);
     // ProfilerStop();
     auto new_count = dynamic_cast<OutputOperator*>(operators_.back())->getOutput()->getCount(executor_idx);
     auto end = std::chrono::steady_clock::now();
-    LOG(INFO) << "Task " << task_id_ << " input " << inputs.size() << " count " << (new_count - old_count)
-              << ", candidates mul " << total << ",  " << 1.0 * (new_count - old_count) / total
-              << ", time usage: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() / 1000.0
-              << "s.";
+    if (shortExecutionLog()) {
+      LOG(INFO) << "Task " << task_id_ << " input " << inputs.size() << '/' << getNumSubgraphs(inputs, 0, inputs.size())
+                << " count " << (new_count - old_count) << ", time usage: " << toSeconds(start, end) << "s.";
+    }
   }
 
   void profile(uint32_t executor_idx) override {

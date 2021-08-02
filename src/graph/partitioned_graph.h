@@ -283,6 +283,8 @@ class ReorderedPartitionedGraph : public GraphBase {
 
   std::pair<double, double> getMemoryUsage() const override;
 
+  void showPartitionInfo() const;
+
  protected:
   void loadUndirectedGraphFromBinary(std::istream& input) override;
   void saveAsBinaryInner(std::ostream& output) const override;
@@ -296,6 +298,8 @@ class ReorderedPartitionedGraph : public GraphBase {
   void computeLabelOffsets(const std::vector<LabelID>& labels);
   void reconstructByOrder();
   void reconstructByOrder(const GraphBase& src_graph);
+
+  std::vector<EdgeID> computeEdgeCounts(uint32_t partition) const;
 };
 
 }  // namespace circinus

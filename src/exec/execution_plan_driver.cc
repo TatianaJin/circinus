@@ -110,18 +110,15 @@ void ExecutionPlanDriver::init(QueryId qid, QueryContext* query_ctx, ExecutionCo
   ExecutionPlanDriverBase::init(qid, query_ctx, ctx, task_queue);
 
   auto n_plans = plan_->getNumPartitionedPlans();
-  // CHECK_EQ(plan_->getPlans().size(), n_plans) << "now one partitioned plan per graph partition";
+  // FIXME(tatiana): rank partitioned plans by their weights
   task_counters_.resize(n_plans, 1);  // one task per partition
   candidates_.resize(n_plans);
-  for (uint32_t i = 0; i < plan_->getPlans().size(); ++i) {
-    LOG(INFO) << "Task " << i << " use plan " << plan_->getPlan(i)->getPartitionId();
-  }
   for (uint32_t i = 0; i < n_plans; ++i) {
     // if (i != 5) continue;
     auto plan_idx = plan_->getPartitionedPlan(i).first;
-    dynamic_cast<OutputOperator*>(plan_->getOutputOperator(plan_idx))
-        ->setOutput(&result_->getOutputs());  // all plans share the same output
-    plan_->getPlan(plan_idx)->printPhysicalPlan();
+    // all plans share the same output
+    dynamic_cast<OutputOperator*>(plan_->getOutputOperator(plan_idx))->setOutput(&result_->getOutputs());
+    // plan_->getPlan(plan_idx)->printPhysicalPlan();
     auto input_operator = plan_->getInputOperator(plan_idx);
 
     auto& scopes = plan_->getPartitionedPlan(i).second;

@@ -82,6 +82,15 @@ class Planner {
   BacktrackingPlan* generateExecutionPlan(const std::vector<std::vector<VertexID>>*, bool multithread = true);
 
  private:
+  static inline std::vector<VertexID> getCardinality(const std::vector<CandidateSetView>& candidate_views) {
+    std::vector<VertexID> cardinality;
+    cardinality.reserve(candidate_views.size());
+    for (auto& view : candidate_views) {
+      cardinality.push_back(view.size());
+    }
+    return cardinality;
+  }
+
   inline bool toPartitionCandidates() const {
     return query_context_->graph_metadata->numPartitions() > 1 && query_context_->query_config.use_partitioned_graph;
   }
@@ -101,22 +110,45 @@ class Planner {
     return ret;
   }
 
-  ExecutionPlan* generateExecutionPlan(std::vector<VertexID>& cardinality, const std::vector<QueryVertexID>& use_order,
-                                       bool multithread, const std::vector<CandidateSetView>* candidate_views = nullptr,
-                                       QueryVertexID partitioning_qv = UINT32_MAX);
+  /** Generates order, then compression strategy, and then operators */
+  ExecutionPlan* generateLogicalExecutionPlan(const std::vector<VertexID>& cardinality, QueryVertexID require_only,
+                                              const std::vector<CandidateSetView>* candidate_views = nullptr,
+                                              const std::vector<QueryVertexID>* partitioning_qvs = nullptr);
 
-  /* start of interface for specifying partitioning strategy */
+  void exhaustivePartitionPlan(std::vector<std::vector<CandidateScope>>& partitioned_plans, uint32_t level,
+                               uint32_t partition_num, const std::vector<QueryVertexID>& partitioning_qv,
+                               std::vector<CandidateScope> partitioned_plan);
+
+  /* start of interface for specifying parallelization strategy */
+
+  /** Select query vertices by which the backtracking search space is partitioned.  */
   virtual std::vector<QueryVertexID> getPartitioningQueryVertices();  // based on query vertex occurence in covers
+  /** Alternative to getPartitioningQueryVertices */
   std::vector<QueryVertexID> getPartitioningQueryVerticesByClosenessCentrality();
+  std::vector<QueryVertexID> getPartitioningQueryVerticesByCover();
+
+  /** Select query vertices by which the backtracking search space is partitioned.  */
+  virtual std::vector<std::vector<CandidateScope>> generatePartitionedScopes(
+      uint32_t partition_num, const std::vector<QueryVertexID>& partitioning_qvs,
+      PartitionedCandidateResult* partitioned_candidates);
+
+  /** Generate logical plans and assign for each partition a logical plan */
+  virtual std::vector<std::pair<uint32_t, std::vector<CandidateScope>>> generateLogicalPlans(
+      const std::vector<QueryVertexID>& partitioning_qvs, const std::vector<std::vector<CandidateScope>>& partitions,
+      PartitionedCandidateResult* result);
+
+  /** Further parallelize each partitioned plan by splitting the scopes for better load balance and concurrency */
+  virtual void parallelizePartitionedPlans(
+      const std::vector<QueryVertexID>& partitioning_qvs,
+      std::vector<std::pair<uint32_t, std::vector<CandidateScope>>>* partitioned_plans, PartitionedCandidateResult*);
+
+  /** Generate logical input operators that are aware of partitioning */
+  virtual void newInputOperators(ExecutionPlan* plan, const std::vector<QueryVertexID>* partitioning_qvs = nullptr);
+
   virtual std::vector<std::pair<uint32_t, std::vector<CandidateScope>>> generatePartitionedPlans(
       const std::vector<QueryVertexID>& partitioning_qv);  // based on indicator partition only
-  virtual void exhaustivePartitionPlan(std::vector<std::vector<CandidateScope>>& partitioned_plans, uint32_t level,
-                                       uint32_t partition_num, const std::vector<QueryVertexID>& partitioning_qv,
-                                       std::vector<CandidateScope> partitioned_plan);
-  virtual void newInputOperators(const QueryGraph& q, const std::vector<QueryVertexID>& partitioning_qvs);
 
-  virtual void newInputOperators();
-  /* end of interface for specifying partitioning strategy */
+  /* end of interface for specifying parallelization strategy */
 };
 
 }  // namespace circinus

@@ -191,6 +191,7 @@ void CircinusServer::handleCandidatePhase(const Event& event) {
       plan_driver = std::make_unique<ExecutionPlanDriver>(plan);
     }
     active_queries_[event.query_id].plan_time = toSeconds(now, std::chrono::high_resolution_clock::now());
+    LOG(INFO) << "Generated backtracking plan in " << active_queries_[event.query_id].plan_time << " seconds";
   }
   executor_manager_.run(event.query_id, &active_queries_[event.query_id].query_context, std::move(plan_driver));
 }

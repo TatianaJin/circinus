@@ -52,9 +52,13 @@ CandidateSetView::CandidateSetView(const std::vector<VertexID>* candidates, cons
     }
     return;
   }
-  case CandidateScopeType::Range: {
+  case CandidateScopeType::PartitionRange: {
     addRange(candidates->data() + partition_offsets[scope.getPartition()] + scope.getRangeStart(),
              candidates->data() + partition_offsets[scope.getPartition()] + scope.getRangeEnd() + 1);
+    return;
+  }
+  case CandidateScopeType::Range: {
+    addRange(candidates->data() + scope.getRangeStart(), candidates->data() + scope.getRangeEnd() + 1);
   }
   }
   CHECK_EQ(ranges_.size(), 1) << "For CandidateSetView, only 1 range is supported for efficiency reason";
@@ -83,10 +87,11 @@ CandidateSetView::CandidateSetView(const std::vector<std::vector<VertexID>>& par
     }
     return;
   }
-  case CandidateScopeType::Range: {
+  case CandidateScopeType::PartitionRange: {
     addRange(partitioned_candidates[scope.getPartition()].data() + scope.getRangeStart(),
              partitioned_candidates[scope.getPartition()].data() + scope.getRangeEnd() + 1);
   }
+  default: { scope.print(LOG(FATAL) << "Unsupported scope type "); }
   }
 
   CHECK_EQ(ranges_.size(), 1) << "For CandidateSetView, only 1 range is supported for efficiency reason";

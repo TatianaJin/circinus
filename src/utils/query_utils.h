@@ -64,6 +64,7 @@ struct ServerEvent {
 enum class CandidatePruningStrategy : uint16_t { None = 0, Adaptive, LDF, NLF, CFL, DAF, GQL, TSO };
 enum class OrderStrategy : uint16_t { None = 0, CFL, DAF, GQL, TSO };
 enum class CompressionStrategy : uint16_t { None = 0, Static, Dynamic };
+enum class PQVStrategy : uint16_t { None = 0, ClosenessCentrality };
 enum class QueryMode : uint16_t { Execute = 0, Profile, Explain, ProfileSI };
 
 // TODO(tatiana): this is workaround as we do not implement the order now
@@ -87,6 +88,10 @@ inline std::vector<QueryVertexID> getOrder(const std::string& order_str, uint32_
 
 class QueryConfig {
  public:
+  static inline const unordered_map<std::string, PQVStrategy> pqv_strategies = {
+      {"none", PQVStrategy::None},
+      {"centrality", PQVStrategy::ClosenessCentrality},
+      {"cc", PQVStrategy::ClosenessCentrality}};
   static inline const unordered_map<std::string, CompressionStrategy> compression_strategies = {
       {"none", CompressionStrategy::None},
       {"static", CompressionStrategy::Static},
@@ -110,9 +115,11 @@ class QueryConfig {
   CandidatePruningStrategy candidate_pruning_strategy = CandidatePruningStrategy::CFL;
   OrderStrategy order_strategy = OrderStrategy::CFL;
   CompressionStrategy compression_strategy = CompressionStrategy::Dynamic;
+  PQVStrategy pqv_strategy = PQVStrategy::None;
   bool use_auxiliary_index = false;
   bool use_two_hop_traversal = true;
   bool use_partitioned_graph = true;
+  bool intra_partition_plan = true;
   std::string output = "count";
   uint64_t limit = ~0ull;
   std::chrono::seconds time_limit = std::chrono::seconds(36000);
@@ -141,6 +148,8 @@ class QueryConfig {
         validateConfig(order_strategy, value, order_strategies, "order strategy");
       } else if (key == "cs" || key == "compression_strategy") {
         validateConfig(compression_strategy, value, compression_strategies, "compression strategy");
+      } else if (key == "pqv" || key == "pqv_strategy") {
+        validateConfig(pqv_strategy, value, pqv_strategies, "pqv strategy");
       } else if (key == "mode") {
         validateConfig(mode, value, modes, "query mode");
       } else if (key == "limit") {
@@ -153,6 +162,8 @@ class QueryConfig {
         use_partitioned_graph = value == "true" || value == "1";
       } else if (key == "use_auxiliary_index" || key == "uai") {
         use_auxiliary_index = value == "true" || value == "1";
+      } else if (key == "intra_partition_plan" || key == "ipp") {
+        intra_partition_plan = value == "true" || value == "1";
       } else if (key == "output") {
         output = value;
       }
@@ -207,6 +218,7 @@ struct QueryResult {
   double filter_time = 0;
   double plan_time = 0;
   double enumerate_time = 0;
+  double max_task_time = 0;
   double elapsed_execution_time = 0;
   uint64_t embedding_count = 0;
   std::string matching_order;
@@ -220,7 +232,8 @@ struct QueryResult {
 
   friend std::ostream& operator<<(std::ostream& out, const QueryResult& res) {
     return out << res.elapsed_execution_time << ',' << res.filter_time << ',' << res.plan_time << ','
-               << res.enumerate_time << ',' << res.embedding_count << ',' << res.matching_order;
+               << res.enumerate_time << ',' << res.embedding_count << ',' << res.matching_order << ','
+               << res.max_task_time;
   }
 };
 

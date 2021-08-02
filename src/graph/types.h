@@ -28,11 +28,14 @@ using VertexID = uint64_t;
 
 using VertexSet = std::shared_ptr<std::vector<VertexID>>;
 
-const LabelID ALL_LABEL = ~0u;
+constexpr LabelID ALL_LABEL = ~0u;
+constexpr QueryVertexID DUMMY_QUERY_VERTEX = UINT32_MAX;
 
 enum class GraphType : uint32_t { Normal, Partitioned, GraphView, BipartiteGraphView };
 
-enum class CandidateScopeType : uint8_t { All, Partition, Inverse, Range };
+// TODO(tatiana): remove inverse type
+enum class CandidateScopeType : uint8_t { All = 0, Partition = 1, Range = 2, PartitionRange = 3, Inverse = 5 };
+inline std::string CANDIDATE_SCOPE_TYPE_NAMES[5] = {"All", "Partition", "Range", "PRange", "Inverse"};
 
 class CandidateScope {
  private:
@@ -42,11 +45,10 @@ class CandidateScope {
   uint32_t start_ = 0, end_ = 0;
 
  public:
-  void addRange(uint32_t partition, uint32_t start, uint32_t end) {
-    partition_ = partition;
+  void addRange(uint32_t start, uint32_t end) {
     start_ = start;
     end_ = end;
-    type_ = CandidateScopeType::Range;
+    type_ = (type_ == CandidateScopeType::All) ? CandidateScopeType::Range : CandidateScopeType::PartitionRange;
   }
 
   void usePartition(uint32_t partition) {
@@ -65,13 +67,17 @@ class CandidateScope {
   inline uint32_t getRangeEnd() const { return end_; }
 
   void print(std::ostream& oss) const {
-    if (type_ == CandidateScopeType::All) {
-      oss << "all";
+    oss << CANDIDATE_SCOPE_TYPE_NAMES[(uint8_t)type_];
+    if ((uint8_t)type_ >> 2 & 1) {  // inverse
+      oss << ' ' << '-';
     } else {
-      if (type_ == CandidateScopeType::Inverse) {
-        oss << '-';
-      }
-      oss << partition_;
+      oss << ' ';
+    }
+    if ((uint8_t)type_ & 1) {  // partition
+      oss << partition_ << ' ';
+    }
+    if ((uint8_t)type_ >> 1 & 1) {  // range
+      oss << '[' << start_ << ',' << end_ << "] ";
     }
   }
 };

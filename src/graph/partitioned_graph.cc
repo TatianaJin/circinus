@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <set>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -268,6 +269,7 @@ void ReorderedPartitionedGraph::loadUndirectedGraphFromBinary(std::istream& inpu
   GraphBase::loadUndirectedGraphFromBinary(input);
   n_partitions_ = n_partitions;
   input.read(reinterpret_cast<char*>(&n_edge_cuts_), sizeof(n_edge_cuts_));
+  LOG(INFO) << "n_edge_cuts_ = " << n_edge_cuts_;
 
   binaryStreamToVector(input, vertex_ids_);
   CHECK_EQ(vertex_ids_.size(), getNumVertices());
@@ -319,6 +321,79 @@ std::pair<double, double> ReorderedPartitionedGraph::getMemoryUsage() const {
     ret.second += vec.size() * sizeof(VertexID);
   }
   return ret;
+}
+
+std::vector<EdgeID> ReorderedPartitionedGraph::computeEdgeCounts(uint32_t partition) const {
+  std::vector<EdgeID> edge_counts(n_partitions_ - partition, 0);
+  EdgeID& intra_edge_count = edge_counts[0];
+  for (auto vid = partition_offsets_[partition]; vid < partition_offsets_[partition + 1]; ++vid) {
+    auto nbrs = getOutNeighbors(vid);
+    for (uint32_t i = 0; i < nbrs.second; ++i) {
+      auto nbr = nbrs.first[i];
+      if (nbr > vid) {
+        if (nbr < partition_offsets_[partition + 1]) {  // intra-partition edge
+          ++intra_edge_count;
+        } else {  // inter-partition edge
+          for (auto nbr_partition = partition + 1; nbr_partition < n_partitions_; ++nbr_partition) {
+            if (nbr < partition_offsets_[nbr_partition + 1]) {
+              ++edge_counts[nbr_partition - partition];
+              break;
+            }
+          }
+        }
+      }
+    }
+  }
+  return edge_counts;
+}
+
+void ReorderedPartitionedGraph::showPartitionInfo() const {
+  LOG(INFO) << "n_partitions\t" << n_partitions_;
+  {  // vertex balance
+    VertexID min = n_vertices_, max = 0, square_sum = 0;
+    for (uint32_t partition = 0; partition < n_partitions_; ++partition) {
+      auto partition_size = partition_offsets_[partition + 1] - partition_offsets_[partition];
+      LOG(INFO) << "partition " << partition << " size " << partition_size;
+      min = std::min(min, partition_size);
+      max = std::max(max, partition_size);
+      square_sum += partition_size * partition_size;
+    }
+    double average = ((double)n_vertices_) / n_partitions_;
+    LOG(INFO) << "[vertex count in partitions]\nmin\t" << min << "\nmax\t" << max << "\navg\t" << average << "\nvar\t"
+              << (((double)square_sum) / n_partitions_ - average * average);
+  }
+  {  // edge balance
+    std::vector<std::vector<EdgeID>> edge_counts(n_partitions_);
+    std::vector<std::thread> threads;
+    for (uint32_t partition = 0; partition < n_partitions_; ++partition) {
+      threads.emplace_back(
+          [&edge_counts, partition, this]() { edge_counts[partition] = computeEdgeCounts(partition); });
+    }
+    for (auto& t : threads) t.join();
+    EdgeID min = n_edges_, max = 0, square_sum = 0, sum = 0;
+    for (uint32_t partition = 0; partition < n_partitions_; ++partition) {
+      min = std::min(min, edge_counts[partition][0]);
+      max = std::max(max, edge_counts[partition][0]);
+      square_sum += edge_counts[partition][0] * edge_counts[partition][0];
+      sum += edge_counts[partition][0];
+    }
+    double average = ((double)sum) / n_partitions_;
+    LOG(INFO) << "[intra-partition edge count]\nmin\t" << min << "\nmax\t" << max << "\navg\t" << average << "\nvar\t"
+              << (((double)square_sum) / n_partitions_ - average * average);
+    std::vector<uint32_t> partition_connectivity(n_partitions_);
+    for (uint32_t partition = 0; partition < n_partitions_; ++partition) {
+      for (uint32_t i = 1; i < edge_counts[partition].size(); ++i) {
+        if (edge_counts[partition][i] > 0) {
+          ++partition_connectivity[partition];
+          ++partition_connectivity[partition + i];
+          // LOG(INFO) << partition << " -(" << edge_counts[partition][i] << ")-> " << (partition + i);
+        }
+      }
+    }
+    for (uint32_t partition = 0; partition < n_partitions_; ++partition) {
+      LOG(INFO) << "partition " << partition << " connectivity " << partition_connectivity[partition];
+    }
+  }
 }
 
 }  // namespace circinus

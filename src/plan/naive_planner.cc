@@ -29,6 +29,7 @@
 #include "algorithms/minimum_weight_vertex_cover.h"
 #include "algorithms/vertex_cover.h"
 #include "graph/query_graph.h"
+#include "ops/order_generator.h"
 #include "plan/execution_plan.h"
 #include "utils/hashmap.h"
 
@@ -361,6 +362,7 @@ ExecutionPlan* NaivePlanner::generatePlanWithEagerDynamicCover(const std::vector
   return &plan_;
 }
 
+template <typename Hashmap>
 unordered_map<VertexID, double> NaivePlanner::dfsComputeCost(QueryVertexID qid, const uint64_t cover_bits,
                                                              std::vector<bool>& visited, const GraphBase* data_graph,
                                                              const std::vector<CandidateSetView>* candidate_views,
@@ -374,90 +376,109 @@ unordered_map<VertexID, double> NaivePlanner::dfsComputeCost(QueryVertexID qid, 
 
   auto[qnbrs, qcnt] = query_graph_->getOutNeighbors(qid);
   if (!with_traversal) {
-    for (uint32_t i = 0; i < qcnt; ++i) {
+    /* For a DFS tree from qid in the given cc:
+     * 1) initialize the weights of leaf candidates as 1;
+     * 2) for each candidate, take sum of the weights of the neighbor candidates in each child tree node, and take
+     * product of the sums;
+     * 3) in case that a neighbor is a non-cover query vertex, each sum is averaged over the number of the neighbor
+     * candidates assuming the neighbor candidates' neighborhood overlaps.
+     */
+    for (uint32_t i = 0; i < qcnt; ++i) {  // for each unvisited neighbor in the cc, recursively compute cost
       QueryVertexID nbr = qnbrs[i];
-      if (visited[nbr] || cc[nbr] == UINT32_MAX) {
+      if (visited[nbr] || cc[nbr] == DUMMY_QUERY_VERTEX) {
         continue;
       }
 
+      // TODO(tatiana): pass ret to child to prune child?
       auto child_ret = dfsComputeCost(nbr, cover_bits, visited, data_graph, candidate_views, cc, with_traversal);
-      for (VertexID v : (*candidate_views)[qid]) {
+      for (auto& pair : ret) {  // for each candidate of qid, compute the weight from neighbor candidates
         double sum = 0;
         double num = 0;
-        auto[nbrs, cnt] = data_graph->getOutNeighbors(v);
+        auto[nbrs, cnt] = data_graph->getOutNeighbors(pair.first);
         for (uint32_t j = 0; j < cnt; ++j) {
-          if (child_ret.find(nbrs[j]) != child_ret.end()) {
-            sum += child_ret[nbrs[j]];
+          auto pos = child_ret.find(nbrs[j]);
+          if (pos != child_ret.end()) {
+            sum += pos->second;
             num += 1;
           }
         }
         if (!(cover_bits >> nbr & 1)) {
           sum /= num;
         }
-        ret[v] *= sum;
+        pair.second *= sum;
       }
     }
   } else {
+    /* For a DFS tree from qid in the given cc:
+     * 1) initialize the weights of leaf candidates as 1;
+     * 2) for each candidate at a tree node, compute the subtree cardinality at each child tree node, and take product;
+     *   a) for a child node in cover, take sum of the weights of the neighbors in the child candidates;
+     *   b) for a child node not in cover, traverse two hops and find the two-hop neighbor candidates, for each
+     *      descendant node (which must be in cover) take sum of the neighbor candidate weights, and take product;
+     * 3) traversal to child nodes in the cover is prioritized at each node to make sure nodes in the original
+     * cover-only ccs are connected in the dfs tree without passing through a non-cover node.
+     */
     for (uint32_t i = 0; i < qcnt; ++i) {
       QueryVertexID nbr = qnbrs[i];
-      if (visited[nbr] || cc[nbr] == UINT32_MAX) {
+      if (visited[nbr] || cc[nbr] == DUMMY_QUERY_VERTEX) {
         continue;
       }
       if (cover_bits >> nbr & 1) {
         auto child_ret = dfsComputeCost(nbr, cover_bits, visited, data_graph, candidate_views, cc, with_traversal);
-        for (VertexID v : (*candidate_views)[qid]) {
+        for (auto& pair : ret) {
           double sum = 0;
-          auto[nbrs, cnt] = data_graph->getOutNeighbors(v);
+          auto[nbrs, cnt] = data_graph->getOutNeighbors(pair.first);
           for (uint32_t j = 0; j < cnt; ++j) {
-            if (child_ret.find(nbrs[j]) != child_ret.end()) {
-              sum += child_ret[nbrs[j]];
+            auto pos = child_ret.find(nbrs[j]);
+            if (pos != child_ret.end()) {
+              sum += pos->second;
             }
           }
-          ret[v] *= sum;
+          pair.second *= sum;
         }
       }
     }
     for (uint32_t i = 0; i < qcnt; ++i) {
       QueryVertexID nbr = qnbrs[i];
-      if (visited[nbr] || cc[nbr] == UINT32_MAX) {
+      if (visited[nbr] || cc[nbr] == DUMMY_QUERY_VERTEX) {
         continue;
       }
       if ((cover_bits >> nbr & 1) == 0) {
         visited[nbr] = true;
         auto[set_nbrs, set_cnt] = query_graph_->getOutNeighbors(nbr);
         unordered_set<VertexID> set_candidate((*candidate_views)[nbr].begin(), (*candidate_views)[nbr].end());
-        for (uint32_t j = 0; j < set_cnt; ++j) {
+        for (uint32_t j = 0; j < set_cnt; ++j) {  // for each two-hop descendant node, compute cost for each candidate
           QueryVertexID set_nbr = set_nbrs[j];
-          if (visited[set_nbr] || cc[set_nbr] == UINT32_MAX) {
+          if (visited[set_nbr] || cc[set_nbr] == DUMMY_QUERY_VERTEX) {
             continue;
           }
           auto child_ret =
               dfsComputeCost(set_nbr, cover_bits, visited, data_graph, candidate_views, cc, with_traversal);
 
-          for (VertexID v : (*candidate_views)[qid]) {
+          // two-hop traversal to find the cover node candidates
+          for (auto& pair : ret) {
             unordered_set<VertexID> has_added;
             double sum = 0;
-            auto[nbrs, cnt] = data_graph->getOutNeighbors(v);
+            auto[nbrs, cnt] = data_graph->getOutNeighbors(pair.first);
             for (uint32_t k = 0; k < cnt; ++k) {
-              if (set_candidate.find(nbrs[k]) != set_candidate.end()) {
+              if (set_candidate.count(nbrs[k]) == 1) {
                 auto[second_nbrs, second_cnt] = data_graph->getOutNeighbors(nbrs[k]);
                 for (uint32_t l = 0; l < second_cnt; ++l) {
                   VertexID second_level_vid = second_nbrs[l];
-                  if (child_ret.find(second_level_vid) != child_ret.end() &&
-                      has_added.find(second_level_vid) == has_added.end()) {
-                    sum += child_ret[second_level_vid];
-                    has_added.insert(second_level_vid);
+                  auto pos = child_ret.find(second_level_vid);
+                  if (pos != child_ret.end() && has_added.insert(second_level_vid).second) {
+                    sum += pos->second;
                   }
                 }
               }
             }
-            ret[v] *= sum;
+            pair.second *= sum;
           }
         }
       }
     }
   }
-  return std::move(ret);
+  return ret;
 }
 
 void NaivePlanner::getCoverCC(QueryVertexID qid, QueryVertexID cc_id, const uint64_t cover_bits,
@@ -466,7 +487,7 @@ void NaivePlanner::getCoverCC(QueryVertexID qid, QueryVertexID cc_id, const uint
   auto[qnbrs, qcnt] = query_graph_->getOutNeighbors(qid);
   for (uint32_t i = 0; i < qcnt; ++i) {
     QueryVertexID nbr = qnbrs[i];
-    if ((cover_bits >> nbr & 1) == 0 || cc[nbr] != UINT32_MAX) {
+    if ((cover_bits >> nbr & 1) == 0 || cc[nbr] != DUMMY_QUERY_VERTEX) {
       continue;
     }
     getCoverCC(nbr, cc_id, cover_bits, cc);
@@ -476,26 +497,38 @@ void NaivePlanner::getCoverCC(QueryVertexID qid, QueryVertexID cc_id, const uint
 void NaivePlanner::getMinimalConectedSubgraphWithAllKeys(std::vector<QueryVertexID>& cc, uint32_t level,
                                                          uint64_t cover_bits) {
   std::stringstream ss;
-  for (uint32_t i = 0; i <= level; ++i) {
-    ss << matching_order_[i] << ", ";
+  if (verbosePlannerLog()) {  // debug log
+    for (uint32_t i = 0; i <= level; ++i) {
+      ss << matching_order_[i] << ", ";
+    }
+    DLOG(INFO) << "subquery vertices: " << ss.str();
   }
-  DLOG(INFO) << "subquery vertices: " << ss.str();
+  uint32_t cc_count = 0;
+  /* find connected components in cover */
   for (uint32_t i = 0; i <= level; ++i) {
     auto qid = matching_order_[i];
-    if ((cover_bits >> qid & 1) == 0 || cc[qid] != UINT32_MAX) {
+    if ((cover_bits >> qid & 1) == 0 || cc[qid] != DUMMY_QUERY_VERTEX) {
       continue;
     }
+    ++cc_count;
     getCoverCC(qid, qid, cover_bits, cc);
   }
-
-  ss.str("");
-  for (uint32_t i = 0; i < matching_order_.size(); ++i) {
-    if (cc[i] != UINT32_MAX) {
-      ss << i << ", ";
+  if (verbosePlannerLog()) {  // debug log
+    ss.str("");
+    unordered_set<uint32_t> connected_components;
+    for (uint32_t i = 0; i < matching_order_.size(); ++i) {
+      if (cc[i] != DUMMY_QUERY_VERTEX) {
+        connected_components.insert(cc[i]);
+        ss << i << ':' << cc[i] << ", ";
+      }
     }
+    CHECK_EQ(connected_components.size(), cc_count);
+    DLOG(INFO) << "keys: " << ss.str();
   }
-  DLOG(INFO) << "keys: " << ss.str();
 
+  if (cc_count == 1) return;
+
+  /* if there are multiple CCs, greedily pick non-cover vertices with smallest candidate cardinality to connect CCs */
   std::vector<uint32_t> increasing_idx(level + 1);
   std::iota(increasing_idx.begin(), increasing_idx.end(), 0);
   sort(increasing_idx.begin(), increasing_idx.end(), [&](uint32_t l, uint32_t r) {
@@ -508,7 +541,7 @@ void NaivePlanner::getMinimalConectedSubgraphWithAllKeys(std::vector<QueryVertex
       unordered_set<QueryVertexID> connecting_cover_cc;
       for (uint32_t j = 0; j < cnt; ++j) {
         if (cover_bits >> nbr[j] & 1) {
-          CHECK_NE(cc[nbr[j]], UINT32_MAX) << nbr[j];
+          CHECK_NE(cc[nbr[j]], DUMMY_QUERY_VERTEX) << nbr[j];
           connecting_cover_cc.insert(cc[nbr[j]]);
         }
       }
@@ -519,17 +552,21 @@ void NaivePlanner::getMinimalConectedSubgraphWithAllKeys(std::vector<QueryVertex
           }
         }
         cc[qid] = qid;
+        cc_count -= connecting_cover_cc.size() - 1;
+        if (cc_count == 1) break;
       }
     }
   }
 
-  ss.str("");
-  for (uint32_t i = 0; i < matching_order_.size(); ++i) {
-    if (cc[i] != UINT32_MAX) {
-      ss << i << ", ";
+  if (verbosePlannerLog()) {  // debug log
+    ss.str("");
+    for (uint32_t i = 0; i < matching_order_.size(); ++i) {
+      if (cc[i] != DUMMY_QUERY_VERTEX) {
+        ss << i << ':' << cc[i] << ", ";
+      }
     }
+    DLOG(INFO) << "after adding set: " << ss.str();
   }
-  DLOG(INFO) << "after adding set: " << ss.str();
 }
 
 double NaivePlanner::estimateCardinality(const GraphBase* data_graph,
@@ -537,92 +574,144 @@ double NaivePlanner::estimateCardinality(const GraphBase* data_graph,
                                          uint32_t level) {
   double ret = 1;
   std::vector<bool> visited(matching_order_.size(), false);
-  std::vector<QueryVertexID> cc(matching_order_.size(), UINT32_MAX);
+  std::vector<QueryVertexID> cc(matching_order_.size(), DUMMY_QUERY_VERTEX);
   getMinimalConectedSubgraphWithAllKeys(cc, level, cover_bits);
 
   for (uint32_t i = level + 1; i < matching_order_.size(); ++i) {
     visited[matching_order_[i]] = true;
   }
 
-  unordered_map<VertexID, double> current_candidate_cars;
+  /* dfs from a cover vertex to compute estimation */
+  // TODO(tatiana): find one cover vertex with least candidates?
   for (auto qid : matching_order_) {
     if ((cover_bits >> qid & 1) == 0 || visited[qid]) {
       continue;
     }
     ret = 0;
-    current_candidate_cars =
+    auto current_candidate_cars =
         dfsComputeCost(qid, cover_bits, visited, data_graph, candidate_views, cc, use_two_hop_traversal_);
     for (auto candidate_car : current_candidate_cars) {
       ret += candidate_car.second;
     }
+    break;
   }
 
   DLOG(INFO) << "cost: " << ret;
   return ret;
 }
 
-std::vector<double> NaivePlanner::getPartitionQueryVertexWeights(QueryVertexID partition_qv,
-                                                                 const GraphBase* data_graph,
-                                                                 const std::vector<CandidateSetView>* candidate_views,
-                                                                 uint64_t cover_bits) {
+std::vector<double> NaivePlanner::getParallelizingQueryVertexWeights(
+    QueryVertexID partition_qv, const GraphBase* data_graph, const std::vector<CandidateSetView>* candidate_views,
+    uint64_t cover_bits) {
   std::vector<bool> visited(matching_order_.size(), false);
-  std::vector<QueryVertexID> cc(matching_order_.size(), UINT32_MAX);
-  LOG(INFO) << cover_bits;
+  std::vector<QueryVertexID> cc(matching_order_.size(), DUMMY_QUERY_VERTEX);
+  // LOG(INFO) << cover_bits;
   getMinimalConectedSubgraphWithAllKeys(cc, matching_order_.size() - 1, cover_bits);
 
   // use partition qv as the starting vertex.
   //  1) partition qv is in the connected subgraph;
   //  2) partition qv is not in the connected subgraph:
   //     there must be a neighbor of pqv in the connected subgraph
-  unordered_map<VertexID, double> current_candidate_cars;
-  current_candidate_cars =
+  auto current_candidate_cars =
       dfsComputeCost(partition_qv, cover_bits, visited, data_graph, candidate_views, cc, use_two_hop_traversal_);
 
   std::vector<double> weights((*candidate_views)[partition_qv].size(), 0.0);
   uint32_t idx = 0;
   double sum = 0;
   for (VertexID v : (*candidate_views)[partition_qv]) {
-    if (current_candidate_cars.find(v) != current_candidate_cars.end()) {
-      weights[idx] = current_candidate_cars[v];
+    auto pos = current_candidate_cars.find(v);
+    if (pos != current_candidate_cars.end()) {
+      weights[idx] = pos->second;
       sum += weights[idx];
     }
-    idx++;
+    ++idx;
   }
-  LOG(INFO) << sum;
+  DLOG(INFO) << "parallelizing vertex weight sum " << sum;
   return std::move(weights);
 }
 
-ExecutionPlan* NaivePlanner::generatePlanWithDynamicCover(const GraphBase* data_graph,
-                                                          const std::vector<CandidateSetView>* candidate_views,
-                                                          QueryVertexID partition_qv) {
-  std::vector<std::vector<double>> costs_car(covers_.size());
-  std::vector<std::vector<uint32_t>> pre(covers_.size());
-  std::vector<std::vector<double>> car(covers_.size());
-
-  costs_car[0].resize(covers_[0].size(), 0);
-  std::stringstream ss;
-  for (auto& view : *candidate_views) {
-    ss << view.size() << "  ";
+double NaivePlanner::estimateExpandCost(const GraphBase* data_graph,
+                                        const std::vector<CandidateSetView>* candidate_views,
+                                        const std::vector<std::vector<double>>& car,
+                                        const unordered_set<QueryVertexID>& existing_vertices, uint32_t level,
+                                        uint32_t idx, uint32_t parent) {
+  if (candidate_views == nullptr) {  // update the estimation of computation for set to key / expand into
+    return car[level - 1][parent];
   }
-  LOG(INFO) << "generatePlanWithDynamicCover " << ss.str();
-  LOG(INFO) << "use_two_hop_traversal_ " << use_two_hop_traversal_;
-  for (uint32_t i = 0; i < covers_.size(); ++i) {
-    car[i].resize(covers_[i].size());
-    for (uint32_t j = 0; j < covers_[i].size(); ++j) {
-      car[i][j] = 1;
 
-      if (candidate_views == nullptr) {
-        for (QueryVertexID qid : covers_[i][j].cover) {
-          car[i][j] = car[i][j] * (*candidate_cardinality_)[qid];
-        }
+  auto cover_bits = covers_[level][idx].cover_bits;
+  auto parent_cover_bits = covers_[level - 1][parent].cover_bits;
+  auto target_vertex = matching_order_[level];
+  bool target_in_cover = cover_bits >> target_vertex & 1;
+  uint32_t key_parent_cnt = 0, set_parent_cnt = 0;
+
+  auto[nbrs, cnt] = query_graph_->getOutNeighbors(target_vertex);
+  for (uint32_t k = 0; k < cnt; ++k) {
+    if (existing_vertices.count(nbrs[k]) != 0) {
+      if ((parent_cover_bits >> nbrs[k] & 1) == 0) {
+        ++set_parent_cnt;
       } else {
-        car[i][j] = estimateCardinality(data_graph, candidate_views, covers_[i][j].cover_bits, i);
+        ++key_parent_cnt;
       }
     }
   }
 
+  if (FLAGS_intersection_count_coefficient) {  // compute the cost by intersection count
+    // expand from key
+    double cost = key_parent_cnt * car[level - 1][parent];
+    if (target_in_cover) {
+      // computation cost for expand-into / expand-from-set
+      auto key_bits = parent_cover_bits | (1 << target_vertex);  // including target
+      return cost + set_parent_cnt * estimateCardinality(data_graph, candidate_views, key_bits, level);
+    }
+    if (set_parent_cnt > 0) {  // enumerate key expand to set
+      // computation cost to expand from enumerated parents
+      return cost + set_parent_cnt * estimateCardinality(data_graph, candidate_views, cover_bits, level - 1);
+    }
+    return cost;
+  }
+
+  if (target_in_cover) {                                       // compute the cost by the number of compressed groups
+    auto key_bits = parent_cover_bits | (1 << target_vertex);  // including target
+    return estimateCardinality(data_graph, candidate_views, key_bits, level);
+  } else if (set_parent_cnt > 0) {
+    return estimateCardinality(data_graph, candidate_views, cover_bits, level - 1);
+  }
+  return car[level - 1][parent];
+}
+
+ExecutionPlan* NaivePlanner::generatePlanWithDynamicCover(const GraphBase* data_graph,
+                                                          const std::vector<CandidateSetView>* candidate_views) {
+  if (verbosePlannerLog()) {
+    std::stringstream ss;
+    for (auto& view : *candidate_views) {
+      ss << " " << view.size();
+    }
+    LOG(INFO) << "generatePlanWithDynamicCover candidates" << ss.str();
+    LOG(INFO) << "use_two_hop_traversal_ " << use_two_hop_traversal_;
+  }
+
+  /* generate pruned dynamic cover search space */
+  std::vector<std::vector<double>> cardinality_per_level(candidate_cardinality_->size(), *candidate_cardinality_);
+  generateCoverNode(cardinality_per_level);
+  // FIXME(tatiana): check for and eliminate covers in which some vertex can be removed soundly?
+
+  std::vector<std::vector<double>> costs_car(covers_.size());  // dp table: cost of each subquery given a cover
+  std::vector<std::vector<uint32_t>> pre(covers_.size());      // best parent of cover for backtracing
+  std::vector<std::vector<double>> car(covers_.size());  // cardinality estimation of compressed groups for each step
+
+  /* estimate the compressed group cardinality for each subquery given each cover */
+  for (uint32_t i = 0; i < covers_.size(); ++i) {
+    car[i].resize(covers_[i].size());
+    for (uint32_t j = 0; j < covers_[i].size(); ++j) {
+      car[i][j] = estimateCardinality(data_graph, candidate_views, covers_[i][j], i);
+    }
+  }
+
+  /* dynamic programming to compute costs for sequences */
   unordered_set<QueryVertexID> existing_vertices;
   existing_vertices.insert(matching_order_[0]);
+  costs_car[0].resize(covers_[0].size(), 0);  // initialization
   for (uint32_t i = 1; i < covers_.size(); ++i) {
     costs_car[i].resize(covers_[i].size(), -1);
     pre[i].resize(covers_[i].size());
@@ -630,32 +719,7 @@ ExecutionPlan* NaivePlanner::generatePlanWithDynamicCover(const GraphBase* data_
       auto& cover_node = covers_[i][j];
       for (uint32_t par : cover_node.parents) {
         if (costs_car[i - 1][par] >= 0) {
-          auto[nbrs, cnt] = query_graph_->getOutNeighbors(matching_order_[i]);
-          double cost = car[i - 1][par];
-          if (candidate_views != nullptr) {
-            uint64_t parent_set_bits = 0, parent_key_bits = 0;
-            for (uint32_t k = 0; k < cnt; ++k) {
-              if (existing_vertices.count(nbrs[k]) != 0) {
-                if ((covers_[i - 1][par].cover_bits >> nbrs[k] & 1) == 0) {
-                  parent_set_bits |= 1 << nbrs[k];
-                } else {
-                  parent_key_bits |= 1 << nbrs[k];
-                }
-              }
-            }
-
-            if (covers_[i][j].cover_bits >> matching_order_[i] & 1) {
-              parent_key_bits |= covers_[i - 1][par].cover_bits;
-              // including itself
-              parent_key_bits |= 1 << matching_order_[i];
-              cost = estimateCardinality(data_graph, candidate_views, parent_key_bits, i);
-            } else {
-              if (parent_set_bits != 0) {
-                parent_set_bits |= covers_[i - 1][par].cover_bits;
-                cost = estimateCardinality(data_graph, candidate_views, parent_set_bits, i - 1);
-              }
-            }
-          }
+          double cost = estimateExpandCost(data_graph, candidate_views, car, existing_vertices, i, j, par);
           if (costs_car[i][j] < 0 || costs_car[i - 1][par] + cost < costs_car[i][j]) {
             costs_car[i][j] = costs_car[i - 1][par] + cost;
             pre[i][j] = par;
@@ -666,80 +730,62 @@ ExecutionPlan* NaivePlanner::generatePlanWithDynamicCover(const GraphBase* data_
     existing_vertices.insert(matching_order_[i]);
   }
 
-  CHECK_GT(covers_.size(), 0);
   uint32_t last = covers_.size() - 1;
+  /* select the best sequence and trace back */
   double mini_cost = -1;
   int best_idx = -1;
   for (uint32_t i = 0; i < covers_[last].size(); ++i) {
-    std::vector<int> select_cover(matching_order_.size(), 0);
-    for (uint32_t j = 0; j < matching_order_.size(); ++j) {
-      if (covers_[last][i].cover_bits >> j & 1) {
-        select_cover[j] = 1;
-      }
-    }
-
-    std::string s = "";
-    for (uint32_t j = 0; j < matching_order_.size(); ++j) {
-      s += std::to_string(select_cover[j]) + ",";
-    }
-    LOG(INFO) << i << " cover " << s << " costs_car " << costs_car[last][i];
-
     if (car[last][i] >= 0 && (mini_cost < 0 || mini_cost > costs_car[last][i])) {
       mini_cost = costs_car[last][i];
       best_idx = i;
     }
   }
-
-  // calculate the weights of partition_qv's candidates
-  if (candidate_views != nullptr) {
-    plan_.addPartitionQueryVertexWeights(
-        getPartitionQueryVertexWeights(partition_qv, data_graph, candidate_views, covers_[last][best_idx].cover_bits));
-  }
-
-  CHECK(best_idx != -1) << "ERROR: can not get best plan index.";
-  // best_idx = 3;
-  LOG(INFO) << "best last level cover idx " << best_idx << "  " << costs_car[last][best_idx];
-  std::vector<int> select_cover(matching_order_.size(), 0);
-  for (uint32_t i = 0; i < matching_order_.size(); ++i) {
-    if (covers_[last][best_idx].cover_bits >> i & 1) {
-      select_cover[i] = 1;
+  CHECK_NE(best_idx, -1) << "ERROR: can not get best plan index.";
+  if (verbosePlannerLog()) {  // debug log
+    LOG(INFO) << "===== Covers for query graph =====";
+    for (uint32_t i = 0; i < covers_[last].size(); ++i) {
+      LOG(INFO) << i << " cover " << covers_[last][i].getCoverTableString(matching_order_.size()) << " costs_car "
+                << costs_car[last][i];
     }
+    LOG(INFO) << "best last level cover idx " << best_idx << " cost " << costs_car[last][best_idx];
   }
 
-  LOG(INFO) << mini_cost;
-  std::string s = "";
-  for (uint32_t i = 0; i < select_cover.size(); ++i) {
-    s += std::to_string(select_cover[i]) + " ";
-  }
-  DLOG(INFO) << s;
+  auto& select_cover_node = covers_[last][best_idx];
+  auto select_cover = select_cover_node.getCoverTable(matching_order_.size());
 
+  // trace back from the last level
   unordered_map<QueryVertexID, uint32_t> level_become_key;
   std::vector<uint32_t> best_path;
   best_path.emplace_back(best_idx);
-  for (uint32_t idx = 0; idx < covers_[last].size(); ++idx) {
-    LOG(INFO) << "----------------------------";
-    uint32_t last_idx = idx;
-    for (uint32_t i = 1; i < matching_order_.size(); ++i) {
-      std::string s = "[";
-      for (auto vid : covers_[last][last_idx].cover) {
-        s += std::to_string(vid) + " ";
+
+  if (verbosePlannerLog()) {
+    for (uint32_t idx = 0; idx < covers_[last].size(); ++idx) {  // debug log
+      LOG(INFO) << "---------- sequence " << idx << " ----------";
+      uint32_t last_idx = idx;
+      for (uint32_t i = 1; i < matching_order_.size(); ++i) {
+        std::string s = "[";
+        for (auto vid : covers_[last][last_idx].cover) {
+          s += std::to_string(vid) + " ";
+        }
+        s += "]";
+        LOG(INFO) << s << " " << costs_car[last][last_idx];
+        last_idx = pre[last][last_idx];
+        last--;
       }
-      s += "]";
-      LOG(INFO) << s << " " << costs_car[last][last_idx];
-      last_idx = pre[last][last_idx];
-      last--;
+      last = matching_order_.size() - 1;
     }
-    last = matching_order_.size() - 1;
   }
 
   last = matching_order_.size() - 1;
   for (uint32_t i = 1; i < matching_order_.size(); ++i) {
-    std::string s = "[";
-    for (auto vid : covers_[last][best_idx].cover) {
-      s += std::to_string(vid) + " ";
+    if (verbosePlannerLog()) {  // debug log
+      std::string s = "[";
+      for (auto vid : covers_[last][best_idx].cover) {
+        s += std::to_string(vid) + " ";
+      }
+      s += "]";
+      LOG(INFO) << s << " " << costs_car[last][best_idx];
     }
-    s += "]";
-    LOG(INFO) << s << " " << costs_car[last][best_idx];
     best_idx = pre[last][best_idx];
     best_path.emplace_back(best_idx);
     last--;
@@ -759,8 +805,27 @@ ExecutionPlan* NaivePlanner::generatePlanWithDynamicCover(const GraphBase* data_
       }
     }
   }
+
+  plan_.setQueryCoverBits(select_cover_node.cover_bits);
   plan_.populatePhysicalPlan(query_graph_, matching_order_, select_cover, level_become_key);
   return &plan_;
+}
+
+QueryVertexID NaivePlanner::selectParallelizingQueryVertex(
+    uint64_t cover_bits, const std::vector<QueryVertexID>& parallelizing_qv_candidates) {
+  for (auto v : parallelizing_qv_candidates) {  // pick a parallelizing qv from the candidates which is in cover
+    if (cover_bits >> v & 1) {
+      return v;
+    }
+  }
+  // if none of the candidate is in cover, pick the first cover vertex in the order
+  for (auto v : matching_order_) {
+    if (cover_bits >> v & 1) {
+      return v;
+    }
+  }
+  CHECK(false) << "cannot find a valid parallelizing qv";
+  return DUMMY_QUERY_VERTEX;
 }
 
 ExecutionPlan* NaivePlanner::generatePlanWithSampleExecution(const std::vector<std::vector<double>>& cardinality,
@@ -879,42 +944,25 @@ ExecutionPlan* NaivePlanner::generatePlanWithSampleExecution(const std::vector<s
   return &plan_;
 }
 
-void NaivePlanner::generateOrder(const std::vector<QueryVertexID>& use_order) {
+const std::vector<QueryVertexID>& NaivePlanner::generateOrder(const GraphBase* data_graph,
+                                                              const GraphMetadata& metadata,
+                                                              const std::vector<CandidateSetView>* candidate_views,
+                                                              const std::vector<VertexID>& candidate_cardinality,
+                                                              OrderStrategy order_strategy,
+                                                              const std::vector<QueryVertexID>& use_order) {
+  matching_order_.clear();
   if (!hasValidCandidate()) {
-    return;
+    return matching_order_;
   }
 
-  // this is for getting matching order
-  auto log_cardinality = logCardinality();
-  WeightedBnB vertex_cover_solver(query_graph_, log_cardinality);
-  vertex_cover_solver.computeVertexCover();
-  auto& covers = vertex_cover_solver.getBestCovers();
-  CHECK_GT(covers.size(), 0);  // at least one cover should be obtained
-  auto smallest_covers = BnB::getSmallestCover(covers);
-  auto select_cover = covers[smallest_covers.first.front()];
-  std::string s = "";
-  for (uint32_t j = 0; j < select_cover.size(); ++j) {
-    s += std::to_string(select_cover[j]) + " ";
-  }
-  LOG(INFO) << s;
   if (use_order.empty()) {
-    TwoCoreSolver solver(query_graph_);
-    auto& core_table = solver.get2CoreTable();
-    // now we only consider a random smallest MWVC from covers
-    QueryVertexID v = 0;
-    std::vector<QueryVertexID> cover;
-    for (auto assignment : select_cover) {
-      if (assignment == 1) {
-        cover.push_back(v);
-      }
-      ++v;
-    }
-    // start matching from the vertex with the smallest cardinality in cover
-    auto start_vertex = selectStartingVertex(cover);
-    matching_order_ = generateMatchingOrder(query_graph_, core_table, start_vertex);
+    auto order_generator = OrderGenerator(data_graph, metadata, query_graph_, *candidate_views, candidate_cardinality);
+    matching_order_ = order_generator.getOrder(order_strategy);
+
   } else {
     matching_order_ = use_order;
   }
+  return matching_order_;
 }
 
 std::vector<int> NaivePlanner::getCoverByOrder() const {
@@ -955,6 +1003,53 @@ std::vector<int> NaivePlanner::getCoverByOrder() const {
   return ret;
 }
 
+std::vector<std::vector<int>> NaivePlanner::generateAnchorCovers(const std::vector<QueryVertexID>& subquery_vertices,
+                                                                 const std::vector<double>& cardinality) {
+  auto subquery = query_graph_->getInducedSubgraph(subquery_vertices);
+  WeightedBnB vc_solver(&subquery, cardinality);
+  vc_solver.computeVertexCover();
+  return std::move(vc_solver.getBestCovers());
+}
+
+std::vector<std::vector<int>> NaivePlanner::generateAnchorCoversSettingParentAsKey(
+    const std::vector<QueryVertexID>& subquery_vertices, const std::vector<double>& cardinality,
+    const std::vector<uint32_t>& order_index, const std::vector<std::vector<QueryVertexID>>& parent_vertices_per_level,
+    const std::vector<unordered_set<QueryVertexID>>& existing_vertices) {
+  auto subquery_size = subquery_vertices.size();
+  // no anchor cover for the full query due to no further expansion
+  if (subquery_size == matching_order_.size()) {
+    return {};
+  }
+  auto subquery = query_graph_->getInducedSubgraph(subquery_vertices);
+  WeightedBnB vc_solver(&subquery, cardinality);
+  // make parent query vertices at level subquery_size as keys, virtually removing them from subquery
+  std::vector<QueryVertexID> pre_set_to_keys;
+  // pre set to intersect vertices to key
+  for (QueryVertexID to_intersect_vertex : parent_vertices_per_level[subquery_size]) {
+    pre_set_to_keys.push_back(order_index[to_intersect_vertex]);
+  }
+  vc_solver.computeVertexCover(&pre_set_to_keys);
+  auto& covers = vc_solver.getBestCovers();
+  auto choice = BnB::getSmallestCover(covers);
+  auto select_cover = covers[choice.first.front()];
+
+  // set to_intersect_key to set if they can be set
+  for (QueryVertexID to_intersect_vertex : parent_vertices_per_level[subquery_size]) {
+    auto nbrs = query_graph_->getOutNeighbors(to_intersect_vertex);
+    bool can_be_set = 1;
+    for (uint32_t j = 0; j < nbrs.second; ++j) {
+      QueryVertexID nbr = nbrs.first[j];
+      if (existing_vertices[subquery_size].find(nbr) != existing_vertices[subquery_size].end()) {
+        can_be_set &= select_cover[order_index[nbr]] == 1;
+      }
+    }
+    if (can_be_set) {
+      select_cover[order_index[to_intersect_vertex]] = 0;
+    }
+  }
+  return {std::move(select_cover)};
+}
+
 void NaivePlanner::generateCoverNode(const std::vector<std::vector<double>>& cardinality) {
   if (!hasValidCandidate()) {
     return;
@@ -963,6 +1058,7 @@ void NaivePlanner::generateCoverNode(const std::vector<std::vector<double>>& car
   auto subquery_vertices = matching_order_;
   covers_.resize(matching_order_.size());
 
+  // compute existing vertices for each level j when target is matching_order_[j]
   std::vector<unordered_set<QueryVertexID>> existing_vertices;
   existing_vertices.resize(matching_order_.size());
   for (uint32_t i = 0; i < matching_order_.size(); ++i) {
@@ -971,6 +1067,7 @@ void NaivePlanner::generateCoverNode(const std::vector<std::vector<double>>& car
     }
   }
 
+  // compute parent vertices in descending order of cardinality for each level i when target is matching_order_[i]
   std::vector<std::vector<QueryVertexID>> to_intersect_vertices;
   to_intersect_vertices.resize(matching_order_.size());
   for (uint32_t i = 0; i < matching_order_.size(); ++i) {
@@ -985,6 +1082,8 @@ void NaivePlanner::generateCoverNode(const std::vector<std::vector<double>>& car
               [&](QueryVertexID qid1, QueryVertexID qid2) { return cardinality[i][qid1] > cardinality[i][qid2]; });
   }
 
+  // take log of the cardinality for computing weighted vertex cover
+  // TODO(tatiana): more efficient implementation by reusing the prefix values
   std::vector<std::vector<double>> candidate_cardinality_by_match_order(matching_order_.size());
   std::vector<uint32_t> order_index(matching_order_.size(), 0);  // query vertex to matching order index
   for (uint32_t i = 0; i < matching_order_.size(); ++i) {
@@ -995,44 +1094,17 @@ void NaivePlanner::generateCoverNode(const std::vector<std::vector<double>>& car
     }
   }
 
+  /* populate each level in the search space covers_ */
   for (uint32_t i = matching_order_.size() - 1; i > 0; --i) {
     subquery_vertices.resize(i + 1);
-    // compute a vertex cover of subquery i
-    // make parent query vertices as keys, virtually removing them from subquery
-    auto subquery = query_graph_->getInducedSubgraph(subquery_vertices);
-    WeightedBnB vc_solver(&subquery, candidate_cardinality_by_match_order[i]);
-    std::vector<QueryVertexID> pre_set_to_keys;
-    // if (i + 1 != matching_order_.size()) {
-    //   // pre set to intersect vertices to key
-    //   for (QueryVertexID to_intersect_vertex : to_intersect_vertices[i + 1]) {
-    //     pre_set_to_keys.push_back(order_index[to_intersect_vertex]);
-    //   }
-    // }
-    vc_solver.computeVertexCover(&pre_set_to_keys);
-    auto& covers = vc_solver.getBestCovers();
+    // compute anchor vertex covers of subquery i
+    auto covers = generateAnchorCovers(subquery_vertices, candidate_cardinality_by_match_order[i]);
+    // auto covers = generateAnchorCoversSettingParentAsKey(subquery_vertices, candidate_cardinality_by_match_order[i],
+    // order_index, to_intersect_vertices, existing_vertices);
     CHECK_GT(covers.size(), 0) << "level " << i << " doesn't have any cover.";  // at least one cover should be obtained
-    auto choice = BnB::getSmallestCover(covers);
-    // auto select_cover = covers[choice.first.front()];
-    for (auto select_cover : covers) {
-      // if (i + 1 != matching_order_.size()) {
-      //   // set to_intersect_key to set if they can be set
-      //   for (QueryVertexID to_intersect_vertex : to_intersect_vertices[i + 1]) {
-      //     auto nbrs = query_graph_->getOutNeighbors(to_intersect_vertex);
-      //     bool can_be_set = 1;
-      //     for (uint32_t j = 0; j < nbrs.second; ++j) {
-      //       QueryVertexID nbr = nbrs.first[j];
-      //       if (existing_vertices[i + 1].find(nbr) != existing_vertices[i + 1].end()) {
-      //         can_be_set &= select_cover[order_index[nbr]] == 1;
-      //       }
-      //     }
-      //     if (can_be_set) {
-      //       select_cover[order_index[to_intersect_vertex]] = 0;
-      //     }
-      //   }
-      // }
-
+    for (const auto& select_cover : covers) {
+      /* add cover to search space if not existing */
       CoverNode new_cover_node;
-      new_cover_node.cover_bits = 0;
       for (uint32_t j = 0; j < select_cover.size(); ++j) {
         if (select_cover[j] == 1) {
           QueryVertexID v = matching_order_[j];
@@ -1041,7 +1113,7 @@ void NaivePlanner::generateCoverNode(const std::vector<std::vector<double>>& car
         }
       }
 
-      if (i == matching_order_.size() - 1) {
+      if (verbosePlannerLog() && i == matching_order_.size() - 1) {  // debug log
         std::string s = "";
         std::vector<uint32_t> mapped_cover(matching_order_.size(), 0);
         for (uint32_t j = 0; j < select_cover.size(); ++j) {
@@ -1057,21 +1129,11 @@ void NaivePlanner::generateCoverNode(const std::vector<std::vector<double>>& car
       }
 
       DLOG(INFO) << "------------------- level = " << i;
-      bool existing = false;
-      for (const auto& cover_node : covers_[i]) {
-        if (cover_node.cover_bits == new_cover_node.cover_bits) {
-          existing = true;
-          break;
-        }
-      }
-      std::stringstream ss;
-      for (auto x : new_cover_node.cover) {
-        ss << x << ", ";
-      }
-      DLOG(INFO) << i << " " << ss.str();
-      if (!existing) {
-        covers_[i].emplace_back(new_cover_node);
-      }
+
+      bool existing = addCover(new_cover_node, i);
+      // TODO(tatiana): we may have populated compatible covers if new_cover_node has been existing
+
+      /* populate compatible covers for larger subqueries */
       CoverNode nxt_cover_node = new_cover_node;
       for (uint32_t j = i + 1; j < matching_order_.size(); ++j) {
         QueryVertexID new_v = matching_order_[j];
@@ -1099,23 +1161,10 @@ void NaivePlanner::generateCoverNode(const std::vector<std::vector<double>>& car
           }
         }
 
-        bool existing = false;
-        for (const auto& cover_node : covers_[j]) {
-          if (cover_node.cover_bits == nxt_cover_node.cover_bits) {
-            existing = true;
-            break;
-          }
-        }
-        std::stringstream ss;
-        for (auto x : nxt_cover_node.cover) {
-          ss << x << ", ";
-        }
-        DLOG(INFO) << j << " " << ss.str();
-        if (!existing) {
-          covers_[j].emplace_back(nxt_cover_node);
-        }
+        existing = addCover(nxt_cover_node, j);
       }
 
+      /* populate compatible covers for smaller subqueries */
       CoverNode last_cover_node = new_cover_node;
       for (uint32_t j = i; j > 0; --j) {
         QueryVertexID delete_v = matching_order_[j];
@@ -1150,24 +1199,12 @@ void NaivePlanner::generateCoverNode(const std::vector<std::vector<double>>& car
             }
           }
         }
-        bool existing = false;
-        for (const auto& cover_node : covers_[j - 1]) {
-          if (cover_node.cover_bits == last_cover_node.cover_bits) {
-            existing = true;
-            break;
-          }
-        }
-        std::stringstream ss;
-        for (auto x : last_cover_node.cover) {
-          ss << x << ", ";
-        }
-        DLOG(INFO) << j - 1 << " " << ss.str();
-        if (!existing) {
-          covers_[j - 1].emplace_back(last_cover_node);
-        }
+        existing = addCover(last_cover_node, j - 1);
       }
     }
   }
+
+  /* populate covers for the single-vertex subquery */
   CoverNode first_level_node;
   bool key_existing = false;
   bool set_existing = false;
@@ -1191,13 +1228,13 @@ void NaivePlanner::generateCoverNode(const std::vector<std::vector<double>>& car
     covers_[0].emplace_back(first_level_node);
   }
 
-  // populate cover nodes' parents
+  /* populate cover nodes' parents */
   for (uint32_t i = 1; i < matching_order_.size(); ++i) {
     for (auto& cover_node : covers_[i]) {
       for (uint32_t j = 0; j < covers_[i - 1].size(); ++j) {
         const auto& last_level_cover_node = covers_[i - 1][j];
-        // avoid enumerate key expand to key
-        if ((cover_node.cover_bits | last_level_cover_node.cover_bits) == cover_node.cover_bits) {
+        if ((cover_node.cover_bits | last_level_cover_node.cover_bits) == cover_node.cover_bits) {  // key containment
+          // avoid enumerate key expand to key
           if ((cover_node.cover_bits >> matching_order_[i] & 1) &&
               (last_level_cover_node.cover_bits | (1 << matching_order_[i])) != cover_node.cover_bits) {
             continue;

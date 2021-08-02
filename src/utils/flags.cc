@@ -29,3 +29,9 @@ DEFINE_bool(standalone, false,
 
 DEFINE_string(data_dir, "/data/share/project/haxe/data/subgraph_matching_datasets",
               "The default directory of datasets");
+
+DEFINE_bool(intersection_count_coefficient, true,
+            "If true, use estimated intersection count to calcuate costs for dynamic covers; otherwise, use estimated "
+            "compressed group cardinality.");
+
+DEFINE_int32(verbosity, circinus::FULL_LOG, "The verbosity level of logs");
