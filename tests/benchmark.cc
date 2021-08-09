@@ -160,15 +160,14 @@ class Benchmark {
 
   static inline std::string getPartitionGraphPath(const std::string& dataset, const uint32_t partition) {
     return circinus::Path::join(FLAGS_data_dir, dataset, "data_graph",
-                                dataset + ".graph_partition_" + std::to_string(partition) + ".bin");
+                                dataset + ".graph.p" + std::to_string(partition) + ".bin");
   }
 
   void loadDataset(const std::string& dataset, double& load_time, const uint32_t partition = 1) {
     if (partition == 1) {
       server_->loadGraph(getGraphPath(dataset), std::string(dataset), "", ADDRESS);
     } else {
-      server_->loadGraph(getPartitionGraphPath(dataset, partition), std::string(dataset),
-                         "partition=" + std::to_string(partition), ADDRESS);
+      server_->loadGraph(getPartitionGraphPath(dataset, partition), std::string(dataset), "", ADDRESS);
     }
     zmq::multipart_t reply;
     reply.recv(sock_);
@@ -187,6 +186,7 @@ class Benchmark {
     auto query_path = getQueryPath(dataset, query_size, query_mode, index, out);
     // run query
     std::stringstream config;
+    // FIXME(tatiana): parallelization strategy
     config << "cps=" << FLAGS_filter << ",cs=" << FLAGS_vertex_cover << ",limit=" << FLAGS_match_limit
            << ",mo=" << match_order;
 

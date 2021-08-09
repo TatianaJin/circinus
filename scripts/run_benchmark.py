@@ -24,6 +24,8 @@ def get_args():
   parser.add_argument('-o', '--order', default='cfl', help='Matching order strategy.')
   parser.add_argument('-s', '--strategy', default='dynamic', choices=['dynamic', 'eager', 'static', 'all'], help='Vertex cover strategy.')
   parser.add_argument('--profile', choices=['simple', 'si'])
+  parser.add_argument('--partition', type=int, default=1, help='The number of partitions for graph')
+  # FIXME(tatiana): config for parallelization strategy
 
   args = parser.parse_args()
   args.bin_dir = osp.join(args.project_dir, "build", "tests")

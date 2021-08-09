@@ -50,22 +50,8 @@ namespace circinus {
 
 template <typename G>
 class ExpandEdgeKeyToSetOperator : public ExpandEdgeOperator {
-  unordered_set<VertexID> candidate_set_;
-
  public:
   CONSTRUCT(KeyToSet)
-
-  void setCandidateSets(const CandidateSetView* candidates) override {
-    if (target_vertex_ == 0) {
-      std::stringstream ss;
-      for (auto x : *candidates) {
-        ss << x << ",";
-      }
-      LOG(INFO) << ss.str();
-    }
-    candidates_ = candidates;
-    candidate_set_.insert(candidates->begin(), candidates->end());
-  }
 
   uint32_t expand(uint32_t cap, TraverseContext* ctx) const override {
     uint32_t n = 0;
@@ -79,7 +65,7 @@ class ExpandEdgeKeyToSetOperator : public ExpandEdgeOperator {
     uint32_t old_input_index = ctx->getInputIndex();
     uint32_t n = 0;
     for (; n < cap && ctx->hasNextInput(); ctx->nextInput()) {
-      n += (ctx->query_type == QueryType::Profile)
+      n += (ctx->getQueryType() == QueryType::Profile)
                ? expandInner<QueryType::Profile>(ctx->getCurrentInput(), ctx)
                : expandInner<QueryType::ProfileWithMiniIntersection>(ctx->getCurrentInput(), ctx);
       ctx->total_num_input_subgraphs += ctx->getCurrentInput().getNumSubgraphs();
@@ -99,6 +85,12 @@ class ExpandEdgeKeyToSetOperator : public ExpandEdgeOperator {
     return {input_key_size.first, input_key_size.second + 1};
   }
 
+  std::unique_ptr<TraverseContext> initTraverseContext(const CandidateSetView* candidates,
+                                                       std::vector<CompressedSubgraphs>* outputs, const void* graph,
+                                                       QueryType profile) const override {
+    return std::make_unique<ExpandEdgeTraverseContext>(candidates, graph, outputs, profile, true);
+  }
+
  private:
   /** @returns True if one CompressedSubgraphs is generated, else false. */
   template <QueryType profile>
@@ -106,7 +98,7 @@ class ExpandEdgeKeyToSetOperator : public ExpandEdgeOperator {
     std::vector<VertexID> targets;
     auto parent_match = input.getKeyVal(parent_index_);
     auto exceptions = input.getExceptions(same_label_key_indices_, same_label_set_indices_);
-    expandFromParent<G, profile>(ctx, parent_match, candidate_set_, exceptions, &targets);
+    expandFromParent<G, profile>(ctx, parent_match, exceptions, &targets);
 
     if (targets.empty()) {
       return false;
@@ -129,9 +121,13 @@ class ExpandEdgeKeyToSetOperator : public ExpandEdgeOperator {
 
 class ExpandEdgeKeyToKeyTraverseContext : public ExpandEdgeTraverseContext, public TargetBuffer {
  public:
-  ExpandEdgeKeyToKeyTraverseContext(const std::vector<CompressedSubgraphs>* inputs, const void* data_graph,
-                                    uint32_t input_index, uint32_t input_end_index)
-      : ExpandEdgeTraverseContext(inputs, data_graph, input_index, input_end_index) {}
+  ExpandEdgeKeyToKeyTraverseContext(const CandidateSetView* candidates, const void* graph,
+                                    std::vector<CompressedSubgraphs>* outputs, QueryType profile)
+      : ExpandEdgeTraverseContext(candidates, graph, outputs, profile, true) {}
+
+  std::unique_ptr<TraverseContext> clone() const override {
+    return std::make_unique<ExpandEdgeKeyToKeyTraverseContext>(*this);
+  }
 };
 
 template <typename G, bool intersect_candidates>
@@ -141,18 +137,6 @@ class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
  public:
   CONSTRUCT(KeyToKey)
 
-  void setCandidateSets(const CandidateSetView* candidates) override {
-    if (target_vertex_ == 0) {
-      std::stringstream ss;
-      for (auto x : *candidates) {
-        ss << x << ",";
-      }
-      LOG(INFO) << ss.str();
-    }
-    candidates_ = candidates;
-    candidate_set_.insert(candidates->begin(), candidates->end());
-  }
-
   uint32_t expand(uint32_t cap, TraverseContext* ctx) const override {
     return expandInner<QueryType::Execute>(cap, ctx);
   }
@@ -160,11 +144,11 @@ class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
   uint32_t expandAndProfileInner(uint32_t cap, TraverseContext* ctx) const override {
     auto old_input_index = ctx->getInputIndex();
     uint32_t n = 0;
-    if (ctx->query_type == QueryType::Profile) {
+    if (ctx->getQueryType() == QueryType::Profile) {
       n = expandInner<QueryType::Profile>(cap, ctx);
     } else {
-      CHECK(ctx->query_type == QueryType::ProfileWithMiniIntersection) << "unknown query type "
-                                                                       << (uint32_t)ctx->query_type;
+      CHECK(ctx->getQueryType() == QueryType::ProfileWithMiniIntersection) << "unknown query type "
+                                                                           << (uint32_t)ctx->getQueryType();
       n = expandInner<QueryType::ProfileWithMiniIntersection>(cap, ctx);
     }
     ctx->intersection_count += (ctx->getInputIndex() - old_input_index) * (intersect_candidates);
@@ -182,17 +166,13 @@ class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
     return {input_key_size.first + 1, input_key_size.second + 1};
   }
 
-  std::unique_ptr<TraverseContext> initTraverseContext(const std::vector<CompressedSubgraphs>* inputs,
-                                                       const void* graph, uint32_t input_start, uint32_t input_end,
+  std::unique_ptr<TraverseContext> initTraverseContext(const CandidateSetView* candidates,
+                                                       std::vector<CompressedSubgraphs>* outputs, const void* graph,
                                                        QueryType profile) const override {
-    auto ret = std::make_unique<ExpandEdgeKeyToKeyTraverseContext>(inputs, graph, input_start, input_end);
-    ret->query_type = profile;
-    return ret;
+    return std::make_unique<ExpandEdgeKeyToKeyTraverseContext>(candidates, graph, outputs, profile);
   }
 
  private:
-  inline const G* getDataGraph(TraverseContext* ctx) const { return (const G*)(ctx->current_data_graph); }
-
   template <QueryType profile>
   uint32_t expandInner(uint32_t cap, TraverseContext* base_ctx) const {
     uint32_t n = 0;
@@ -243,10 +223,10 @@ class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
     auto parent_match = input.getKeyVal(parent_index_);
     auto exceptions = input.getExceptions(same_label_key_indices_, same_label_set_indices_);
     if (!intersect_candidates) {
-      auto neighbors = getDataGraph(ctx)->getOutNeighborsWithHint(parent_match, target_label_, 0);
+      auto neighbors = ctx->getDataGraph<G>()->getOutNeighborsWithHint(parent_match, target_label_, 0);
       removeExceptions(neighbors, &current_targets, exceptions);
     } else {
-      expandFromParent<G, profile>(ctx, parent_match, candidate_set_, exceptions, &current_targets);
+      expandFromParent<G, profile>(ctx, parent_match, exceptions, &current_targets);
     }
   }
 };
@@ -269,14 +249,24 @@ class CurrentResults {
 };
 
 class ExpandEdgeSetToKeyTraverseContext : public ExpandEdgeTraverseContext {
+  const CandidateSetView* candidates_ = nullptr;
   std::unique_ptr<CurrentResults> current_results_ = nullptr;
   uint64_t candidates_neighbor_size_ = 0;
 
  public:
-  ExpandEdgeSetToKeyTraverseContext(const std::vector<CompressedSubgraphs>* inputs, const void* data_graph,
-                                    uint32_t input_start, uint32_t input_end)
-      : ExpandEdgeTraverseContext(inputs, data_graph, input_start, input_end) {}
+  ExpandEdgeSetToKeyTraverseContext(const CandidateSetView* candidates, const void* graph,
+                                    std::vector<CompressedSubgraphs>* outputs, QueryType profile,
+                                    uint64_t candidate_neighbor_size = 0)
+      : ExpandEdgeTraverseContext(candidates, graph, outputs, profile, false),
+        candidates_(candidates),
+        candidates_neighbor_size_(candidate_neighbor_size) {}
 
+  std::unique_ptr<TraverseContext> clone() const override {
+    return std::make_unique<ExpandEdgeSetToKeyTraverseContext>(candidates_, getDataGraph<void>(), getOutputs(),
+                                                               getQueryType(), candidates_neighbor_size_);
+  }
+
+  inline const CandidateSetView* getCandidateSet() const { return candidates_; }
   inline uint64_t getCandidateNeighborSize() const { return candidates_neighbor_size_; }
   inline bool hasRemainingResults() const { return current_results_ != nullptr; }
   inline uint32_t getResults(uint32_t cap) { return current_results_->getResults(cap); }
@@ -284,7 +274,7 @@ class ExpandEdgeSetToKeyTraverseContext : public ExpandEdgeTraverseContext {
 
   template <typename G>
   void init(const CandidateSetView& candidates, LabelID parent_label) {
-    auto data_graph = reinterpret_cast<const G*>(current_data_graph);
+    auto data_graph = getDataGraph<G>();
     // if a different data graph is given, recompute the candidates' neighbor size
     candidates_neighbor_size_ = 0;
     for (auto candidate : candidates) {
@@ -297,13 +287,15 @@ template <QueryType profile, typename G>
 class CurrentResultsByCandidate : public CurrentResults {
  private:
   CandidateSetView::ConstIterator candidate_iter_;
+  CandidateSetView::ConstIterator candidate_end_;
   const LabelID parent_label_;
 
  public:
   CurrentResultsByCandidate(const CompressedSubgraphs* input, uint32_t parent_index, LabelID parent_label,
-                            const TraverseOperator* owner, ExpandEdgeTraverseContext* ctx)
+                            const TraverseOperator* owner, ExpandEdgeSetToKeyTraverseContext* ctx)
       : CurrentResults(input, parent_index, owner, ctx),
-        candidate_iter_(owner->getCandidateSet()->begin()),
+        candidate_iter_(ctx->getCandidateSet()->begin()),
+        candidate_end_(ctx->getCandidateSet()->end()),
         parent_label_(parent_label) {}
 
   uint32_t getResults(uint32_t cap) override {
@@ -311,8 +303,8 @@ class CurrentResultsByCandidate : public CurrentResults {
     auto& parent_set = input_->getSet(parent_index_);
 
     auto exceptions = input_->getExceptions(owner_->getSameLabelKeyIndices(), owner_->getSameLabelSetIndices());
-    auto data_graph = ((const G*)ctx_->current_data_graph);
-    for (; n < cap && candidate_iter_ != owner_->getCandidateSet()->end(); ++candidate_iter_) {
+    auto data_graph = ctx_->getDataGraph<G>();
+    for (; n < cap && candidate_iter_ != candidate_end_; ++candidate_iter_) {
       std::vector<VertexID> parents;
       VertexID candidate = *candidate_iter_;
       if (exceptions.count(candidate)) {
@@ -358,15 +350,17 @@ class CurrentResultsByParent : public CurrentResults {
     unordered_map<VertexID, int> group_index;
     uint32_t n = 0;
     auto target_label = owner_->getTargetLabel();
+    auto& candidates = *((ExpandEdgeSetToKeyTraverseContext*)ctx_)->getCandidateSet();
+    auto graph = ctx_->getDataGraph<G>();
     for (uint32_t i = 0; i < parent_set.size(); ++i) {
       auto parent_match = parent_set[i];
       if (exceptions_.count(parent_match)) continue;
       std::vector<VertexID> targets;
-      auto neighbors = ((const G*)ctx_->current_data_graph)->getOutNeighborsWithHint(parent_match, target_label, 0);
-      intersect(*owner_->getCandidateSet(), neighbors, &targets, exceptions_);
+      auto neighbors = graph->getOutNeighborsWithHint(parent_match, target_label, 0);
+      intersect(candidates, neighbors, &targets, exceptions_);
       if
         constexpr(isProfileMode(profile)) {
-          ctx_->updateIntersectInfo(owner_->getCandidateSet()->size() + neighbors.size(), targets.size());
+          ctx_->updateIntersectInfo(candidates.size() + neighbors.size(), targets.size());
         }
       for (auto target : targets) {
         auto pos = group_index.find(target);
@@ -411,7 +405,7 @@ class CurrentResultsByExtension : public CurrentResults {
   uint32_t getResults(uint32_t cap) override {
     uint32_t n = 0;
     auto& parent_set = *input_->getSet(parent_index_);
-    auto g = ((const G*)ctx_->current_data_graph);
+    auto g = ctx_->getDataGraph<G>();
     while (true) {
       // check existing extensions first
       while (!extensions_.empty()) {
@@ -456,10 +450,11 @@ class CurrentResultsByExtension : public CurrentResults {
     }
     std::vector<VertexID> current_extensions;
     auto neighbors = g->getOutNeighborsWithHint(parent_match, owner_->getTargetLabel(), 0);
-    intersect(*owner_->getCandidateSet(), neighbors, &current_extensions, current_exceptions_);
+    auto& candidates = *((ExpandEdgeSetToKeyTraverseContext*)ctx_)->getCandidateSet();
+    intersect(candidates, neighbors, &current_extensions, current_exceptions_);
     if
       constexpr(isProfileMode(profile)) {
-        ctx_->updateIntersectInfo(owner_->getCandidateSet()->size() + neighbors.size(), current_extensions.size());
+        ctx_->updateIntersectInfo(candidates.size() + neighbors.size(), current_extensions.size());
       }
     for (VertexID neighbor : current_extensions) {
       if (seen_extensions_.insert(neighbor).second) {
@@ -481,11 +476,11 @@ class ExpandEdgeSetToKeyOperator : public ExpandEdgeOperator {
   }
 
   uint32_t expandAndProfileInner(uint32_t cap, TraverseContext* ctx) const override {
-    if (ctx->query_type == QueryType::Profile) {
+    if (ctx->getQueryType() == QueryType::Profile) {
       return expandInner<QueryType::Profile>(cap, ctx);
     }
-    CHECK(ctx->query_type == QueryType::ProfileWithMiniIntersection) << "unknown query type "
-                                                                     << (uint32_t)ctx->query_type;
+    CHECK(ctx->getQueryType() == QueryType::ProfileWithMiniIntersection) << "unknown query type "
+                                                                         << (uint32_t)ctx->getQueryType();
     return expandInner<QueryType::ProfileWithMiniIntersection>(cap, ctx);
   }
 
@@ -500,19 +495,15 @@ class ExpandEdgeSetToKeyOperator : public ExpandEdgeOperator {
     return {input_key_size.first + 1, input_key_size.second + 1};
   }
 
-  std::unique_ptr<TraverseContext> initTraverseContext(const std::vector<CompressedSubgraphs>* inputs,
-                                                       const void* graph, uint32_t input_start, uint32_t input_end,
+  std::unique_ptr<TraverseContext> initTraverseContext(const CandidateSetView* candidates,
+                                                       std::vector<CompressedSubgraphs>* outputs, const void* graph,
                                                        QueryType profile) const override {
-    auto ret = std::make_unique<ExpandEdgeSetToKeyTraverseContext>(inputs, graph, input_start, input_end);
-    CHECK(candidates_ != nullptr) << "need to call setCandidateSets() first";
-    ret->init<G>(*candidates_, parent_label_);
-    ret->query_type = profile;
+    auto ret = std::make_unique<ExpandEdgeSetToKeyTraverseContext>(candidates, graph, outputs, profile);
+    ret->init<G>(*candidates, parent_label_);
     return ret;
   }
 
  private:
-  inline const G* getDataGraph(TraverseContext* ctx) const { return (const G*)(ctx->current_data_graph); }
-
   /* Assume the set intersection cost of two sorted sets of size n and m is 2(n+m).
    *
    * cost of enumerating candidates = total set intersection cost
@@ -527,16 +518,16 @@ class ExpandEdgeSetToKeyOperator : public ExpandEdgeOperator {
     DCHECK_NE(ctx->getCandidateNeighborSize(), 0);
     uint64_t set_neighbor_size = 0;
     for (auto v : *parent_set) {
-      set_neighbor_size += getDataGraph(ctx)->getVertexOutDegreeWithHint(v, target_label_, 0);
+      set_neighbor_size += ctx->getDataGraph<G>()->getVertexOutDegreeWithHint(v, target_label_, 0);
     }
     auto enumerating_candidate_cost = 2 * ctx->getCandidateNeighborSize();
     auto enumerating_parent_cost =
-        2 * set_neighbor_size + std::min(parent_set->size() * candidates_->size(), set_neighbor_size);
+        2 * set_neighbor_size + std::min(parent_set->size() * ctx->getCandidateSet()->size(), set_neighbor_size);
     if (enumerating_candidate_cost < enumerating_parent_cost) return ByCandidate;
 
     /* ByParent requires all parent to be processed before the outputs become ready, and thus the output size is unknown
      * in advance and unbounded. ByExtension incurs extra set intersection, but the output size can be bounded. */
-    if (std::min(candidates_->size(), set_neighbor_size) <=
+    if (std::min(ctx->getCandidateSet()->size(), set_neighbor_size) <=
         cap) {  // here we use set_neighbor_size to approximate the output size. as long as the
                 // output size does not exceed cap, ByParent is preferred than ByExtension.
                 // TODO(tatiana): consider better estimation on the output size

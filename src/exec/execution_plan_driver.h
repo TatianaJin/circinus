@@ -85,6 +85,7 @@ class MatchingParallelExecutionPlanDriver : public ExecutionPlanDriverBase {
   std::unique_ptr<InputOperator> input_op_ = nullptr;
   std::vector<bool> task_depleted_;
   std::vector<CandidateSetView> candidates_;
+  std::vector<std::unique_ptr<TraverseContext>> traverse_ctx_templates_;
 
  public:
   explicit MatchingParallelExecutionPlanDriver(BacktrackingPlan* plan) : ExecutionPlanDriverBase(plan) {}

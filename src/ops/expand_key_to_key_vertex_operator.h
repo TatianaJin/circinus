@@ -31,9 +31,14 @@ namespace circinus {
 
 class ExpandKeyToKeyVertexTraverseContext : public ExpandVertexTraverseContext, public TargetBuffer {
  public:
-  ExpandKeyToKeyVertexTraverseContext(const std::vector<CompressedSubgraphs>* inputs, const void* data_graph,
-                                      uint32_t input_index, uint32_t input_end_index, uint32_t parent_size)
-      : ExpandVertexTraverseContext(inputs, data_graph, input_index, input_end_index, parent_size) {}
+  ExpandKeyToKeyVertexTraverseContext(const CandidateSetView* candidates, const void* graph,
+                                      std::vector<CompressedSubgraphs>* outputs, QueryType profile,
+                                      uint32_t parent_size)
+      : ExpandVertexTraverseContext(candidates, graph, outputs, profile, parent_size) {}
+
+  std::unique_ptr<TraverseContext> clone() const override {
+    return std::make_unique<ExpandKeyToKeyVertexTraverseContext>(*this);
+  }
 };
 
 template <typename G, bool intersect_candidates>
@@ -52,10 +57,10 @@ class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
   }
 
   uint32_t expandAndProfileInner(uint32_t batch_size, TraverseContext* ctx) const override {
-    if (ctx->query_type == QueryType::Profile)
+    if (ctx->getQueryType() == QueryType::Profile)
       return expandInner<QueryType::Profile>(batch_size, (ExpandKeyToKeyVertexTraverseContext*)ctx);
-    CHECK(ctx->query_type == QueryType::ProfileWithMiniIntersection) << "Unknown query type "
-                                                                     << (uint32_t)ctx->query_type;
+    CHECK(ctx->getQueryType() == QueryType::ProfileWithMiniIntersection) << "Unknown query type "
+                                                                         << (uint32_t)ctx->getQueryType();
     return expandInner<QueryType::ProfileWithMiniIntersection>(batch_size, (ExpandKeyToKeyVertexTraverseContext*)ctx);
   }
 
@@ -70,21 +75,21 @@ class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
     return {input_key_size.first + 1, input_key_size.second + 1};
   }
 
-  std::unique_ptr<TraverseContext> initTraverseContext(const std::vector<CompressedSubgraphs>* inputs,
-                                                       const void* graph, uint32_t start, uint32_t end,
+  std::unique_ptr<TraverseContext> initTraverseContext(const CandidateSetView* candidates,
+                                                       std::vector<CompressedSubgraphs>* outputs, const void* graph,
                                                        QueryType profile) const override {
-    auto ret = std::make_unique<ExpandKeyToKeyVertexTraverseContext>(inputs, graph, start, end, parents_.size());
+    auto ret =
+        std::make_unique<ExpandKeyToKeyVertexTraverseContext>(candidates, graph, outputs, profile, parents_.size());
 #ifdef INTERSECTION_CACHE
     ret->initCacheSize(parents_.size());
 #endif
-    ret->query_type = profile;
     return ret;
   }
 
  protected:
   template <QueryType profile>
   inline uint32_t expandInner(uint32_t batch_size, ExpandKeyToKeyVertexTraverseContext* ctx) const {
-    auto data_graph = (G*)(ctx->current_data_graph);
+    auto data_graph = ctx->getDataGraph<G>();
     uint32_t output_num = 0;
     while (true) {
       if (ctx->hasTarget()) {
@@ -134,11 +139,11 @@ class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
         auto neighbors = data_graph->getOutNeighborsWithHint(key_vid, target_label_, 0);
         if (intersect_candidates) {
           auto& intersection = ctx->resetIntersectionCache(0, key_vid);
-          intersect(*candidates_, neighbors, &intersection);
+          intersect(*ctx->getCandidateSet(), neighbors, &intersection);
           i = 1;
           if
             constexpr(isProfileMode(profile)) {
-              ctx->updateIntersectInfo(candidates_->size() + neighbors.size(), intersection.size());
+              ctx->updateIntersectInfo(ctx->getCandidateSet()->size() + neighbors.size(), intersection.size());
             }
         } else {
           uint32_t second_key_vid = input.getKeyVal(query_vertex_indices_.at(parents_[1]));
@@ -187,10 +192,10 @@ class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
           if (!intersect_candidates) {
             removeExceptions(neighbors, &new_keys, exceptions);
           } else {
-            intersect(*candidates_, neighbors, &new_keys, exceptions);
+            intersect(*ctx->getCandidateSet(), neighbors, &new_keys, exceptions);
             if
               constexpr(isProfileMode(profile)) {
-                ctx->updateIntersectInfo(candidates_->size() + neighbors.size(), new_keys.size());
+                ctx->updateIntersectInfo(ctx->getCandidateSet()->size() + neighbors.size(), new_keys.size());
               }
           }
         } else {

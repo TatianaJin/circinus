@@ -80,11 +80,11 @@ PartitionedLogicalCompressedInputOperator::PartitionedLogicalCompressedInputOper
   }
 }
 
-std::unique_ptr<InputOperator> PartitionedLogicalCompressedInputOperator::toPhysicalOperators() {
+std::unique_ptr<InputOperator> PartitionedLogicalCompressedInputOperator::toPhysicalOperators() const {
   return std::make_unique<PartitionedInputOperator>(input_query_vertex_, inputs_are_keys_, &qv_pivots_);
 }
 
-std::unique_ptr<InputOperator> LogicalCompressedInputOperator::toPhysicalOperators() {
+std::unique_ptr<InputOperator> LogicalCompressedInputOperator::toPhysicalOperators() const {
   return std::make_unique<InputOperator>(input_query_vertex_, inputs_are_keys_);
 }
 

@@ -28,17 +28,24 @@ class ExpandVertexTraverseContext : public TraverseContext, public MultiparentIn
 #else
 class ExpandVertexTraverseContext : public TraverseContext {
 #endif
+ protected:
+  const CandidateSetView* candidates_ = nullptr;
+
   // for profiling
   std::vector<unordered_set<std::string>> parent_tuple_sets_;
 
  public:
-  ExpandVertexTraverseContext(const std::vector<CompressedSubgraphs>* inputs, const void* data_graph,
-                              uint32_t input_index, uint32_t input_end_index, uint32_t parent_size)
-      : TraverseContext(inputs, data_graph, input_index, input_end_index), parent_tuple_sets_(parent_size) {}
+  ExpandVertexTraverseContext(const CandidateSetView* candidates, const void* graph,
+                              std::vector<CompressedSubgraphs>* outputs, QueryType profile, uint32_t parent_size)
+      : TraverseContext(graph, outputs, profile), candidates_(candidates), parent_tuple_sets_(parent_size) {}
 
-  ExpandVertexTraverseContext(const std::vector<CompressedSubgraphs>* inputs, const void* data_graph,
-                              uint32_t parent_size)
-      : TraverseContext(inputs, data_graph), parent_tuple_sets_(parent_size) {}
+  virtual ~ExpandVertexTraverseContext() {}
+
+  std::unique_ptr<TraverseContext> clone() const override {
+    return std::make_unique<ExpandVertexTraverseContext>(*this);
+  }
+
+  inline const CandidateSetView* getCandidateSet() const { return candidates_; }
 
   inline void updateDistinctSICount(uint32_t depth, std::vector<VertexID>& parent_tuple, uint32_t pidx) {
     distinct_intersection_count +=

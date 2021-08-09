@@ -46,9 +46,14 @@ class ExpandSetToKeyVertexTraverseContext : public ExpandVertexTraverseContext {
   std::queue<VertexID> extensions_;
 
  public:
-  ExpandSetToKeyVertexTraverseContext(const std::vector<CompressedSubgraphs>* inputs, const void* data_graph,
-                                      uint32_t input_index, uint32_t input_end_index, uint32_t parent_size)
-      : ExpandVertexTraverseContext(inputs, data_graph, input_index, input_end_index, parent_size) {}
+  ExpandSetToKeyVertexTraverseContext(const CandidateSetView* candidates, const void* graph,
+                                      std::vector<CompressedSubgraphs>* outputs, QueryType profile,
+                                      uint32_t parent_size)
+      : ExpandVertexTraverseContext(candidates, graph, outputs, profile, parent_size) {}
+
+  std::unique_ptr<TraverseContext> clone() const override {
+    return std::make_unique<ExpandSetToKeyVertexTraverseContext>(*this);
+  }
 
   bool fromCandidate() const { return from_candidate_; }
 
@@ -59,8 +64,8 @@ class ExpandSetToKeyVertexTraverseContext : public ExpandVertexTraverseContext {
   }
 
   /* for fromCandidateStrategy */
-  inline void initCandidateIter(const CandidateSetView& view) {
-    candidate_iter_ = view.begin();
+  inline void initCandidateIter() {
+    candidate_iter_ = candidates_->begin();
     from_candidate_ = true;
   }
   inline auto& getCandidateIter() { return candidate_iter_; }
@@ -101,12 +106,10 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
 
   inline void setParentLabels(std::vector<LabelID>&& parent_labels) { parent_labels_ = std::move(parent_labels); }
 
-  std::unique_ptr<TraverseContext> initTraverseContext(const std::vector<CompressedSubgraphs>* inputs,
-                                                       const void* graph, uint32_t start, uint32_t end,
+  std::unique_ptr<TraverseContext> initTraverseContext(const CandidateSetView* candidates,
+                                                       std::vector<CompressedSubgraphs>* outputs, const void* graph,
                                                        QueryType profile) const override {
-    auto ret = std::make_unique<ExpandSetToKeyVertexTraverseContext>(inputs, graph, start, end, parents_.size());
-    ret->query_type = profile;
-    return ret;
+    return std::make_unique<ExpandSetToKeyVertexTraverseContext>(candidates, graph, outputs, profile, parents_.size());
   }
 
   uint32_t expand(uint32_t batch_size, TraverseContext* ctx) const override {
@@ -114,9 +117,9 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
   }
 
   uint32_t expandAndProfileInner(uint32_t batch_size, TraverseContext* ctx) const override {
-    if (ctx->query_type == QueryType::Profile) return expandInner<QueryType::Profile>(batch_size, ctx);
-    CHECK(ctx->query_type == QueryType::ProfileWithMiniIntersection) << "Unknown query type "
-                                                                     << (uint32_t)ctx->query_type;
+    if (ctx->getQueryType() == QueryType::Profile) return expandInner<QueryType::Profile>(batch_size, ctx);
+    CHECK(ctx->getQueryType() == QueryType::ProfileWithMiniIntersection) << "Unknown query type "
+                                                                         << (uint32_t)ctx->getQueryType();
     return expandInner<QueryType::ProfileWithMiniIntersection>(batch_size, ctx);
   }
 
@@ -131,7 +134,6 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
       }
       DCHECK_EQ(query_vertex_indices_.count(target_vertex_), 1);
       ss << " -> " << target_vertex_ << ':' << target_label_;
-      if (candidates_ != nullptr) ss << " (" << candidates_->size() << ")";
     }
     return ss.str();
   }
@@ -141,9 +143,10 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
   }
 
  protected:
-  bool isInCandidates(VertexID key) const {
-    auto lb = std::lower_bound(candidates_->begin(), candidates_->end(), key);
-    return lb != candidates_->end() && *lb == key;
+  template <typename ForwardIter>
+  bool isInCandidates(VertexID key, ForwardIter& begin, ForwardIter end) const {
+    begin = std::lower_bound(begin, end, key);
+    return begin != end && *begin == key;
   }
 
   std::tuple<uint32_t, uint32_t, uint32_t> getMinimumParent(TraverseContext* ctx) const {
@@ -154,7 +157,7 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
       auto current_set = input.getSet(query_vertex_indices_.at(par));
       uint32_t current_size = 0;
       for (auto set_vertex_id : *current_set) {
-        current_size += ((G*)(ctx->current_data_graph))->getVertexOutDegreeWithHint(set_vertex_id, target_label_, idx);
+        current_size += ctx->getDataGraph<G>()->getVertexOutDegreeWithHint(set_vertex_id, target_label_, idx);
       }
       if (current_size < size) {
         size = current_size;
@@ -174,7 +177,7 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
 
     // check remaining targets for the last input
     if (ctx->fromCandidate()) {
-      if (ctx->getCandidateIter() != candidates_->end())
+      if (ctx->getCandidateIter() != ctx->getCandidateSet()->end())
         output_num = fromCandidateStrategy<profile>(ctx, ctx->getPreviousInput(), batch_size, buffer);
     } else if (ctx->getParentMatches() != nullptr) {
       output_num = fromSetNeighborStrategy<profile>(ctx, ctx->getPreviousInput(), batch_size, buffer);
@@ -191,11 +194,11 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
         }
       auto& input = ctx->getCurrentInput();
       input.getExceptions(ctx->resetExceptions(), same_label_key_indices_, same_label_set_indices_);
-      if (min_parent_set_size < candidates_->size()) {
+      if (min_parent_set_size < ctx->getCandidateSet()->size()) {
         ctx->initParentSet(input.getSet(query_vertex_indices_.at(min_parent_vertex)).get(), min_parent_idx);
         output_num += fromSetNeighborStrategy<profile>(ctx, input, batch_size - output_num, buffer);
       } else {
-        ctx->initCandidateIter(*candidates_);
+        ctx->initCandidateIter();
         output_num += fromCandidateStrategy<profile>(ctx, input, batch_size - output_num, buffer);
       }
       if
@@ -227,7 +230,7 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
     // TODO(by) hash key_out_neighbors?
     if
       constexpr(!sensitive_to_hint<G>) key_out_neighbors =
-          ((G*)(ctx->current_data_graph))->getInNeighborsWithHint(target, ALL_LABEL, source_parent_idx);
+          ctx->getDataGraph<G>()->getInNeighborsWithHint(target, ALL_LABEL, source_parent_idx);
     uint32_t parent_idx = 0;
     for (uint32_t set_vid : parents_) {
       std::vector<VertexID> new_set;
@@ -236,11 +239,11 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
         constexpr(sensitive_to_hint<G>) {  // if graph provides different neighbors for hints, select neighbors from
                                            // the right graph part
           if
-            constexpr(std::is_same_v<G, ReorderedPartitionedGraph>)((G*)(ctx->current_data_graph))
-                ->getInNeighborsWithHint(target, parent_labels_[parent_idx], parent_idx, key_out_neighbors);
+            constexpr(std::is_same_v<G, ReorderedPartitionedGraph>) ctx->getDataGraph<G>()->getInNeighborsWithHint(
+                target, parent_labels_[parent_idx], parent_idx, key_out_neighbors);
           else
             key_out_neighbors =
-                ((G*)(ctx->current_data_graph))->getInNeighborsWithHint(target, parent_labels_[parent_idx], parent_idx);
+                ctx->getDataGraph<G>()->getInNeighborsWithHint(target, parent_labels_[parent_idx], parent_idx);
         }
       intersect(*input.getSet(id), key_out_neighbors, &new_set);  // No need for exceptions
       if
@@ -279,7 +282,7 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
                                  uint32_t batch_size, NeighborSet& buffer) const {
     uint32_t output_num = 0;
     auto& iter = ctx->getCandidateIter();
-    while (iter != candidates_->end()) {
+    while (iter != ctx->getCandidateSet()->end()) {
       auto vid = *iter;
       ++iter;
       if (ctx->getExceptions().count(vid)) {
@@ -310,29 +313,33 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
 
     auto& parent_match_idx = ctx->getParentMatchIdx();
     auto& parent_matches = *ctx->getParentMatches();
+    auto candidate_end = ctx->getCandidateSet()->end();
     while (parent_match_idx < parent_matches.size()) {
       // find extensions and enumerate
       auto vid = parent_matches[parent_match_idx++];
-      auto out_neighbors = ((G*)(ctx->current_data_graph))->getOutNeighborsWithHint(vid, target_label_, min_parent_idx);
+      auto out_neighbors = ctx->getDataGraph<G>()->getOutNeighborsWithHint(vid, target_label_, min_parent_idx);
+      auto begin = ctx->getCandidateSet()->begin();
       if (std::is_same_v<decltype(out_neighbors), VertexSetView>) {
         auto& ranges = out_neighbors.getRanges();
         for (uint32_t range_i = 0; range_i < ranges.size(); ++range_i) {
           for (size_t idx = 0; idx < ranges[range_i].second; ++idx) {
             VertexID key_vertex_id = ranges[range_i].first[idx];
             if (ctx->getExceptions().count(key_vertex_id) == 0 && ctx->visitOnce(key_vertex_id) &&
-                isInCandidates(key_vertex_id)) {
+                isInCandidates(key_vertex_id, begin, candidate_end)) {
               output_num += validateTarget<profile>(ctx, key_vertex_id, input, min_parent_idx, buffer);
               if (output_num == batch_size) {
                 // store the remaining extensions for next batch output
                 for (++idx; idx < ranges[range_i].second; ++idx) {
                   auto vid = ranges[range_i].first[idx];
-                  if (ctx->getExceptions().count(vid) == 0 && ctx->visitOnce(vid) && isInCandidates(vid))
+                  if (ctx->getExceptions().count(vid) == 0 && ctx->visitOnce(vid) &&
+                      isInCandidates(vid, begin, candidate_end))
                     extensions.push(vid);
                 }
                 for (++range_i; range_i < ranges.size(); ++range_i) {
                   for (size_t idx = 0; idx < ranges[range_i].second; ++idx) {
                     auto vid = ranges[range_i].first[idx];
-                    if (ctx->getExceptions().count(vid) == 0 && ctx->visitOnce(vid) && isInCandidates(vid))
+                    if (ctx->getExceptions().count(vid) == 0 && ctx->visitOnce(vid) &&
+                        isInCandidates(vid, begin, candidate_end))
                       extensions.push(vid);
                   }
                 }
@@ -345,13 +352,14 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
         for (auto iter = out_neighbors.begin(); iter != out_neighbors.end(); ++iter) {
           VertexID key_vertex_id = *iter;
           if (ctx->getExceptions().count(key_vertex_id) == 0 && ctx->visitOnce(key_vertex_id) &&
-              isInCandidates(key_vertex_id)) {
+              isInCandidates(key_vertex_id, begin, candidate_end)) {
             output_num += validateTarget<profile>(ctx, key_vertex_id, input, min_parent_idx, buffer);
             if (output_num == batch_size) {
               // store the remaining extensions for next batch output
               for (++iter; iter != out_neighbors.end(); ++iter) {
                 auto vid = *iter;
-                if (ctx->getExceptions().count(vid) == 0 && ctx->visitOnce(vid) && isInCandidates(vid))
+                if (ctx->getExceptions().count(vid) == 0 && ctx->visitOnce(vid) &&
+                    isInCandidates(vid, begin, candidate_end))
                   extensions.push(vid);
               }
               return output_num;

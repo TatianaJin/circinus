@@ -62,7 +62,6 @@ using circinus::QueryGraph;
 using circinus::QueryVertexID;
 using circinus::VertexID;
 using circinus::Profiler;
-using circinus::CoverNode;
 using circinus::QueryType;
 using circinus::TraverseOperator;
 using circinus::INVALID_VERTEX_ID;

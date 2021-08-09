@@ -49,6 +49,7 @@ class TraverseChainTask : public TaskBase {
 
   std::vector<ProfileInfo> profile_info_;
   QueryType query_type_;
+  std::vector<std::unique_ptr<TraverseContext>> traverse_context_;
   std::vector<std::vector<CompressedSubgraphs>> outputs_;
 
  public:
@@ -70,33 +71,43 @@ class TraverseChainTask : public TaskBase {
 
   void run(uint32_t executor_idx) override {
     auto start = std::chrono::steady_clock::now();
-    setupCandidateSets();
     setupOutputs();
+    setupTraverseContexts();
     if (verboseExecutionLog()) {
       std::stringstream ss;
       for (auto& x : *candidates_) {
         ss << x.size() << " ";
       }
-      LOG(INFO) << "-------- Task " << task_id_ << " candidate sizes" << ss.str();
+      LOG(INFO) << "-------- Task " << task_id_ << " candidate sizes " << ss.str();
     }
     auto old_count = dynamic_cast<OutputOperator*>(operators_.back())->getOutput()->getCount(executor_idx);
     // TODO(tatiana): support match limit
     auto inputs = input_op_->getInputs(graph_, *candidates_);
     // auto profile_output = "Task_" + std::to_string(task_id_);
     // ProfilerStart(profile_output.data());
-    execute<QueryType::Execute>(inputs, inputs.size(), 0, executor_idx);
+    if (false) {
+      profile_info_.resize(operators_.size() + 1);
+      query_type_ = QueryType::Profile;
+      execute<QueryType::Profile>(inputs, inputs.size(), 0, executor_idx);
+      for (uint32_t i = 1; i < operators_.size(); ++i) {
+        LOG(INFO) << operators_[i - 1]->toProfileString(profile_info_[i]);
+      }
+    } else {
+      execute<QueryType::Execute>(inputs, inputs.size(), 0, executor_idx);  // FIXME(debug)
+    }
     // ProfilerStop();
     auto new_count = dynamic_cast<OutputOperator*>(operators_.back())->getOutput()->getCount(executor_idx);
     auto end = std::chrono::steady_clock::now();
     if (shortExecutionLog()) {
       LOG(INFO) << "Task " << task_id_ << " input " << inputs.size() << '/' << getNumSubgraphs(inputs, 0, inputs.size())
-                << " count " << (new_count - old_count) << ", time usage: " << toSeconds(start, end) << "s.";
+                << " count " << (new_count - old_count) << " (" << old_count << " to " << new_count
+                << "), time usage: " << toSeconds(start, end) << "s.";
     }
   }
 
   void profile(uint32_t executor_idx) override {
-    setupCandidateSets();
     setupOutputs();
+    setupTraverseContexts();
     LOG(INFO) << "Task " << task_id_;
     profile_info_.resize(operators_.size() + 1);  // traverse chain + input operator
     std::vector<CompressedSubgraphs> inputs;
@@ -119,16 +130,19 @@ class TraverseChainTask : public TaskBase {
   }
 
  protected:
-  void setupCandidateSets() const {
+  void setupTraverseContexts() {
     auto op = operators_[0];
     auto traverse = dynamic_cast<TraverseOperator*>(op);
+    uint32_t level = 0;
+    traverse_context_.reserve(operators_.size() - 1);
     while (traverse != nullptr) {
       DCHECK_LT(traverse->getTargetQueryVertex(), candidates_->size());
       // now assume all query vertices have candidate sets
-      traverse->setCandidateSets(&(*candidates_)[traverse->getTargetQueryVertex()]);
+      traverse_context_.emplace_back(createTraverseContext(&(*candidates_)[traverse->getTargetQueryVertex()],
+                                                           outputs_[level], level, traverse, query_type_));
       // LOG(INFO) << "set candidates for " << traverse->getTargetQueryVertex() << " " << traverse->toString();
-      op = op->getNext();
-      traverse = dynamic_cast<TraverseOperator*>(op);
+      traverse = dynamic_cast<TraverseOperator*>(traverse->getNext());
+      ++level;
     }
   }
 
@@ -141,13 +155,11 @@ class TraverseChainTask : public TaskBase {
     }
   }
 
-  virtual std::unique_ptr<TraverseContext> createTraverseContext(const std::vector<CompressedSubgraphs>& inputs,
-                                                                 uint32_t input_size,
+  virtual std::unique_ptr<TraverseContext> createTraverseContext(const CandidateSetView* candidates,
                                                                  std::vector<CompressedSubgraphs>& outputs,
                                                                  uint32_t level, const TraverseOperator* op,
                                                                  QueryType profile) {
-    auto ctx = op->initTraverseContext(&inputs, graph_, 0, input_size, profile);
-    ctx->setOutputBuffer(outputs);
+    auto ctx = op->initTraverseContext(candidates, &outputs, graph_, profile);
     return ctx;
   }
 
@@ -168,9 +180,10 @@ class TraverseChainTask : public TaskBase {
       return output_op->validateAndOutput(inputs, start, input_size, executor_idx);
     }
 
-    auto& outputs = outputs_[level];
     auto traverse_op = dynamic_cast<TraverseOperator*>(op);
-    auto ctx = createTraverseContext(inputs, input_size, outputs, level, traverse_op, query_type_);
+    auto ctx = traverse_context_[level].get();
+    DCHECK_NOTNULL(ctx->getOutputs());
+    ctx->setInput(inputs, 0, input_size);
     bool finished = false;
     while (true) {
       if (isTimeOut()) {
@@ -179,21 +192,22 @@ class TraverseChainTask : public TaskBase {
       ctx->resetOutputs();
       uint32_t size = 0;
       if
-        constexpr(isProfileMode(profile)) size = traverse_op->expandAndProfile(batch_size_, ctx.get());
+        constexpr(isProfileMode(profile)) size = traverse_op->expandAndProfile(batch_size_, ctx);
       else {
-        size = traverse_op->expand(batch_size_, ctx.get());
+        size = traverse_op->expand(batch_size_, ctx);
       }
       if (size == 0) {
         break;
       }
-      if (execute<profile>(outputs, size, level + 1, executor_idx)) {
+      if (execute<profile>(outputs_[level], size, level + 1, executor_idx)) {
         finished = true;
         break;
       }
     }
     if
       constexpr(isProfileMode(profile)) {
-        ctx->total_input_size = ctx->getTotalInputSize();
+        ctx->total_input_size += ctx->getTotalInputSize();
+        // FIXME(tatiana): copy once execution is done, now is redundantly added
         profile_info_[level + 1] += *ctx;
       }
 
@@ -219,12 +233,10 @@ class TraverseTask : public TraverseChainTask {
   }
 
  protected:
-  std::unique_ptr<TraverseContext> createTraverseContext(const std::vector<CompressedSubgraphs>& inputs,
-                                                         uint32_t input_size, std::vector<CompressedSubgraphs>& outputs,
-                                                         uint32_t level, const TraverseOperator* op,
-                                                         QueryType profile) override {
-    auto ctx = op->initTraverseContext(&inputs, &graph_views_[level], 0, input_size, profile);
-    ctx->setOutputBuffer(outputs);
+  std::unique_ptr<TraverseContext> createTraverseContext(const CandidateSetView* candidates,
+                                                         std::vector<CompressedSubgraphs>& outputs, uint32_t level,
+                                                         const TraverseOperator* op, QueryType profile) override {
+    auto ctx = op->initTraverseContext(candidates, &outputs, &graph_views_[level], profile);
     return ctx;
   }
 
@@ -311,9 +323,7 @@ class MatchingParallelTraverseTask : public MatchingParallelTask {
     traverse_ctx_->setOutputBuffer(outputs_);
   }
 
-  const GraphBase* getDataGraph() const override {
-    return reinterpret_cast<const GraphBase*>(traverse_ctx_->current_data_graph);
-  }
+  const GraphBase* getDataGraph() const override { return traverse_ctx_->getDataGraph<GraphBase>(); }
 
   void collectProfileInfo(ProfileInfo& agg) const override {
     traverse_ctx_->total_input_size = traverse_ctx_->getTotalInputSize();

@@ -33,12 +33,21 @@ class ExpandEdgeTraverseContext : public TraverseContext, public IntersectionCac
 #else
 class ExpandEdgeTraverseContext : public TraverseContext {
 #endif
+  std::shared_ptr<unordered_set<VertexID>> candidate_set_;
   unordered_set<VertexID> parent_set_;  // for profile
 
  public:
-  ExpandEdgeTraverseContext(const std::vector<CompressedSubgraphs>* inputs, const void* data_graph,
-                            uint32_t input_index, uint32_t input_end_index)
-      : TraverseContext(inputs, data_graph, input_index, input_end_index) {}
+  ExpandEdgeTraverseContext(const CandidateSetView* candidates, const void* graph,
+                            std::vector<CompressedSubgraphs>* outputs, QueryType profile, bool hash_candidates)
+      : TraverseContext(graph, outputs, profile) {
+    if (hash_candidates) {
+      candidate_set_ = std::make_shared<unordered_set<VertexID>>(candidates->begin(), candidates->end());
+    }
+  }
+
+  virtual ~ExpandEdgeTraverseContext() {}
+
+  std::unique_ptr<TraverseContext> clone() const override { return std::make_unique<ExpandEdgeTraverseContext>(*this); }
 
   template <QueryType profile>
   inline void updateIntersection(uint32_t input_size, uint32_t output_size, VertexID parent) {
@@ -54,6 +63,8 @@ class ExpandEdgeTraverseContext : public TraverseContext {
   }
 
   inline bool hasIntersectionParent(VertexID parent_match) { return parent_set_.insert(parent_match).second; }
+
+  const unordered_set<VertexID>& getCandidateSet() const { return *candidate_set_; }
 };
 
 class ExpandEdgeOperator : public TraverseOperator {
@@ -104,14 +115,6 @@ class ExpandEdgeOperator : public TraverseOperator {
 
   inline void setParentLabel(LabelID l) { parent_label_ = l; }
 
-  std::unique_ptr<TraverseContext> initTraverseContext(const std::vector<CompressedSubgraphs>* inputs,
-                                                       const void* graph, uint32_t start, uint32_t end,
-                                                       QueryType profile) const override {
-    auto ret = std::make_unique<ExpandEdgeTraverseContext>(inputs, graph, start, end);
-    ret->query_type = profile;
-    return ret;
-  }
-
   std::vector<std::unique_ptr<BipartiteGraph>> computeBipartiteGraphs(
       const Graph* g, const std::vector<CandidateSetView>& candidate_sets) override {
     std::vector<std::unique_ptr<BipartiteGraph>> ret;
@@ -130,34 +133,33 @@ class ExpandEdgeOperator : public TraverseOperator {
   }
 
   template <typename G, QueryType profile>
-  inline void expandFromParent(TraverseContext* ctx, VertexID parent_match,
-                               const unordered_set<VertexID>& candidate_set, const unordered_set<VertexID>& exceptions,
+  inline void expandFromParent(TraverseContext* ctx, VertexID parent_match, const unordered_set<VertexID>& exceptions,
                                std::vector<VertexID>* targets) const {
-    auto g = (const G*)(ctx->current_data_graph);
-#ifdef INTERSECTION_CACHE
+    auto g = ctx->getDataGraph<G>();
     auto dctx = dynamic_cast<ExpandEdgeTraverseContext*>(ctx);
+#ifdef INTERSECTION_CACHE
     if (dctx->getIntersectionCache(parent_match, targets)) {
       if
         constexpr(isProfileMode(profile)) { ++ctx->cache_hit; }
     } else {
       auto neighbors = g->getOutNeighborsWithHint(parent_match, target_label_, 0);
-      intersect(candidate_set, neighbors, targets);
-      dctx->updateIntersection<profile>(candidate_set.size() + neighbors.size(), targets->size(), parent_match);
+      intersect(dctx->getCandidateSet(), neighbors, targets);
+      dctx->updateIntersection<profile>(dctx->getCandidateSet().size() + neighbors.size(), targets->size(),
+                                        parent_match);
       dctx->cacheIntersection(parent_match, *targets);
     }
     removeExceptions(targets, exceptions);
 #else
     auto neighbors = g->getOutNeighborsWithHint(parent_match, target_label_, 0);
-    intersect(candidate_set, neighbors, targets, exceptions);
+    intersect(dctx->getCandidateSet(), neighbors, targets, exceptions);
     ((ExpandEdgeTraverseContext*)ctx)
-        ->updateIntersection<profile>(candidate_set.size() + neighbors.size(), targets->size(), parent_match);
+        ->updateIntersection<profile>(dctx->getCandidateSet().size() + neighbors.size(), targets->size(), parent_match);
 #endif
   }
 
  protected:
   inline void toStringInner(std::stringstream& ss) const {
     ss << ' ' << parent_id_ << ':' << parent_label_ << " -> " << target_vertex_ << ':' << target_label_;
-    if (candidates_ != nullptr) ss << " (" << candidates_->size() << ")";
   }
 };
 

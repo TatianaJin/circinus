@@ -45,9 +45,9 @@ class ExpandKeyToSetVertexOperator : public ExpandVertexOperator {
   }
 
   uint32_t expandAndProfileInner(uint32_t batch_size, TraverseContext* ctx) const override {
-    if (ctx->query_type == QueryType::Profile) return expandInner<QueryType::Profile>(batch_size, ctx);
-    CHECK(ctx->query_type == QueryType::ProfileWithMiniIntersection) << "Unknown query type "
-                                                                     << (uint32_t)ctx->query_type;
+    if (ctx->getQueryType() == QueryType::Profile) return expandInner<QueryType::Profile>(batch_size, ctx);
+    CHECK(ctx->getQueryType() == QueryType::ProfileWithMiniIntersection) << "Unknown query type "
+                                                                         << (uint32_t)ctx->getQueryType();
     return expandInner<QueryType::ProfileWithMiniIntersection>(batch_size, ctx);
   }
 
@@ -74,12 +74,12 @@ class ExpandKeyToSetVertexOperator : public ExpandVertexOperator {
       for (uint32_t i = 0; i < parents_.size(); ++i) {
         uint32_t key = query_vertex_indices_.at(parents_[i]);
         uint32_t key_vid = input.getKeyVal(key);
-        auto neighbors = ((G*)ctx->current_data_graph)->getOutNeighborsWithHint(key_vid, target_label_, i);
+        auto neighbors = ctx->getDataGraph<G>()->getOutNeighborsWithHint(key_vid, target_label_, i);
         if (i == 0) {
-          intersect(*candidates_, neighbors, &new_set, exceptions);
+          intersect(*ctx->getCandidateSet(), neighbors, &new_set, exceptions);
           if
             constexpr(isProfileMode(profile)) {
-              ctx->updateIntersectInfo(candidates_->size() + neighbors.size(), new_set.size());
+              ctx->updateIntersectInfo(ctx->getCandidateSet()->size() + neighbors.size(), new_set.size());
             }
         } else {
           auto new_set_size = new_set.size();
@@ -121,7 +121,6 @@ class ExpandKeyToSetVertexOperator : public ExpandVertexOperator {
         }
 #endif
         ++output_num;
-        // TODO(by) break if batch_size is reached
       }
     }
     return output_num;

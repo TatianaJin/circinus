@@ -114,7 +114,6 @@ void ExecutionPlanDriver::init(QueryId qid, QueryContext* query_ctx, ExecutionCo
   task_counters_.resize(n_plans, 1);  // one task per partition
   candidates_.resize(n_plans);
   for (uint32_t i = 0; i < n_plans; ++i) {
-    // if (i != 5) continue;
     auto plan_idx = plan_->getPartitionedPlan(i).first;
     // all plans share the same output
     dynamic_cast<OutputOperator*>(plan_->getOutputOperator(plan_idx))->setOutput(&result_->getOutputs());
@@ -157,10 +156,13 @@ void MatchingParallelExecutionPlanDriver::init(QueryId qid, QueryContext* query_
   }
 
   {  // TODO(tatiana): wrap with a task?
+    traverse_ctx_templates_.reserve(plan_->getOperators().size() - 1);
     for (auto op : plan_->getOperators()) {
       auto traverse = dynamic_cast<TraverseOperator*>(op);
       if (traverse == nullptr) break;
-      traverse->setCandidateSets(&candidates_[traverse->getTargetQueryVertex()]);
+      traverse_ctx_templates_.emplace_back(
+          traverse->initTraverseContext(&candidates_[traverse->getTargetQueryVertex()], nullptr,
+                                        (const GraphBase*)query_ctx->data_graph, query_type_));
     }
   }
 
@@ -209,18 +211,16 @@ void MatchingParallelExecutionPlanDriver::taskFinish(TaskBase* task, ThreadsafeT
     } else {
       uint32_t input_index = 0;
       for (; input_index + batch_size_ < input_size; input_index += batch_size_) {
-        addTaskToQueue<MatchingParallelTraverseTask>(
-            task_queue, task->getQueryId(), level, task->getStopTime(), dynamic_cast<TraverseOperator*>(op),
-            dynamic_cast<TraverseOperator*>(op)->initTraverseContext(inputs.get(), task->getDataGraph(), input_index,
-                                                                     input_index + batch_size_, query_type_),
-            inputs);
+        auto ctx_clone = traverse_ctx_templates_[level - 1]->clone();
+        ctx_clone->setInput(*inputs, input_index, input_index + batch_size_);
+        addTaskToQueue<MatchingParallelTraverseTask>(task_queue, task->getQueryId(), level, task->getStopTime(),
+                                                     dynamic_cast<TraverseOperator*>(op), std::move(ctx_clone), inputs);
       }
       if (input_index < input_size) {
-        addTaskToQueue<MatchingParallelTraverseTask>(
-            task_queue, task->getQueryId(), level, task->getStopTime(), dynamic_cast<TraverseOperator*>(op),
-            dynamic_cast<TraverseOperator*>(op)->initTraverseContext(inputs.get(), task->getDataGraph(), input_index,
-                                                                     input_size, query_type_),
-            inputs);
+        auto ctx_clone = traverse_ctx_templates_[level - 1]->clone();
+        ctx_clone->setInput(*inputs, input_index, input_size);
+        addTaskToQueue<MatchingParallelTraverseTask>(task_queue, task->getQueryId(), level, task->getStopTime(),
+                                                     dynamic_cast<TraverseOperator*>(op), std::move(ctx_clone), inputs);
       }
     }
   }

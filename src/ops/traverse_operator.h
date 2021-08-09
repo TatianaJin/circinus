@@ -30,73 +30,14 @@
 #include "graph/types.h"
 #include "ops/filters/subgraph_filter.h"
 #include "ops/operator.h"
+#include "ops/traverse_context.h"
 #include "utils/query_utils.h"
 #include "utils/utils.h"
 
 namespace circinus {
 
-class TraverseContext : public ProfileInfo {
- private:
-  uint32_t input_index_ = 0;
-  uint32_t input_start_index_ = 0;
-  uint32_t input_end_index_ = 0;
-  const std::vector<CompressedSubgraphs>* current_inputs_ = nullptr;
-
-  uint32_t output_idx_ = 0;
-  std::vector<CompressedSubgraphs>* outputs_;
-
- public:
-  const void* current_data_graph = nullptr;
-  QueryType query_type;
-
-  TraverseContext() {}
-  TraverseContext(const std::vector<CompressedSubgraphs>* inputs, const void* data_graph)
-      : TraverseContext(inputs, data_graph, 0, inputs->size()) {}
-
-  TraverseContext(const std::vector<CompressedSubgraphs>* inputs, const void* data_graph, uint32_t input_index,
-                  uint32_t input_end_index)
-      : input_index_(input_index),
-        input_start_index_(input_index),
-        input_end_index_(input_end_index),
-        current_inputs_(inputs),
-        current_data_graph(data_graph) {}
-
-  virtual ~TraverseContext() {}
-
-  inline const CompressedSubgraphs& getCurrentInput() const { return (*current_inputs_)[input_index_]; }
-  inline const CompressedSubgraphs& getPreviousInput() const { return (*current_inputs_)[input_index_ - 1]; }
-  inline bool hasNextInput() const { return input_index_ < input_end_index_; }
-  inline uint32_t getInputIndex() const { return input_index_; }
-  inline uint32_t getTotalInputSize() const { return input_index_ - input_start_index_; }
-  inline auto getOutputs() const { return outputs_; }
-  inline auto getOutputSize() const { return output_idx_; }
-
-  inline void nextInput() { ++input_index_; }
-
-  inline void setOutputBuffer(std::vector<CompressedSubgraphs>& outputs) { outputs_ = &outputs; }
-  inline void popOutputs(uint32_t size) { output_idx_ -= size; }
-  inline void popOutput() { --output_idx_; }
-
-  template <typename... Args>
-  inline CompressedSubgraphs* newOutput(Args&&... args) {
-    DCHECK_LT(output_idx_, outputs_->size()) << output_idx_ << " " << outputs_->size();
-    // do not increment output_idx_ if the current output is invalid
-    auto ret = (*outputs_)[output_idx_].reset(std::forward<Args>(args)...);
-    output_idx_ += (ret != nullptr);
-    return ret;
-  }
-
-  inline CompressedSubgraphs& copyOutput(const CompressedSubgraphs& from) {
-    (*outputs_)[output_idx_] = from;
-    return (*outputs_)[output_idx_++];
-  }
-
-  inline void resetOutputs() { output_idx_ = 0; }
-};
-
 class TraverseOperator : public Operator {
  protected:
-  const CandidateSetView* candidates_ = nullptr;
   const QueryVertexID target_vertex_;
   LabelID target_label_ = ALL_LABEL;
 
@@ -122,14 +63,12 @@ class TraverseOperator : public Operator {
   virtual ~TraverseOperator() {}
 
   /* setters */
-  inline virtual void setCandidateSets(const CandidateSetView* candidates) { candidates_ = candidates; }
   inline void setMatchingOrderIndices(std::vector<std::pair<bool, uint32_t>>&& matching_order_indices) {
     matching_order_indices_ = std::move(matching_order_indices);
   }
   inline void setTargetLabel(LabelID l) { target_label_ = l; }
 
   /* getters */
-  inline const CandidateSetView* getCandidateSet() const { return candidates_; }
   inline const auto& getSameLabelKeyIndices() const { return same_label_key_indices_; }
   inline const auto& getSameLabelSetIndices() const { return same_label_set_indices_; }
   inline auto getSetPruningThreshold() const { return set_pruning_threshold_; }
@@ -160,13 +99,9 @@ class TraverseOperator : public Operator {
   virtual std::vector<std::unique_ptr<GraphPartitionBase>> computeGraphPartitions(
       const ReorderedPartitionedGraph* g, const std::vector<CandidateScope>& candidate_scopes) const = 0;
 
-  virtual std::unique_ptr<TraverseContext> initTraverseContext(const std::vector<CompressedSubgraphs>* inputs,
-                                                               const void* graph, uint32_t input_start,
-                                                               uint32_t input_end, QueryType profile) const {
-    auto ret = std::make_unique<TraverseContext>(inputs, graph, input_start, input_end);
-    ret->query_type = profile;
-    return ret;
-  }
+  virtual std::unique_ptr<TraverseContext> initTraverseContext(const CandidateSetView* candidates,
+                                                               std::vector<CompressedSubgraphs>* outputs,
+                                                               const void* graph, QueryType profile) const = 0;
 
   virtual std::pair<uint32_t, uint32_t> getOutputSize(const std::pair<uint32_t, uint32_t>& input_key_size) const = 0;
 
