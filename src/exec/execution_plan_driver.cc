@@ -49,7 +49,9 @@ void ExecutionPlanDriverBase::init(QueryId qid, QueryContext* query_ctx, Executi
                     ? QueryType::Profile
                     : ((query_ctx->query_config.mode == QueryMode::ProfileSI) ? QueryType::ProfileWithMiniIntersection
                                                                               : QueryType::Execute);
-  LOG(INFO) << "Query Type " << ((uint16_t)query_type_);
+  if (verboseExecutionLog()) {
+    LOG(INFO) << "Query Type " << ((uint16_t)query_type_);
+  }
 
   finish_event_ = std::make_unique<ServerEvent>(ServerEvent::ExecutionPhase);
   finish_event_->data = &result_->getQueryResult();
@@ -131,6 +133,7 @@ void ExecutionPlanDriver::init(QueryId qid, QueryContext* query_ctx, ExecutionCo
 
 void ExecutionPlanDriver::taskFinish(TaskBase* task, ThreadsafeTaskQueue* task_queue,
                                      ThreadsafeQueue<ServerEvent>* reply_queue) {
+  DCHECK_LT(task->getTaskId(), task_counters_.size());
   collectTaskInfo(task);
   if (--task_counters_[task->getTaskId()] == 0 && ++n_finished_tasks_ == task_counters_.size()) {
     finishPlan(reply_queue);

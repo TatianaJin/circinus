@@ -25,7 +25,9 @@ def get_args():
   parser.add_argument('-s', '--strategy', default='dynamic', choices=['dynamic', 'eager', 'static', 'all'], help='Vertex cover strategy.')
   parser.add_argument('--profile', choices=['simple', 'si'])
   parser.add_argument('--partition', type=int, default=1, help='The number of partitions for graph')
-  # FIXME(tatiana): config for parallelization strategy
+  parser.add_argument('--upg', '--use_partitioned_graph', type=int, default=1, choices=[0, 1])
+  parser.add_argument('--ipp', '--intra_partition_plan', type=int, default=1, choices=[0, 1])
+  parser.add_argument('--pqv', default='none', choices=['none', 'cc'])
 
   args = parser.parse_args()
   args.bin_dir = osp.join(args.project_dir, "build", "tests")
@@ -35,7 +37,10 @@ def get_args():
 
 
 def get_log_path(args):
-  base = "_".join([str(x) for x in (args.match, args.limit, args.batch, args.filter, args.order, args.strategy, args.config) if x is not None])
+  base = "_".join([
+    str(x) for x in (args.match, args.limit, args.batch, args.filter, args.order, args.strategy, "partition{0}".format(args.partition),
+                     "upg{0}".format(args.upg), "ipp{0}".format(args.ipp), args.pqv, args.config) if x is not None
+  ])
   path = osp.join(args.log_dir, base)
   if args.profile is not None:  # for profiling, we output the profile for each query separately in a folder with the result log
     log_dir = "{0}_{1}".format(path, args.profile)
@@ -47,8 +52,8 @@ def get_log_path(args):
 
 
 def get_common_flags(args, log):
-  return "-match_limit {0} -batch_size {1} -filter {2} -vertex_cover {3} -output_file {4} -match_order {5}".format(
-    args.limit, args.batch, args.filter, args.strategy, log, args.order)
+  return "-match_limit {0} -batch_size {1} -filter {2} -vertex_cover {3} -output_file {4} -match_order {5} -upg {upg} -ipp {ipp} -pqv {pqv} -partition {partition}".format(
+    args.limit, args.batch, args.filter, args.strategy, log, args.order, upg=args.upg, ipp=args.ipp, pqv=args.pqv, partition=args.partition)
 
 
 def run_batch(args):
@@ -60,7 +65,7 @@ def run_batch(args):
   log_dir, log = get_log_path(args)
 
   with open(log, 'a') as log_f:
-    log_f.write("dataset,query_size,query_mode,query_index,elapsed_time,filter_time,plan_time,enumerate_time,n_embeddings,order\n")
+    log_f.write("dataset,query_size,query_mode,query_index,elapsed_time,filter_time,plan_time,enumerate_time,n_embeddings,order,max_task_time\n")
 
   common_flags = get_common_flags(args, log)
   with open(config_path, 'r') as config_f:
@@ -73,10 +78,8 @@ def run_batch(args):
 def run_query(config, args, log_dir, common_flags):
   flags = config.split(',')
   profile_flag = "" if args.profile is None else "-profile_prefix {1} -profile {0}".format(1 if args.profile == "simple" else 2, log_dir)
-  cmd = "timeout {0} {1} -dataset {2} -query_size {3} -query_mode {4} -query_index {5} {6} {7}".format(args.time_out,
-                                                                                                       osp.join(args.bin_dir,
-                                                                                                                args.match), flags[0], flags[1],
-                                                                                                       flags[2], flags[3], profile_flag, common_flags)
+  cmd = "timeout {0} {1} -verbosity 0 -dataset {2} -query_size {3} -query_mode {4} -query_index {5} {6} {7}".format(
+    args.time_out, osp.join(args.bin_dir, args.match), flags[0], flags[1], flags[2], flags[3], profile_flag, common_flags)
   os.system(cmd)
 
 

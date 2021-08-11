@@ -103,7 +103,7 @@ void GraphBase::loadUndirectedGraphFromBinary(std::istream& input) {
   input.read(reinterpret_cast<char*>(&n_vertices_), sizeof(n_vertices_));
   input.read(reinterpret_cast<char*>(&n_edges_), sizeof(n_edges_));
   input.read(reinterpret_cast<char*>(&max_degree_), sizeof(max_degree_));
-  LOG(INFO) << n_vertices_ << " " << n_edges_ << " " << max_degree_;
+  LOG(INFO) << "Vertices " << n_vertices_ << ", edges " << n_edges_ << ", max degree " << max_degree_;
   binaryStreamToVector(input, vlist_);
   CHECK_EQ(vlist_.size(), n_vertices_ + 1);
   binaryStreamToVector(input, elist_);
@@ -119,7 +119,7 @@ void GraphBase::loadUndirectedGraphFromBinary(std::istream& input) {
       vertex_cardinality_by_label_[l] = count;
     }
   }
-  LOG(INFO) << "Finish Graph Base Load";
+  DLOG(INFO) << "Finish Graph Base Load";
 }
 
 void GraphBase::saveAsBinaryInner(std::ostream& output) const {

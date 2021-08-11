@@ -49,11 +49,13 @@ ExecutorManager::ExecutorManager(ThreadsafeQueue<ServerEvent>* queue) : reply_qu
 }
 
 void ExecutorManager::run(QueryId qid, QueryContext* query_ctx, std::unique_ptr<PlanDriver>&& plan_driver) {
-  std::pair<ExecutionContext, std::unique_ptr<PlanDriver>>* ctx;
+  PlanDriver* driver = nullptr;
+  ExecutionContext* ctx = nullptr;
   {
     std::lock_guard<std::mutex> lock(execution_ctx_mu_);
     auto ctx_pos = execution_ctx_.find(qid);
     if (ctx_pos == execution_ctx_.end()) {
+      DCHECK_NOTNULL(plan_driver.get());
       ctx_pos =
           execution_ctx_
               .insert({qid, std::make_pair(std::make_pair(getExecutionConfig(), nullptr), std::move(plan_driver))})
@@ -61,9 +63,10 @@ void ExecutorManager::run(QueryId qid, QueryContext* query_ctx, std::unique_ptr<
     } else if (plan_driver != nullptr) {
       ctx_pos->second.second = std::move(plan_driver);  // update driver
     }
-    ctx = &ctx_pos->second;
+    driver = ctx_pos->second.second.get();
+    ctx = &ctx_pos->second.first;
   }
-  ctx->second->init(qid, query_ctx, ctx->first, task_queue_);
+  driver->init(qid, query_ctx, *ctx, task_queue_);
 }
 
 void ExecutorManager::ExecutorPool::start(ThreadsafeTaskQueue* task_queue,

@@ -166,10 +166,6 @@ std::vector<QueryVertexID> NaivePlanner::generateMatchingOrder(const QueryGraph*
 }
 
 QueryVertexID NaivePlanner::selectStartingVertex(const std::vector<QueryVertexID>& cover) {
-  // std::sort(cover.begin(), cover.end(), [this](QueryVertexID v1, QueryVertexID v2) { return
-  // candidate_cardinality_[v1] / query_graph_->getVertexOutDegree(v1) < candidate_cardinality_[v2] /
-  // query_graph_->getVertexOutDegree(v2); });
-
   QueryVertexID start_vertex = cover.front();
   double min = candidate_cardinality_[cover.front()];
 

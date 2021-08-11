@@ -35,6 +35,7 @@ void CandidatePruningPlanDriver::initPhase1TasksForPartitionedGraph(QueryId qid,
   auto n_partitions = metadata.numPartitions();
   auto n_qvs = plan_->getScanQueryVertices().size();
 
+  DCHECK_NE(n_qvs, 0) << "The case of no candidate is not handled yet";
   task_counters_.resize(n_qvs);
   ctx.second = Result::newPartitionedCandidateResult(n_qvs, n_partitions);
   result_ = (CandidateResult*)ctx.second.get();
@@ -70,12 +71,14 @@ void CandidatePruningPlanDriver::init(QueryId qid, QueryContext* query_ctx, Exec
   finish_event_ = std::make_unique<ServerEvent>(ServerEvent::CandidatePhase);
   finish_event_->query_id = qid;
   if (plan_->getPhase() == 1) {
+    LOG(INFO) << "Candidate pruning phase 1";
     auto n_partitions = query_ctx->graph_metadata->numPartitions();
     if (n_partitions > 1) {
       initPhase1TasksForPartitionedGraph(qid, query_ctx, ctx, task_queue);
       return;
     }
     auto scans = plan_->getScanOperators(*query_ctx->graph_metadata, ctx.first);
+    DCHECK_NE(scans.size(), 0) << "The case of no candidate is not handled yet";
     task_counters_.resize(scans.size());
     ctx.second = Result::newCandidateResult(scans.size());
     result_ = (CandidateResult*)ctx.second.get();
@@ -90,8 +93,9 @@ void CandidatePruningPlanDriver::init(QueryId qid, QueryContext* query_ctx, Exec
       operators_.push_back(std::move(scan));
     }
   } else if (plan_->getPhase() == 3) {
+    LOG(INFO) << "Candidate pruning phase 3";
     auto filters = plan_->getFilterOperators(*query_ctx->graph_metadata, ctx.first);
-    LOG(INFO) << filters.size();
+    DCHECK_NE(filters.size(), 0) << "The case of no candidate is not handled yet";
     task_counters_.resize(filters.size());
     uint32_t task_id = 0;
     auto& filter = filters[task_id];
@@ -114,6 +118,7 @@ void CandidatePruningPlanDriver::init(QueryId qid, QueryContext* query_ctx, Exec
 
 void CandidatePruningPlanDriver::taskFinish(TaskBase* task, ThreadsafeTaskQueue* task_queue,
                                             ThreadsafeQueue<ServerEvent>* reply_queue) {
+  DCHECK_LT(task->getTaskId(), task_counters_.size()) << "phase " << plan_->getPhase();
   if (plan_->getPhase() == 1) {
     // DLOG(INFO) << task->getTaskId() << ' ' << dynamic_cast<ScanTask*>(task)->getScanContext().candidates.size();
     result_->collect(task);

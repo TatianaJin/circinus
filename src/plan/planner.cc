@@ -574,8 +574,9 @@ ExecutionPlan* Planner::generateLogicalExecutionPlan(const std::vector<VertexID>
           : (query_context_->query_config.use_auxiliary_index
                  ? GraphType::BipartiteGraphView
                  : (query_context_->graph_metadata->numPartitions() > 1 ? GraphType::Partitioned : GraphType::Normal));
-  planners_.push_back(std::make_unique<NaivePlanner>(
-      &query_context_->query_graph, query_context_->query_config.use_two_hop_traversal, cardinality, graph_type));
+  planners_.push_back(std::make_unique<NaivePlanner>(&query_context_->query_graph,
+                                                     query_context_->query_config.use_two_hop_traversal,
+                                                     std::move(cardinality), graph_type));
   auto& planner = planners_.back();
 
   auto use_order = planner->generateOrder(query_context_->data_graph, *query_context_->graph_metadata, candidate_views,

@@ -58,6 +58,9 @@ DEFINE_string(batch_file, "", "Batch query file");
 DEFINE_uint64(partition, 1, "Number of Graph Partitions");
 DEFINE_bool(bipartite_graph, false, "Use bipartite graph or not");  // TODO(exp): support for control experiment
 DEFINE_bool(batch_run, false, "Batch run");
+DEFINE_bool(upg, true, "Use partitioned graph for plan");
+DEFINE_bool(ipp, true, "Use intra-partition for plan if true, otherwise use actual partition scopes for plan");
+DEFINE_string(pqv, "none", "The strategy to choose pqv");
 
 class QueryConfig {
  public:
@@ -188,7 +191,7 @@ class Benchmark {
     std::stringstream config;
     // FIXME(tatiana): parallelization strategy
     config << "cps=" << FLAGS_filter << ",cs=" << FLAGS_vertex_cover << ",limit=" << FLAGS_match_limit
-           << ",mo=" << match_order << ",pqv=cc";
+           << ",mo=" << match_order << ",pqv=" << FLAGS_pqv << ",ipp=" << FLAGS_ipp << ",upg=" << FLAGS_upg;
 
     if (FLAGS_profile == 1) {
       config << ",mode=profile";

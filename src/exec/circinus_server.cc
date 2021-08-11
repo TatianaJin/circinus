@@ -146,7 +146,6 @@ bool CircinusServer::query(std::string&& graph_name, std::string&& query_path, s
 }
 
 void CircinusServer::handleNewQuery(const Event& event) {
-  LOG(INFO) << "handleNewQuery";
   if (data_graphs_.count(event.args[0]) == 0) {
     std::stringstream error;
     error << "Graph '" << event.args[0] << "' does not exist";

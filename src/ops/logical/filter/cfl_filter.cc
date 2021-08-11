@@ -29,7 +29,9 @@ LogicalCFLFilter::LogicalCFLFilter(const GraphMetadata& metadata, const QueryGra
                                    const std::vector<VertexID>& candidate_size)
     : LogicalNeighborhoodFilter(query_graph), two_core_solver_(query_graph) {
   start_vertex_ = getStartVertex(metadata, query_graph, candidate_size);
-  LOG(INFO) << "start_vertex " << start_vertex_;
+  if (verbosePlannerLog()) {
+    LOG(INFO) << "start_vertex " << start_vertex_;
+  }
   uint32_t query_vertices_num = query_graph->getNumVertices();
   bfs_tree_.resize(query_vertices_num);
   bfs_order_.reserve(query_vertices_num);

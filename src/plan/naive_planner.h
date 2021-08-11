@@ -73,7 +73,7 @@ class NaivePlanner {
 
   const QueryGraph* query_graph_;
   bool use_two_hop_traversal_ = false;
-  std::vector<double> candidate_cardinality_;
+  const std::vector<double> candidate_cardinality_;
   ExecutionPlan plan_;
 
   std::vector<std::vector<CoverNode>> covers_;  // covers for each level, the search space for compression
@@ -81,20 +81,20 @@ class NaivePlanner {
   std::vector<double> level_cost_;
 
  public:
-  NaivePlanner(QueryGraph* query_graph, std::vector<double> candidate_cardinality)
-      : query_graph_(query_graph), candidate_cardinality_(candidate_cardinality), plan_(GraphType::Normal) {}
+  NaivePlanner(QueryGraph* query_graph, std::vector<double>&& candidate_cardinality)
+      : query_graph_(query_graph), candidate_cardinality_(std::move(candidate_cardinality)), plan_(GraphType::Normal) {}
 
-  NaivePlanner(QueryGraph* query_graph, bool use_two_hop_traversal, std::vector<double> candidate_cardinality,
+  NaivePlanner(QueryGraph* query_graph, bool use_two_hop_traversal, std::vector<double>&& candidate_cardinality,
                GraphType type)
       : query_graph_(query_graph),
         use_two_hop_traversal_(use_two_hop_traversal),
-        candidate_cardinality_(candidate_cardinality),
+        candidate_cardinality_(std::move(candidate_cardinality)),
         plan_(type) {}
 
-  void setCandidateCardinality(const std::vector<double> candidates) { candidate_cardinality_ = candidates; }
   const auto& getMatchingOrder() const { return matching_order_; }
   const auto& getCovers() const { return covers_; }
 
+  // FIXME(tatiana): tidy-up the interface and implementations
   ExecutionPlan* generatePlan(const std::vector<QueryVertexID>& use_order = {});
   ExecutionPlan* generatePlanWithEagerDynamicCover(const std::vector<QueryVertexID>& use_order = {});
   ExecutionPlan* generatePlanWithoutCompression(const std::vector<QueryVertexID>& use_order = {});
@@ -228,6 +228,7 @@ class NaivePlanner {
   std::vector<QueryVertexID> generateMatchingOrder(const QueryGraph* g, const std::vector<int>& core_table,
                                                    QueryVertexID start_vertex);
 
+  // FIXME(tatiana): reuse the implementation of ordering strategy
   QueryVertexID selectStartingVertex(const std::vector<QueryVertexID>& cover);
 
   std::pair<uint32_t, uint32_t> analyzeDynamicCoreCoverEagerInner(const std::vector<int>& query_graph_cover);
