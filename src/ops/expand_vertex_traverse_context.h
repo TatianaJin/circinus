@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <memory>
 #include <string>
 #include <unordered_set>
 #include <vector>
@@ -28,6 +29,7 @@ class ExpandVertexTraverseContext : public TraverseContext, public MultiparentIn
 #else
 class ExpandVertexTraverseContext : public TraverseContext {
 #endif
+
  protected:
   const CandidateSetView* candidates_ = nullptr;
 

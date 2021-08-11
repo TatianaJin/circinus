@@ -96,7 +96,7 @@ class PrintExecutionPlan : public testing::Test {
       for (auto& set : candidates) {
         candidate_cardinality.push_back(set.size());
       }
-      NaivePlanner planner(&q, &candidate_cardinality);
+      NaivePlanner planner(&q, candidate_cardinality);
       ExecutionPlan* plan;
       if (dynamic) {
         plan = planner.generatePlanWithEagerDynamicCover();

@@ -16,8 +16,10 @@
 
 #include <cmath>
 #include <queue>
+#include <string>
 #include <tuple>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -71,7 +73,7 @@ class NaivePlanner {
 
   const QueryGraph* query_graph_;
   bool use_two_hop_traversal_ = false;
-  const std::vector<double>* candidate_cardinality_;
+  std::vector<double> candidate_cardinality_;
   ExecutionPlan plan_;
 
   std::vector<std::vector<CoverNode>> covers_;  // covers for each level, the search space for compression
@@ -79,17 +81,17 @@ class NaivePlanner {
   std::vector<double> level_cost_;
 
  public:
-  NaivePlanner(QueryGraph* query_graph, std::vector<double>* candidate_cardinality)
+  NaivePlanner(QueryGraph* query_graph, std::vector<double> candidate_cardinality)
       : query_graph_(query_graph), candidate_cardinality_(candidate_cardinality), plan_(GraphType::Normal) {}
 
-  NaivePlanner(QueryGraph* query_graph, bool use_two_hop_traversal, std::vector<double>* candidate_cardinality,
+  NaivePlanner(QueryGraph* query_graph, bool use_two_hop_traversal, std::vector<double> candidate_cardinality,
                GraphType type)
       : query_graph_(query_graph),
         use_two_hop_traversal_(use_two_hop_traversal),
         candidate_cardinality_(candidate_cardinality),
         plan_(type) {}
 
-  void setCandidateCardinality(const std::vector<double>* candidates) { candidate_cardinality_ = candidates; }
+  void setCandidateCardinality(const std::vector<double> candidates) { candidate_cardinality_ = candidates; }
   const auto& getMatchingOrder() const { return matching_order_; }
   const auto& getCovers() const { return covers_; }
 
@@ -160,7 +162,7 @@ class NaivePlanner {
     if (candidate_views == nullptr) {
       double car = 1;
       for (QueryVertexID qid : cover_node.cover) {
-        car *= (*candidate_cardinality_)[qid];
+        car *= candidate_cardinality_[qid];
       }
       return car;
     }
@@ -178,7 +180,7 @@ class NaivePlanner {
    */
   template <typename Hashmap = unordered_map<VertexID, double>>
   unordered_map<VertexID, double> dfsComputeCost(QueryVertexID qid, uint64_t cover_bits, std::vector<bool>& visited,
-                                                 const GraphBase* data_graph,
+                                                 std::vector<bool>& visited_cc, const GraphBase* data_graph,
                                                  const std::vector<CandidateSetView>* candidate_views,
                                                  const std::vector<QueryVertexID>& cc, bool with_traversal = false);
 
@@ -197,9 +199,9 @@ class NaivePlanner {
   bool hasValidCandidate();
 
   inline std::vector<double> logCardinality() {
-    std::vector<double> log_cardinality((*candidate_cardinality_).size(), 0);
-    for (uint32_t i = 0; i < (*candidate_cardinality_).size(); ++i) {
-      log_cardinality[i] = log2((*candidate_cardinality_)[i]);
+    std::vector<double> log_cardinality(candidate_cardinality_.size(), 0);
+    for (uint32_t i = 0; i < candidate_cardinality_.size(); ++i) {
+      log_cardinality[i] = log2(candidate_cardinality_[i]);
     }
     return log_cardinality;
   }

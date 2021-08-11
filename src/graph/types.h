@@ -17,6 +17,7 @@
 #include <cinttypes>
 #include <iostream>
 #include <memory>
+#include <string>
 #include <vector>
 
 namespace circinus {

@@ -188,7 +188,7 @@ class Benchmark {
     std::stringstream config;
     // FIXME(tatiana): parallelization strategy
     config << "cps=" << FLAGS_filter << ",cs=" << FLAGS_vertex_cover << ",limit=" << FLAGS_match_limit
-           << ",mo=" << match_order;
+           << ",mo=" << match_order << ",pqv=cc";
 
     if (FLAGS_profile == 1) {
       config << ",mode=profile";
@@ -220,8 +220,13 @@ class Benchmark {
   }
 
   void batch_run(const std::string& dataset, uint32_t query_size, const std::string& match_order, std::ostream* out) {
+    (*out) << "dataset,query_size,query_mode,query_index,elapsed_execution_time,filter_time,plan_time,"
+              "enumerate_time,n_embeddings,"
+              "order\n";
     for (uint32_t i = 1; i <= 200; ++i) {
       run(dataset, query_size, "dense", i, match_order, out);
+    }
+    for (uint32_t i = 1; i <= 200; ++i) {
       run(dataset, query_size, "sparse", i, match_order, out);
     }
   }

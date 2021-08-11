@@ -193,9 +193,9 @@ class TraverseChainTask : public TaskBase {
       uint32_t size = 0;
       if
         constexpr(isProfileMode(profile)) size = traverse_op->expandAndProfile(batch_size_, ctx);
-      else {
+      else
         size = traverse_op->expand(batch_size_, ctx);
-      }
+
       if (size == 0) {
         break;
       }

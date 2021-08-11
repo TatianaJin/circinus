@@ -15,6 +15,7 @@
 #pragma once
 
 #include <queue>
+#include <utility>
 #include <vector>
 
 #include "graph/query_graph.h"
@@ -50,7 +51,7 @@ class ClosenessCentrality {
   }
 
  public:
-  ClosenessCentrality(const QueryGraph* graph) : graph_(graph) {}
+  explicit ClosenessCentrality(const QueryGraph* graph) : graph_(graph) {}
 
   std::vector<double> getClosenessCentrality() {
     std::vector<double> ret(graph_->getNumVertices());

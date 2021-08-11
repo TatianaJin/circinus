@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -387,7 +388,7 @@ void Planner::parallelizePartitionedPlans(
   }
 
   /* split candidates of parallelizing qv into buckets by limiting each bucket weight */
-  double bucket_weight_limit = max_weight / 3.0;
+  double bucket_weight_limit = max_weight / 10.0;
   double max_bucket_weight = 0, max_single_vertex_weight = 0;
   if (verbosePlannerLog()) {
     LOG(INFO) << "===== Parallelizing plans =====";
@@ -396,6 +397,7 @@ void Planner::parallelizePartitionedPlans(
   std::vector<std::pair<uint32_t, std::vector<CandidateScope>>> parallelized_partitioned_plans;
   parallelized_partitioned_plans.reserve(partitioned_plans->size());
   QueryVertexID parallelizing_qv = DUMMY_QUERY_VERTEX;
+  LOG(INFO) << partitioned_plans->size();
   for (uint32_t i = 0; i < partitioned_plans->size(); ++i) {
     auto& pair = (*partitioned_plans)[i];
     parallelizing_qv = plan_weights[i].first;
@@ -573,7 +575,7 @@ ExecutionPlan* Planner::generateLogicalExecutionPlan(const std::vector<VertexID>
                  ? GraphType::BipartiteGraphView
                  : (query_context_->graph_metadata->numPartitions() > 1 ? GraphType::Partitioned : GraphType::Normal));
   planners_.push_back(std::make_unique<NaivePlanner>(
-      &query_context_->query_graph, query_context_->query_config.use_two_hop_traversal, &cardinality, graph_type));
+      &query_context_->query_graph, query_context_->query_config.use_two_hop_traversal, cardinality, graph_type));
   auto& planner = planners_.back();
 
   auto use_order = planner->generateOrder(query_context_->data_graph, *query_context_->graph_metadata, candidate_views,

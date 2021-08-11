@@ -11,6 +11,10 @@
 
 #pragma once
 
+#include <memory>
+#include <utility>
+#include <vector>
+
 #include "graph/candidate_set_view.h"
 #include "graph/compressed_subgraphs.h"
 #include "graph/types.h"

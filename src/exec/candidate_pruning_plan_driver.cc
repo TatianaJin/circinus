@@ -91,6 +91,7 @@ void CandidatePruningPlanDriver::init(QueryId qid, QueryContext* query_ctx, Exec
     }
   } else if (plan_->getPhase() == 3) {
     auto filters = plan_->getFilterOperators(*query_ctx->graph_metadata, ctx.first);
+    LOG(INFO) << filters.size();
     task_counters_.resize(filters.size());
     uint32_t task_id = 0;
     auto& filter = filters[task_id];

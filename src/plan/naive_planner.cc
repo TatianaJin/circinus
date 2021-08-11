@@ -37,7 +37,7 @@ namespace circinus {
 
 bool NaivePlanner::hasValidCandidate() {
   uint32_t i = 0;
-  for (auto& cardinality : *candidate_cardinality_) {
+  for (auto& cardinality : candidate_cardinality_) {
     if (cardinality < 0) {
       LOG(INFO) << "candidate for vertex is empty " << i;
       return false;
@@ -70,7 +70,7 @@ ExecutionPlan* NaivePlanner::generatePlan(const std::vector<QueryVertexID>& use_
     double res = 1;
     for (uint32_t i = 0; i < select_cover.size(); ++i) {
       if (select_cover[i] == 1) {
-        res *= (*candidate_cardinality_)[i];
+        res *= candidate_cardinality_[i];
       }
     }
     LOG(INFO) << res << "  " << s;
@@ -130,14 +130,14 @@ std::vector<QueryVertexID> NaivePlanner::generateMatchingOrder(const QueryGraph*
   auto compare = [this, &core_table](QueryVertexID v1, QueryVertexID v2) {
     if (TwoCoreSolver::isInCore(core_table, v1)) {
       if (TwoCoreSolver::isInCore(core_table, v2)) {
-        return (*candidate_cardinality_)[v1] > (*candidate_cardinality_)[v2];
+        return candidate_cardinality_[v1] > candidate_cardinality_[v2];
       }
       return false;
     }
     if (TwoCoreSolver::isInCore(core_table, v2)) {
       return true;
     }
-    return (*candidate_cardinality_)[v1] > (*candidate_cardinality_)[v2];
+    return candidate_cardinality_[v1] > candidate_cardinality_[v2];
   };
   std::priority_queue<QueryVertexID, std::vector<QueryVertexID>, decltype(compare)> queue(compare);
   // initialization
@@ -167,14 +167,14 @@ std::vector<QueryVertexID> NaivePlanner::generateMatchingOrder(const QueryGraph*
 
 QueryVertexID NaivePlanner::selectStartingVertex(const std::vector<QueryVertexID>& cover) {
   // std::sort(cover.begin(), cover.end(), [this](QueryVertexID v1, QueryVertexID v2) { return
-  // (*candidate_cardinality_)[v1] / query_graph_->getVertexOutDegree(v1) < (*candidate_cardinality_)[v2] /
+  // candidate_cardinality_[v1] / query_graph_->getVertexOutDegree(v1) < candidate_cardinality_[v2] /
   // query_graph_->getVertexOutDegree(v2); });
 
   QueryVertexID start_vertex = cover.front();
-  double min = (*candidate_cardinality_)[cover.front()];
+  double min = candidate_cardinality_[cover.front()];
 
   for (auto v : cover) {
-    double score = (*candidate_cardinality_)[v] / query_graph_->getVertexOutDegree(v);
+    double score = candidate_cardinality_[v] / query_graph_->getVertexOutDegree(v);
     DLOG(INFO) << "cover vertex " << v << " score " << score << " min " << min;
     if (score < min) {
       min = score;
@@ -246,7 +246,6 @@ std::pair<uint32_t, uint32_t> NaivePlanner::analyzeDynamicCoreCoverEagerInner(co
   vertex_order[matching_order_.front()] = 0;
   auto current_subquery_key_size = (select_cover[matching_order_.front()] == 1);
   uint32_t key_sizes = current_subquery_key_size;
-  LOG(INFO) << "analyzeDynamicCoreCoverEagerInner";
   for (uint32_t i = 1; i < matching_order_.size(); ++i) {
     auto v = matching_order_[i];
     vertex_order[v] = i;
@@ -364,11 +363,13 @@ ExecutionPlan* NaivePlanner::generatePlanWithEagerDynamicCover(const std::vector
 
 template <typename Hashmap>
 unordered_map<VertexID, double> NaivePlanner::dfsComputeCost(QueryVertexID qid, const uint64_t cover_bits,
-                                                             std::vector<bool>& visited, const GraphBase* data_graph,
+                                                             std::vector<bool>& visited, std::vector<bool>& visited_cc,
+                                                             const GraphBase* data_graph,
                                                              const std::vector<CandidateSetView>* candidate_views,
                                                              const std::vector<QueryVertexID>& cc,
                                                              bool with_traversal) {
   visited[qid] = true;
+  visited_cc[cc[qid]] = true;
   unordered_map<VertexID, double> ret;
   for (VertexID v : (*candidate_views)[qid]) {
     ret[v] = 1;
@@ -385,12 +386,14 @@ unordered_map<VertexID, double> NaivePlanner::dfsComputeCost(QueryVertexID qid, 
      */
     for (uint32_t i = 0; i < qcnt; ++i) {  // for each unvisited neighbor in the cc, recursively compute cost
       QueryVertexID nbr = qnbrs[i];
-      if (visited[nbr] || cc[nbr] == DUMMY_QUERY_VERTEX) {
+      // dfs into each cc from other different cc only one time
+      if (visited[nbr] || cc[nbr] == DUMMY_QUERY_VERTEX || (cc[nbr] != cc[qid] && visited_cc[cc[nbr]])) {
         continue;
       }
 
       // TODO(tatiana): pass ret to child to prune child?
-      auto child_ret = dfsComputeCost(nbr, cover_bits, visited, data_graph, candidate_views, cc, with_traversal);
+      auto child_ret =
+          dfsComputeCost(nbr, cover_bits, visited, visited_cc, data_graph, candidate_views, cc, with_traversal);
       for (auto& pair : ret) {  // for each candidate of qid, compute the weight from neighbor candidates
         double sum = 0;
         double num = 0;
@@ -424,7 +427,8 @@ unordered_map<VertexID, double> NaivePlanner::dfsComputeCost(QueryVertexID qid, 
         continue;
       }
       if (cover_bits >> nbr & 1) {
-        auto child_ret = dfsComputeCost(nbr, cover_bits, visited, data_graph, candidate_views, cc, with_traversal);
+        auto child_ret =
+            dfsComputeCost(nbr, cover_bits, visited, visited_cc, data_graph, candidate_views, cc, with_traversal);
         for (auto& pair : ret) {
           double sum = 0;
           auto[nbrs, cnt] = data_graph->getOutNeighbors(pair.first);
@@ -453,7 +457,7 @@ unordered_map<VertexID, double> NaivePlanner::dfsComputeCost(QueryVertexID qid, 
             continue;
           }
           auto child_ret =
-              dfsComputeCost(set_nbr, cover_bits, visited, data_graph, candidate_views, cc, with_traversal);
+              dfsComputeCost(set_nbr, cover_bits, visited, visited_cc, data_graph, candidate_views, cc, with_traversal);
 
           // two-hop traversal to find the cover node candidates
           for (auto& pair : ret) {
@@ -529,31 +533,26 @@ void NaivePlanner::getMinimalConectedSubgraphWithAllKeys(std::vector<QueryVertex
   if (cc_count == 1) return;
 
   /* if there are multiple CCs, greedily pick non-cover vertices with smallest candidate cardinality to connect CCs */
-  std::vector<uint32_t> increasing_idx(level + 1);
+  std::vector<uint32_t> increasing_idx(level + 1, 0);
   std::iota(increasing_idx.begin(), increasing_idx.end(), 0);
   sort(increasing_idx.begin(), increasing_idx.end(), [&](uint32_t l, uint32_t r) {
-    return (*candidate_cardinality_)[matching_order_[l]] < (*candidate_cardinality_)[matching_order_[r]];
+    return candidate_cardinality_[matching_order_[l]] < candidate_cardinality_[matching_order_[r]];
   });
+  unordered_set<QueryVertexID> connecting_cover_cc;
   for (uint32_t i : increasing_idx) {
     QueryVertexID qid = matching_order_[i];
     if ((cover_bits >> qid & 1) == 0) {
       auto[nbr, cnt] = query_graph_->getOutNeighbors(qid);
-      unordered_set<QueryVertexID> connecting_cover_cc;
+      uint32_t current_cc_size = connecting_cover_cc.size();
       for (uint32_t j = 0; j < cnt; ++j) {
         if (cover_bits >> nbr[j] & 1) {
           CHECK_NE(cc[nbr[j]], DUMMY_QUERY_VERTEX) << nbr[j];
           connecting_cover_cc.insert(cc[nbr[j]]);
         }
       }
-      if (connecting_cover_cc.size() > 1) {
-        for (auto& cc_id : cc) {
-          if (connecting_cover_cc.count(cc_id) != 0) {
-            cc_id = qid;
-          }
-        }
+      if (connecting_cover_cc.size() > current_cc_size) {
         cc[qid] = qid;
-        cc_count -= connecting_cover_cc.size() - 1;
-        if (cc_count == 1) break;
+        if (cc_count == connecting_cover_cc.size()) break;
       }
     }
   }
@@ -574,6 +573,7 @@ double NaivePlanner::estimateCardinality(const GraphBase* data_graph,
                                          uint32_t level) {
   double ret = 1;
   std::vector<bool> visited(matching_order_.size(), false);
+  std::vector<bool> visited_cc(matching_order_.size(), false);
   std::vector<QueryVertexID> cc(matching_order_.size(), DUMMY_QUERY_VERTEX);
   getMinimalConectedSubgraphWithAllKeys(cc, level, cover_bits);
 
@@ -589,7 +589,7 @@ double NaivePlanner::estimateCardinality(const GraphBase* data_graph,
     }
     ret = 0;
     auto current_candidate_cars =
-        dfsComputeCost(qid, cover_bits, visited, data_graph, candidate_views, cc, use_two_hop_traversal_);
+        dfsComputeCost(qid, cover_bits, visited, visited_cc, data_graph, candidate_views, cc, use_two_hop_traversal_);
     for (auto candidate_car : current_candidate_cars) {
       ret += candidate_car.second;
     }
@@ -604,6 +604,7 @@ std::vector<double> NaivePlanner::getParallelizingQueryVertexWeights(
     QueryVertexID partition_qv, const GraphBase* data_graph, const std::vector<CandidateSetView>* candidate_views,
     uint64_t cover_bits) {
   std::vector<bool> visited(matching_order_.size(), false);
+  std::vector<bool> visited_cc(matching_order_.size(), false);
   std::vector<QueryVertexID> cc(matching_order_.size(), DUMMY_QUERY_VERTEX);
   // LOG(INFO) << cover_bits;
   getMinimalConectedSubgraphWithAllKeys(cc, matching_order_.size() - 1, cover_bits);
@@ -612,8 +613,8 @@ std::vector<double> NaivePlanner::getParallelizingQueryVertexWeights(
   //  1) partition qv is in the connected subgraph;
   //  2) partition qv is not in the connected subgraph:
   //     there must be a neighbor of pqv in the connected subgraph
-  auto current_candidate_cars =
-      dfsComputeCost(partition_qv, cover_bits, visited, data_graph, candidate_views, cc, use_two_hop_traversal_);
+  auto current_candidate_cars = dfsComputeCost(partition_qv, cover_bits, visited, visited_cc, data_graph,
+                                               candidate_views, cc, use_two_hop_traversal_);
 
   std::vector<double> weights((*candidate_views)[partition_qv].size(), 0.0);
   uint32_t idx = 0;
@@ -692,7 +693,7 @@ ExecutionPlan* NaivePlanner::generatePlanWithDynamicCover(const GraphBase* data_
   }
 
   /* generate pruned dynamic cover search space */
-  std::vector<std::vector<double>> cardinality_per_level(candidate_cardinality_->size(), *candidate_cardinality_);
+  std::vector<std::vector<double>> cardinality_per_level(candidate_cardinality_.size(), candidate_cardinality_);
   generateCoverNode(cardinality_per_level);
   // FIXME(tatiana): check for and eliminate covers in which some vertex can be removed soundly?
 
@@ -974,7 +975,7 @@ std::vector<int> NaivePlanner::getCoverByOrder() const {
 
   std::vector<double> candidate_cardinality_by_match_order(matching_order_.size() - 1);
   for (uint32_t i = 0; i < candidate_cardinality_by_match_order.size(); ++i) {
-    candidate_cardinality_by_match_order[i] = log2((*candidate_cardinality_)[matching_order_[i]]);
+    candidate_cardinality_by_match_order[i] = log2(candidate_cardinality_[matching_order_[i]]);
   }
 
   WeightedBnB vc_solver(&subquery, candidate_cardinality_by_match_order);
@@ -1293,7 +1294,7 @@ std::tuple<uint32_t, uint32_t, uint32_t> NaivePlanner::analyzeDynamicCoreCoverMW
   uint32_t sum_key_to_set_changes = 0;
 
   auto subquery_vertices = matching_order_;
-  auto candidate_cardinality = *candidate_cardinality_;
+  auto candidate_cardinality = candidate_cardinality_;
 
   // the static cover for the original query
   auto log_cardinality = logCardinality();
