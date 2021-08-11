@@ -393,11 +393,11 @@ void Planner::parallelizePartitionedPlans(
   if (verbosePlannerLog()) {
     LOG(INFO) << "===== Parallelizing plans =====";
     LOG(INFO) << "max weight " << max_weight << ", limit " << bucket_weight_limit;
+    LOG(INFO) << "Partitioned plan count before " << partitioned_plans->size();
   }
   std::vector<std::pair<uint32_t, std::vector<CandidateScope>>> parallelized_partitioned_plans;
   parallelized_partitioned_plans.reserve(partitioned_plans->size());
   QueryVertexID parallelizing_qv = DUMMY_QUERY_VERTEX;
-  LOG(INFO) << partitioned_plans->size();
   for (uint32_t i = 0; i < partitioned_plans->size(); ++i) {
     auto& pair = (*partitioned_plans)[i];
     parallelizing_qv = plan_weights[i].first;

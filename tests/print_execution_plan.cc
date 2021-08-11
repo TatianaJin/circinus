@@ -83,6 +83,7 @@ class PrintExecutionPlan : public testing::Test {
     return candidates;
   }
 
+  // TODO(tatiana): update test according to current planner implementation
   template <bool dynamic = false>
   void printExecutionPlan(uint32_t i) {
     Graph g(FLAGS_data_dir + "/" + data_graph_paths_[i]);  // load data graph
@@ -96,7 +97,7 @@ class PrintExecutionPlan : public testing::Test {
       for (auto& set : candidates) {
         candidate_cardinality.push_back(set.size());
       }
-      NaivePlanner planner(&q, candidate_cardinality);
+      NaivePlanner planner(&q, std::move(candidate_cardinality));
       ExecutionPlan* plan;
       if (dynamic) {
         plan = planner.generatePlanWithEagerDynamicCover();

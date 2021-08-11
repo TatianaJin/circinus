@@ -55,7 +55,7 @@ void ExecutorManager::run(QueryId qid, QueryContext* query_ctx, std::unique_ptr<
     std::lock_guard<std::mutex> lock(execution_ctx_mu_);
     auto ctx_pos = execution_ctx_.find(qid);
     if (ctx_pos == execution_ctx_.end()) {
-      DCHECK_NOTNULL(plan_driver.get());
+      CHECK_NOTNULL(plan_driver.get());
       ctx_pos =
           execution_ctx_
               .insert({qid, std::make_pair(std::make_pair(getExecutionConfig(), nullptr), std::move(plan_driver))})
@@ -66,6 +66,9 @@ void ExecutorManager::run(QueryId qid, QueryContext* query_ctx, std::unique_ptr<
     driver = ctx_pos->second.second.get();
     ctx = &ctx_pos->second.first;
   }
+  CHECK_NOTNULL(driver);
+  CHECK_NOTNULL(ctx);
+  LOG(INFO) << "driver addr " << driver << " ctx addr " << ctx;
   driver->init(qid, query_ctx, *ctx, task_queue_);
 }
 
