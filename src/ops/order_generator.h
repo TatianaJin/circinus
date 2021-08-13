@@ -35,7 +35,7 @@ class OrderGenerator {
  private:
   struct hash_pair {
     template <class T1, class T2>
-    size_t operator()(const std::pair<T1, T2>& p) const {
+    uint32_t operator()(const std::pair<T1, T2>& p) const {
       auto hash1 = std::hash<T1>{}(p.first);
       auto hash2 = std::hash<T2>{}(p.second);
       return hash1 ^ hash2;
@@ -90,7 +90,7 @@ class OrderGenerator {
     QueryVertexID qg_v_cnt = query_graph_->getNumVertices();
     for (QueryVertexID i = 1; i < qg_v_cnt; ++i) {
       QueryVertexID cur_vertex = i;
-      size_t size1 = candidates_[cur_vertex].size(), size2 = candidates_[start_vertex].size();
+      uint32_t size1 = candidates_[cur_vertex].size(), size2 = candidates_[start_vertex].size();
       if (size1 < size2) {
         start_vertex = cur_vertex;
       } else if (size1 == size2 &&
@@ -125,7 +125,7 @@ class OrderGenerator {
       for (QueryVertexID j = 0; j < qg_v_cnt; ++j) {
         QueryVertexID cur_vertex = j;
         if (!visited_vertices[cur_vertex] && adjacent_vertices[cur_vertex]) {
-          size_t cnt = candidates_[cur_vertex].size();
+          uint32_t cnt = candidates_[cur_vertex].size();
           if (cnt < min_value) {
             min_value = cnt;
             next_vertex = cur_vertex;
@@ -148,18 +148,18 @@ class OrderGenerator {
   }
 
   void estimatePathEmbeddsingsNum(const std::vector<QueryVertexID>& path,
-                                  std::vector<size_t>& estimated_embeddings_num) {
+                                  std::vector<uint32_t>& estimated_embeddings_num) {
     CHECK_GT(path.size(), 1);
-    std::vector<size_t> parent;
-    std::vector<size_t> children;
+    std::vector<uint32_t> parent;
+    std::vector<uint32_t> children;
 
-    size_t begin = path.size() - 2, end = path.size() - 1;
+    uint32_t begin = path.size() - 2, end = path.size() - 1;
 
     estimated_embeddings_num.resize(path.size() - 1);
     auto last_edge = getBipartiteGraph(path[begin], path[end]);
     children.resize(last_edge->getNumVertices());
 
-    size_t sum = 0;
+    uint32_t sum = 0;
     for (auto& v : candidates_[path[begin]]) {
       uint32_t offset = last_edge->getOffset(v);
       children[offset] = last_edge->getVertexOutDegree(v);
@@ -177,7 +177,7 @@ class OrderGenerator {
       sum = 0;
       CHECK_EQ(path[end], last_edge->getSourceId());
       for (auto& v : candidates_[path[begin]]) {
-        size_t local_sum = 0;
+        uint32_t local_sum = 0;
         auto vertex_view = edge->getOutNeighborsWithHint(v);
         for (auto nbr : vertex_view) {
           local_sum += children[last_edge->getOffset(nbr)];
@@ -196,7 +196,7 @@ class OrderGenerator {
   QueryVertexID generateNoneTreeEdgesCount(const std::vector<TreeNode>& tree_node,
                                            const std::vector<QueryVertexID>& path) {
     auto non_tree_edge_count = query_graph_->getVertexOutDegree(path[0]) - tree_node[path[0]].children_.size();
-    for (size_t i = 1; i < path.size(); ++i) {
+    for (uint32_t i = 1; i < path.size(); ++i) {
       auto vertex = path[i];
       non_tree_edge_count += query_graph_->getVertexOutDegree(vertex) - tree_node[vertex].children_.size() - 1;
     }
@@ -233,7 +233,7 @@ class OrderGenerator {
     generateRootToLeafPaths(tree, dfs_order[0], single_path, paths);
     std::vector<std::pair<double, std::vector<QueryVertexID>*>> path_orders;
     for (auto& path : paths) {
-      std::vector<size_t> estimated_embeddings_num;
+      std::vector<uint32_t> estimated_embeddings_num;
       QueryVertexID non_tree_edges_count = generateNoneTreeEdgesCount(tree, path);
       estimatePathEmbeddsingsNum(path, estimated_embeddings_num);
       double score = estimated_embeddings_num[0] / (double)(non_tree_edges_count + 1);
@@ -306,6 +306,45 @@ class OrderGenerator {
     cur_tree_path.pop_back();
   }
 
+  void SelectSubsequentPaths(std::vector<std::vector<QueryVertexID>>& paths,
+                             std::vector<std::vector<uint32_t>>& paths_embededdings_num,
+                             std::vector<bool>& visited_vertices, std::vector<QueryVertexID>& order,
+                             uint32_t& selected_vertices_count) {
+    while (!paths.empty()) {
+      double min_value = std::numeric_limits<double>::max();
+      uint32_t selected_path_index = 0;
+
+      for (uint32_t i = 0; i < paths.size(); ++i) {
+        QueryVertexID path_root_vertex_idx = 0;
+        for (QueryVertexID j = 0; j < paths[i].size(); ++j) {
+          QueryVertexID cur_vertex = paths[i][j];
+          if (visited_vertices[cur_vertex]) continue;
+
+          path_root_vertex_idx = j - 1;
+          break;
+        }
+
+        double cur_value = paths_embededdings_num[i][path_root_vertex_idx] /
+                           (double)(candidates_[paths[i][path_root_vertex_idx]].size());
+        if (cur_value < min_value) {
+          min_value = cur_value;
+          selected_path_index = i;
+        }
+      }
+
+      for (QueryVertexID i = 1; i < paths[selected_path_index].size(); ++i) {
+        if (visited_vertices[paths[selected_path_index][i]]) continue;
+
+        order[selected_vertices_count] = paths[selected_path_index][i];
+        selected_vertices_count += 1;
+        visited_vertices[paths[selected_path_index][i]] = true;
+      }
+
+      paths.erase(paths.begin() + selected_path_index);
+      paths_embededdings_num.erase(paths_embededdings_num.begin() + selected_path_index);
+    }
+  }
+
   std::vector<QueryVertexID> getCFLOrder() {
     auto logical_filter = LogicalCFLFilter(metadata_, query_graph_, candidate_sizes_);
     const std::vector<TreeNode>& tree = logical_filter.getTree();
@@ -331,7 +370,6 @@ class OrderGenerator {
         if (tcs.isInCore(cur_vertex)) {
           std::vector<std::vector<QueryVertexID>> temp_tree_paths;
           std::vector<QueryVertexID> temp_tree_path;
-          // FIXME(tatiana): here the tree paths can contain core vertices?
           generateTreePaths(tree, cur_vertex, temp_tree_path, temp_tree_paths);
           if (!temp_tree_paths.empty()) {
             forests.emplace_back(temp_tree_paths);
@@ -353,23 +391,23 @@ class OrderGenerator {
     visited_vertices[root_vertex] = true;
 
     if (!core_paths.empty()) {
-      std::vector<std::vector<size_t>> paths_embededdings_num;
+      std::vector<std::vector<uint32_t>> paths_embededdings_num;
       std::vector<QueryVertexID> paths_non_tree_edge_num;
       paths_non_tree_edge_num.reserve(core_paths.size());
       for (auto& path : core_paths) {
         QueryVertexID non_tree_edge_num = generateNoneTreeEdgesCount(tree, path);
         paths_non_tree_edge_num.push_back(non_tree_edge_num + 1);
 
-        std::vector<size_t> path_embeddings_num;
+        std::vector<uint32_t> path_embeddings_num;
         estimatePathEmbeddsingsNum(path, path_embeddings_num);
         paths_embededdings_num.emplace_back(std::move(path_embeddings_num));
       }
 
       // Select the start path.
       double min_value = std::numeric_limits<double>::max();
-      size_t selected_path_index = 0;
+      uint32_t selected_path_index = 0;
 
-      for (size_t i = 0; i < core_paths.size(); ++i) {
+      for (uint32_t i = 0; i < core_paths.size(); ++i) {
         double cur_value = paths_embededdings_num[i][0] / (double)paths_non_tree_edge_num[i];
 
         if (cur_value < min_value) {
@@ -388,113 +426,27 @@ class OrderGenerator {
       paths_embededdings_num.erase(paths_embededdings_num.begin() + selected_path_index);
       paths_non_tree_edge_num.erase(paths_non_tree_edge_num.begin() + selected_path_index);
 
-      // Select subsequent paths
-      // TODO(tatiana): the following codes and the codes for path ordering of forest can be shared?
-      while (!core_paths.empty()) {
-        min_value = std::numeric_limits<double>::max();
-        selected_path_index = 0;
-
-        for (size_t i = 0; i < core_paths.size(); ++i) {
-          QueryVertexID path_root_vertex_idx = 0;
-          for (QueryVertexID j = 0; j < core_paths[i].size(); ++j) {
-            QueryVertexID cur_vertex = core_paths[i][j];
-
-            if (visited_vertices[cur_vertex]) continue;
-
-            path_root_vertex_idx = j - 1;
-            break;
-          }
-
-          double cur_value = paths_embededdings_num[i][path_root_vertex_idx] /
-                             (double)(candidates_[core_paths[i][path_root_vertex_idx]].size());
-          if (cur_value < min_value) {
-            min_value = cur_value;
-            selected_path_index = i;
-          }
-        }
-
-        for (QueryVertexID i = 1; i < core_paths[selected_path_index].size(); ++i) {
-          if (visited_vertices[core_paths[selected_path_index][i]]) continue;
-
-          order[selected_vertices_count] = core_paths[selected_path_index][i];
-          selected_vertices_count += 1;
-          visited_vertices[core_paths[selected_path_index][i]] = true;
-        }
-
-        core_paths.erase(core_paths.begin() + selected_path_index);
-        paths_embededdings_num.erase(paths_embededdings_num.begin() + selected_path_index);
-      }
+      SelectSubsequentPaths(core_paths, paths_embededdings_num, visited_vertices, order, selected_vertices_count);
     }
 
     // Order tree paths.
     // TODO(tatiana): there is only path ordering within each tree, but not ordering trees in the forest?
     for (auto& tree_paths : forests) {
-      std::vector<std::vector<size_t>> paths_embededdings_num;
+      std::vector<std::vector<uint32_t>> paths_embededdings_num;
       for (auto& path : tree_paths) {
-        std::vector<size_t> path_embeddings_num;
+        std::vector<uint32_t> path_embeddings_num;
         // FIXME(tatiana): no need to estimate for the path segment which contain query vertices in core? see line 335
         estimatePathEmbeddsingsNum(path, path_embeddings_num);
         paths_embededdings_num.emplace_back(path_embeddings_num);
       }
-
-      while (!tree_paths.empty()) {
-        double min_value = std::numeric_limits<double>::max();
-        QueryVertexID selected_path_index = 0;
-
-        for (size_t i = 0; i < tree_paths.size(); ++i) {
-          QueryVertexID path_root_vertex_idx = 0;
-          for (QueryVertexID j = 0; j < tree_paths[i].size(); ++j) {
-            VertexID cur_vertex = tree_paths[i][j];
-
-            if (visited_vertices[cur_vertex]) continue;
-
-            // TODO(tatiana): j cannot be 0 because the first vertex of the path is in core? CHECK_NE(j, 0);
-            path_root_vertex_idx = j == 0 ? j : j - 1;
-            break;
-          }
-
-          double cur_value = paths_embededdings_num[i][path_root_vertex_idx] /
-                             (double)(candidates_[tree_paths[i][path_root_vertex_idx]].size());
-          if (cur_value < min_value) {
-            min_value = cur_value;
-            selected_path_index = i;
-          }
-        }
-
-        for (QueryVertexID i = 0; i < tree_paths[selected_path_index].size(); ++i) {
-          if (visited_vertices[tree_paths[selected_path_index][i]]) continue;
-
-          order[selected_vertices_count] = tree_paths[selected_path_index][i];
-          selected_vertices_count += 1;
-          visited_vertices[tree_paths[selected_path_index][i]] = true;
-        }
-
-        tree_paths.erase(tree_paths.begin() + selected_path_index);
-        paths_embededdings_num.erase(paths_embededdings_num.begin() + selected_path_index);
-      }
+      SelectSubsequentPaths(tree_paths, paths_embededdings_num, visited_vertices, order, selected_vertices_count);
     }
 
     // Order the leaves.
-    while (!leaves.empty()) {  // TODO(tatiana): simply sort the leaves instead of taking min and erasing?
-      double min_value = std::numeric_limits<double>::max();
-      QueryVertexID selected_leaf_index = 0;
-
-      for (QueryVertexID i = 0; i < leaves.size(); ++i) {
-        QueryVertexID vertex = leaves[i];
-        double cur_value = candidates_[vertex].size();
-
-        if (cur_value < min_value) {
-          min_value = cur_value;
-          selected_leaf_index = i;
-        }
-      }
-
-      if (!visited_vertices[leaves[selected_leaf_index]]) {
-        order[selected_vertices_count] = leaves[selected_leaf_index];
-        selected_vertices_count += 1;
-        visited_vertices[leaves[selected_leaf_index]] = true;
-      }
-      leaves.erase(leaves.begin() + selected_leaf_index);
+    sort(leaves.begin(), leaves.end(),
+         [&](QueryVertexID l, QueryVertexID r) { return candidates_[l].size() < candidates_[r].size(); });
+    for (QueryVertexID leaf : leaves) {
+      order[selected_vertices_count++] = leaf;
     }
     return order;
   }

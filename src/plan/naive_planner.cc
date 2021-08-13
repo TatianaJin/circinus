@@ -401,7 +401,7 @@ unordered_map<VertexID, double> NaivePlanner::dfsComputeCost(QueryVertexID qid, 
             num += 1;
           }
         }
-        if (!(cover_bits >> nbr & 1)) {
+        if (!(cover_bits >> nbr & 1) && num != 0) {
           sum /= num;
         }
         pair.second *= sum;
@@ -643,9 +643,11 @@ double NaivePlanner::estimateExpandCost(const GraphBase* data_graph,
   uint32_t key_parent_cnt = 0, set_parent_cnt = 0;
 
   auto[nbrs, cnt] = query_graph_->getOutNeighbors(target_vertex);
+  QueryVertexID set_parent = DUMMY_QUERY_VERTEX;
   for (uint32_t k = 0; k < cnt; ++k) {
     if (existing_vertices.count(nbrs[k]) != 0) {
       if ((parent_cover_bits >> nbrs[k] & 1) == 0) {
+        set_parent = nbrs[k];
         ++set_parent_cnt;
       } else {
         ++key_parent_cnt;
@@ -655,10 +657,14 @@ double NaivePlanner::estimateExpandCost(const GraphBase* data_graph,
 
   if (FLAGS_intersection_count_coefficient) {  // compute the cost by intersection count
     // expand from key
+    // if (key_parent_cnt == 0) key_parent_cnt = 1;
     double cost = key_parent_cnt * car[level - 1][parent];
     if (target_in_cover) {
       // computation cost for expand-into / expand-from-set
       auto key_bits = parent_cover_bits | (1 << target_vertex);  // including target
+      if (key_parent_cnt == 0) {
+        key_bits |= 1 << set_parent;
+      }
       return cost + set_parent_cnt * estimateCardinality(data_graph, candidate_views, key_bits, level);
     }
     if (set_parent_cnt > 0) {  // enumerate key expand to set
@@ -732,7 +738,7 @@ ExecutionPlan* NaivePlanner::generatePlanWithDynamicCover(const GraphBase* data_
   double mini_cost = -1;
   int best_idx = -1;
   for (uint32_t i = 0; i < covers_[last].size(); ++i) {
-    if (car[last][i] >= 0 && (mini_cost < 0 || mini_cost > costs_car[last][i])) {
+    if (costs_car[last][i] >= 0 && (mini_cost < 0 || mini_cost > costs_car[last][i])) {
       mini_cost = costs_car[last][i];
       best_idx = i;
     }
@@ -959,6 +965,7 @@ const std::vector<QueryVertexID>& NaivePlanner::generateOrder(const GraphBase* d
   } else {
     matching_order_ = use_order;
   }
+
   return matching_order_;
 }
 

@@ -324,13 +324,16 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
         for (uint32_t range_i = 0; range_i < ranges.size(); ++range_i) {
           for (size_t idx = 0; idx < ranges[range_i].second; ++idx) {
             VertexID key_vertex_id = ranges[range_i].first[idx];
+
             if (ctx->getExceptions().count(key_vertex_id) == 0 && ctx->visitOnce(key_vertex_id) &&
                 isInCandidates(key_vertex_id, begin, candidate_end)) {
               output_num += validateTarget<profile>(ctx, key_vertex_id, input, min_parent_idx, buffer);
+
               if (output_num == batch_size) {
                 // store the remaining extensions for next batch output
                 for (++idx; idx < ranges[range_i].second; ++idx) {
                   auto vid = ranges[range_i].first[idx];
+
                   if (ctx->getExceptions().count(vid) == 0 && ctx->visitOnce(vid) &&
                       isInCandidates(vid, begin, candidate_end))
                     extensions.push(vid);

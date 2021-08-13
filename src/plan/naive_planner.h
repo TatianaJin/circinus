@@ -215,7 +215,7 @@ class NaivePlanner {
       }
       DLOG(INFO) << level << " " << ss.str();
     }
-    for (const auto& cover_node : covers_[level]) {
+    for (auto& cover_node : covers_[level]) {
       if (cover_node.cover_bits == new_cover_node.cover_bits) {
         return true;
       }

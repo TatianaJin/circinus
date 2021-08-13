@@ -156,7 +156,7 @@ class QueryConfig {
         limit = std::stoull(value);
       } else if (key == "time_limit") {
         time_limit = std::chrono::seconds(std::stol(value));
-      } else if (key == "use_two_hop_traversal") {
+      } else if (key == "use_two_hop_traversal" || key == "utht") {
         use_two_hop_traversal = value == "true" || value == "1";
       } else if (key == "use_partitioned_graph" || key == "upg") {
         use_partitioned_graph = value == "true" || value == "1";

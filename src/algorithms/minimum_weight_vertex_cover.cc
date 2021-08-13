@@ -124,12 +124,13 @@ void WeightedBnB::dfs(std::vector<int> assignment, std::deque<QueryEdge> uncover
 
   // when a vertex cover is found
   if (uncovered_edges.empty()) {
-    if (best_covers_.size() < 3) {
-      best_covers_.emplace_back(std::move(assignment));
-      best_cover_weights_.emplace_back(current_weight);
+
+    if (best_covers_.size() < 5) {
+      best_covers_.push_back(std::move(assignment));
+      best_cover_weights_.push_back(current_weight);
     } else {  // a cover better than current best covers is found
       uint32_t idx = 0;
-      for (uint32_t i = 1; i < 3; ++i) {
+      for (uint32_t i = 1; i < 5; ++i) {
         if (best_cover_weights_[i] > best_cover_weights_[idx]) {
           idx = i;
         }
