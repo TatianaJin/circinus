@@ -85,16 +85,7 @@ class TraverseChainTask : public TaskBase {
     auto inputs = input_op_->getInputs(graph_, *candidates_);
     // auto profile_output = "Task_" + std::to_string(task_id_);
     // ProfilerStart(profile_output.data());
-    if (false) {
-      profile_info_.resize(operators_.size() + 1);
-      query_type_ = QueryType::Profile;
-      execute<QueryType::Profile>(inputs, inputs.size(), 0, executor_idx);
-      for (uint32_t i = 1; i < operators_.size(); ++i) {
-        LOG(INFO) << operators_[i - 1]->toProfileString(profile_info_[i]);
-      }
-    } else {
-      execute<QueryType::Execute>(inputs, inputs.size(), 0, executor_idx);  // FIXME(debug)
-    }
+    execute<QueryType::Execute>(inputs, inputs.size(), 0, executor_idx);
     // ProfilerStop();
     auto new_count = dynamic_cast<OutputOperator*>(operators_.back())->getOutput()->getCount(executor_idx);
     auto end = std::chrono::steady_clock::now();
@@ -121,6 +112,9 @@ class TraverseChainTask : public TaskBase {
     auto old_count = dynamic_cast<OutputOperator*>(operators_.back())->getOutput()->getCount(executor_idx);
     LOG(INFO) << "Task " << task_id_;
     execute<QueryType::Profile>(inputs, inputs.size(), 0, executor_idx);
+    for (uint32_t i = 0; i + 1 < operators_.size(); ++i) {
+      profile_info_[i + 1] += *traverse_context_[i];
+    }
     auto new_count = dynamic_cast<OutputOperator*>(operators_.back())->getOutput()->getCount(executor_idx);
     auto end = std::chrono::steady_clock::now();
     LOG(INFO) << "Task " << task_id_ << " input " << inputs.size() << " count " << (new_count - old_count)
@@ -205,11 +199,7 @@ class TraverseChainTask : public TaskBase {
       }
     }
     if
-      constexpr(isProfileMode(profile)) {
-        ctx->total_input_size += ctx->getTotalInputSize();
-        // FIXME(tatiana): copy once execution is done, now is redundantly added
-        profile_info_[level + 1] += *ctx;
-      }
+      constexpr(isProfileMode(profile)) { ctx->total_input_size += ctx->getTotalInputSize(); }
 
     return finished;
   }

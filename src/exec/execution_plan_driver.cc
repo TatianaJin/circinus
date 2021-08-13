@@ -112,11 +112,14 @@ void ExecutionPlanDriver::init(QueryId qid, QueryContext* query_ctx, ExecutionCo
   ExecutionPlanDriverBase::init(qid, query_ctx, ctx, task_queue);
 
   auto n_plans = plan_->getNumPartitionedPlans();
+  // TODO(tatiana): handle the case with no plan (no match after pruning)
+  CHECK_NE(n_plans, 0) << "The case of no plan is not handled yet";
   // FIXME(tatiana): rank partitioned plans by their weights
-  task_counters_.resize(n_plans, 1);  // one task per partition
+  task_counters_.resize(plan_->getPlans().size(), 0);  // one task per partition
   candidates_.resize(n_plans);
   for (uint32_t i = 0; i < n_plans; ++i) {
     auto plan_idx = plan_->getPartitionedPlan(i).first;
+    ++task_counters_[plan_idx];
     // all plans share the same output
     dynamic_cast<OutputOperator*>(plan_->getOutputOperator(plan_idx))->setOutput(&result_->getOutputs());
     // plan_->getPlan(plan_idx)->printPhysicalPlan();
@@ -125,7 +128,8 @@ void ExecutionPlanDriver::init(QueryId qid, QueryContext* query_ctx, ExecutionCo
     auto& scopes = plan_->getPartitionedPlan(i).second;
     auto partitioned_result = dynamic_cast<PartitionedCandidateResult*>(candidate_result_.get());
     candidates_[i] = partitioned_result->getCandidatesByScopes(scopes);
-    addTaskToQueue<TraverseTask>(&task_queue, qid, i, query_ctx->stop_time, ctx.first.getBatchSize(),
+    // FIXME(tatiana): share hashmap etc. across traverse context when their candidate scopes are the same?
+    addTaskToQueue<TraverseTask>(&task_queue, qid, plan_idx, query_ctx->stop_time, ctx.first.getBatchSize(),
                                  plan_->getOperators(plan_idx), std::move(input_operator), scopes,
                                  query_ctx->data_graph, &candidates_[i], query_type_);
   }

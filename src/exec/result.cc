@@ -145,8 +145,12 @@ void ProfiledExecutionResult::collect(TaskBase* task) {
   auto traverse_task = dynamic_cast<TraverseChainTask*>(task);
   if (traverse_task != nullptr) {
     DCHECK_LT(traverse_task->getTaskId(), profiles_.size());
-    // assume one plan has only one task here! use += if there are parallel tasks for one plan
-    profiles_[traverse_task->getTaskId()] = traverse_task->getProfileInfo();
+    auto& profile = profiles_[traverse_task->getTaskId()];
+    auto size = profile.size();
+    DCHECK_EQ(size, traverse_task->getProfileInfo().size());
+    for (uint32_t i = 0; i < size; ++i) {
+      profile[i] += traverse_task->getProfileInfo()[i];
+    }
   } else {
     auto matching_parallel_task = dynamic_cast<MatchingParallelTask*>(task);
     CHECK(matching_parallel_task != nullptr);

@@ -95,7 +95,7 @@ void CandidatePruningPlanDriver::init(QueryId qid, QueryContext* query_ctx, Exec
   } else if (plan_->getPhase() == 3) {
     LOG(INFO) << "Candidate pruning phase 3";
     auto filters = plan_->getFilterOperators(*query_ctx->graph_metadata, ctx.first);
-    DCHECK_NE(filters.size(), 0) << "The case of no candidate is not handled yet";
+    CHECK_NE(filters.size(), 0) << "The case of no candidate is not handled yet";
     task_counters_.resize(filters.size());
     uint32_t task_id = 0;
     auto& filter = filters[task_id];
@@ -118,7 +118,7 @@ void CandidatePruningPlanDriver::init(QueryId qid, QueryContext* query_ctx, Exec
 
 void CandidatePruningPlanDriver::taskFinish(TaskBase* task, ThreadsafeTaskQueue* task_queue,
                                             ThreadsafeQueue<ServerEvent>* reply_queue) {
-  DCHECK_LT(task->getTaskId(), task_counters_.size()) << "phase " << plan_->getPhase();
+  CHECK_LT(task->getTaskId(), task_counters_.size()) << "phase " << plan_->getPhase();
   if (plan_->getPhase() == 1) {
     // DLOG(INFO) << task->getTaskId() << ' ' << dynamic_cast<ScanTask*>(task)->getScanContext().candidates.size();
     result_->collect(task);

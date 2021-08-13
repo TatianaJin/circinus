@@ -118,6 +118,7 @@ class NaivePlanner {
   inline std::pair<QueryVertexID, std::vector<double>> computeParallelVertexWeights(
       const GraphBase* data_graph, const std::vector<CandidateSetView>* candidate_views,
       const std::vector<QueryVertexID>& parallelizing_qv_candidates) {
+    // FIXME(tatiana): handle cs=none,static, they do not set the bits properly
     auto cover_bits = plan_.getQueryCoverBits();
     DCHECK_NE(cover_bits, 0);
     auto parallelizing_qv = selectParallelizingQueryVertex(cover_bits, parallelizing_qv_candidates);

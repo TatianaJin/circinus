@@ -49,6 +49,7 @@ class BacktrackingPlan {
   inline uint32_t getNumPartitionedPlans() const { return partitioned_plans_.size(); }
   inline const auto& getPartitionedPlan(uint32_t idx) const { return partitioned_plans_[idx]; }
 
+  // FIXME(tatiana): merge plans with the same cover and order
   inline uint32_t addPlan(ExecutionPlan* plan) {
     plans_.push_back(plan);
     return plans_.size() - 1;
