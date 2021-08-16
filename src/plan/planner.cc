@@ -389,7 +389,7 @@ void Planner::parallelizePartitionedPlans(
   }
 
   /* split candidates of parallelizing qv into buckets by limiting each bucket weight */
-  double bucket_weight_limit = max_weight;
+  double bucket_weight_limit = max_weight / 3.0;
   double max_bucket_weight = 0, max_single_vertex_weight = 0;
   if (verbosePlannerLog()) {
     LOG(INFO) << "===== Parallelizing plans =====";

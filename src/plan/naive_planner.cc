@@ -395,7 +395,6 @@ double NaivePlanner::estimateExpandCost(const GraphBase* data_graph,
 
   if (FLAGS_intersection_count_coefficient) {  // compute the cost by intersection count
     // expand from key
-    // if (key_parent_cnt == 0) key_parent_cnt = 1;
     double cost = key_parent_cnt * car[level - 1][parent];
     if (target_in_cover) {
       // computation cost for expand-into / expand-from-set
