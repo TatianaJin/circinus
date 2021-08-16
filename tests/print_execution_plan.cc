@@ -92,15 +92,21 @@ class PrintExecutionPlan : public testing::Test {
       LOG(INFO) << "graph " << data_graph_paths_[i] << " query " << query_graph_paths_[i][j];
       QueryGraph q(FLAGS_data_dir + "/" + query_graph_paths_[i][j]);  // load query graph
       auto candidates = getCandidateSets(g, q);                       // get candidates for each query vertex
-      std::vector<double> candidate_cardinality;
+      std::vector<VertexID> candidate_cardinality;
+      std::vector<circinus::CandidateSetView> views;
       candidate_cardinality.reserve(candidates.size());
+      views.reserve(candidates.size());
       for (auto& set : candidates) {
+        views.emplace_back(set);
         candidate_cardinality.push_back(set.size());
       }
-      NaivePlanner planner(&q, std::move(candidate_cardinality));
+      NaivePlanner planner(&q, true, {candidate_cardinality.begin(), candidate_cardinality.end()},
+                           circinus::GraphType::Normal);
       ExecutionPlan* plan;
+      circinus::GraphMetadata meta(g);
+      planner.generateOrder(&g, meta, &views, candidate_cardinality, circinus::OrderStrategy::CFL);
       if (dynamic) {
-        plan = planner.generatePlanWithEagerDynamicCover();
+        plan = planner.generatePlanWithDynamicCover(&g, nullptr);
       } else {
         plan = planner.generatePlan();
       }

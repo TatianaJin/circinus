@@ -360,6 +360,7 @@ void Planner::parallelizePartitionedPlans(
     const std::vector<QueryVertexID>& partitioning_qvs,
     std::vector<std::pair<uint32_t, std::vector<CandidateScope>>>* partitioned_plans,
     PartitionedCandidateResult* result) {
+  // TODO(tatiana): handle when candidate views are not available
   /* get weights for each plan partition */
   double max_weight = 0;
   std::vector<std::pair<QueryVertexID, std::vector<double>>> plan_weights;
@@ -367,7 +368,7 @@ void Planner::parallelizePartitionedPlans(
   for (auto& partition : *partitioned_plans) {
     auto candidate_views = result->getCandidatesByScopes(partition.second);
     auto[parallel_qv, weights] = planners_[partition.first]->computeParallelVertexWeights(
-        query_context_->data_graph, &candidate_views, partitioning_qvs);
+        query_context_->data_graph, candidate_views, partitioning_qvs);
     std::stringstream ss;
     bool parallel_qv_is_pqv = false;
     for (auto v : partitioning_qvs) {
@@ -537,7 +538,8 @@ BacktrackingPlan* Planner::generateExecutionPlan(const std::vector<std::vector<V
 ExecutionPlan* Planner::generateLogicalExecutionPlan(const std::vector<VertexID>& candidate_cardinality,
                                                      QueryVertexID require_only,
                                                      const std::vector<CandidateSetView>* candidate_views,
-                                                     const std::vector<QueryVertexID>* partitioning_qvs) {
+                                                     const std::vector<QueryVertexID>* partitioning_qvs,
+                                                     const std::vector<QueryVertexID>* use_order) {
   if (verbosePlannerLog()) {
     std::stringstream ss;
     for (auto c : candidate_cardinality) {
@@ -579,13 +581,13 @@ ExecutionPlan* Planner::generateLogicalExecutionPlan(const std::vector<VertexID>
                                                      std::move(cardinality), graph_type));
   auto& planner = planners_.back();
 
-  auto use_order = planner->generateOrder(query_context_->data_graph, *query_context_->graph_metadata, candidate_views,
-                                          candidate_cardinality, query_context_->query_config.order_strategy);
+  planner->generateOrder(query_context_->data_graph, *query_context_->graph_metadata, candidate_views,
+                         candidate_cardinality, query_context_->query_config.order_strategy, use_order);
 
   ExecutionPlan* plan = nullptr;
   switch (query_context_->query_config.compression_strategy) {
   case CompressionStrategy::Static: {
-    plan = planner->generatePlan(use_order);
+    plan = planner->generatePlan();
     plan->setInputAreKeys(plan->isInCover(plan->getRootQueryVertexID()));
     break;
   }
@@ -596,7 +598,7 @@ ExecutionPlan* Planner::generateLogicalExecutionPlan(const std::vector<VertexID>
     break;
   }
   case CompressionStrategy::None: {
-    plan = planner->generatePlanWithoutCompression(use_order);
+    plan = planner->generatePlanWithoutCompression();
     plan->setInputAreKeys(true);
   }
   }

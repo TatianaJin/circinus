@@ -99,18 +99,14 @@ class TraverseChainTask : public TaskBase {
   void profile(uint32_t executor_idx) override {
     setupOutputs();
     setupTraverseContexts();
-    LOG(INFO) << "Task " << task_id_;
     profile_info_.resize(operators_.size() + 1);  // traverse chain + input operator
     std::vector<CompressedSubgraphs> inputs;
-
     input_op_->inputAndProfile(graph_, *candidates_, &inputs, &profile_info_.front());
-    LOG(INFO) << "Task " << task_id_;
     // auto profile_output = "Profile_Task_" + std::to_string(task_id_);
     // ProfilerStart(profile_output.data());
     // TODO(tatiana): support match limit
     auto start = std::chrono::steady_clock::now();
     auto old_count = dynamic_cast<OutputOperator*>(operators_.back())->getOutput()->getCount(executor_idx);
-    LOG(INFO) << "Task " << task_id_;
     execute<QueryType::Profile>(inputs, inputs.size(), 0, executor_idx);
     for (uint32_t i = 0; i + 1 < operators_.size(); ++i) {
       profile_info_[i + 1] += *traverse_context_[i];

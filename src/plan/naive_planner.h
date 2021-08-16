@@ -15,7 +15,6 @@
 #pragma once
 
 #include <cmath>
-#include <queue>
 #include <string>
 #include <tuple>
 #include <unordered_map>
@@ -23,8 +22,8 @@
 #include <utility>
 #include <vector>
 
-#include "algorithms/minimum_weight_vertex_cover.h"
 #include "graph/query_graph.h"
+#include "graph/types.h"
 #include "plan/execution_plan.h"
 
 namespace circinus {
@@ -32,8 +31,8 @@ namespace circinus {
 /**
  * The following functions should be overrode to implement a different compression strategy:
  *  - For pruning cover search space
- *    - generateAnchorCovers: compute the anchor covers from which sequences of covers are generated to populate the
- *                            search space
+ *    - generateAnchorCovers: compute the anchor covers from which sequences of covers
+ *                            are generated to populate the search space
  *  - For estimating the cardinaltiy
  *    - getMinimalConectedSubgraphWithAllKeys: compute the connected subgraph on which cardinality is estimated
  *    - dfsComputeCost: compute the cost using a dfs tree on the connected subgraph
@@ -46,17 +45,19 @@ namespace circinus {
  */
 class NaivePlanner {
  private:
+  /** The search space of the dynamic cover sequences is a set of DAGs, in which CoverNode is a node.
+   *
+   * A parent of this is a CoverNode that corresponds to the next-level subquery, and whose cover has at most one more
+   * vertex and is compatible with the this cover.
+   */
   struct CoverNode {
-    std::vector<QueryVertexID> cover;
     uint64_t cover_bits = 0;  // assume query size smaller than 64
     std::vector<uint32_t> parents;
 
     inline std::vector<int> getCoverTable(QueryVertexID size) const {
       std::vector<int> select_cover(size, 0);
       for (uint32_t j = 0; j < size; ++j) {
-        if (cover_bits >> j & 1) {
-          select_cover[j] = 1;
-        }
+        select_cover[j] = (cover_bits >> j & 1);
       }
       return select_cover;
     }
@@ -71,33 +72,30 @@ class NaivePlanner {
     }
   };
 
-  const QueryGraph* query_graph_;
+  const QueryGraph* const query_graph_;
   bool use_two_hop_traversal_ = false;
   const std::vector<double> candidate_cardinality_;
   ExecutionPlan plan_;
 
   std::vector<std::vector<CoverNode>> covers_;  // covers for each level, the search space for compression
   std::vector<QueryVertexID> matching_order_;
-  std::vector<double> level_cost_;
 
  public:
-  NaivePlanner(QueryGraph* query_graph, std::vector<double>&& candidate_cardinality)
-      : query_graph_(query_graph), candidate_cardinality_(std::move(candidate_cardinality)), plan_(GraphType::Normal) {}
-
   NaivePlanner(QueryGraph* query_graph, bool use_two_hop_traversal, std::vector<double>&& candidate_cardinality,
                GraphType type)
       : query_graph_(query_graph),
         use_two_hop_traversal_(use_two_hop_traversal),
         candidate_cardinality_(std::move(candidate_cardinality)),
-        plan_(type) {}
+        plan_(type) {
+    CHECK_LE(query_graph->getNumVertices(), 64);
+  }
 
-  const auto& getMatchingOrder() const { return matching_order_; }
-  const auto& getCovers() const { return covers_; }
+  /** Generates a plan with a static cover for partial match compression. */
+  ExecutionPlan* generatePlan();
 
-  // FIXME(tatiana): tidy-up the interface and implementations
-  ExecutionPlan* generatePlan(const std::vector<QueryVertexID>& use_order = {});
-  ExecutionPlan* generatePlanWithEagerDynamicCover(const std::vector<QueryVertexID>& use_order = {});
-  ExecutionPlan* generatePlanWithoutCompression(const std::vector<QueryVertexID>& use_order = {});
+  /** Generates a plan with no compression. */
+  ExecutionPlan* generatePlanWithoutCompression();
+
   /**
    * If candidate_views is nullptr, estimate the cardinality of compressed groups by product of candidate cardinality;
    * otherwise, do a dfs traversal based on the candidate view to compute a tighter estimation.
@@ -107,32 +105,36 @@ class NaivePlanner {
 
   ExecutionPlan* generatePlanWithSampleExecution(const std::vector<std::vector<double>>& cardinality,
                                                  const std::vector<double>& level_cost);
-  /** Generates the pruned search space of dynamic cover sequences */
-  void generateCoverNode(const std::vector<std::vector<double>>& cardinality);
+
+  /** Generates query vertex matching order.
+   *
+   * Candidate views are required for CFL, DAF, TSO and GQL.
+   * TODO(tatiana): handle case when candidate views are not feasible to compute.
+   */
   const std::vector<QueryVertexID>& generateOrder(const GraphBase* data_graph, const GraphMetadata& metadata,
                                                   const std::vector<CandidateSetView>* candidate_views,
                                                   const std::vector<VertexID>& candidate_cardinality,
                                                   OrderStrategy order_strategy,
-                                                  const std::vector<QueryVertexID>& use_order = {});
+                                                  const std::vector<QueryVertexID>* use_order = nullptr);
 
+  /** Select a query vertex to parallelize the plan and compute the weights (estimation of the associated backtracking
+   * search space) for all its candidates. */
   inline std::pair<QueryVertexID, std::vector<double>> computeParallelVertexWeights(
-      const GraphBase* data_graph, const std::vector<CandidateSetView>* candidate_views,
+      const GraphBase* data_graph, const std::vector<CandidateSetView>& candidate_views,
       const std::vector<QueryVertexID>& parallelizing_qv_candidates) {
-    // FIXME(tatiana): handle cs=none,static, they do not set the bits properly
     auto cover_bits = plan_.getQueryCoverBits();
-    DCHECK_NE(cover_bits, 0);
+    CHECK_NE(cover_bits, 0);
     auto parallelizing_qv = selectParallelizingQueryVertex(cover_bits, parallelizing_qv_candidates);
     CHECK_NE(parallelizing_qv, DUMMY_QUERY_VERTEX);
     return std::make_pair(parallelizing_qv, getParallelizingQueryVertexWeights(parallelizing_qv, data_graph,
                                                                                candidate_views, cover_bits));
   }
 
-  std::pair<uint32_t, uint32_t> analyzeDynamicCoreCoverEager(const std::vector<QueryVertexID>& use_order = {});
-  std::tuple<uint32_t, uint32_t, uint32_t> analyzeDynamicCoreCoverMWVC(
-      const std::vector<QueryVertexID>& use_order = {});
-
  private:
   /* Start of implementations of compression strategy */
+
+  /** Generates the pruned search space of dynamic cover sequences */
+  void generateCoverNode(const std::vector<std::vector<double>>& cardinality);
 
   std::vector<std::vector<int>> generateAnchorCovers(const std::vector<QueryVertexID>& subquery_vertices,
                                                      const std::vector<double>& cardinality);
@@ -155,19 +157,23 @@ class NaivePlanner {
    * First computes a minimal connected subgraph containing all cover vertices, and estimate the cardinality by path
    * weights based on a dfs tree.
    */
-  double estimateCardinality(const GraphBase* data_graph, const std::vector<CandidateSetView>* candidate_views,
+  double estimateCardinality(const GraphBase* data_graph, const std::vector<CandidateSetView>& candidate_views,
                              uint64_t cover_bits, uint32_t level);
 
-  inline double estimateCardinality(const GraphBase* data_graph, const std::vector<CandidateSetView>* candidate_views,
-                                    const CoverNode& cover_node, uint32_t level) {
+  inline double estimateCardinality(const std::vector<double>& cardinality, const GraphBase* data_graph,
+                                    const std::vector<CandidateSetView>* candidate_views, const CoverNode& cover_node,
+                                    uint32_t level) {
     if (candidate_views == nullptr) {
       double car = 1;
-      for (QueryVertexID qid : cover_node.cover) {
-        car *= candidate_cardinality_[qid];
+      for (uint32_t i = 0; i <= level; ++i) {
+        auto qid = matching_order_[i];
+        if (cover_node.cover_bits >> qid & 1) {
+          car *= cardinality[qid];
+        }
       }
       return car;
     }
-    return estimateCardinality(data_graph, candidate_views, cover_node.cover_bits, level);
+    return estimateCardinality(data_graph, *candidate_views, cover_node.cover_bits, level);
   }
 
   double estimateExpandCost(const GraphBase* data_graph, const std::vector<CandidateSetView>* candidate_views,
@@ -179,10 +185,9 @@ class NaivePlanner {
    * We estimate the cardinality of cover embeddings by first-order traversal (virtually) on the bipartite graphs of
    * candidate sets. The idea is similar to that of computing path weights in CFL.
    */
-  template <typename Hashmap = unordered_map<VertexID, double>>
   unordered_map<VertexID, double> dfsComputeCost(QueryVertexID qid, uint64_t cover_bits, std::vector<bool>& visited,
                                                  std::vector<bool>& visited_cc, const GraphBase* data_graph,
-                                                 const std::vector<CandidateSetView>* candidate_views,
+                                                 const std::vector<CandidateSetView>& candidate_views,
                                                  const std::vector<QueryVertexID>& cc, bool with_traversal = false);
 
   /* End of implementations of compression strategy */
@@ -193,11 +198,11 @@ class NaivePlanner {
                                                const std::vector<QueryVertexID>& parallelizing_qv_candidates);
 
   std::vector<double> getParallelizingQueryVertexWeights(QueryVertexID partition_qv, const GraphBase* data_graph,
-                                                         const std::vector<CandidateSetView>* candidate_views,
+                                                         const std::vector<CandidateSetView>& candidate_views,
                                                          uint64_t cover_bits);
   /* end of parallelization strategy */
 
-  bool hasValidCandidate();
+  bool hasValidCandidate() const;
 
   inline std::vector<double> logCardinality() {
     std::vector<double> log_cardinality(candidate_cardinality_.size(), 0);
@@ -208,14 +213,8 @@ class NaivePlanner {
   }
 
   inline bool addCover(CoverNode& new_cover_node, uint32_t level) {
-    {  // debug log
-      std::stringstream ss;
-      for (auto x : new_cover_node.cover) {
-        ss << x << ", ";
-      }
-      DLOG(INFO) << level << " " << ss.str();
-    }
-    for (auto& cover_node : covers_[level]) {
+    DLOG(INFO) << level << " " << new_cover_node.getCoverTableString(level + 1);
+    for (const auto& cover_node : covers_[level]) {
       if (cover_node.cover_bits == new_cover_node.cover_bits) {
         return true;
       }
@@ -224,18 +223,14 @@ class NaivePlanner {
     return false;
   }
 
-  void getCoverCC(QueryVertexID qid, QueryVertexID cc_id, const uint64_t cover_bits, std::vector<QueryVertexID>& cc);
+  void getCoverCC(QueryVertexID qid, QueryVertexID cc_id, const uint64_t cover_bits,
+                  std::vector<QueryVertexID>& cc) const;
 
-  std::vector<QueryVertexID> generateMatchingOrder(const QueryGraph* g, const std::vector<int>& core_table,
-                                                   QueryVertexID start_vertex);
+  unordered_map<QueryVertexID, uint32_t> traceBackCoverPath(const std::vector<std::vector<double>>& costs_car,
+                                                            const std::vector<std::vector<uint32_t>>& pre,
+                                                            int best_idx);
 
-  // FIXME(tatiana): reuse the implementation of ordering strategy
-  QueryVertexID selectStartingVertex(const std::vector<QueryVertexID>& cover);
-
-  std::pair<uint32_t, uint32_t> analyzeDynamicCoreCoverEagerInner(const std::vector<int>& query_graph_cover);
-  unordered_map<QueryVertexID, uint32_t> getDynamicCoreCoverEager(const std::vector<int>& query_graph_cover);
-
-  std::vector<int> getCoverByOrder() const;
+  void logCoverSpace();
 };
 
 }  // namespace circinus
