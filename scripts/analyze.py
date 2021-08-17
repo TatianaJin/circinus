@@ -6,6 +6,7 @@ import pandas as pd
 from os import path as osp
 from os import listdir
 from sys import stderr
+from tqdm import tqdm
 
 
 def get_args():
@@ -69,10 +70,10 @@ def read_profile(profile_path, df):
   config = osp.basename(profile_path)
   with open(profile_path, 'r') as f:
     n_ops = None
-    step = 1
     for line in f:
       line = line.strip()
       if line.startswith("[ Plan"):
+        step = 1
         n_ops = int(line.split(" ")[-2])
         #print("#ops = {0}".format(line.split(" ")[-2]))
       elif n_ops is not None:
@@ -80,36 +81,49 @@ def read_profile(profile_path, df):
         if int(splits[0]) == n_ops - 1:
           n_ops = None
         elif int(splits[0]) != 0:
-          op = splits[1].split(' ', 2)[0]
+          op, detail = splits[1].split(' ', 1)
+          parents, _ = detail.split(' -> ')
+          n_parents = len(parents.split(' '))
           if op == "ExpandIntoOperator":
             profile[-1][2] += '-Into'
             profile[-1][4] += int(splits[7]) # si_count
-            profile[-1][4] += int(splits[8]) # si_input
-            profile[-1][5] += float(splits[2]) # time
+            profile[-1][5] += int(splits[8]) # si_input
+            profile[-1][6] += float(splits[2]) # time
+            profile[-1][8] += "-" + str(n_parents)
           else:
-            profile.append([config, step, op, 0.0, float(splits[7]), float(splits[8]), float(splits[2])])
+            profile.append([config, step, op, 0.0, float(splits[7]), float(splits[8]), float(splits[2]), 'dense' if 'dense' in config else 'sparse', str(n_parents)])
             step = step + 1
       elif line.startswith("step_costs"):
-        for i, v in enumerate(line.split(' ')[2:]):
-            profile[i][3] = float(v)
-  update = pd.DataFrame(data=profile, columns=['query', 'step', 'op', 'cost', 'si_count', 'si_input', 'time'])
+        costs = line.split(' ')[2:]
+        offset = len(profile) - len(costs)
+        for i, v in enumerate(costs):
+            profile[i + offset][3] = float(v)
+  update = pd.DataFrame(data=profile, columns=['query', 'step', 'op', 'cost', 'si_count', 'si_input', 'time', 'mode', 'n_parents'])
   #print(update)
-  return df.append(update)
+  #exit(0)
+  return df.append(update) if df is not None else update
 
 
 def analyze_profile(folder):
-  df = pd.DataFrame(columns=['query', 'step', 'op', 'cost', 'si_count', 'si_input', 'time'])
-  for name in listdir(folder):
-    if name == "log" or name.endswith(".swp"):
-      continue
+  profiles = [name for name in listdir(folder) if name != "log" and not name.endswith(".swp") and not name.endswith(".log")]
+
+  df = None
+  for name in tqdm(profiles):
     df = read_profile(osp.join(folder, name), df)
-  print(df)
+  #print(df)
+  pd.set_option('display.max_rows', None) # print all rows without ellipsis
   print("================================== Correlation ==================================")
   print(df[['cost', 'si_count', 'si_input', 'time']].corr())
   print("=============================== Correlation By Op ===============================")
-  print(df.groupby('op').corr(min_periods=1))
+  print(df.groupby('op')[['cost', 'si_count', 'si_input', 'time']].corr(min_periods=1))
+  print("========================== Correlation By Op w/ Parent ==========================")
+  print(df.groupby(['op','n_parents'])[['cost', 'si_count', 'si_input', 'time']].corr(min_periods=1))
   print("============================== Correlation By Step ==============================")
-  print(df.groupby('step').corr(min_periods=1))
+  print(df.groupby('step')[['cost', 'si_count', 'si_input', 'time']].corr(min_periods=1))
+  print("=========================== Correlation By Query Mode ===========================")
+  print(df.groupby('mode')[['cost', 'si_count', 'si_input', 'time']].corr(min_periods=1))
+  print("========================== Correlation By Parent Count ==========================")
+  print(df.groupby('n_parents')[['cost', 'si_count', 'si_input', 'time']].corr(min_periods=1))
 
 
 if __name__ == '__main__':
