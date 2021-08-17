@@ -275,23 +275,7 @@ std::vector<std::pair<uint32_t, std::vector<CandidateScope>>> Planner::generateP
 
   for (uint32_t i = 0; i < backtracking_plan_->getPlans().size(); ++i) {
     ret.emplace_back(i, std::vector<CandidateScope>(n_qvs));
-    // for (uint32_t j = 0; j < n_qvs; ++j)
     ret.back().second[partitioning_qv.front()].usePartition(backtracking_plan_->getPlan(i)->getPartitionId());
-    // for (uint64_t j = 1; j < all; ++j) {
-    //   uint64_t tmp = j;
-    //   ret.emplace_back(i, std::vector<CandidateScope>(n_qvs));
-    //   uint32_t idx = 0;
-    //   while (tmp) {
-    //     if (tmp % 3 == 0) {
-    //       ret.back().second[partitioning_qv[idx]].beforePartition(backtracking_plan_->getPlan(i)->getPartitionId());
-    //     } else if (tmp % 3 == 1) {
-    //       ret.back().second[partitioning_qv[idx]].usePartition(backtracking_plan_->getPlan(i)->getPartitionId());
-    //     } else if (tmp % 3 == 2) {
-    //       ret.back().second[partitioning_qv[idx]].afterPartition(backtracking_plan_->getPlan(i)->getPartitionId());
-    //     }
-    //     idx++;
-    //   }
-    // }
   }
   LOG(INFO) << "Partition qeury vertex size: " << partitioning_qv.size() << ",  partition plan size:" << ret.size();
   return ret;
@@ -329,6 +313,8 @@ std::vector<std::pair<uint32_t, std::vector<CandidateScope>>> Planner::generateL
         LOG(INFO) << "Generate Plan " << backtracking_plan_->getPlans().size() << " for intra-partition "
                   << graph_partition;
         std::vector<CandidateScope> plan_scopes(n_qvs, scopes[primary_pqv]);
+        // std::vector<CandidateScope> plan_scopes(n_qvs);
+        // plan_scopes[primary_pqv] = scopes[primary_pqv];
         auto& stats = candidate_cardinality[graph_partition];
         auto candidate_views = result->getCandidatesByScopes(plan_scopes);
         auto plan = generateLogicalExecutionPlan(stats, primary_pqv, &candidate_views, &partitioning_qvs);

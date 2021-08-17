@@ -193,7 +193,8 @@ class Benchmark {
     std::stringstream config;
     // FIXME(tatiana): parallelization strategy
     config << "cps=" << FLAGS_filter << ",cs=" << FLAGS_vertex_cover << ",limit=" << FLAGS_match_limit
-           << ",mo=" << match_order << ",pqv=" << FLAGS_pqv << ",ipp=" << FLAGS_ipp << ",upg=" << FLAGS_upg << ",utht=" << std::to_string(FLAGS_utht);
+           << ",mo=" << match_order << ",pqv=" << FLAGS_pqv << ",ipp=" << FLAGS_ipp << ",upg=" << FLAGS_upg
+           << ",utht=" << FLAGS_utht;
 
     if (FLAGS_profile == 1) {
       config << ",mode=profile";
@@ -209,8 +210,9 @@ class Benchmark {
     auto msg = reply.pop();
     if (success) {
       if (FLAGS_profile) {
-        auto profile_file_name =
-            dataset + '_' + query_mode + '_' + std::to_string(query_size) + '_' + std::to_string(index) + '_' + FLAGS_filter + '_' + FLAGS_vertex_cover  + '_' + FLAGS_match_order + '_' + FLAGS_pqv + "_" + FLAGS_profile_file_extra;
+        auto profile_file_name = dataset + '_' + query_mode + '_' + std::to_string(query_size) + '_' +
+                                 std::to_string(index) + '_' + FLAGS_filter + '_' + FLAGS_vertex_cover + '_' +
+                                 FLAGS_match_order + '_' + FLAGS_pqv + "_" + FLAGS_profile_file_extra;
         auto profile_file = circinus::Path::join(FLAGS_profile_prefix, profile_file_name);
         LOG(INFO) << "-------------" << profile_file;
         auto ofs = circinus::openOutputFile(profile_file);

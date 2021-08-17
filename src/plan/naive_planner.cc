@@ -139,7 +139,7 @@ unordered_map<VertexID, double> NaivePlanner::dfsComputeCost(QueryVertexID qid, 
           }
         }
         if (!(cover_bits >> nbr & 1) && num != 0) {
-          sum /= num;
+          sum /= num / 2;
         }
         pair.second *= sum;
       }
@@ -395,6 +395,7 @@ double NaivePlanner::estimateExpandCost(const GraphBase* data_graph,
 
   if (FLAGS_intersection_count_coefficient) {  // compute the cost by intersection count
     // expand from key
+    // if (key_parent_cnt == 0) key_parent_cnt = 1;
     double cost = key_parent_cnt * car[level - 1][parent];
     if (target_in_cover) {
       // computation cost for expand-into / expand-from-set
@@ -493,6 +494,7 @@ ExecutionPlan* NaivePlanner::generatePlanWithDynamicCover(const GraphBase* data_
     }
     LOG(INFO) << "best last level cover idx " << best_idx << " cost " << costs_car[last][best_idx];
   }
+  // best_idx = 5 < covers_[last].size() - 1 ? 5 : covers_.size() - 1;
 
   auto& select_cover_node = covers_[last][best_idx];
   auto select_cover = select_cover_node.getCoverTable(matching_order_.size());
@@ -735,8 +737,6 @@ void NaivePlanner::generateCoverNode(const std::vector<std::vector<double>>& car
         to_intersect_vertices[i].emplace_back(nbrs.first[j]);
       }
     }
-    // std::sort(to_intersect_vertices[i].begin(), to_intersect_vertices[i].end(),
-    //           [&](QueryVertexID qid1, QueryVertexID qid2) { return cardinality[i][qid1] > cardinality[i][qid2]; });
   }
 
   // take log of the cardinality for computing weighted vertex cover
@@ -787,10 +787,9 @@ void NaivePlanner::generateCoverNode(const std::vector<std::vector<double>>& car
 
       DLOG(INFO) << "------------------- level = " << i;
 
-      bool existing = addCover(new_cover_node, i);
-      // TODO(tatiana): we may have populated compatible covers if new_cover_node has been existing
+      addCover(new_cover_node, i);
 
-      /* populate compatible covers for larger subqueries */
+      /* populate compatible covers for larger subqueries for new added cover node */
       CoverNode nxt_cover_node = new_cover_node;
       for (uint32_t j = i + 1; j < matching_order_.size(); ++j) {
         QueryVertexID new_v = matching_order_[j];
@@ -814,10 +813,10 @@ void NaivePlanner::generateCoverNode(const std::vector<std::vector<double>>& car
           }
         }
 
-        existing = addCover(nxt_cover_node, j);
+        addCover(nxt_cover_node, j);
       }
 
-      /* populate compatible covers for smaller subqueries */
+      /* populate compatible covers for smaller subqueries from new added cover node */
       CoverNode last_cover_node = new_cover_node;
       for (uint32_t j = i; j > 0; --j) {
         QueryVertexID delete_v = matching_order_[j];
@@ -840,7 +839,7 @@ void NaivePlanner::generateCoverNode(const std::vector<std::vector<double>>& car
           CHECK_GE(last_cover_node.cover_bits, (1ULL << delete_v));
           last_cover_node.cover_bits -= 1ULL << delete_v;
         }
-        existing = addCover(last_cover_node, j - 1);
+        addCover(last_cover_node, j - 1);
       }
     }
   }
@@ -929,5 +928,4 @@ void NaivePlanner::logCoverSpace() {
     LOG(INFO) << ss.str();
   }
 }
-
 }  // namespace circinus
