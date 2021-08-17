@@ -226,9 +226,8 @@ class NaivePlanner {
   void getCoverCC(QueryVertexID qid, QueryVertexID cc_id, const uint64_t cover_bits,
                   std::vector<QueryVertexID>& cc) const;
 
-  unordered_map<QueryVertexID, uint32_t> traceBackCoverPath(const std::vector<std::vector<double>>& costs_car,
-                                                            const std::vector<std::vector<uint32_t>>& pre,
-                                                            int best_idx);
+  std::pair<unordered_map<QueryVertexID, uint32_t>, std::vector<double>> traceBackCoverPath(
+      const std::vector<std::vector<double>>& costs_car, const std::vector<std::vector<uint32_t>>& pre, int best_idx);
 
   void logCoverSpace();
 };

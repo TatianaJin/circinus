@@ -55,8 +55,10 @@ class ExecutionPlan {
    * For non-key vertices, the index n_sets-th key following the matching order */
   unordered_map<QueryVertexID, uint32_t> query_vertex_indices_;
 
+  std::vector<double> step_costs_;
+
   /* partition query vertex's candidate search space */
-  uint32_t partition_id_ = 0;
+  uint32_t partition_id_ = 0;  // TODO(tatiana): obsolete
   uint64_t query_cover_bits_ = 0;
 
   void addKeys(const std::vector<QueryVertexID>& keys_to_add, std::vector<QueryVertexID>& set_vertices,
@@ -98,6 +100,9 @@ class ExecutionPlan {
   void setInputAreKeys(bool flag) { inputs_are_keys_ = flag; }
   void setPartitionId(uint32_t partition_id) { partition_id_ = partition_id; }
   bool inputAreKeys() const { return inputs_are_keys_; }
+
+  inline void setStepCosts(std::vector<double>&& step_costs) { step_costs_ = std::move(step_costs); }
+  inline const auto& getStepCosts() const { return step_costs_; }
 
   void printPhysicalPlan() const {
     if (operators_.empty()) return;

@@ -2,6 +2,7 @@
 
 import argparse
 import os
+import subprocess
 from os import path as osp
 from sys import stderr
 
@@ -78,9 +79,13 @@ def run_batch(args):
 def run_query(config, args, log_dir, common_flags):
   flags = config.split(',')
   profile_flag = "" if args.profile is None else "-profile_prefix {1} -profile {0}".format(1 if args.profile == "simple" else 2, log_dir)
-  cmd = "timeout {0} {1} -verbosity 0 -dataset {2} -query_size {3} -query_mode {4} -query_index {5} {6} {7}".format(
-    args.time_out, osp.join(args.bin_dir, args.match), flags[0], flags[1], flags[2], flags[3], profile_flag, common_flags)
-  os.system(cmd)
+  cmd_args = "-verbosity 0 -dataset {0} -query_size {1} -query_mode {2} -query_index {3} {4} {5}".format(
+    flags[0], flags[1], flags[2], flags[3], profile_flag, common_flags)
+  result = subprocess.run([osp.join(args.bin_dir, args.match), *cmd_args.split(' ')], stderr=subprocess.PIPE, timeout=args.time_out)
+  if result.returncode is not 0:
+    with open('error_log', 'a') as errlog:
+      print('{config},{code},{msg}'.format(config=config, code=result.returncode, msg=result.stderr.decode('utf-8').rstrip()))
+      errlog.write('{code},{msg}\n'.format(code=result.returncode, msg=result.stderr.decode('utf-8').rstrip()))
 
 
 if __name__ == '__main__':
@@ -92,4 +97,6 @@ if __name__ == '__main__':
     run_batch(args)
   else:
     log_dir, log = get_log_path(args)
+    with open(log, 'a') as log_f:
+      log_f.write("dataset,query_size,query_mode,query_index,elapsed_time,filter_time,plan_time,enumerate_time,n_embeddings,order,max_task_time\n")
     run_query(args.query, args, log_dir, get_common_flags(args, log))

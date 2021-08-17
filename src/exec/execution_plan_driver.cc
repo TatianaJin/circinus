@@ -73,7 +73,7 @@ void ExecutionPlanDriverBase::finishPlan(ThreadsafeQueue<ServerEvent>* reply_que
     auto size = plan_->getPlans().size();
     std::stringstream ss;
     for (uint32_t i = 0; i < size; ++i) {
-      ss << "[ Plan " << plan_->getPlan(i)->getPartitionId() << " ]\n";
+      ss << "[ Plan " << i << ": " << (plan_->getOperators(i).size() + 1) << " ]\n";
       auto input_op = plan_->getInputOperator(i);
       profiled->setProfiledPlan(i, plan_->getOperators(i), input_op.get());
       uint32_t op_idx = 0;
@@ -81,6 +81,11 @@ void ExecutionPlanDriverBase::finishPlan(ThreadsafeQueue<ServerEvent>* reply_que
         ss << op_idx << ',' << op_profile << std::endl;
         ++op_idx;
       }
+      ss << "step_costs";
+      for (auto step_cost : plan_->getPlan(i)->getStepCosts()) {
+        ss << ' ' << step_cost;
+      }
+      ss << std::endl;
     }
     if (plan_->getNumPartitionedPlans() != 0) {
       ss << "[ Partitions ]\n";

@@ -264,6 +264,7 @@ std::vector<std::vector<CandidateScope>> Planner::generatePartitionedScopes(
   return partitioned_plans;
 }
 
+// TODO(tatiana): remove obsolete functions
 std::vector<std::pair<uint32_t, std::vector<CandidateScope>>> Planner::generatePartitionedPlans(
     const std::vector<QueryVertexID>& partitioning_qv) {
   // CHECK_EQ(partitioning_qv.size(), 1);  // consider the locality indicator only, no. tasks equal to no. partitions

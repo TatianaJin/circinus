@@ -499,8 +499,9 @@ ExecutionPlan* NaivePlanner::generatePlanWithDynamicCover(const GraphBase* data_
   auto& select_cover_node = covers_[last][best_idx];
   auto select_cover = select_cover_node.getCoverTable(matching_order_.size());
 
-  auto level_become_key = traceBackCoverPath(costs_car, pre, best_idx);
+  auto[level_become_key, step_costs] = traceBackCoverPath(costs_car, pre, best_idx);
 
+  plan_.setStepCosts(std::move(step_costs));
   plan_.setQueryCoverBits(select_cover_node.cover_bits);
   plan_.populatePhysicalPlan(query_graph_, matching_order_, select_cover, level_become_key);
   return &plan_;
@@ -584,17 +585,20 @@ ExecutionPlan* NaivePlanner::generatePlanWithSampleExecution(const std::vector<s
   auto select_cover = covers_[last][best_idx].getCoverTable(matching_order_.size());
 
   // trace back from the last level
-  auto level_become_key = traceBackCoverPath(costs_car, pre, best_idx);
+  auto[level_become_key, step_costs] = traceBackCoverPath(costs_car, pre, best_idx);
 
+  plan_.setStepCosts(std::move(step_costs));
   plan_.setQueryCoverBits(covers_[last][best_idx].cover_bits);
   plan_.populatePhysicalPlan(query_graph_, matching_order_, select_cover, level_become_key);
 
   return &plan_;
 }
 
-unordered_map<QueryVertexID, uint32_t> NaivePlanner::traceBackCoverPath(
+std::pair<unordered_map<QueryVertexID, uint32_t>, std::vector<double>> NaivePlanner::traceBackCoverPath(
     const std::vector<std::vector<double>>& costs_car, const std::vector<std::vector<uint32_t>>& pre, int best_idx) {
   unordered_map<QueryVertexID, uint32_t> level_become_key;
+  std::vector<double> step_costs(matching_order_.size(), 0);
+
   // trace back from the last level
   uint32_t last = covers_.size() - 1;
   std::vector<uint32_t> best_path;
@@ -639,7 +643,10 @@ unordered_map<QueryVertexID, uint32_t> NaivePlanner::traceBackCoverPath(
       }
     }
   }
-  return level_become_key;
+  for (uint32_t i = 1; i < matching_order_.size(); ++i) {  // the cost of each step along best_path
+    step_costs[i] = costs_car[i][best_path[i]] - costs_car[i - 1][best_path[i - 1]];
+  }
+  return {level_become_key, step_costs};
 }
 
 const std::vector<QueryVertexID>& NaivePlanner::generateOrder(const GraphBase* data_graph,

@@ -18,15 +18,18 @@ For testing, Circinus uses [googletest](https://github.com/google/googletest/rel
 ### Build
 
 1. Build and install
-        $ git clone https://github.com/tatianajin/circinus.git && cd circinus
-        $ mkdir -p release && cd release
-        $ cmake .. -DCMAKE_BUILD_TYPE=Release # CMAKE_BUILD_TYPE: Release, Debug, RelWithDebInfo
-        $ make -j4 # 4 if to use 4 threads to compile
+```bash
+git clone https://github.com/tatianajin/circinus.git && cd circinus
+mkdir -p release && cd release
+cmake .. -DCMAKE_BUILD_TYPE=Release # CMAKE_BUILD_TYPE: Release, Debug, RelWithDebInfo
+make -j4 # 4 if to use 4 threads to compile
+```
 
 
 2. Run unit tests
-
-        $ make test                            # Run unit tests
+```bash
+make test                            # Run unit tests
+```
 
 
 ### Introduction to Circinus

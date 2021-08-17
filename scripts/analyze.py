@@ -4,12 +4,13 @@ import argparse
 import pandas as pd
 
 from os import path as osp
+from os import listdir
 from sys import stderr
 
 
 def get_args():
   parser = argparse.ArgumentParser(description='Experimental analysis')
-  parser.add_argument('target_file', help='The file of results to analyze')
+  parser.add_argument('target_file', help='The file of results to analyze, or the profile directory')
   parser.add_argument('--check', help='The groundtruth file for checking whether the n_embeddings values in the target file are correct')
   parser.add_argument('-t', '--time', help='The baseline file for comparing enumerate time')
   parser.add_argument('-m', '--missing', help='The config file for getting missing queries')
@@ -63,9 +64,62 @@ def get_config(target, config_file):
   print("Query config is output to {0}".format(config_file))
 
 
+def read_profile(profile_path, df):
+  profile = []
+  config = osp.basename(profile_path)
+  with open(profile_path, 'r') as f:
+    n_ops = None
+    step = 1
+    for line in f:
+      line = line.strip()
+      if line.startswith("[ Plan"):
+        n_ops = int(line.split(" ")[-2])
+        #print("#ops = {0}".format(line.split(" ")[-2]))
+      elif n_ops is not None:
+        splits = line.split(',')
+        if int(splits[0]) == n_ops - 1:
+          n_ops = None
+        elif int(splits[0]) != 0:
+          op = splits[1].split(' ', 2)[0]
+          if op == "ExpandIntoOperator":
+            profile[-1][2] += '-Into'
+            profile[-1][4] += int(splits[7]) # si_count
+            profile[-1][4] += int(splits[8]) # si_input
+            profile[-1][5] += float(splits[2]) # time
+          else:
+            profile.append([config, step, op, 0.0, float(splits[7]), float(splits[8]), float(splits[2])])
+            step = step + 1
+      elif line.startswith("step_costs"):
+        for i, v in enumerate(line.split(' ')[2:]):
+            profile[i][3] = float(v)
+  update = pd.DataFrame(data=profile, columns=['query', 'step', 'op', 'cost', 'si_count', 'si_input', 'time'])
+  #print(update)
+  return df.append(update)
+
+
+def analyze_profile(folder):
+  df = pd.DataFrame(columns=['query', 'step', 'op', 'cost', 'si_count', 'si_input', 'time'])
+  for name in listdir(folder):
+    if name == "log" or name.endswith(".swp"):
+      continue
+    df = read_profile(osp.join(folder, name), df)
+  print(df)
+  print("================================== Correlation ==================================")
+  print(df[['cost', 'si_count', 'si_input', 'time']].corr())
+  print("=============================== Correlation By Op ===============================")
+  print(df.groupby('op').corr(min_periods=1))
+  print("============================== Correlation By Step ==============================")
+  print(df.groupby('step').corr(min_periods=1))
+
+
 if __name__ == '__main__':
   args, _ = get_args()
-  target = read(args.target_file).dropna()
+  if osp.isdir(args.target_file):
+    target_log = osp.join(args.target_file, "log")
+    analyze_profile(args.target_file)
+  else:
+    target_log = args.target_file
+  target = read(target_log).dropna()
   if args.check:
     print("Mismatch:\t{0}".format(check_embeddings(target, args.check)))
   if args.time:
