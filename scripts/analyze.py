@@ -45,8 +45,8 @@ def compare_enumerate_time(target, baseline_file):
   comparison['speedup'] = speedup
   comparison['speedup_ratio'] = speedup / comparison['enumerate_time_base']
   print(comparison[['speedup', 'speedup_ratio']].describe())
-  print(speedup.sum())
-  print(comparison.iloc[speedup.argmin()])
+  print("Total speedup (seconds)", speedup.sum())
+  # print(comparison.iloc[speedup.argmin()])
   if sum(speedup < 0) > 0:
     print(comparison[["speedup", 'enumerate_time_base', 'speedup_ratio']].loc[speedup < 0])
 

@@ -152,6 +152,7 @@ class CompressedSubgraphs {
   inline CompressedSubgraphs* reset(const CompressedSubgraphs& subgraphs, uint32_t replacing_set_index,
                                     VertexSet&& new_set, VertexID key, const std::vector<uint32_t>& pruning_set_indices,
                                     uint64_t set_pruning_threshold, bool prune_by_set) {
+    DCHECK_EQ(subgraphs.getNumKeys() + 1, keys_.size());
     sets_ = subgraphs.sets_;
     unordered_set<uint32_t> set_indices(pruning_set_indices.begin(), pruning_set_indices.end());
     if (pruneExistingSets(key, set_indices, set_pruning_threshold)) {
@@ -288,6 +289,7 @@ class CompressedSubgraphs {
     }
 
     for (auto idx : exception_set_indices) {
+      DCHECK(sets_[idx] != nullptr) << idx << " " << keys_.size() << " + " << sets_.size();
       auto& set = *sets_[idx];
       if (set.size() == 1) {
         exception.insert(set.front());
@@ -318,6 +320,11 @@ class CompressedSubgraphs {
 
   bool pruneExistingSets(VertexID v, unordered_set<uint32_t>& set_indices, uint32_t set_size_threshold,
                          bool recursive_prune = true);
+
+  inline void swap(CompressedSubgraphs& other) {
+    keys_.swap(other.keys_);
+    sets_.swap(other.sets_);
+  }
 };
 
 }  // namespace circinus

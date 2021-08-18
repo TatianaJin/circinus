@@ -51,9 +51,16 @@ class SetPrunningSubgraphFilter : public SubgraphFilter {
   uint32_t filter(std::vector<CompressedSubgraphs>& subgraphs, uint32_t start, uint32_t end) override {
     auto end_iter = subgraphs.begin() + end;
     auto start_iter = subgraphs.begin() + start;
-    uint32_t old_size = subgraphs.size();
-    subgraphs.erase(std::remove_if(start_iter, end_iter, [this](auto& group) { return filter(group); }), end_iter);
-    return old_size - subgraphs.size();
+    start_iter = std::find_if(start_iter, end_iter, [this](auto& group) { return filter(group); });
+    if (start_iter != end_iter) {
+      for (auto i = start_iter; ++i != end_iter;) {
+        if (!filter(*i)) {
+          start_iter->swap(*i);
+          ++start_iter;
+        }
+      }
+    }
+    return std::distance(start_iter, end_iter);
   }
 
   /** @returns True if pruned. */

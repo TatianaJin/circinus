@@ -329,7 +329,7 @@ double NaivePlanner::estimateCardinality(const GraphBase* data_graph,
     break;
   }
 
-  DLOG(INFO) << "cost: " << ret;
+  // DLOG(INFO) << "cost: " << ret;
   return ret;
 }
 
@@ -383,7 +383,8 @@ double NaivePlanner::estimateExpandCost(const GraphBase* data_graph,
   for (uint32_t k = 0; k < cnt; ++k) {
     if (existing_vertices.count(nbrs[k]) != 0) {
       if ((parent_cover_bits >> nbrs[k] & 1) == 0) {
-        if (set_parent == DUMMY_QUERY_VERTEX || candidate_views[nbrs[k]].size() < candidate_views[set_parent].size()) {
+        if (set_parent == DUMMY_QUERY_VERTEX ||
+            (*candidate_views)[nbrs[k]].size() < (*candidate_views)[set_parent].size()) {
           set_parent = nbrs[k];
         }
         ++set_parent_cnt;
@@ -634,11 +635,11 @@ std::pair<unordered_map<QueryVertexID, uint32_t>, std::vector<double>> NaivePlan
         if (vid != matching_order_[i] && !(covers_[i - 1][best_path[i - 1]].cover_bits >> vid & 1)) {
           // if the first vertex becomes key in the next subquery, make it as key initially
           level_become_key.insert({vid, (i == 1) ? 0 : i});
-          DLOG(INFO) << vid << " " << i;
+          DLOG(INFO) << "add " << vid << " to key at " << i;
         }
         if (vid == matching_order_[i]) {
           level_become_key.insert({vid, i});
-          DLOG(INFO) << vid << " " << i;
+          DLOG(INFO) << "add " << vid << " to key at " << i;
         }
       }
     }

@@ -180,6 +180,7 @@ class TraverseChainTask : public TaskBase {
         return true;
       }
       ctx->resetOutputs();
+      DCHECK_EQ(ctx->getOutputs()->size(), batch_size_) << "level " << level;
       uint32_t size = 0;
       if
         constexpr(isProfileMode(profile)) size = traverse_op->expandAndProfile(batch_size_, ctx);
@@ -189,6 +190,7 @@ class TraverseChainTask : public TaskBase {
       if (size == 0) {
         break;
       }
+      DCHECK_EQ(outputs_[level].size(), batch_size_) << "level " << level;
       if (execute<profile>(outputs_[level], size, level + 1, executor_idx)) {
         finished = true;
         break;

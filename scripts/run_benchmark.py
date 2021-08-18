@@ -81,15 +81,20 @@ def run_query(config, args, log_dir, common_flags):
   profile_flag = "" if args.profile is None else "-profile_prefix {1} -profile {0}".format(1 if args.profile == "simple" else 2, log_dir)
   cmd_args = "-verbosity 0 -dataset {0} -query_size {1} -query_mode {2} -query_index {3} {4} {5}".format(flags[0], flags[1], flags[2], flags[3],
                                                                                                          profile_flag, common_flags)
+  #print(osp.join(args.bin_dir, args.match), cmd_args)
+  config = ",".join(flags[0:4])
   try:
     result = subprocess.run([osp.join(args.bin_dir, args.match), *cmd_args.split(' ')], stderr=subprocess.PIPE, timeout=args.time_out)
     print(config)
     if result.returncode is not 0:
       with open('error_log', 'a') as errlog:
-        print('{config},{code},{msg}'.format(config=config, code=result.returncode, msg=result.stderr.decode('utf-8').rstrip()))
+        print('Error {config},{code}\n{msg}'.format(config=config, code=result.returncode, msg=result.stderr.decode('utf-8').rstrip()))
         errlog.write('{config},{code}\n'.format(config=config, code=result.returncode))
-    with open(osp.join(log_dir, '_'.join(flags)) + ".log", 'w') as out:
-      out.write(result.stderr.decode('utf-8'))
+    if log_dir is not None:
+      with open(osp.join(log_dir, '_'.join(flags)) + ".log", 'w') as out:
+        out.write(result.stderr.decode('utf-8'))
+    else:
+      print(result.stderr.decode('utf-8'))
   except subprocess.TimeoutExpired:
     print('{config} timeout'.format(config=config))
 

@@ -73,7 +73,7 @@ class TraverseContext : public ProfileInfo {
 
   template <typename... Args>
   inline CompressedSubgraphs* newOutput(Args&&... args) {
-    DCHECK_LT(output_idx_, outputs_->size()) << output_idx_ << " " << outputs_->size();
+    DCHECK_LT(output_idx_, outputs_->size()) << "output buffer addr " << outputs_;
     auto ret = (*outputs_)[output_idx_].reset(std::forward<Args>(args)...);
     // do not increment output_idx_ if the current output is invalid
     output_idx_ += (ret != nullptr);

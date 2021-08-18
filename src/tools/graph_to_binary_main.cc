@@ -57,7 +57,7 @@ int main(int argc, char** argv) {
   } else if (FLAGS_partition == 0) {
     output = input + ".bin";
   } else {
-    output = input + "_ordered.bin";
+    output = input + ".p" + std::to_string(FLAGS_partition) + ".bin";
   }
   if (FLAGS_partition == 0) {
     LOG(INFO) << "Transform graph " << input << " to binary, with output path " << output;

@@ -348,7 +348,7 @@ class CurrentResultsByParent : public CurrentResults {
   uint32_t getResults(uint32_t cap) override {
     auto& parent_set = *input_->getSet(parent_index_);
     unordered_map<VertexID, int> group_index;
-    uint32_t n = 0;
+    uint32_t old_count = ctx_->getOutputSize();
     auto target_label = owner_->getTargetLabel();
     auto& candidates = *((ExpandEdgeSetToKeyTraverseContext*)ctx_)->getCandidateSet();
     auto graph = ctx_->getDataGraph<G>();
@@ -371,18 +371,16 @@ class CurrentResultsByParent : public CurrentResults {
           if (output == nullptr) {
             group_index[target] = -1;
           }
-          ++n;
         } else if (pos->second != -1) {  // the target is invalid if the group index is -1
           (*ctx_->getOutputs())[pos->second].UpdateSet(parent_index_, parent_match);
         }
       }
     }
 #ifdef USE_FILTER
-    auto n_pruned = owner_->filter((*ctx_->getOutputs()), ctx_->getOutputSize() - n, ctx_->getOutputSize());
-    n -= n_pruned;
+    auto n_pruned = owner_->filter((*ctx_->getOutputs()), old_count, ctx_->getOutputSize());
     ctx_->popOutputs(n_pruned);
 #endif
-    return n;
+    return ctx_->getOutputSize() - old_count;
   }
 };
 
