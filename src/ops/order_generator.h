@@ -147,7 +147,8 @@ class OrderGenerator {
     return logical_filter.getBfsOrder();
   }
 
-  void estimatePathEmbeddsingsNum(const std::vector<QueryVertexID>& path,
+  /** @returns True if no edge in any BipartiteGraph along the path */
+  bool estimatePathEmbeddsingsNum(const std::vector<QueryVertexID>& path,
                                   std::vector<uint32_t>& estimated_embeddings_num) {
     CHECK_GT(path.size(), 1);
     std::vector<uint32_t> parent;
@@ -157,6 +158,11 @@ class OrderGenerator {
 
     estimated_embeddings_num.resize(path.size() - 1);
     auto last_edge = getBipartiteGraph(path[begin], path[end]);
+    if (last_edge->getNumEdges() == 0) {
+      DLOG(INFO) << "no edge for BipartiteGraph between " << path[begin] << " and " << path[end] << " "
+                 << candidates_[begin].size() << " to " << candidates_[end].size();
+      return true;
+    }
     children.resize(last_edge->getNumVertices());
 
     uint32_t sum = 0;
@@ -172,6 +178,11 @@ class OrderGenerator {
       begin = i - 1;
       end = i;
       auto edge = getBipartiteGraph(path[begin], path[end]);
+      if (edge->getNumEdges() == 0) {
+        DLOG(INFO) << "no edge for BipartiteGraph between " << path[begin] << " and " << path[end] << " "
+                   << candidates_[begin].size() << " to " << candidates_[end].size();
+        return true;
+      }
       parent.resize(edge->getNumVertices());
 
       sum = 0;
@@ -191,6 +202,7 @@ class OrderGenerator {
 
       last_edge = edge;
     }
+    return false;
   }
 
   QueryVertexID generateNoneTreeEdgesCount(const std::vector<TreeNode>& tree_node,
@@ -235,7 +247,7 @@ class OrderGenerator {
     for (auto& path : paths) {
       std::vector<uint32_t> estimated_embeddings_num;
       QueryVertexID non_tree_edges_count = generateNoneTreeEdgesCount(tree, path);
-      estimatePathEmbeddsingsNum(path, estimated_embeddings_num);
+      if (estimatePathEmbeddsingsNum(path, estimated_embeddings_num)) return {};
       double score = estimated_embeddings_num[0] / (double)(non_tree_edges_count + 1);
       path_orders.emplace_back(std::make_pair(score, &path));
     }
@@ -324,6 +336,9 @@ class OrderGenerator {
           break;
         }
 
+        if (paths_embededdings_num[i][path_root_vertex_idx] == 0) {
+          LOG(WARNING) << "path score is 0, path starts from " << paths[i][path_root_vertex_idx];
+        }
         double cur_value = paths_embededdings_num[i][path_root_vertex_idx] /
                            (double)(candidates_[paths[i][path_root_vertex_idx]].size());
         if (cur_value < min_value) {
@@ -399,7 +414,7 @@ class OrderGenerator {
         paths_non_tree_edge_num.push_back(non_tree_edge_num + 1);
 
         std::vector<uint32_t> path_embeddings_num;
-        estimatePathEmbeddsingsNum(path, path_embeddings_num);
+        if (estimatePathEmbeddsingsNum(path, path_embeddings_num)) return {};
         paths_embededdings_num.emplace_back(std::move(path_embeddings_num));
       }
 
@@ -435,8 +450,8 @@ class OrderGenerator {
       std::vector<std::vector<uint32_t>> paths_embededdings_num;
       for (auto& path : tree_paths) {
         std::vector<uint32_t> path_embeddings_num;
-        // FIXME(tatiana): no need to estimate for the path segment which contain query vertices in core? see line 335
-        estimatePathEmbeddsingsNum(path, path_embeddings_num);
+        // FIXME(tatiana): no need to estimate for the path segment which contain query vertices in core?
+        if (estimatePathEmbeddsingsNum(path, path_embeddings_num)) return {};
         paths_embededdings_num.emplace_back(path_embeddings_num);
       }
       SelectSubsequentPaths(tree_paths, paths_embededdings_num, visited_vertices, order, selected_vertices_count);

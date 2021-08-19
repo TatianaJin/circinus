@@ -72,6 +72,8 @@ class BipartiteGraph
     }
     bipartite_graph_intersection_input_size_ += candidate_set1.size() + candidate_set2.size();
     bipartite_graph_intersection_output_size_ += elist_.size();
+    n_edges_ = elist_.size();
+    // TODO(tatiana): set max_degree_ and vertex_cardinality_by_label_
   }
 
   std::pair<uint64_t, uint64_t> getProfilePair() const {

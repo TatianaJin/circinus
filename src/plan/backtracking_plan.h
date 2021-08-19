@@ -70,6 +70,11 @@ class BacktrackingPlan {
     input_operators_.push_back(std::move(op));
   }
 
+  inline auto getNumInputOperators() const { return input_operators_.size(); }
+  inline void replaceInputOperator(uint32_t idx, std::unique_ptr<LogicalCompressedInputOperator>&& op) {
+    input_operators_[idx] = std::move(op);
+  }
+
   std::string toString() const {
     std::stringstream ss;
     for (uint32_t i = 0; i < plans_.size(); ++i) {

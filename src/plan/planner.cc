@@ -305,6 +305,7 @@ std::vector<std::pair<uint32_t, std::vector<CandidateScope>>> Planner::generateL
     uint32_t n_qvs = query_context_->query_graph.getNumVertices();
     auto candidate_cardinality = result->getCandidateCardinality();
     unordered_map<uint32_t, uint32_t> scope_partition_to_plan_idx;
+    int global_plan_idx = -1;  // in case a global plan is needed
     for (auto& scopes : partitions) {
       // assume the candidates of the primary pqv are split for each graph partition
       CHECK(scopes[primary_pqv].getType() == CandidateScopeType::Partition) << (uint32_t)scopes[primary_pqv].getType();
@@ -320,9 +321,22 @@ std::vector<std::pair<uint32_t, std::vector<CandidateScope>>> Planner::generateL
         auto candidate_views = result->getCandidatesByScopes(plan_scopes);
         auto plan = generateLogicalExecutionPlan(stats, primary_pqv, &candidate_views, &partitioning_qvs);
         if (plan == nullptr) {
-          continue;
+          if (planners_.size() == backtracking_plan_->getPlans().size() + 1) {  // need a global plan
+            planners_.pop_back();
+            if (global_plan_idx == -1) {
+              auto candidate_views = result->getCandidates();
+              plan = generateLogicalExecutionPlan(getCardinality(candidate_views), DUMMY_QUERY_VERTEX, &candidate_views,
+                                                  &partitioning_qvs);
+              CHECK(plan != nullptr);  // the entire problem does not have a match if nullptr
+              global_plan_idx = backtracking_plan_->addPlan(plan);
+            }
+            plan_pos = scope_partition_to_plan_idx.insert({graph_partition, global_plan_idx}).first;
+          } else {
+            continue;
+          }
+        } else {
+          plan_pos = scope_partition_to_plan_idx.insert({graph_partition, backtracking_plan_->addPlan(plan)}).first;
         }
-        plan_pos = scope_partition_to_plan_idx.insert({graph_partition, backtracking_plan_->addPlan(plan)}).first;
       }
       // assign plan to scope
       partition_plans.emplace_back(plan_pos->second, scopes);
@@ -336,6 +350,7 @@ std::vector<std::pair<uint32_t, std::vector<CandidateScope>>> Planner::generateL
     auto stats = getCardinality(candidate_views);
     auto plan = generateLogicalExecutionPlan(stats, DUMMY_QUERY_VERTEX, &candidate_views, &partitioning_qvs);
     if (plan == nullptr) {
+      planners_.resize(backtracking_plan_->getPlans().size());
       continue;
     }
     partition_plans.emplace_back(backtracking_plan_->addPlan(plan), scopes);
@@ -366,11 +381,15 @@ void Planner::parallelizePartitionedPlans(
       if (verbosePlannerLog()) {
         LOG(INFO) << "parallel_qv = " << parallel_qv << " partitioning_qvs [" << ss.str() << " ]";
       }
-    } else {
+    } else {  // replace existing logical input operator
       std::vector<QueryVertexID> pqvs(partitioning_qvs.size() + 1);
       std::copy(partitioning_qvs.begin(), partitioning_qvs.end(), pqvs.begin());
       pqvs.back() = parallel_qv;
-      newInputOperators(backtracking_plan_->getPlan(partition.first), &pqvs);
+      auto logical_plan = backtracking_plan_->getPlan(partition.first);
+      backtracking_plan_->replaceInputOperator(
+          partition.first,
+          std::make_unique<PartitionedLogicalCompressedInputOperator>(
+              &query_context_->query_graph, logical_plan->inputAreKeys(), logical_plan->getMatchingOrder(), pqvs));
       LOG(INFO) << "Regenerate input operator as parallel qv is not pqv. parallel_qv = " << parallel_qv
                 << " partitioning_qvs [" << ss.str() << " ]";
     }
@@ -495,6 +514,7 @@ BacktrackingPlan* Planner::generateExecutionPlan(const CandidateResult* result, 
   // 4. parallelize partitioned plans for better concurrency and load balance
   if (multithread) {
     parallelizePartitionedPlans(partitioning_qv, &partition_plans, partitioned_result);
+    CHECK_EQ(backtracking_plan_->getPlans().size(), backtracking_plan_->getNumInputOperators());
 
     auto t2 = std::chrono::steady_clock::now();
     LOG(INFO) << ">>>>>>>>>> Time to parallelizePartitionedPlans " << toSeconds(t1, t2) << "s";
@@ -574,8 +594,11 @@ ExecutionPlan* Planner::generateLogicalExecutionPlan(const std::vector<VertexID>
                                                      std::move(cardinality), graph_type));
   auto& planner = planners_.back();
 
-  planner->generateOrder(query_context_->data_graph, *query_context_->graph_metadata, candidate_views,
-                         candidate_cardinality, query_context_->query_config.order_strategy, use_order);
+  auto& order = planner->generateOrder(query_context_->data_graph, *query_context_->graph_metadata, candidate_views,
+                                       candidate_cardinality, query_context_->query_config.order_strategy, use_order);
+  if (order.empty()) {
+    return nullptr;
+  }
 
   ExecutionPlan* plan = nullptr;
   switch (query_context_->query_config.compression_strategy) {

@@ -68,7 +68,7 @@ void ExecutorManager::run(QueryId qid, QueryContext* query_ctx, std::unique_ptr<
   }
   CHECK_NOTNULL(driver);
   CHECK_NOTNULL(ctx);
-  LOG(INFO) << "driver addr " << driver << " ctx addr " << ctx;
+  DLOG(INFO) << "driver addr " << driver << " ctx addr " << ctx;
   driver->init(qid, query_ctx, *ctx, task_queue_);
 }
 
