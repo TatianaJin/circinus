@@ -72,7 +72,7 @@ class TraverseChainTask : public TaskBase {
   void run(uint32_t executor_idx) override {
     auto start = std::chrono::steady_clock::now();
     setupOutputs();
-    setupTraverseContexts();
+    if (!setupTraverseContexts()) return;
     if (verboseExecutionLog()) {
       std::stringstream ss;
       for (auto& x : *candidates_) {
@@ -98,7 +98,7 @@ class TraverseChainTask : public TaskBase {
 
   void profile(uint32_t executor_idx) override {
     setupOutputs();
-    setupTraverseContexts();
+    if (!setupTraverseContexts()) return;
     profile_info_.resize(operators_.size() + 1);  // traverse chain + input operator
     std::vector<CompressedSubgraphs> inputs;
     input_op_->inputAndProfile(graph_, *candidates_, &inputs, &profile_info_.front());
@@ -120,7 +120,8 @@ class TraverseChainTask : public TaskBase {
   }
 
  protected:
-  void setupTraverseContexts() {
+  /** @returns True if success, otherwise task is pruned. */
+  bool setupTraverseContexts() {
     auto op = operators_[0];
     auto traverse = dynamic_cast<TraverseOperator*>(op);
     uint32_t level = 0;
@@ -128,12 +129,15 @@ class TraverseChainTask : public TaskBase {
     while (traverse != nullptr) {
       DCHECK_LT(traverse->getTargetQueryVertex(), candidates_->size());
       // now assume all query vertices have candidate sets
-      traverse_context_.emplace_back(createTraverseContext(&(*candidates_)[traverse->getTargetQueryVertex()],
-                                                           outputs_[level], level, traverse, query_type_));
+      auto ctx = createTraverseContext(&(*candidates_)[traverse->getTargetQueryVertex()], outputs_[level], level,
+                                       traverse, query_type_);
+      if (ctx == nullptr) return false;
+      traverse_context_.emplace_back(std::move(ctx));
       // LOG(INFO) << "set candidates for " << traverse->getTargetQueryVertex() << " " << traverse->toString();
       traverse = dynamic_cast<TraverseOperator*>(traverse->getNext());
       ++level;
     }
+    return true;
   }
 
   void setupOutputs() {
@@ -149,8 +153,7 @@ class TraverseChainTask : public TaskBase {
                                                                  std::vector<CompressedSubgraphs>& outputs,
                                                                  uint32_t level, const TraverseOperator* op,
                                                                  QueryType profile) {
-    auto ctx = op->initTraverseContext(candidates, &outputs, graph_, profile);
-    return ctx;
+    return op->initTraverseContext(candidates, &outputs, graph_, profile);
   }
 
   template <QueryType profile>
@@ -224,8 +227,7 @@ class TraverseTask : public TraverseChainTask {
   std::unique_ptr<TraverseContext> createTraverseContext(const CandidateSetView* candidates,
                                                          std::vector<CompressedSubgraphs>& outputs, uint32_t level,
                                                          const TraverseOperator* op, QueryType profile) override {
-    auto ctx = op->initTraverseContext(candidates, &outputs, &graph_views_[level], profile);
-    return ctx;
+    return op->initTraverseContext(candidates, &outputs, &graph_views_[level], profile);
   }
 
   static std::vector<GraphView<GraphPartitionBase>> setupGraphView(const ReorderedPartitionedGraph* g,

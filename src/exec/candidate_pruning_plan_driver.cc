@@ -132,14 +132,11 @@ void CandidatePruningPlanDriver::taskFinish(TaskBase* task, ThreadsafeTaskQueue*
     }
 
     if (++n_finished_tasks_ == task_counters_.size()) {
-      if (plan_->getPhase() == 1) {
-        reply_queue->push(std::move(*finish_event_));
-        reset();
-      } else if (plan_->getPhase() == 3) {
+      if (plan_->getPhase() == 3) {
         result_->removeInvalid(dynamic_cast<NeighborhoodFilterTask*>(task)->getFilter()->getQueryVertex());
-        reply_queue->push(std::move(*finish_event_));
-        reset();
       }
+      reset();
+      reply_queue->push(std::move(*finish_event_));  // must be the last step in phase to avoid data race
       return;
     }
 

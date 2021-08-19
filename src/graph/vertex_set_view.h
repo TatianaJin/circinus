@@ -152,7 +152,10 @@ class SingleRangeVertexSetView : public VertexSetView {
  public:
   using ConstIterator = const VertexID*;
   SingleRangeVertexSetView() {}
-  SingleRangeVertexSetView(const VertexID* start, size_t size) { addRange(start, start + size); }
+  SingleRangeVertexSetView(const VertexID* start, size_t size) {
+    if (start == nullptr) return;
+    addRange(start, start + size);
+  }
 
   inline ConstIterator begin() const { return ranges_.empty() ? nullptr : ranges_.front().first; }
   inline ConstIterator end() const {

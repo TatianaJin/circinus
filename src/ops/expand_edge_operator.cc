@@ -273,13 +273,17 @@ class ExpandEdgeSetToKeyTraverseContext : public ExpandEdgeTraverseContext {
   inline void setResults(CurrentResults* ptr) { current_results_.reset(ptr); }
 
   template <typename G>
-  void init(const CandidateSetView& candidates, LabelID parent_label) {
+  bool init(const CandidateSetView& candidates, LabelID parent_label) {
     auto data_graph = getDataGraph<G>();
-    // if a different data graph is given, recompute the candidates' neighbor size
     candidates_neighbor_size_ = 0;
     for (auto candidate : candidates) {
       candidates_neighbor_size_ += data_graph->getVertexInDegreeWithHint(candidate, parent_label, 0);
     }
+    if (candidates_neighbor_size_ == 0) {
+      LOG(WARNING) << "WARNING: no neighbor for all " << candidates.size() << " candidates";
+      return true;
+    }
+    return false;
   }
 };
 
@@ -497,7 +501,7 @@ class ExpandEdgeSetToKeyOperator : public ExpandEdgeOperator {
                                                        std::vector<CompressedSubgraphs>* outputs, const void* graph,
                                                        QueryType profile) const override {
     auto ret = std::make_unique<ExpandEdgeSetToKeyTraverseContext>(candidates, graph, outputs, profile);
-    ret->init<G>(*candidates, parent_label_);
+    if (ret->init<G>(*candidates, parent_label_)) return nullptr;  // prune the whole traverse chain
     return ret;
   }
 
@@ -513,7 +517,7 @@ class ExpandEdgeSetToKeyOperator : public ExpandEdgeOperator {
    */
   inline ExecutionMode getExecutionMode(const std::vector<VertexID>* parent_set, uint32_t cap,
                                         ExpandEdgeSetToKeyTraverseContext* ctx) const {
-    DCHECK_NE(ctx->getCandidateNeighborSize(), 0);
+    DCHECK_NE(ctx->getCandidateNeighborSize(), 0) << ctx->getCandidateSet()->size();
     uint64_t set_neighbor_size = 0;
     for (auto v : *parent_set) {
       set_neighbor_size += ctx->getDataGraph<G>()->getVertexOutDegreeWithHint(v, target_label_, 0);

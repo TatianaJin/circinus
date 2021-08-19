@@ -56,7 +56,6 @@ class PlanDriver {
     operators_.clear();
     task_counters_.clear();
     n_finished_tasks_ = 0;
-    finish_event_.reset();
   }
 };
 

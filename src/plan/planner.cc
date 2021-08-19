@@ -367,8 +367,12 @@ void Planner::parallelizePartitionedPlans(
         LOG(INFO) << "parallel_qv = " << parallel_qv << " partitioning_qvs [" << ss.str() << " ]";
       }
     } else {
-      LOG(WARNING) << "Parallel qv is not pqv, maybe lacking pruning at input: parallel_qv = " << parallel_qv
-                   << " partitioning_qvs [" << ss.str() << " ]";
+      std::vector<QueryVertexID> pqvs(partitioning_qvs.size() + 1);
+      std::copy(partitioning_qvs.begin(), partitioning_qvs.end(), pqvs.begin());
+      pqvs.back() = parallel_qv;
+      newInputOperators(backtracking_plan_->getPlan(partition.first), &pqvs);
+      LOG(INFO) << "Regenerate input operator as parallel qv is not pqv. parallel_qv = " << parallel_qv
+                << " partitioning_qvs [" << ss.str() << " ]";
     }
     auto sum = std::accumulate(weights.begin(), weights.end(), 0.0);
     plan_weights.emplace_back(parallel_qv, std::move(weights));
@@ -495,6 +499,8 @@ BacktrackingPlan* Planner::generateExecutionPlan(const CandidateResult* result, 
     auto t2 = std::chrono::steady_clock::now();
     LOG(INFO) << ">>>>>>>>>> Time to parallelizePartitionedPlans " << toSeconds(t1, t2) << "s";
   }
+
+  // TODO(tatiana): check for prunable partitioned plans
 
   if (shortPlannerLog()) {  // debug log for scopes and plans
     uint32_t plan_idx = 0;
