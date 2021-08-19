@@ -42,13 +42,15 @@ void CandidatePruningPlanDriver::initPhase1TasksForPartitionedGraph(QueryId qid,
   finish_event_->data = result_;
   // TODO(tatiana) now for simplicity enforce one task per partition for one query vertex
   ctx.first.setMaxParallelism(1);
+  std::vector<ScanTask*> tasks;
+  tasks.reserve(n_partitions * n_qvs);
   for (uint32_t i = 0; i < n_partitions; ++i) {
     auto scans = plan_->getScanOperators(metadata.getPartition(i), ctx.first);
     for (uint32_t task_id = 0; task_id < n_qvs; ++task_id) {
       auto& scan = scans[task_id];
       if (scan != nullptr) {
         task_counters_[task_id] += scan->getParallelism();
-        task_queue.putTask(new ScanTask(qid, task_id, query_ctx->stop_time, 0, scan.get(), query_ctx->data_graph, i));
+        tasks.push_back(new ScanTask(qid, task_id, query_ctx->stop_time, 0, scan.get(), query_ctx->data_graph, i));
         operators_.push_back(std::move(scan));
       } else {
         DLOG(INFO) << "partition " << i << '/' << n_partitions << " no candidates for " << task_id;
@@ -63,6 +65,9 @@ void CandidatePruningPlanDriver::initPhase1TasksForPartitionedGraph(QueryId qid,
       // TODO(tatiana): handle trivial case when there is no candidate
       LOG(FATAL) << " No candidate matching query vertex?";
     }
+  }
+  for (auto task : tasks) {
+    task_queue.putTask(task);
   }
 }
 

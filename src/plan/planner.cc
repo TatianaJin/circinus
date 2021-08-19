@@ -199,14 +199,7 @@ std::vector<QueryVertexID> Planner::getPartitioningQueryVerticesByCover() {
     }
   }
   LOG(INFO) << "Common cover vertex: [" << ss.str() << ']';
-  if (common_cover_vertex_count != 0) {
-    // TODO(tatiana): pick the indicator by considering the closeness centrality?
-  }
-
-  // TODO(tatiana): now we use only one partitioning query vertex to test the pipeline, later may consider
-  // parallelism for deciding partitioning vertices
   order_by_cover_occurrence.resize(1);
-
   return order_by_cover_occurrence;
 }
 
@@ -544,7 +537,7 @@ BacktrackingPlan* Planner::generateExecutionPlan(const CandidateResult* result, 
 
 BacktrackingPlan* Planner::generateExecutionPlan(const std::vector<std::vector<VertexID>>* candidate_cardinality,
                                                  bool multithread) {
-  // TODO(tatiana): for explain mode
+  // TODO(engineering): for explain mode
   return backtracking_plan_.get();
 }
 

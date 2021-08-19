@@ -38,7 +38,6 @@ class Planner {
   QueryContext* const query_context_ = nullptr;
   CandidatePruningPlan candidate_pruning_plan_;
 
-  // TODO(tatiana): refactor for current framework
   std::vector<std::unique_ptr<NaivePlanner>> planners_;
   std::unique_ptr<BacktrackingPlan> backtracking_plan_ = nullptr;
 
@@ -126,7 +125,7 @@ class Planner {
   virtual std::vector<QueryVertexID> getPartitioningQueryVertices();  // based on query vertex occurence in covers
   /** Alternative to getPartitioningQueryVertices */
   std::vector<QueryVertexID> getPartitioningQueryVerticesByClosenessCentrality();
-  std::vector<QueryVertexID> getPartitioningQueryVerticesByCover();
+  [[deprecated]] std::vector<QueryVertexID> getPartitioningQueryVerticesByCover();
 
   /** Select query vertices by which the backtracking search space is partitioned.  */
   virtual std::vector<std::vector<CandidateScope>> generatePartitionedScopes(
