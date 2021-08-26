@@ -61,8 +61,8 @@ void ExecutionPlanDriverBase::init(QueryId qid, QueryContext* query_ctx, Executi
 void ExecutionPlanDriverBase::finishPlan(ThreadsafeQueue<ServerEvent>* reply_queue) {
   if (is_time_out_) {
     finish_event_->type = ServerEvent::TimeOut;
-    reply_queue->push(std::move(*finish_event_));
     reset();
+    reply_queue->push(std::move(*finish_event_));  // must be the last step in phase to avoid data race
     return;
   }
 
@@ -101,8 +101,8 @@ void ExecutionPlanDriverBase::finishPlan(ThreadsafeQueue<ServerEvent>* reply_que
     }
     result_->getQueryResult().profile_info = ss.str();
   }
-  reply_queue->push(std::move(*finish_event_));
   reset();
+  reply_queue->push(std::move(*finish_event_));  // must be the last step in phase to avoid data race
 }
 
 void ExecutionPlanDriverBase::taskTimeOut(TaskBase* task, ThreadsafeQueue<ServerEvent>* reply_queue) {

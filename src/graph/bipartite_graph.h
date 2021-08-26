@@ -40,6 +40,7 @@ class BipartiteGraph
   uint64_t bipartite_graph_intersection_output_size_ = 0;
 
  public:
+  using NeighborSet = VertexSetView;
   BipartiteGraph(VertexID id1, VertexID id2) : Graph(), source_id_(id1), destination_id_(id2) {}
 
   inline QueryVertexID getSourceId() const { return source_id_; }
@@ -88,7 +89,7 @@ class BipartiteGraph
   /**
    * @returns The original ids of neighbor vertices of the given vertex
    */
-  inline VertexSetView getOutNeighborsWithHint(VertexID id, LabelID nbr_label = ALL_LABEL) const {
+  inline NeighborSet getOutNeighborsWithHint(VertexID id, LabelID nbr_label = ALL_LABEL) const {
     DCHECK_EQ(offset_by_vertex_.count(id), 1);
     const uint32_t offset = offset_by_vertex_.at(id);
     return Graph::getOutNeighborsWithHint(offset, nbr_label);

@@ -132,9 +132,10 @@ template <typename Set>
 void intersectInplace(const std::vector<VertexID>& set1, const Set& set2, std::vector<VertexID>* intersection) {
   uint32_t size = 0;
   auto lb = set2.begin();
+  auto end = set2.end();
   for (auto vid : set1) {
-    lb = lowerBound(lb, set2.end(), vid);
-    if (lb == set2.end()) {
+    lb = lowerBound(lb, end, vid);
+    if (lb == end) {
       break;
     }
     if (*lb == vid) {
@@ -142,6 +143,16 @@ void intersectInplace(const std::vector<VertexID>& set1, const Set& set2, std::v
     }
   }
   intersection->resize(size);
+}
+
+inline void intersectInplace(std::vector<VertexID>* set1, const unordered_set<VertexID>& set2) {
+  uint32_t size = 0;
+  for (auto vid : *set1) {
+    if (set2.count(vid)) {
+      (*set1)[size++] = vid;
+    }
+  }
+  set1->resize(size);
 }
 
 }  // namespace circinus

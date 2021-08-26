@@ -23,10 +23,12 @@ namespace circinus {
 
 class GraphPartitionBase {
  public:
+  using NeighborSet = VertexSetView;
+
   virtual ~GraphPartitionBase() {}
   virtual bool containsDestination(VertexID vid) const = 0;
-  virtual VertexSetView getOutNeighborsWithHint(VertexID vid, LabelID nbr_label) const = 0;
-  virtual VertexSetView getInNeighborsWithHint(VertexID vid, LabelID nbr_label) const = 0;
+  virtual NeighborSet getOutNeighborsWithHint(VertexID vid, LabelID nbr_label) const = 0;
+  virtual NeighborSet getInNeighborsWithHint(VertexID vid, LabelID nbr_label) const = 0;
   virtual VertexID getVertexOutDegreeWithHint(VertexID vid, LabelID nbr_label) const = 0;
   virtual VertexID getVertexInDegreeWithHint(VertexID vid, LabelID nbr_label) const = 0;
   static std::unique_ptr<GraphPartitionBase> createGraphPartition(const CandidateScope& src_scope,
@@ -62,6 +64,8 @@ class SDGraphPartition : public GraphPartitionBase {
   const uint32_t dst_partition_;
 
  public:
+  using NeighborSet = VertexSetView;
+
   SDGraphPartition(const ReorderedPartitionedGraph* original_graph, uint32_t src_partition, uint32_t dst_partition)
       : original_graph_(original_graph), src_partition_(src_partition), dst_partition_(dst_partition) {}
 
@@ -89,7 +93,7 @@ class SDGraphPartition : public GraphPartitionBase {
     return vid < original_graph_->getNumVertices();
   }
 
-  inline VertexSetView getOutNeighborsWithHint(VertexID vid, LabelID nbr_label) const override {
+  inline NeighborSet getOutNeighborsWithHint(VertexID vid, LabelID nbr_label) const override {
     if
       constexpr(limit_dst) {
         return original_graph_->getOutNeighborsInPartitionWithHint(vid, nbr_label, dst_partition_);
@@ -97,7 +101,7 @@ class SDGraphPartition : public GraphPartitionBase {
     return original_graph_->getAllOutNeighborsWithHint(vid, nbr_label);
   }
 
-  inline VertexSetView getInNeighborsWithHint(VertexID vid, LabelID nbr_label) const override {
+  inline NeighborSet getInNeighborsWithHint(VertexID vid, LabelID nbr_label) const override {
     if
       constexpr(limit_src) {
         return original_graph_->getOutNeighborsInPartitionWithHint(vid, nbr_label, src_partition_);

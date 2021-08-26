@@ -86,19 +86,27 @@ def read_profile(profile_path, df):
           n_parents = len(parents.split(' '))
           if op == "ExpandIntoOperator":
             profile[-1][2] += '-Into'
-            profile[-1][4] += int(splits[7]) # si_count
-            profile[-1][5] += int(splits[8]) # si_input
-            profile[-1][6] += float(splits[2]) # time
+            profile[-1][4] += int(splits[7])  # si_count
+            profile[-1][5] += int(splits[8])  # si_input
+            profile[-1][6] += float(splits[2])  # time
             profile[-1][8] += "-" + str(n_parents)
           else:
-            profile.append([config, step, op, 0.0, float(splits[7]), float(splits[8]), float(splits[2]), 'dense' if 'dense' in config else 'sparse', str(n_parents)])
+            profile.append([
+              config, step, op, 0.0,
+              float(splits[7]),
+              float(splits[8]),
+              float(splits[2]), 'dense' if 'dense' in config else 'sparse',
+              str(n_parents),
+              int(splits[-1])
+            ])
             step = step + 1
       elif line.startswith("step_costs"):
         costs = line.split(' ')[2:]
         offset = len(profile) - len(costs)
         for i, v in enumerate(costs):
-            profile[i + offset][3] = float(v)
-  update = pd.DataFrame(data=profile, columns=['query', 'step', 'op', 'cost', 'si_count', 'si_input', 'time', 'mode', 'n_parents'])
+          profile[i + offset][3] = float(v)
+  update = pd.DataFrame(data=profile,
+                        columns=['query', 'step', 'op', 'cost', 'si_count', 'si_input', 'time', 'mode', 'n_parents', 'candidate_si_effect'])
   #print(update)
   #exit(0)
   return df.append(update) if df is not None else update
@@ -111,19 +119,23 @@ def analyze_profile(folder):
   for name in tqdm(profiles):
     df = read_profile(osp.join(folder, name), df)
   #print(df)
-  pd.set_option('display.max_rows', None) # print all rows without ellipsis
+  pd.set_option('display.max_rows', None)  # print all rows without ellipsis
   print("================================== Correlation ==================================")
   print(df[['cost', 'si_count', 'si_input', 'time']].corr())
   print("=============================== Correlation By Op ===============================")
   print(df.groupby('op')[['cost', 'si_count', 'si_input', 'time']].corr(min_periods=1))
   print("========================== Correlation By Op w/ Parent ==========================")
-  print(df.groupby(['op','n_parents'])[['cost', 'si_count', 'si_input', 'time']].corr(min_periods=1))
+  print(df.groupby(['op', 'n_parents'])[['cost', 'si_count', 'si_input', 'time']].corr(min_periods=1))
   print("============================== Correlation By Step ==============================")
   print(df.groupby('step')[['cost', 'si_count', 'si_input', 'time']].corr(min_periods=1))
   print("=========================== Correlation By Query Mode ===========================")
   print(df.groupby('mode')[['cost', 'si_count', 'si_input', 'time']].corr(min_periods=1))
   print("========================== Correlation By Parent Count ==========================")
   print(df.groupby('n_parents')[['cost', 'si_count', 'si_input', 'time']].corr(min_periods=1))
+  print("========================== Candidate si effect ==========================")
+  print(df['candidate_si_effect'].describe())
+  print(df.groupby('step')['candidate_si_effect'].describe())
+  print(df.groupby('op')['candidate_si_effect'].describe())
 
 
 if __name__ == '__main__':

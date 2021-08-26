@@ -19,6 +19,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "algorithms/intersect.h"
 #include "graph/types.h"
 #include "ops/filters/subgraph_filter.h"
 #include "ops/traverse_operator.h"
@@ -151,9 +152,17 @@ class ExpandEdgeOperator : public TraverseOperator {
     removeExceptions(targets, exceptions);
 #else
     auto neighbors = g->getOutNeighborsWithHint(parent_match, target_label_, 0);
+    if
+      constexpr(isProfileMode(profile)) {
+        removeExceptions(neighbors, targets, exceptions);
+        auto target_size = targets->size();
+        intersectInplace(targets, dctx->getCandidateSet());
+        ctx->candidate_si_diff += target_size - targets->size();
+        ((ExpandEdgeTraverseContext*)ctx)
+            ->updateIntersection<profile>(dctx->getCandidateSet().size() + target_size, targets->size(), parent_match);
+        return;
+      }
     intersect(dctx->getCandidateSet(), neighbors, targets, exceptions);
-    ((ExpandEdgeTraverseContext*)ctx)
-        ->updateIntersection<profile>(dctx->getCandidateSet().size() + neighbors.size(), targets->size(), parent_match);
 #endif
   }
 

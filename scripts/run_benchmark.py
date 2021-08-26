@@ -91,7 +91,7 @@ def run_query(config, args, log_dir, common_flags):
         print('Error {config},{code}\n{msg}'.format(config=config, code=result.returncode, msg=result.stderr.decode('utf-8').rstrip()))
         errlog.write('{config},{code}\n'.format(config=config, code=result.returncode))
     if log_dir is not None:
-      with open(osp.join(log_dir, '_'.join(flags)) + ".log", 'w') as out:
+      with open(osp.join(log_dir, '_'.join(flags[0:4])) + ".log", 'w') as out:
         out.write(result.stderr.decode('utf-8'))
     else:
       print(result.stderr.decode('utf-8'))

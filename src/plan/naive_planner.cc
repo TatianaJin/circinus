@@ -399,8 +399,11 @@ double NaivePlanner::estimateExpandCost(const GraphBase* data_graph,
     // if (key_parent_cnt == 0) key_parent_cnt = 1;
     double cost = key_parent_cnt * car[level - 1][parent];
     if (target_in_cover) {
+      if (set_parent_cnt == 0) {  // key to key only
+        return cost;
+      }
       // computation cost for expand-into / expand-from-set
-      if (key_parent_cnt == 0) {
+      if (key_parent_cnt == 0) {  // set to key
         auto key_bits = parent_cover_bits | (1 << set_parent);
         cost = estimateCardinality(data_graph, *candidate_views, key_bits, level - 1);
       }
@@ -411,7 +414,7 @@ double NaivePlanner::estimateExpandCost(const GraphBase* data_graph,
       // computation cost to expand from enumerated parents
       return cost + set_parent_cnt * estimateCardinality(data_graph, *candidate_views, cover_bits, level - 1);
     }
-    return cost;
+    return cost;  // key to set
   }
 
   if (target_in_cover) {                                       // compute the cost by the number of compressed groups
@@ -611,17 +614,21 @@ std::pair<unordered_map<QueryVertexID, uint32_t>, std::vector<double>> NaivePlan
       LOG(INFO) << "---------- sequence " << idx << " ----------";
       uint32_t last_idx = idx;
       for (uint32_t i = 1; i < matching_order_.size(); ++i) {
-        LOG(INFO) << "[ " << covers_[last][last_idx].getCoverTableString(last + 1) << " ] "
-                  << costs_car[last][last_idx];
+        LOG(INFO) << "[ " << covers_[last][last_idx].getCoverTableString(matching_order_.size()) << " ] "
+                  << costs_car[last][last_idx] << " target " << matching_order_[i];
         last_idx = pre[last--][last_idx];
       }
       last = matching_order_.size() - 1;
     }
   }
 
+  if (verbosePlannerLog()) {  // debug log
+    LOG(INFO) << "---------- best sequence ----------";
+  }
   for (uint32_t i = 1; i < matching_order_.size(); ++i) {
     if (verbosePlannerLog()) {  // debug log
-      LOG(INFO) << "[ " << covers_[last][best_idx].getCoverTableString(last + 1) << " ] " << costs_car[last][best_idx];
+      LOG(INFO) << "[ " << covers_[last][best_idx].getCoverTableString(matching_order_.size()) << " ] "
+                << costs_car[last][best_idx] << " target " << matching_order_[i];
     }
     best_idx = pre[last--][best_idx];
     best_path.emplace_back(best_idx);
@@ -646,6 +653,15 @@ std::pair<unordered_map<QueryVertexID, uint32_t>, std::vector<double>> NaivePlan
   }
   for (uint32_t i = 1; i < matching_order_.size(); ++i) {  // the cost of each step along best_path
     step_costs[i] = costs_car[i][best_path[i]] - costs_car[i - 1][best_path[i - 1]];
+    if (step_costs[i] == 0) {
+      LOG(WARNING) << "step " << i << " - " << matching_order_[i]
+                   << " cost is estimated as 0 = " << costs_car[i][best_path[i]] << " - "
+                   << costs_car[i - 1][best_path[i - 1]] << ", "
+                   << covers_[i][best_path[i]].getCoverTableString(matching_order_.size()) << " from "
+                   << covers_[i - 1][best_path[i - 1]].getCoverTableString(matching_order_.size())
+                   << " level become key "
+                   << (level_become_key.count(matching_order_[i]) ? (int)level_become_key.at(matching_order_[i]) : -1);
+    }
   }
   return {level_become_key, step_costs};
 }

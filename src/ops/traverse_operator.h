@@ -144,7 +144,8 @@ class TraverseOperator : public Operator {
     ss << toString() << ',' << info.total_time_in_milliseconds << ',' << info.total_input_size << ','
        << info.total_output_size << ',' << info.total_num_input_subgraphs << ',' << info.total_num_output_subgraphs
        << ',' << info.intersection_count << ',' << info.total_intersection_input_size << ','
-       << info.total_intersection_output_size << ',' << info.distinct_intersection_count;
+       << info.total_intersection_output_size << ',' << info.distinct_intersection_count << ','
+       << info.candidate_si_diff;
 #ifdef INTERSECTION_CACHE
     ss << ',' << info.cache_hit;
 #endif

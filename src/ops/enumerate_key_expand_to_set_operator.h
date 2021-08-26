@@ -92,6 +92,8 @@ class EnumerateTraverseContext : public ExpandVertexTraverseContext {
   inline void nextKeyToEnumerate(uint32_t enumerate_key_depth) { ++enumerate_key_idx_[enumerate_key_depth]; }
   inline void resetKeyToEnumerate(uint32_t enumerate_key_depth) { enumerate_key_idx_[enumerate_key_depth] = 0; }
 
+  auto& getParentTuple() { return parent_tuple_; }
+
   template <QueryType profile>
   inline void updateIntersection(uint32_t input_size, uint32_t output_size, uint32_t pidx, VertexID key_vid) {
     if
@@ -411,11 +413,11 @@ bool EnumerateKeyExpandToSetOperator<G>::expandInner(
   ctx->existing_vertices = input.getKeyMap();
   input.getExceptions(ctx->existing_vertices, {}, same_label_set_indices_);
   ctx->n_exceptions = ctx->existing_vertices.size();
-
-#ifdef INTERSECTION_CACHE
   if (existing_key_parent_indices_.empty()) {
     return ctx->getCandidateSet()->empty();
   }
+
+#ifdef INTERSECTION_CACHE
   uint32_t i = 0;
   // lookup cache
   for (; i < existing_key_parent_indices_.size(); ++i) {
@@ -453,24 +455,35 @@ bool EnumerateKeyExpandToSetOperator<G>::expandInner(
   target_set = ctx->getIntersectionCache(i - 1);
   removeExceptions(&target_set, ctx->existing_vertices);
 #else
-  for (uint32_t i = 0; i < existing_key_parent_indices_.size(); ++i) {
-    uint32_t key_vid = input.getKeyVal(existing_key_parent_indices_[i]);
-    auto neighbors = ctx->getDataGraph<G>()->getOutNeighborsWithHint(key_vid, target_label_, i);
-    auto input_size = target_set.size() + neighbors.size();
-    if (i == 0) {
-      input_size = ctx->getCandidateSet()->size() + neighbors.size();
-      intersect(*ctx->getCandidateSet(), neighbors, &target_set, ctx->existing_vertices);
-    } else {
-      intersectInplace(target_set, neighbors, &target_set);
-    }
-    ctx->updateIntersection<profile>(input_size, target_set.size(), i, key_vid);
-    if (target_set.empty()) {
-      return true;
-    }
+  if (existing_key_parent_indices_.size() == 1) {
+    uint32_t key_vid = input.getKeyVal(existing_key_parent_indices_[0]);
+    auto neighbors = ctx->getDataGraph<G>()->getOutNeighborsWithHint(key_vid, target_label_, 0);
+    if
+      constexpr(isProfileMode(profile)) {
+        removeExceptions(neighbors, &target_set, ctx->existing_vertices);
+        auto target_size = target_set.size();
+        intersectInplace(target_set, *ctx->getCandidateSet(), &target_set);
+        ctx->candidate_si_diff += target_size - target_set.size();
+        ctx->updateIntersection<profile>(ctx->getCandidateSet()->size() + target_size, target_set.size(), 0, key_vid);
+        return target_set.empty();
+      }
+    intersect(*ctx->getCandidateSet(), neighbors, &target_set, ctx->existing_vertices);
+  } else {
+    expandFromParents<G, profile, true>(input, ctx->getDataGraph<G>(), ctx, existing_key_parent_indices_,
+                                        ctx->existing_vertices, &target_set);
+    if
+      constexpr(isProfileWithMiniIntersectionMode(profile)) {
+        auto& parent_tuple = ctx->getParentTuple();
+        for (uint32_t j = 0; j < existing_key_parent_indices_.size(); ++j) {
+          uint32_t key_vid = input.getKeyVal(parent_indices_[j]);
+          parent_tuple[j] = key_vid;
+          ctx->updateDistinctSICount(j, parent_tuple, j);
+        }
+      }
   }
 #endif
 
-  return ctx->getCandidateSet()->empty() || (target_set.empty() && existing_key_parent_indices_.size() > 0);
+  return target_set.empty();
 }
 
 }  // namespace circinus

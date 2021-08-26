@@ -325,8 +325,12 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
           for (size_t idx = 0; idx < ranges[range_i].second; ++idx) {
             VertexID key_vertex_id = ranges[range_i].first[idx];
 
-            if (ctx->getExceptions().count(key_vertex_id) == 0 && ctx->visitOnce(key_vertex_id) &&
-                isInCandidates(key_vertex_id, begin, candidate_end)) {
+            if (ctx->getExceptions().count(key_vertex_id) == 0 && ctx->visitOnce(key_vertex_id)) {
+              if (!isInCandidates(key_vertex_id, begin, candidate_end)) {
+                if
+                  constexpr(isProfileMode(profile)) ctx->candidate_si_diff += 1;
+                continue;
+              }
               output_num += validateTarget<profile>(ctx, key_vertex_id, input, min_parent_idx, buffer);
 
               if (output_num == batch_size) {
@@ -334,16 +338,26 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
                 for (++idx; idx < ranges[range_i].second; ++idx) {
                   auto vid = ranges[range_i].first[idx];
 
-                  if (ctx->getExceptions().count(vid) == 0 && ctx->visitOnce(vid) &&
-                      isInCandidates(vid, begin, candidate_end))
-                    extensions.push(vid);
+                  if (ctx->getExceptions().count(vid) == 0 && ctx->visitOnce(vid)) {
+                    if (isInCandidates(vid, begin, candidate_end)) {
+                      extensions.push(vid);
+                    } else {
+                      if
+                        constexpr(isProfileMode(profile)) ctx->candidate_si_diff += 1;
+                    }
+                  }
                 }
                 for (++range_i; range_i < ranges.size(); ++range_i) {
                   for (size_t idx = 0; idx < ranges[range_i].second; ++idx) {
                     auto vid = ranges[range_i].first[idx];
-                    if (ctx->getExceptions().count(vid) == 0 && ctx->visitOnce(vid) &&
-                        isInCandidates(vid, begin, candidate_end))
-                      extensions.push(vid);
+                    if (ctx->getExceptions().count(vid) == 0 && ctx->visitOnce(vid)) {
+                      if (isInCandidates(vid, begin, candidate_end)) {
+                        extensions.push(vid);
+                      } else {
+                        if
+                          constexpr(isProfileMode(profile)) ctx->candidate_si_diff += 1;
+                      }
+                    }
                   }
                 }
                 return output_num;
@@ -354,16 +368,25 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
       } else {
         for (auto iter = out_neighbors.begin(); iter != out_neighbors.end(); ++iter) {
           VertexID key_vertex_id = *iter;
-          if (ctx->getExceptions().count(key_vertex_id) == 0 && ctx->visitOnce(key_vertex_id) &&
-              isInCandidates(key_vertex_id, begin, candidate_end)) {
+          if (ctx->getExceptions().count(key_vertex_id) == 0 && ctx->visitOnce(key_vertex_id)) {
+            if (!isInCandidates(key_vertex_id, begin, candidate_end)) {
+              if
+                constexpr(isProfileMode(profile)) ctx->candidate_si_diff += 1;
+              continue;
+            }
             output_num += validateTarget<profile>(ctx, key_vertex_id, input, min_parent_idx, buffer);
             if (output_num == batch_size) {
               // store the remaining extensions for next batch output
               for (++iter; iter != out_neighbors.end(); ++iter) {
                 auto vid = *iter;
-                if (ctx->getExceptions().count(vid) == 0 && ctx->visitOnce(vid) &&
-                    isInCandidates(vid, begin, candidate_end))
-                  extensions.push(vid);
+                if (ctx->getExceptions().count(vid) == 0 && ctx->visitOnce(vid)) {
+                  if (isInCandidates(vid, begin, candidate_end)) {
+                    extensions.push(vid);
+                  } else {
+                    if
+                      constexpr(isProfileMode(profile)) ctx->candidate_si_diff += 1;
+                  }
+                }
               }
               return output_num;
             }

@@ -30,6 +30,7 @@ class GraphView {
   std::vector<std::unique_ptr<G>> graphs_;  // owned, need to delete upon destruction
 
  public:
+  using NeighborSet = std::conditional_t<std::is_same_v<Graph, G>, SingleRangeVertexSetView, VertexSetView>;
   explicit GraphView(std::vector<std::unique_ptr<G>>&& graphs) : graphs_(std::move(graphs)) {}
 
   /**
@@ -46,13 +47,11 @@ class GraphView {
   /**
    * @param nbr_label Hint of the label of out neighbors. The results do not guarantee that the hint is used.
    */
-  inline std::conditional_t<std::is_same_v<Graph, G>, SingleRangeVertexSetView, VertexSetView> getOutNeighborsWithHint(
-      VertexID id, LabelID nbr_label, uint32_t graph_idx) const {
+  inline NeighborSet getOutNeighborsWithHint(VertexID id, LabelID nbr_label, uint32_t graph_idx) const {
     return graphs_[graph_idx]->getOutNeighborsWithHint(id, nbr_label);
   }
 
-  inline std::conditional_t<std::is_same_v<Graph, G>, SingleRangeVertexSetView, VertexSetView> getInNeighborsWithHint(
-      VertexID id, LabelID nbr_label, uint32_t graph_idx) const {
+  inline NeighborSet getInNeighborsWithHint(VertexID id, LabelID nbr_label, uint32_t graph_idx) const {
     return graphs_[graph_idx]->getInNeighborsWithHint(id, nbr_label);
   }
 };

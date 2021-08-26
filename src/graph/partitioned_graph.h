@@ -49,6 +49,8 @@ class ReorderedPartitionedGraph : public GraphBase {
   std::vector<std::vector<VertexID>> label_offsets_per_part_;  // {partition: {label: start_offset}}}
 
  public:
+  using NeighborSet = VertexSetView;
+
   explicit ReorderedPartitionedGraph(const std::string& path, uint32_t n_partitions = 20, bool sort_by_degree = true);
 
   explicit ReorderedPartitionedGraph(const Graph& graph, uint32_t n_partitions = 20, bool sort_by_degree = true);
@@ -158,7 +160,7 @@ class ReorderedPartitionedGraph : public GraphBase {
   /** Get the neighbors that satisfy the hints.
    * @param partition The desired partition of neighbors.
    */
-  VertexSetView getOutNeighborsInPartitionWithHint(VertexID id, LabelID nbr_label, uint32_t partition = 0) const {
+  NeighborSet getOutNeighborsInPartitionWithHint(VertexID id, LabelID nbr_label, uint32_t partition = 0) const {
     auto nbrs = getOutNeighbors(id);
     VertexID range_l, range_r;
     // get the range of vertex ids that satisfy the hint
@@ -173,39 +175,39 @@ class ReorderedPartitionedGraph : public GraphBase {
 
     auto[start, end] = getVertexRange(nbrs.first, nbrs.first + nbrs.second, range_l, range_r);
 
-    return VertexSetView(start, end);
+    return NeighborSet(start, end);
   }
 
-  inline VertexSetView getInNeighborsInPartitionWithHint(VertexID id, LabelID nbr_label, uint32_t partition = 0) const {
+  inline NeighborSet getInNeighborsInPartitionWithHint(VertexID id, LabelID nbr_label, uint32_t partition = 0) const {
     return getOutNeighborsInPartitionWithHint(id, nbr_label, partition);
   }
 
-  inline VertexSetView getOutNeighborsWithHint(VertexID id, LabelID nbr_label, uint32_t graph_idx = 0) const {
-    VertexSetView res;
+  inline NeighborSet getOutNeighborsWithHint(VertexID id, LabelID nbr_label, uint32_t graph_idx = 0) const {
+    NeighborSet res;
     getAllOutNeighborsWithHint(id, nbr_label, res);
     return res;
   }
 
-  inline VertexSetView getInNeighborsWithHint(VertexID id, LabelID nbr_label, uint32_t graph_idx = 0) const {
-    VertexSetView res;
+  inline NeighborSet getInNeighborsWithHint(VertexID id, LabelID nbr_label, uint32_t graph_idx = 0) const {
+    NeighborSet res;
     getAllOutNeighborsWithHint(id, nbr_label, res);
     return res;
   }
 
-  inline VertexSetView& getInNeighborsWithHint(VertexID id, LabelID nbr_label, uint32_t graph_idx,
-                                               VertexSetView& res) const {
+  inline NeighborSet& getInNeighborsWithHint(VertexID id, LabelID nbr_label, uint32_t graph_idx,
+                                             NeighborSet& res) const {
     res.clear();
     getAllOutNeighborsWithHint(id, nbr_label, res);
     return res;
   }
 
-  inline VertexSetView getAllOutNeighborsWithHint(VertexID id, LabelID nbr_label) const {
-    VertexSetView view;
+  inline NeighborSet getAllOutNeighborsWithHint(VertexID id, LabelID nbr_label) const {
+    NeighborSet view;
     getAllOutNeighborsWithHint(id, nbr_label, view);
     return view;
   }
 
-  VertexSetView& getAllOutNeighborsWithHint(VertexID id, LabelID nbr_label, VertexSetView& view) const {
+  NeighborSet& getAllOutNeighborsWithHint(VertexID id, LabelID nbr_label, NeighborSet& view) const {
     auto nbrs = getOutNeighbors(id);
     if (nbr_label == ALL_LABEL) {
       view.addRange(nbrs.first, nbrs.first + nbrs.second);

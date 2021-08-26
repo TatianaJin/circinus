@@ -117,7 +117,7 @@ class ExpandEdgeKeyToSetOperator : public ExpandEdgeOperator {
 #endif
     return true;
   }
-};
+};  // class ExpandEdgeKeyToSetOperator
 
 class ExpandEdgeKeyToKeyTraverseContext : public ExpandEdgeTraverseContext, public TargetBuffer {
  public:
@@ -229,7 +229,7 @@ class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
       expandFromParent<G, profile>(ctx, parent_match, exceptions, &current_targets);
     }
   }
-};
+};  // class ExpandEdgeKeyToKeyOperator
 
 class CurrentResults {
  protected:
@@ -361,11 +361,15 @@ class CurrentResultsByParent : public CurrentResults {
       if (exceptions_.count(parent_match)) continue;
       std::vector<VertexID> targets;
       auto neighbors = graph->getOutNeighborsWithHint(parent_match, target_label, 0);
-      intersect(candidates, neighbors, &targets, exceptions_);
-      if
-        constexpr(isProfileMode(profile)) {
-          ctx_->updateIntersectInfo(candidates.size() + neighbors.size(), targets.size());
-        }
+      if (isProfileMode(profile)) {
+        removeExceptions(neighbors, &targets, exceptions_);
+        auto target_size = targets.size();
+        intersectInplace(targets, candidates, &targets);
+        ctx_->candidate_si_diff += target_size - targets.size();
+        ctx_->updateIntersectInfo(candidates.size() + target_size, targets.size());
+      } else {
+        intersect(candidates, neighbors, &targets, exceptions_);
+      }
       for (auto target : targets) {
         auto pos = group_index.find(target);
         if (pos == group_index.end()) {
@@ -453,11 +457,15 @@ class CurrentResultsByExtension : public CurrentResults {
     std::vector<VertexID> current_extensions;
     auto neighbors = g->getOutNeighborsWithHint(parent_match, owner_->getTargetLabel(), 0);
     auto& candidates = *((ExpandEdgeSetToKeyTraverseContext*)ctx_)->getCandidateSet();
-    intersect(candidates, neighbors, &current_extensions, current_exceptions_);
-    if
-      constexpr(isProfileMode(profile)) {
-        ctx_->updateIntersectInfo(candidates.size() + neighbors.size(), current_extensions.size());
-      }
+    if (isProfileMode(profile)) {
+      removeExceptions(neighbors, &current_extensions, current_exceptions_);
+      auto extension_size = current_extensions.size();
+      intersectInplace(current_extensions, candidates, &current_extensions);
+      ctx_->candidate_si_diff += extension_size - current_extensions.size();
+      ctx_->updateIntersectInfo(candidates.size() + extension_size, current_extensions.size());
+    } else {
+      intersect(candidates, neighbors, &current_extensions, current_exceptions_);
+    }
     for (VertexID neighbor : current_extensions) {
       if (seen_extensions_.insert(neighbor).second) {
         extensions_.push(neighbor);

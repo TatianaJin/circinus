@@ -35,6 +35,7 @@ class Graph : public GraphBase {
   unordered_map<LabelID, std::vector<VertexID>> vertex_ids_by_label_;
 
  public:
+  using NeighborSet = SingleRangeVertexSetView;
   /**
    * @param path The file to load graph (undirected).
    *
@@ -67,13 +68,12 @@ class Graph : public GraphBase {
 
   inline LabelID getVertexLabel(VertexID id) const { return labels_[id]; }
 
-  inline SingleRangeVertexSetView getOutNeighborsWithHint(VertexID id, LabelID nbr_label,
-                                                          uint32_t graph_idx = 0) const {
+  inline NeighborSet getOutNeighborsWithHint(VertexID id, LabelID nbr_label, uint32_t graph_idx = 0) const {
     auto[first, size] = getOutNeighbors(id);
-    return SingleRangeVertexSetView(first, size);
+    return NeighborSet(first, size);
   }
 
-  inline SingleRangeVertexSetView getInNeighborsWithHint(VertexID id, LabelID nbr_label, uint32_t graph_idx = 0) const {
+  inline NeighborSet getInNeighborsWithHint(VertexID id, LabelID nbr_label, uint32_t graph_idx = 0) const {
     return getOutNeighborsWithHint(id, nbr_label, graph_idx);
   }
 

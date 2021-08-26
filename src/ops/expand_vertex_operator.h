@@ -24,6 +24,7 @@
 #include "graph/query_graph.h"
 #include "ops/expand_vertex_traverse_context.h"
 #include "ops/traverse_operator.h"
+#include "ops/types.h"
 #include "utils/hashmap.h"
 
 namespace circinus {
@@ -32,6 +33,7 @@ class ExpandVertexOperator : public TraverseOperator {
  protected:
   std::vector<QueryVertexID> parents_;
   unordered_map<QueryVertexID, uint32_t> query_vertex_indices_;
+  std::vector<uint32_t> parent_indices_;
 
  public:
   ExpandVertexOperator(const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
@@ -42,7 +44,12 @@ class ExpandVertexOperator : public TraverseOperator {
       : TraverseOperator(target_vertex, same_label_key_indices, same_label_set_indices, set_pruning_threshold,
                          subgraph_filter),
         parents_(parents),
-        query_vertex_indices_(query_vertex_indices) {}
+        query_vertex_indices_(query_vertex_indices),
+        parent_indices_(parents.size()) {
+    for (uint32_t i = 0; i < parents_.size(); ++i) {
+      parent_indices_[i] = query_vertex_indices_.at(parents_[i]);
+    }
+  }
 
   virtual ~ExpandVertexOperator() {}
 
@@ -74,6 +81,52 @@ class ExpandVertexOperator : public TraverseOperator {
                                                                 candidate_scopes[target_vertex_], g));
     }
     return ret;
+  }
+
+  template <typename G, QueryType profile, bool intersect_candidates>
+  void expandFromParents(const CompressedSubgraphs& input, const G* data_graph, ExpandVertexTraverseContext* ctx,
+                         const std::vector<uint32_t>& parent_indices, const unordered_set<VertexID>& exceptions,
+                         std::vector<VertexID>* targets) const {
+    using NeighborSet = typename G::NeighborSet;
+    std::vector<NeighborSet> neighbor_sets;
+    neighbor_sets.reserve(parent_indices.size());
+    for (uint32_t i = 0; i < parent_indices.size(); ++i) {
+      DCHECK_LT(parent_indices[i], input.getNumKeys());
+      uint32_t key_vid = input.getKeyVal(parent_indices[i]);
+      neighbor_sets.push_back(data_graph->getOutNeighborsWithHint(key_vid, target_label_, i));
+    }
+    std::sort(neighbor_sets.begin(), neighbor_sets.end(),
+              [](const NeighborSet& a, const NeighborSet& b) { return a.size() <= b.size(); });
+    if (neighbor_sets.front().size() == 0) return;
+    intersect(neighbor_sets[0], neighbor_sets[1], targets, exceptions);
+    if
+      constexpr(isProfileMode(profile)) {
+        ctx->updateIntersectInfo(neighbor_sets[0].size() + neighbor_sets[1].size(), targets->size());
+      }
+    if (targets->empty()) {
+      return;
+    }
+    for (uint32_t i = 2; i < parent_indices.size(); ++i) {
+      auto si_input_size = targets->size() + neighbor_sets[i].size();
+      (void)si_input_size;
+      intersectInplace(*targets, neighbor_sets[i], targets);
+      if
+        constexpr(isProfileMode(profile)) { ctx->updateIntersectInfo(si_input_size, targets->size()); }
+      if (targets->empty()) {
+        return;
+      }
+    }
+    if
+      constexpr(intersect_candidates) {
+        auto new_key_size = targets->size();
+        (void)new_key_size;
+        intersectInplace(*targets, *ctx->getCandidateSet(), targets);
+        if
+          constexpr(isProfileMode(profile)) {
+            ctx->updateIntersectInfo(new_key_size + ctx->getCandidateSet()->size(), targets->size());
+            ctx->candidate_si_diff += new_key_size - targets->size();
+          }
+      }
   }
 
  protected:

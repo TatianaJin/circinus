@@ -144,6 +144,7 @@ void PartitionedCandidateResult::removeInvalid(QueryVertexID query_vertex) {
 void ProfiledExecutionResult::collect(TaskBase* task) {
   auto traverse_task = dynamic_cast<TraverseChainTask*>(task);
   if (traverse_task != nullptr) {
+    if (traverse_task->getProfileInfo().empty()) return;  // the task is skipped during runtime checking
     DCHECK_LT(traverse_task->getTaskId(), profiles_.size());
     auto& profile = profiles_[traverse_task->getTaskId()];
     auto size = profile.size();
