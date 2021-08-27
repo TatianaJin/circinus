@@ -67,7 +67,9 @@ class ExpandEdgeKeyToSetOperator : public ExpandEdgeOperator {
     for (; n < cap && ctx->hasNextInput(); ctx->nextInput()) {
       n += (ctx->getQueryType() == QueryType::Profile)
                ? expandInner<QueryType::Profile>(ctx->getCurrentInput(), ctx)
-               : expandInner<QueryType::ProfileWithMiniIntersection>(ctx->getCurrentInput(), ctx);
+               : (ctx->getQueryType() == QueryType::ProfileCandidateSIEffect
+                      ? expandInner<QueryType::ProfileCandidateSIEffect>(ctx->getCurrentInput(), ctx)
+                      : expandInner<QueryType::ProfileWithMiniIntersection>(ctx->getCurrentInput(), ctx));
       ctx->total_num_input_subgraphs += ctx->getCurrentInput().getNumSubgraphs();
     }
     ctx->intersection_count += ctx->getInputIndex() - old_input_index;
@@ -146,6 +148,8 @@ class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
     uint32_t n = 0;
     if (ctx->getQueryType() == QueryType::Profile) {
       n = expandInner<QueryType::Profile>(cap, ctx);
+    } else if (ctx->getQueryType() == QueryType::ProfileCandidateSIEffect) {
+      n = expandInner<QueryType::ProfileCandidateSIEffect>(cap, ctx);
     } else {
       CHECK(ctx->getQueryType() == QueryType::ProfileWithMiniIntersection) << "unknown query type "
                                                                            << (uint32_t)ctx->getQueryType();
@@ -361,14 +365,14 @@ class CurrentResultsByParent : public CurrentResults {
       if (exceptions_.count(parent_match)) continue;
       std::vector<VertexID> targets;
       auto neighbors = graph->getOutNeighborsWithHint(parent_match, target_label, 0);
-      if (isProfileMode(profile)) {
-        removeExceptions(neighbors, &targets, exceptions_);
-        auto target_size = targets.size();
-        intersectInplace(targets, candidates, &targets);
-        ctx_->candidate_si_diff += target_size - targets.size();
-        ctx_->updateIntersectInfo(candidates.size() + target_size, targets.size());
+      if (isProfileCandidateSIEffect(profile)) {
+        intersectCandidateSetWithProfile(candidates, neighbors, &targets, exceptions_, ctx_);
       } else {
         intersect(candidates, neighbors, &targets, exceptions_);
+        if
+          constexpr(isProfileMode(profile)) {
+            ctx_->updateIntersectInfo(candidates.size() + neighbors.size(), targets.size());
+          }
       }
       for (auto target : targets) {
         auto pos = group_index.find(target);
@@ -457,14 +461,14 @@ class CurrentResultsByExtension : public CurrentResults {
     std::vector<VertexID> current_extensions;
     auto neighbors = g->getOutNeighborsWithHint(parent_match, owner_->getTargetLabel(), 0);
     auto& candidates = *((ExpandEdgeSetToKeyTraverseContext*)ctx_)->getCandidateSet();
-    if (isProfileMode(profile)) {
-      removeExceptions(neighbors, &current_extensions, current_exceptions_);
-      auto extension_size = current_extensions.size();
-      intersectInplace(current_extensions, candidates, &current_extensions);
-      ctx_->candidate_si_diff += extension_size - current_extensions.size();
-      ctx_->updateIntersectInfo(candidates.size() + extension_size, current_extensions.size());
+    if (isProfileCandidateSIEffect(profile)) {
+      intersectCandidateSetWithProfile(candidates, neighbors, &current_extensions, current_exceptions_, ctx_);
     } else {
       intersect(candidates, neighbors, &current_extensions, current_exceptions_);
+      if
+        constexpr(isProfileMode(profile)) {
+          ctx_->updateIntersectInfo(candidates.size() + neighbors.size(), current_extensions.size());
+        }
     }
     for (VertexID neighbor : current_extensions) {
       if (seen_extensions_.insert(neighbor).second) {
@@ -488,6 +492,9 @@ class ExpandEdgeSetToKeyOperator : public ExpandEdgeOperator {
   uint32_t expandAndProfileInner(uint32_t cap, TraverseContext* ctx) const override {
     if (ctx->getQueryType() == QueryType::Profile) {
       return expandInner<QueryType::Profile>(cap, ctx);
+    }
+    if (ctx->getQueryType() == QueryType::ProfileCandidateSIEffect) {
+      return expandInner<QueryType::ProfileCandidateSIEffect>(cap, ctx);
     }
     CHECK(ctx->getQueryType() == QueryType::ProfileWithMiniIntersection) << "unknown query type "
                                                                          << (uint32_t)ctx->getQueryType();

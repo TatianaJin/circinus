@@ -59,8 +59,12 @@ class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
   }
 
   uint32_t expandAndProfileInner(uint32_t batch_size, TraverseContext* ctx) const override {
-    if (ctx->getQueryType() == QueryType::Profile)
+    if (ctx->getQueryType() == QueryType::Profile) {
       return expandInner<QueryType::Profile>(batch_size, (ExpandKeyToKeyVertexTraverseContext*)ctx);
+    }
+    if (ctx->getQueryType() == QueryType::ProfileCandidateSIEffect) {
+      return expandInner<QueryType::ProfileCandidateSIEffect>(batch_size, (ExpandKeyToKeyVertexTraverseContext*)ctx);
+    }
     CHECK(ctx->getQueryType() == QueryType::ProfileWithMiniIntersection) << "Unknown query type "
                                                                          << (uint32_t)ctx->getQueryType();
     return expandInner<QueryType::ProfileWithMiniIntersection>(batch_size, (ExpandKeyToKeyVertexTraverseContext*)ctx);

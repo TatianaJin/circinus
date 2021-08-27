@@ -200,6 +200,8 @@ class Benchmark {
       config << ",mode=profile";
     } else if (FLAGS_profile == 2) {
       config << ",mode=profile_si";
+    } else if (FLAGS_profile == 3) {
+      config << ",mode=profile_candidate";
     }
 
     server_->query(std::string(dataset), std::move(query_path), config.str(), ADDRESS);

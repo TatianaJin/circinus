@@ -153,7 +153,7 @@ class ExpandEdgeOperator : public TraverseOperator {
 #else
     auto neighbors = g->getOutNeighborsWithHint(parent_match, target_label_, 0);
     if
-      constexpr(isProfileMode(profile)) {
+      constexpr(isProfileCandidateSIEffect(profile)) {
         removeExceptions(neighbors, targets, exceptions);
         auto target_size = targets->size();
         intersectInplace(targets, dctx->getCandidateSet());
@@ -163,6 +163,12 @@ class ExpandEdgeOperator : public TraverseOperator {
         return;
       }
     intersect(dctx->getCandidateSet(), neighbors, targets, exceptions);
+    if
+      constexpr(isProfileMode(profile)) {
+        ((ExpandEdgeTraverseContext*)ctx)
+            ->updateIntersection<profile>(dctx->getCandidateSet().size() + neighbors.size(), targets->size(),
+                                          parent_match);
+      }
 #endif
   }
 

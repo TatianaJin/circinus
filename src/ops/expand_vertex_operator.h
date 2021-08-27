@@ -14,9 +14,11 @@
 
 #pragma once
 
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "algorithms/intersect.h"
@@ -98,15 +100,25 @@ class ExpandVertexOperator : public TraverseOperator {
     std::sort(neighbor_sets.begin(), neighbor_sets.end(),
               [](const NeighborSet& a, const NeighborSet& b) { return a.size() <= b.size(); });
     if (neighbor_sets.front().size() == 0) return;
-    intersect(neighbor_sets[0], neighbor_sets[1], targets, exceptions);
+
+    bool intersect_candidates_first = intersect_candidates && (!isProfileCandidateSIEffect(profile)) &&
+                                      ctx->getCandidateSet()->size() <= neighbor_sets.front().size();
+    uint32_t loop_idx = 2;
+    uint32_t si_input_size = neighbor_sets.front().size();
+    if (intersect_candidates_first) {
+      loop_idx = 1;
+      intersect(neighbor_sets.front(), *ctx->getCandidateSet(), targets, exceptions);
+      si_input_size += ctx->getCandidateSet()->size();
+    } else {
+      intersect(neighbor_sets[0], neighbor_sets[1], targets, exceptions);
+      si_input_size += neighbor_sets[1].size();
+    }
     if
-      constexpr(isProfileMode(profile)) {
-        ctx->updateIntersectInfo(neighbor_sets[0].size() + neighbor_sets[1].size(), targets->size());
-      }
+      constexpr(isProfileMode(profile)) { ctx->updateIntersectInfo(si_input_size, targets->size()); }
     if (targets->empty()) {
       return;
     }
-    for (uint32_t i = 2; i < parent_indices.size(); ++i) {
+    for (uint32_t i = loop_idx; i < parent_indices.size(); ++i) {
       auto si_input_size = targets->size() + neighbor_sets[i].size();
       (void)si_input_size;
       intersectInplace(*targets, neighbor_sets[i], targets);
@@ -116,17 +128,16 @@ class ExpandVertexOperator : public TraverseOperator {
         return;
       }
     }
-    if
-      constexpr(intersect_candidates) {
-        auto new_key_size = targets->size();
-        (void)new_key_size;
-        intersectInplace(*targets, *ctx->getCandidateSet(), targets);
-        if
-          constexpr(isProfileMode(profile)) {
-            ctx->updateIntersectInfo(new_key_size + ctx->getCandidateSet()->size(), targets->size());
-            ctx->candidate_si_diff += new_key_size - targets->size();
-          }
-      }
+    if (intersect_candidates && !intersect_candidates_first) {
+      auto new_key_size = targets->size();
+      (void)new_key_size;
+      intersectInplace(*targets, *ctx->getCandidateSet(), targets);
+      if
+        constexpr(isProfileMode(profile)) {
+          ctx->updateIntersectInfo(new_key_size + ctx->getCandidateSet()->size(), targets->size());
+          ctx->candidate_si_diff += new_key_size - targets->size();
+        }
+    }
   }
 
  protected:

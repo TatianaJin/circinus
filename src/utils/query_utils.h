@@ -31,7 +31,13 @@ namespace circinus {
 using QueryId = uint16_t;
 using TaskId = uint16_t;
 
-enum class QueryType : uint8_t { Execute = 0, Profile, ProfileWithMiniIntersection, SampleExecute };
+enum class QueryType : uint8_t {
+  Execute = 0,
+  Profile,
+  ProfileWithMiniIntersection,
+  ProfileCandidateSIEffect,
+  SampleExecute
+};
 
 struct ServerEvent {
   enum Type : uint32_t {
@@ -65,7 +71,7 @@ enum class CandidatePruningStrategy : uint16_t { None = 0, Adaptive, LDF, NLF, C
 enum class OrderStrategy : uint16_t { None = 0, CFL, DAF, GQL, TSO };
 enum class CompressionStrategy : uint16_t { None = 0, Static, Dynamic };
 enum class PQVStrategy : uint16_t { None = 0, ClosenessCentrality };
-enum class QueryMode : uint16_t { Execute = 0, Profile, Explain, ProfileSI };
+enum class QueryMode : uint16_t { Execute = 0, Profile, Explain, ProfileSI, ProfileCandidateSI };
 
 // TODO(tatiana): this is workaround as we do not implement the order now
 inline std::vector<QueryVertexID> getOrder(const std::string& order_str, uint32_t size) {
@@ -101,10 +107,13 @@ class QueryConfig {
       {"ldf", CandidatePruningStrategy::LDF},   {"nlf", CandidatePruningStrategy::NLF},
       {"cfl", CandidatePruningStrategy::CFL},   {"daf", CandidatePruningStrategy::DAF},
       {"gql", CandidatePruningStrategy::GQL}};
-  static inline const unordered_map<std::string, QueryMode> modes = {{"execute", QueryMode::Execute},
-                                                                     {"profile", QueryMode::Profile},
-                                                                     {"explain", QueryMode::Explain},
-                                                                     {"profile_si", QueryMode::ProfileSI}};
+  static inline const unordered_map<std::string, QueryMode> modes = {
+      {"execute", QueryMode::Execute},
+      {"profile", QueryMode::Profile},
+      {"explain", QueryMode::Explain},
+      {"profile_si", QueryMode::ProfileSI},
+      {"profile_candidate", QueryMode::ProfileCandidateSI},
+  };
   static inline const unordered_map<std::string, OrderStrategy> order_strategies = {{"none", OrderStrategy::None},
                                                                                     {"cfl", OrderStrategy::CFL},
                                                                                     {"daf", OrderStrategy::DAF},
@@ -170,7 +179,9 @@ class QueryConfig {
     }
   }
 
-  bool isProfileMode() const { return mode == QueryMode::Profile || mode == QueryMode::ProfileSI; }
+  bool isProfileMode() const {
+    return mode == QueryMode::Profile || mode == QueryMode::ProfileSI || mode == QueryMode::ProfileCandidateSI;
+  }
 
  private:
   template <typename T, typename Container>

@@ -24,7 +24,7 @@ def get_args():
   parser.add_argument('-f', '--filter', default='cfl', help='Candidate filter.')
   parser.add_argument('-o', '--order', default='cfl', help='Matching order strategy.')
   parser.add_argument('-s', '--strategy', default='dynamic', choices=['dynamic', 'eager', 'static', 'all'], help='Vertex cover strategy.')
-  parser.add_argument('--profile', choices=['simple', 'si'])
+  parser.add_argument('--profile', choices=['simple', 'si', 'candidate'])
   parser.add_argument('--partition', type=int, default=1, help='The number of partitions for graph')
   parser.add_argument('--upg', '--use_partitioned_graph', type=int, default=1, choices=[0, 1])
   parser.add_argument('--ipp', '--intra_partition_plan', type=int, default=1, choices=[0, 1])
@@ -78,7 +78,7 @@ def run_batch(args):
 
 def run_query(config, args, log_dir, common_flags):
   flags = config.split(',')
-  profile_flag = "" if args.profile is None else "-profile_prefix {1} -profile {0}".format(1 if args.profile == "simple" else 2, log_dir)
+  profile_flag = "" if args.profile is None else "-profile_prefix {1} -profile {0}".format(1 if args.profile == "simple" else 2 if args.profile == "si" else 3, log_dir)
   cmd_args = "-verbosity 0 -dataset {0} -query_size {1} -query_mode {2} -query_index {3} {4} {5}".format(flags[0], flags[1], flags[2], flags[3],
                                                                                                          profile_flag, common_flags)
   #print(osp.join(args.bin_dir, args.match), cmd_args)

@@ -118,6 +118,8 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
 
   uint32_t expandAndProfileInner(uint32_t batch_size, TraverseContext* ctx) const override {
     if (ctx->getQueryType() == QueryType::Profile) return expandInner<QueryType::Profile>(batch_size, ctx);
+    if (ctx->getQueryType() == QueryType::ProfileCandidateSIEffect)
+      return expandInner<QueryType::ProfileCandidateSIEffect>(batch_size, ctx);
     CHECK(ctx->getQueryType() == QueryType::ProfileWithMiniIntersection) << "Unknown query type "
                                                                          << (uint32_t)ctx->getQueryType();
     return expandInner<QueryType::ProfileWithMiniIntersection>(batch_size, ctx);
@@ -328,7 +330,7 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
             if (ctx->getExceptions().count(key_vertex_id) == 0 && ctx->visitOnce(key_vertex_id)) {
               if (!isInCandidates(key_vertex_id, begin, candidate_end)) {
                 if
-                  constexpr(isProfileMode(profile)) ctx->candidate_si_diff += 1;
+                  constexpr(isProfileCandidateSIEffect(profile)) ctx->candidate_si_diff += 1;
                 continue;
               }
               output_num += validateTarget<profile>(ctx, key_vertex_id, input, min_parent_idx, buffer);
@@ -343,7 +345,7 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
                       extensions.push(vid);
                     } else {
                       if
-                        constexpr(isProfileMode(profile)) ctx->candidate_si_diff += 1;
+                        constexpr(isProfileCandidateSIEffect(profile)) ctx->candidate_si_diff += 1;
                     }
                   }
                 }
@@ -355,7 +357,7 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
                         extensions.push(vid);
                       } else {
                         if
-                          constexpr(isProfileMode(profile)) ctx->candidate_si_diff += 1;
+                          constexpr(isProfileCandidateSIEffect(profile)) ctx->candidate_si_diff += 1;
                       }
                     }
                   }
@@ -371,7 +373,7 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
           if (ctx->getExceptions().count(key_vertex_id) == 0 && ctx->visitOnce(key_vertex_id)) {
             if (!isInCandidates(key_vertex_id, begin, candidate_end)) {
               if
-                constexpr(isProfileMode(profile)) ctx->candidate_si_diff += 1;
+                constexpr(isProfileCandidateSIEffect(profile)) ctx->candidate_si_diff += 1;
               continue;
             }
             output_num += validateTarget<profile>(ctx, key_vertex_id, input, min_parent_idx, buffer);
@@ -384,7 +386,7 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
                     extensions.push(vid);
                   } else {
                     if
-                      constexpr(isProfileMode(profile)) ctx->candidate_si_diff += 1;
+                      constexpr(isProfileCandidateSIEffect(profile)) ctx->candidate_si_diff += 1;
                   }
                 }
               }

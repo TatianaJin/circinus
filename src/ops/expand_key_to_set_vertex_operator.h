@@ -46,6 +46,8 @@ class ExpandKeyToSetVertexOperator : public ExpandVertexOperator {
 
   uint32_t expandAndProfileInner(uint32_t batch_size, TraverseContext* ctx) const override {
     if (ctx->getQueryType() == QueryType::Profile) return expandInner<QueryType::Profile>(batch_size, ctx);
+    if (ctx->getQueryType() == QueryType::ProfileCandidateSIEffect)
+      return expandInner<QueryType::ProfileCandidateSIEffect>(batch_size, ctx);
     CHECK(ctx->getQueryType() == QueryType::ProfileWithMiniIntersection) << "Unknown query type "
                                                                          << (uint32_t)ctx->getQueryType();
     return expandInner<QueryType::ProfileWithMiniIntersection>(batch_size, ctx);

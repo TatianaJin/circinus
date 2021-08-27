@@ -45,10 +45,19 @@ void ExecutionPlanDriverBase::init(QueryId qid, QueryContext* query_ctx, Executi
     result_->setMatchingOrder("mixed");
   }
 
-  query_type_ = (query_ctx->query_config.mode == QueryMode::Profile)
-                    ? QueryType::Profile
-                    : ((query_ctx->query_config.mode == QueryMode::ProfileSI) ? QueryType::ProfileWithMiniIntersection
-                                                                              : QueryType::Execute);
+  switch (query_ctx->query_config.mode) {
+  case QueryMode::Profile:
+    query_type_ = QueryType::Profile;
+    break;
+  case QueryMode::ProfileSI:
+    query_type_ = QueryType::ProfileWithMiniIntersection;
+    break;
+  case QueryMode::ProfileCandidateSI:
+    query_type_ = QueryType::ProfileCandidateSIEffect;
+    break;
+  default:
+    query_type_ = QueryType::Execute;
+  }
   if (verboseExecutionLog()) {
     LOG(INFO) << "Query Type " << ((uint16_t)query_type_);
   }

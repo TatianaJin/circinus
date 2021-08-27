@@ -137,6 +137,8 @@ class EnumerateKeyExpandToSetOperator : public ExpandVertexOperator {
 
   uint32_t expandAndProfileInner(uint32_t batch_size, TraverseContext* ctx) const override {
     if (ctx->getQueryType() == QueryType::Profile) return expandInner<QueryType::Profile>(batch_size, ctx);
+    if (ctx->getQueryType() == QueryType::ProfileCandidateSIEffect)
+      return expandInner<QueryType::ProfileCandidateSIEffect>(batch_size, ctx);
     CHECK(ctx->getQueryType() == QueryType::ProfileWithMiniIntersection) << "unknown query type "
                                                                          << (uint32_t)ctx->getQueryType();
     return expandInner<QueryType::ProfileWithMiniIntersection>(batch_size, ctx);
@@ -459,15 +461,16 @@ bool EnumerateKeyExpandToSetOperator<G>::expandInner(
     uint32_t key_vid = input.getKeyVal(existing_key_parent_indices_[0]);
     auto neighbors = ctx->getDataGraph<G>()->getOutNeighborsWithHint(key_vid, target_label_, 0);
     if
-      constexpr(isProfileMode(profile)) {
-        removeExceptions(neighbors, &target_set, ctx->existing_vertices);
-        auto target_size = target_set.size();
-        intersectInplace(target_set, *ctx->getCandidateSet(), &target_set);
-        ctx->candidate_si_diff += target_size - target_set.size();
-        ctx->updateIntersection<profile>(ctx->getCandidateSet()->size() + target_size, target_set.size(), 0, key_vid);
+      constexpr(isProfileCandidateSIEffect(profile)) {
+        intersectCandidateSetWithProfile(*ctx->getCandidateSet(), neighbors, &target_set, ctx->existing_vertices, ctx);
         return target_set.empty();
       }
     intersect(*ctx->getCandidateSet(), neighbors, &target_set, ctx->existing_vertices);
+    if
+      constexpr(isProfileMode(profile)) {
+        ctx->updateIntersection<profile>(ctx->getCandidateSet()->size() + neighbors.size(), target_set.size(), 0,
+                                         key_vid);
+      }
   } else {
     expandFromParents<G, profile, true>(input, ctx->getDataGraph<G>(), ctx, existing_key_parent_indices_,
                                         ctx->existing_vertices, &target_set);

@@ -16,6 +16,7 @@ def get_args():
   parser.add_argument('-t', '--time', help='The baseline file for comparing enumerate time')
   parser.add_argument('-m', '--missing', help='The config file for getting missing queries')
   parser.add_argument('--config', help='Config output path')
+  parser.add_argument('--parallel', action='store_true', help='Parallel execution analysis')
 
   args = parser.parse_args()
   return args, parser
@@ -48,7 +49,7 @@ def compare_enumerate_time(target, baseline_file):
   print("Total speedup (seconds)", speedup.sum())
   # print(comparison.iloc[speedup.argmin()])
   if sum(speedup < 0) > 0:
-    print(comparison[["speedup", 'enumerate_time_base', 'speedup_ratio']].loc[speedup < 0])
+    print(comparison[["speedup", 'enumerate_time_base', 'speedup_ratio']].loc[speedup < 0].sort_values(by='speedup', ascending=True))
 
 
 def get_missing_query_config(target, config_file):
@@ -63,6 +64,16 @@ def get_config(target, config_file):
   target = target[[]]
   target.to_csv(config_file)
   print("Query config is output to {0}".format(config_file))
+
+
+def parallel_analysis(target):
+  target = target[['enumerate_time', 'max_task_time', 'elapsed_time']]
+  print("========== parallel ratio = enumerate_time / elapsed_time ==========")
+  print((target['enumerate_time'] / target['elapsed_time']).describe())
+  print("======= dominant task ratio = max_task_time / enumerate_time =======")
+  max_task_ratio = target['max_task_time'] / target['enumerate_time']
+  print(max_task_ratio.describe())
+  max_task_ratio.nlargest(10)
 
 
 def read_profile(profile_path, df):
@@ -155,3 +166,5 @@ if __name__ == '__main__':
     get_missing_query_config(target, args.missing)
   if args.config:
     get_config(target, args.config)
+  if args.parallel:
+    parallel_analysis(target)

@@ -19,6 +19,7 @@
 #include <utility>
 #include <vector>
 
+#include "algorithms/intersect.h"
 #include "graph/bipartite_graph.h"
 #include "graph/graph.h"
 #include "graph/graph_view.h"
@@ -66,6 +67,17 @@ inline constexpr bool sensitive_to_hint = !std::is_same<G, Graph>::value;
 inline void removeExceptions(std::vector<VertexID>* set, const unordered_set<VertexID>& except = {}) {
   if (except.empty()) return;
   set->erase(std::remove_if(set->begin(), set->end(), [&except](VertexID v) { return except.count(v); }), set->end());
+}
+
+template <typename NeighborSet>
+inline void intersectCandidateSetWithProfile(const CandidateSetView& candidates, const NeighborSet& neighbors,
+                                             std::vector<VertexID>* targets, const unordered_set<VertexID>& exceptions,
+                                             TraverseContext* ctx) {
+  removeExceptions(neighbors, targets, exceptions);
+  auto target_size = targets->size();
+  intersectInplace(*targets, candidates, targets);
+  ctx->candidate_si_diff += target_size - targets->size();
+  ctx->updateIntersectInfo(candidates.size() + target_size, targets->size());
 }
 
 class TargetBuffer {
