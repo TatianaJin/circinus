@@ -32,6 +32,7 @@
 #include "ops/order_generator.h"
 #include "plan/execution_plan.h"
 #include "utils/hashmap.h"
+#include "utils/utils.h"
 
 namespace circinus {
 
@@ -623,7 +624,7 @@ std::pair<unordered_map<QueryVertexID, uint32_t>, std::vector<double>> NaivePlan
       uint32_t last_idx = idx;
       for (uint32_t i = 1; i < matching_order_.size(); ++i) {
         LOG(INFO) << "[ " << covers_[last][last_idx].getCoverTableString(matching_order_.size()) << " ] "
-                  << costs_car[last][last_idx] << " target " << matching_order_[i];
+                  << costs_car[last][last_idx] << " target " << matching_order_[last];
         last_idx = pre[last--][last_idx];
       }
       last = matching_order_.size() - 1;
@@ -636,7 +637,7 @@ std::pair<unordered_map<QueryVertexID, uint32_t>, std::vector<double>> NaivePlan
   for (uint32_t i = 1; i < matching_order_.size(); ++i) {
     if (verbosePlannerLog()) {  // debug log
       LOG(INFO) << "[ " << covers_[last][best_idx].getCoverTableString(matching_order_.size()) << " ] "
-                << costs_car[last][best_idx] << " target " << matching_order_[i];
+                << costs_car[last][best_idx] << " target " << matching_order_[last];
     }
     best_idx = pre[last--][best_idx];
     best_path.emplace_back(best_idx);
@@ -806,6 +807,7 @@ void NaivePlanner::generateCoverNode(const std::vector<std::vector<double>>& car
           new_cover_node.cover_bits |= 1ULL << v;
         }
       }
+      DCHECK_NE(new_cover_node.cover_bits, 0) << toString(select_cover);
 
       if (verbosePlannerLog() && i == matching_order_.size() - 1) {  // debug log
         std::string s = "";
@@ -857,7 +859,7 @@ void NaivePlanner::generateCoverNode(const std::vector<std::vector<double>>& car
       CoverNode last_cover_node = new_cover_node;
       for (uint32_t j = i; j > 0; --j) {
         QueryVertexID delete_v = matching_order_[j];
-        if (!(last_cover_node.cover_bits >> delete_v & 1)) {
+        if (!(last_cover_node.cover_bits >> delete_v & 1)) {  // if the last target is set
           for (QueryVertexID existing_v : to_intersect_vertices[j]) {
             const auto nbrs = query_graph_->getOutNeighbors(existing_v);
             uint32_t all_key = 1;
@@ -868,7 +870,9 @@ void NaivePlanner::generateCoverNode(const std::vector<std::vector<double>>& car
               }
             }
             if (all_key) {
-              CHECK_GE(last_cover_node.cover_bits, (1ULL << existing_v)) << i << " " << existing_v;
+              CHECK_GE(last_cover_node.cover_bits, (1ULL << existing_v))
+                  << j << ' ' << existing_v << " " << last_cover_node.getCoverTableString(matching_order_.size())
+                  << toString(to_intersect_vertices[j]);
               last_cover_node.cover_bits -= 1ULL << existing_v;
             }
           }

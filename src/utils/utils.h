@@ -134,6 +134,16 @@ static inline uint64_t getNumSubgraphs(const std::vector<CompressedSubgraphs>& g
   return count;
 }
 
+template <typename V>
+inline std::string toString(const std::vector<V>& vec) {
+  std::stringstream ss;
+  for (auto v : vec) {
+    ss << ' ' << v;
+  }
+  return ss.str();
+}
+
+// FIXME(tatiana): move to traverse utils
 inline void removeExceptions(const VertexSetView& set, std::vector<VertexID>* res,
                              const unordered_set<VertexID>& except = {}) {
   for (auto vid : set) {

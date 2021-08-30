@@ -626,6 +626,10 @@ ExecutionPlan* Planner::generateLogicalExecutionPlan(const std::vector<VertexID>
     return nullptr;
   }
 
+  if (shortPlannerLog()) {
+    LOG(INFO) << "Order:" << toString(order);
+  }
+
   ExecutionPlan* plan = nullptr;
   switch (query_context_->query_config.compression_strategy) {
   case CompressionStrategy::Static: {

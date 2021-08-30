@@ -62,6 +62,7 @@ int main(int argc, char** argv) {
   if (FLAGS_partition == 0) {
     LOG(INFO) << "Transform graph " << input << " to binary, with output path " << output;
     Graph g(input);
+    LOG(INFO) << "Loaded graph, now saving as a binary file";
     g.saveAsBinary(output);
   } else {
     LOG(INFO) << "Transform graph " << input << " as ReorderedPartitionedGraph to binary, with output path " << output;

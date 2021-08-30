@@ -294,6 +294,9 @@ class OrderGenerator {
 
     if (is_core_leaf) {
       core_paths.emplace_back(cur_core_path);
+      if (verbosePlannerLog()) {
+        LOG(INFO) << "[CFL] core path" << toString(cur_core_path);
+      }
     }
     cur_core_path.pop_back();
   }
@@ -313,6 +316,7 @@ class OrderGenerator {
     }
 
     if (is_tree_leaf && cur_tree_path.size() > 1) {
+      LOG(INFO) << "[CFL] tree path" << toString(cur_tree_path);
       tree_paths.emplace_back(cur_tree_path);
     }
     cur_tree_path.pop_back();
@@ -375,6 +379,9 @@ class OrderGenerator {
     std::vector<QueryVertexID> leaves;
 
     generateLeaves(leaves);
+    if (verbosePlannerLog()) {
+      LOG(INFO) << "[CFL] leaves" << toString(leaves);
+    }
 
     const auto& tcs = logical_filter.getTwoCoreSolver();
     if (tcs.isInCore(root_vertex)) {
@@ -461,8 +468,11 @@ class OrderGenerator {
     sort(leaves.begin(), leaves.end(),
          [&](QueryVertexID l, QueryVertexID r) { return candidates_[l].size() < candidates_[r].size(); });
     for (QueryVertexID leaf : leaves) {
-      order[selected_vertices_count++] = leaf;
+      if (!visited_vertices[leaf]) {
+        order[selected_vertices_count++] = leaf;  // no need to update visited_vertices
+      }
     }
+    CHECK_EQ(selected_vertices_count, qg_v_cnt);
     return order;
   }
 };

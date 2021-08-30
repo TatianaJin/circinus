@@ -216,7 +216,8 @@ class NaivePlanner {
   }
 
   inline bool addCover(CoverNode& new_cover_node, uint32_t level) {
-    DLOG(INFO) << level << " " << new_cover_node.getCoverTableString(level + 1);
+    DLOG(INFO) << level << " " << new_cover_node.getCoverTableString(matching_order_.size()) << " target "
+               << matching_order_[level];
     for (const auto& cover_node : covers_[level]) {
       if (cover_node.cover_bits == new_cover_node.cover_bits) {
         return true;
