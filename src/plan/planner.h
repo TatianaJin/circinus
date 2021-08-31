@@ -121,6 +121,10 @@ class Planner {
 
   /* start of interface for specifying parallelization strategy */
 
+  /** Generate parallel query vertex for each partition plan */
+  std::vector<std::pair<uint32_t, std::vector<QueryVertexID>>> generateParallelQueryVertex(
+      const std::vector<std::pair<uint32_t, std::vector<CandidateScope>>>& partition_plans);
+
   /** Select query vertices by which the backtracking search space is partitioned.  */
   virtual std::vector<QueryVertexID> getPartitioningQueryVertices();  // based on query vertex occurence in covers
   /** Alternative to getPartitioningQueryVertices */

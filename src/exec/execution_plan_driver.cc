@@ -114,7 +114,7 @@ void ExecutionPlanDriverBase::finishPlan(ThreadsafeQueue<ServerEvent>* reply_que
   reply_queue->push(std::move(*finish_event_));  // must be the last step in phase to avoid data race
 }
 
-void ExecutionPlanDriverBase::taskTimeOut(TaskBase* task, ThreadsafeQueue<ServerEvent>* reply_queue) {
+void ExecutionPlanDriverBase::taskTimeOut(std::unique_ptr<TaskBase>& task, ThreadsafeQueue<ServerEvent>* reply_queue) {
   is_time_out_ = true;
   if (--task_counters_[task->getTaskId()] == 0 && ++n_finished_tasks_ == task_counters_.size()) {
     finishPlan(reply_queue);
@@ -131,31 +131,65 @@ void ExecutionPlanDriver::init(QueryId qid, QueryContext* query_ctx, ExecutionCo
   // FIXME(tatiana): rank partitioned plans by their weights
   task_counters_.resize(plan_->getPlans().size(), 0);  // one task per partition
   candidates_.resize(n_plans);
+  batch_size_ = ctx.first.getBatchSize();
   for (uint32_t i = 0; i < n_plans; ++i) {
-    // if (i != 9) continue;
     auto plan_idx = plan_->getPartitionedPlan(i).first;
     ++task_counters_[plan_idx];
     // all plans share the same output
     dynamic_cast<OutputOperator*>(plan_->getOutputOperator(plan_idx))->setOutput(&result_->getOutputs());
     // plan_->getPlan(plan_idx)->printPhysicalPlan();
-    auto input_operator = plan_->getInputOperator(plan_idx);
+    std::shared_ptr<InputOperator> input_operator = std::move(plan_->getInputOperator(plan_idx));
 
     auto& scopes = plan_->getPartitionedPlan(i).second;
+    std::vector<Operator*>& ops = plan_->getOperators(plan_idx);
+    uint32_t end_level = ops.size() - 1;
+
+    // if parallel query vertex exists, use pqv to divide execution
+    std::vector<QueryVertexID> opids = plan_->getParallelOpids(i).second;
+    if (!opids.empty()) {
+      end_level = opids.front();
+      LOG(INFO) << "plan " << plan_idx << ", segment step " << opids.front();
+    }
     auto partitioned_result = dynamic_cast<PartitionedCandidateResult*>(candidate_result_.get());
     candidates_[i] = partitioned_result->getCandidatesByScopes(scopes);
     // FIXME(tatiana): share hashmap etc. across traverse context when their candidate scopes are the same?
-    addTaskToQueue<TraverseTask>(&task_queue, qid, plan_idx, query_ctx->stop_time, ctx.first.getBatchSize(),
-                                 plan_->getOperators(plan_idx), std::move(input_operator), scopes,
-                                 query_ctx->data_graph, &candidates_[i], query_type_);
+    addTaskToQueue<TraverseTask>(&task_queue, qid, plan_idx, query_ctx->stop_time, ctx.first.getBatchSize(), ops,
+                                 input_operator, scopes, query_ctx->data_graph, &candidates_[i], query_type_, 0,
+                                 end_level, TaskStatus::Normal);
   }
 }
 
-void ExecutionPlanDriver::taskFinish(TaskBase* task, ThreadsafeTaskQueue* task_queue,
+void ExecutionPlanDriver::taskFinish(std::unique_ptr<TaskBase>& task, ThreadsafeTaskQueue* task_queue,
                                      ThreadsafeQueue<ServerEvent>* reply_queue) {
   DCHECK_LT(task->getTaskId(), task_counters_.size());
-  collectTaskInfo(task);
-  if (--task_counters_[task->getTaskId()] == 0 && ++n_finished_tasks_ == task_counters_.size()) {
-    finishPlan(reply_queue);
+  auto traverse_task = dynamic_cast<TraverseTask*>(task.get());
+  if (traverse_task->getTaskStatus() == TaskStatus::Suspended) {
+    std::vector<CompressedSubgraphs> output = traverse_task->getLastOutput();
+    std::shared_ptr<std::vector<CompressedSubgraphs>> inputs =
+        std::make_shared<std::vector<CompressedSubgraphs>>(std::move(output));
+    uint32_t input_index = 0;
+    uint32_t input_size = traverse_task->getLastOutputSize();
+    uint32_t qid = traverse_task->getQueryId();
+    uint32_t task_id = traverse_task->getTaskId();
+    std::chrono::time_point<std::chrono::steady_clock> stop_time = traverse_task->getStopTime();
+    std::shared_ptr<InputOperator> input_op = std::move(plan_->getInputOperator(task_id));
+    auto& ops = plan_->getOperators(task_id);
+
+    addTaskToQueue<TraverseTask>(task_queue, qid, task_id, stop_time, batch_size_, ops, input_op,
+                                 traverse_task->getScopes(), traverse_task->getDataGraph(),
+                                 traverse_task->getCandidates(), query_type_, traverse_task->getEndLevel(),
+                                 ops.size() - 1, TaskStatus::Normal, inputs, input_index, input_size);
+
+    ++task_counters_[task->getTaskId()];
+
+    // change traverse_task to normal status and put into the queue for continuing execution
+    // traverse_task->setTaskStatus(TaskStatus::Normal);
+    addTaskToQueue(task_queue, task);
+  } else {
+    collectTaskInfo(task);
+    if (--task_counters_[task->getTaskId()] == 0 && ++n_finished_tasks_ == task_counters_.size()) {
+      finishPlan(reply_queue);
+    }
   }
 }
 
@@ -201,16 +235,16 @@ void MatchingParallelExecutionPlanDriver::init(QueryId qid, QueryContext* query_
                                             candidate_result_->getCandidates());
 }
 
-void MatchingParallelExecutionPlanDriver::taskFinish(TaskBase* task, ThreadsafeTaskQueue* task_queue,
+void MatchingParallelExecutionPlanDriver::taskFinish(std::unique_ptr<TaskBase>& task, ThreadsafeTaskQueue* task_queue,
                                                      ThreadsafeQueue<ServerEvent>* reply_queue) {
   collectTaskInfo(task);
-  auto matching_parallel_task = dynamic_cast<MatchingParallelTask*>(task);
+  auto matching_parallel_task = dynamic_cast<MatchingParallelTask*>(task.get());
   if (matching_parallel_task == nullptr) {  // single-thread execution
     finishPlan(reply_queue);
     return;
   }
 
-  // LOG(INFO) << "Task " << task->getTaskId() << " Finish.";
+  LOG(INFO) << "Task " << task->getTaskId() << " Finish.";
   auto op = matching_parallel_task->getNextOperator();
   if (op != nullptr) {
     auto inputs = std::make_shared<std::vector<CompressedSubgraphs>>(std::move(matching_parallel_task->getOutputs()));
@@ -261,7 +295,8 @@ void MatchingParallelExecutionPlanDriver::taskFinish(TaskBase* task, ThreadsafeT
   }
 }
 
-void MatchingParallelExecutionPlanDriver::taskTimeOut(TaskBase* task, ThreadsafeQueue<ServerEvent>* reply_queue) {
+void MatchingParallelExecutionPlanDriver::taskTimeOut(std::unique_ptr<TaskBase>& task,
+                                                      ThreadsafeQueue<ServerEvent>* reply_queue) {
   is_time_out_ = true;
   if (--task_counters_[task->getTaskId()] == 0) {
     if (task->getTaskId() == 0 || task_depleted_[task->getTaskId() - 1]) {

@@ -116,6 +116,8 @@ class ExpandEdgeOperator : public TraverseOperator {
 
   inline void setParentLabel(LabelID l) { parent_label_ = l; }
 
+  bool extend_vertex() const override { return true; }
+
   std::vector<std::unique_ptr<BipartiteGraph>> computeBipartiteGraphs(
       const Graph* g, const std::vector<CandidateSetView>& candidate_sets) override {
     std::vector<std::unique_ptr<BipartiteGraph>> ret;

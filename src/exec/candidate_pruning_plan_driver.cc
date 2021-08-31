@@ -74,6 +74,7 @@ void CandidatePruningPlanDriver::initPhase1TasksForPartitionedGraph(QueryId qid,
 void CandidatePruningPlanDriver::init(QueryId qid, QueryContext* query_ctx, ExecutionContext& ctx,
                                       ThreadsafeTaskQueue& task_queue) {
   finish_event_ = std::make_unique<ServerEvent>(ServerEvent::CandidatePhase);
+  LOG(INFO) << (finish_event_ == nullptr);
   finish_event_->query_id = qid;
   if (plan_->getPhase() == 1) {
     LOG(INFO) << "Candidate pruning phase 1";
@@ -121,11 +122,12 @@ void CandidatePruningPlanDriver::init(QueryId qid, QueryContext* query_ctx, Exec
   finish_event_->data = result_;
 }
 
-void CandidatePruningPlanDriver::taskFinish(TaskBase* task, ThreadsafeTaskQueue* task_queue,
+void CandidatePruningPlanDriver::taskFinish(std::unique_ptr<TaskBase>& task, ThreadsafeTaskQueue* task_queue,
                                             ThreadsafeQueue<ServerEvent>* reply_queue) {
   CHECK_LT(task->getTaskId(), task_counters_.size()) << "phase " << plan_->getPhase();
   if (plan_->getPhase() == 1) {
-    // DLOG(INFO) << task->getTaskId() << ' ' << dynamic_cast<ScanTask*>(task)->getScanContext().candidates.size();
+    // DLOG(INFO) << task->getTaskId() << ' ' <<
+    // dynamic_cast<ScanTask*>(task.get())->getScanContext().candidates.size();
     result_->collect(task);
   }
   // TODO(BYLI) package merge operation and remove_invalid operation into tasks, determine the parallelism
@@ -138,7 +140,7 @@ void CandidatePruningPlanDriver::taskFinish(TaskBase* task, ThreadsafeTaskQueue*
 
     if (++n_finished_tasks_ == task_counters_.size()) {
       if (plan_->getPhase() == 3) {
-        result_->removeInvalid(dynamic_cast<NeighborhoodFilterTask*>(task)->getFilter()->getQueryVertex());
+        result_->removeInvalid(dynamic_cast<NeighborhoodFilterTask*>(task.get())->getFilter()->getQueryVertex());
       }
       reset();
       reply_queue->push(std::move(*finish_event_));  // must be the last step in phase to avoid data race
@@ -146,7 +148,7 @@ void CandidatePruningPlanDriver::taskFinish(TaskBase* task, ThreadsafeTaskQueue*
     }
 
     if (plan_->getPhase() == 3) {
-      result_->removeInvalid(dynamic_cast<NeighborhoodFilterTask*>(task)->getFilter()->getQueryVertex());
+      result_->removeInvalid(dynamic_cast<NeighborhoodFilterTask*>(task.get())->getFilter()->getQueryVertex());
       auto filter = dynamic_cast<NeighborhoodFilter*>(operators_[n_finished_tasks_].get());
       QueryVertexID query_vertex = filter->getQueryVertex();
       uint64_t input_size = (*result_->getMergedCandidates())[query_vertex].size();
@@ -162,7 +164,8 @@ void CandidatePruningPlanDriver::taskFinish(TaskBase* task, ThreadsafeTaskQueue*
   }
 }
 
-void CandidatePruningPlanDriver::taskTimeOut(TaskBase* task, ThreadsafeQueue<ServerEvent>* reply_queue) {
+void CandidatePruningPlanDriver::taskTimeOut(std::unique_ptr<TaskBase>& task,
+                                             ThreadsafeQueue<ServerEvent>* reply_queue) {
   if (--task_counters_[task->getTaskId()] == 0 && ++n_finished_tasks_ == task_counters_.size()) {
     finish_event_->type = ServerEvent::TimeOut;
     reply_queue->push(std::move(*finish_event_));

@@ -40,9 +40,9 @@ ExecutorManager::ExecutorManager(ThreadsafeQueue<ServerEvent>* queue) : reply_qu
       }
       DCHECK(ctx->second != nullptr);
       if (task->isTimeOut()) {
-        driver->taskTimeOut(task.get(), reply_queue_);
+        driver->taskTimeOut(task, reply_queue_);
       } else {
-        driver->taskFinish(task.get(), &task_queue_, reply_queue_);
+        driver->taskFinish(task, &task_queue_, reply_queue_);
       }
     }
   });

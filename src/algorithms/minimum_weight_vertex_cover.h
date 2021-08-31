@@ -24,7 +24,7 @@
 
 namespace circinus {
 
-#define TOPK 4
+#define TOPK 3
 
 /**
  * A branch-and-bound algorithm to find exact minimum vertex cover.

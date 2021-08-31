@@ -66,6 +66,7 @@ class BipartiteGraph
     for (auto v1_id : candidate_set1) {
       offset_by_vertex_.insert({v1_id, i++});
       auto[dest_nodes, cnt] = g->getOutNeighbors(v1_id);
+      
       for (uint32_t j = 0; j < cnt; ++j) {
         if (vset.find(dest_nodes[j]) != vset.end()) elist_.emplace_back(dest_nodes[j]);
       }

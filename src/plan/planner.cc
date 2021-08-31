@@ -375,9 +375,11 @@ void Planner::parallelizePartitionedPlans(
         LOG(INFO) << "parallel_qv = " << parallel_qv << " partitioning_qvs [" << ss.str() << " ]";
       }
     } else {  // replace existing logical input operator
-      std::vector<QueryVertexID> pqvs(partitioning_qvs.size() + 1);
-      std::copy(partitioning_qvs.begin(), partitioning_qvs.end(), pqvs.begin());
-      pqvs.back() = parallel_qv;
+      // template
+      std::vector<QueryVertexID> pqvs(1, parallel_qv);
+      // std::vector<QueryVertexID> pqvs(partitioning_qvs.size() + 1);
+      // std::copy(partitioning_qvs.begin(), partitioning_qvs.end(), pqvs.begin());
+      // pqvs.back() = parallel_qv;
       auto logical_plan = backtracking_plan_->getPlan(partition.first);
       backtracking_plan_->replaceInputOperator(
           partition.first,
@@ -392,7 +394,7 @@ void Planner::parallelizePartitionedPlans(
   }
 
   /* split candidates of parallelizing qv into buckets by limiting each bucket weight */
-  double bucket_weight_limit = max_weight / 3.0;
+  double bucket_weight_limit = max_weight / 10.0;
   double max_bucket_weight = 0, max_single_vertex_weight = 0;
   if (verbosePlannerLog()) {
     LOG(INFO) << "===== Parallelizing plans =====";
@@ -461,6 +463,33 @@ void Planner::parallelizePartitionedPlans(
   }
 }
 
+std::vector<std::pair<uint32_t, std::vector<QueryVertexID>>> Planner::generateParallelQueryVertex(
+    const std::vector<std::pair<uint32_t, std::vector<CandidateScope>>>& partition_plans) {
+  std::vector<std::pair<uint32_t, std::vector<QueryVertexID>>> parallel_opids(partition_plans.size());
+  for (auto& partition : partition_plans) {
+    QueryVertexID parallel_qv = planners_[partition.first]->selectParallelizingQueryVertex(
+        backtracking_plan_->getPlan(partition.first)->getQueryCoverBits(), std::vector<QueryVertexID>{});
+    const std::vector<QueryVertexID>& matching_order = planners_[partition.first]->getMatchingOrder();
+    // find matching order of parallel_qv
+    uint32_t parallel_qv_order =
+        std::distance(matching_order.begin(), std::find(matching_order.begin(), matching_order.end(), parallel_qv));
+    // find the operator index corresponding to extpanding parallel_qv
+    std::vector<Operator*>& ops = backtracking_plan_->getOperators(partition.first);
+    uint32_t prefix_vertex_num = 0;
+    for (uint32_t i = 0; i < ops.size() - 1; ++i) {
+      if (dynamic_cast<TraverseOperator*>(ops[i])->extend_vertex()) {
+        ++prefix_vertex_num;
+      }
+      if (prefix_vertex_num == parallel_qv_order) {
+        std::vector<QueryVertexID> opid(1, i + 1);
+        parallel_opids[partition.first] = std::make_pair(partition.first, std::move(opid));
+        break;
+      }
+    }
+  }
+  return std::move(parallel_opids);
+}
+
 // TODO(engineering): classes in plan should not know classes in exec
 BacktrackingPlan* Planner::generateExecutionPlan(const CandidateResult* result, bool multithread) {
   backtracking_plan_ = std::make_unique<BacktrackingPlan>();
@@ -504,13 +533,15 @@ BacktrackingPlan* Planner::generateExecutionPlan(const CandidateResult* result, 
 
   auto t1 = std::chrono::steady_clock::now();
   LOG(INFO) << ">>>>>>>>>> Time to generateLogicalPlans " << toSeconds(t0, t1) << "s";
+  std::vector<std::pair<uint32_t, std::vector<QueryVertexID>>> parallel_opids;
   // 4. parallelize partitioned plans for better concurrency and load balance
   if (multithread) {
-    parallelizePartitionedPlans(partitioning_qv, &partition_plans, partitioned_result);
-    CHECK_EQ(backtracking_plan_->getPlans().size(), backtracking_plan_->getNumInputOperators());
+    // parallelizePartitionedPlans(partitioning_qv, &partition_plans, partitioned_result);
+    // CHECK_EQ(backtracking_plan_->getPlans().size(), backtracking_plan_->getNumInputOperators());
 
-    auto t2 = std::chrono::steady_clock::now();
-    LOG(INFO) << ">>>>>>>>>> Time to parallelizePartitionedPlans " << toSeconds(t1, t2) << "s";
+    // auto t2 = std::chrono::steady_clock::now();
+    // LOG(INFO) << ">>>>>>>>>> Time to parallelizePartitionedPlans " << toSeconds(t1, t2) << "s";
+    parallel_opids = generateParallelQueryVertex(partition_plans);
   }
 
   // TODO(tatiana): check for prunable partitioned plans
@@ -532,6 +563,7 @@ BacktrackingPlan* Planner::generateExecutionPlan(const CandidateResult* result, 
   }
 
   backtracking_plan_->addPartitionedPlans(std::move(partition_plans));
+  backtracking_plan_->addParallelOpids(std::move(parallel_opids));
   return backtracking_plan_.get();
 }
 
@@ -589,6 +621,7 @@ ExecutionPlan* Planner::generateLogicalExecutionPlan(const std::vector<VertexID>
 
   auto& order = planner->generateOrder(query_context_->data_graph, *query_context_->graph_metadata, candidate_views,
                                        candidate_cardinality, query_context_->query_config.order_strategy, use_order);
+
   if (order.empty()) {
     return nullptr;
   }

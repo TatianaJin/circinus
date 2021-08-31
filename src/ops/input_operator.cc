@@ -35,6 +35,9 @@ std::vector<CompressedSubgraphs> PartitionedInputOperator::getInputs(
   if (verboseExecutionLog()) {
     LOG(INFO) << "Prune input by pivot query vertex? " << qv_pivots_->empty();
   }
+  if (qv_pivots_ == nullptr) {
+    LOG(FATAL) << "qv_pivots_ is nullptr";
+  }
   if (!qv_pivots_->empty()) {
 #ifndef NDEBUG
     std::stringstream ss;

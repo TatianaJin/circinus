@@ -92,6 +92,19 @@ class QueryGraph {
     return q;
   }
 
+  inline void sortEdgesByOrder(const std::vector<QueryVertexID>& matching_order) {
+    // sort neighbors by id for each vertex
+    CHECK_GT(matching_order.size(), 0);
+    for (QueryVertexID i = 0; i < n_vertices_; ++i) {
+      std::sort(elist_.begin() + vlist_[i], elist_.begin() + vlist_[i + 1],
+                [&matching_order](QueryVertexID l, QueryVertexID r) {
+                  CHECK_LT(l, matching_order.size());
+                  CHECK_LT(r, matching_order.size());
+                  return matching_order[l] < matching_order[r];
+                });
+    }
+  }
+
  protected:
   void readHeader(std::ifstream& infile, bool directed = false);
   void readVertices(std::ifstream& infile);

@@ -73,6 +73,7 @@ class NaivePlanner {
   };
 
   const QueryGraph* const query_graph_;
+  QueryGraph ordered_query_graph_;
   bool use_two_hop_traversal_ = false;
   const std::vector<double> candidate_cardinality_;
   ExecutionPlan plan_;
@@ -129,6 +130,11 @@ class NaivePlanner {
     return std::make_pair(parallelizing_qv, getParallelizingQueryVertexWeights(parallelizing_qv, data_graph,
                                                                                candidate_views, cover_bits));
   }
+
+  inline const std::vector<QueryVertexID>& getMatchingOrder() { return matching_order_; }
+
+  QueryVertexID selectParallelizingQueryVertex(uint64_t cover_bits,
+                                               const std::vector<QueryVertexID>& parallelizing_qv_candidates);
 
  private:
   /* Start of implementations of compression strategy */
@@ -193,9 +199,6 @@ class NaivePlanner {
   /* End of implementations of compression strategy */
 
   /* start of parallelization strategy */
-
-  QueryVertexID selectParallelizingQueryVertex(uint64_t cover_bits,
-                                               const std::vector<QueryVertexID>& parallelizing_qv_candidates);
 
   std::vector<double> getParallelizingQueryVertexWeights(QueryVertexID partition_qv, const GraphBase* data_graph,
                                                          const std::vector<CandidateSetView>& candidate_views,

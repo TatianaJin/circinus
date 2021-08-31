@@ -46,15 +46,15 @@ std::unique_ptr<Result> Result::newExecutionResult(bool profile, const std::vect
   return std::make_unique<ExecutionResult>();
 }
 
-void CandidateResult::collect(TaskBase* task) {
-  auto scan = dynamic_cast<ScanTask*>(task);
+void CandidateResult::collect(std::unique_ptr<TaskBase>& task) {
+  auto scan = dynamic_cast<ScanTask*>(task.get());
   auto& shard_candidates = scan->getScanContext().candidates;
   if (!shard_candidates.empty()) {
     candidates_[task->getTaskId()].push_back(std::move(shard_candidates));
   }
 }
 
-void CandidateResult::merge(TaskBase* task) {
+void CandidateResult::merge(std::unique_ptr<TaskBase>& task) {
   auto task_id = task->getTaskId();
   std::vector<uint32_t> order(candidates_[task_id].size());
   std::iota(order.begin(), order.end(), 0);
@@ -93,15 +93,15 @@ std::vector<std::vector<VertexID>> CandidateResult::getCandidateCardinality() co
   return {std::move(ret)};
 }
 
-void PartitionedCandidateResult::collect(TaskBase* task) {
-  auto scan = dynamic_cast<ScanTask*>(task);
+void PartitionedCandidateResult::collect(std::unique_ptr<TaskBase>& task) {
+  auto scan = dynamic_cast<ScanTask*>(task.get());
   uint32_t task_id = scan->getTaskId();
   uint32_t partition = scan->getPartition();
   candidates_[task_id][partition] = std::move(scan->getScanContext().candidates);
   per_partition_candidate_cardinality_[partition][task_id] = candidates_[task_id][partition].size();
 }
 
-void PartitionedCandidateResult::merge(TaskBase* task) {
+void PartitionedCandidateResult::merge(std::unique_ptr<TaskBase>& task) {
   uint32_t task_id = task->getTaskId();
   candidate_partition_offsets_[task_id].resize(candidates_[task_id].size() + 1, 0);
   for (uint32_t j = 0; j < candidates_[task_id].size(); ++j) {
@@ -141,8 +141,8 @@ void PartitionedCandidateResult::removeInvalid(QueryVertexID query_vertex) {
   merged_candidates_[query_vertex].resize(valid_idx);
 }
 
-void ProfiledExecutionResult::collect(TaskBase* task) {
-  auto traverse_task = dynamic_cast<TraverseChainTask*>(task);
+void ProfiledExecutionResult::collect(std::unique_ptr<TaskBase>& task) {
+  auto traverse_task = dynamic_cast<TraverseChainTask*>(task.get());
   if (traverse_task != nullptr) {
     if (traverse_task->getProfileInfo().empty()) return;  // the task is skipped during runtime checking
     DCHECK_LT(traverse_task->getTaskId(), profiles_.size());
@@ -153,7 +153,7 @@ void ProfiledExecutionResult::collect(TaskBase* task) {
       profile[i] += traverse_task->getProfileInfo()[i];
     }
   } else {
-    auto matching_parallel_task = dynamic_cast<MatchingParallelTask*>(task);
+    auto matching_parallel_task = dynamic_cast<MatchingParallelTask*>(task.get());
     CHECK(matching_parallel_task != nullptr);
     // TODO(profile): record intersection count in input op? now skip input task
     matching_parallel_task->collectProfileInfo(profiles_.front()[matching_parallel_task->getTaskId()]);

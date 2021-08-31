@@ -107,6 +107,8 @@ class TraverseOperator : public Operator {
 
   virtual uint32_t expand(uint32_t cap, TraverseContext* ctx) const = 0;
 
+  virtual bool extend_vertex() const = 0;
+
   uint32_t expandAndProfile(uint32_t cap, TraverseContext* ctx) const {
     auto start = std::chrono::high_resolution_clock::now();
     auto n = expandAndProfileInner(cap, ctx);

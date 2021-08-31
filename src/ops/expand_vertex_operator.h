@@ -55,6 +55,8 @@ class ExpandVertexOperator : public TraverseOperator {
 
   virtual ~ExpandVertexOperator() {}
 
+  bool extend_vertex() const override { return true; }
+
   const auto& getQueryVertexIndices() const { return query_vertex_indices_; }
 
   std::unique_ptr<TraverseContext> initTraverseContext(const CandidateSetView* candidates,

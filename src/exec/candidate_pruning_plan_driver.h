@@ -34,9 +34,10 @@ class CandidatePruningPlanDriver : public PlanDriver {
 
   void init(QueryId qid, QueryContext* query_ctx, ExecutionContext& ctx, ThreadsafeTaskQueue& task_queue) override;
 
-  void taskFinish(TaskBase* task, ThreadsafeTaskQueue* task_queue, ThreadsafeQueue<ServerEvent>* reply_queue) override;
+  void taskFinish(std::unique_ptr<TaskBase>& task, ThreadsafeTaskQueue* task_queue,
+                  ThreadsafeQueue<ServerEvent>* reply_queue) override;
 
-  void taskTimeOut(TaskBase* task, ThreadsafeQueue<ServerEvent>* reply_queue) override;
+  void taskTimeOut(std::unique_ptr<TaskBase>& task, ThreadsafeQueue<ServerEvent>* reply_queue) override;
 
  private:
   void initPhase1TasksForPartitionedGraph(QueryId qid, QueryContext* query_ctx, ExecutionContext& ctx,

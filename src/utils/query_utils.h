@@ -131,7 +131,7 @@ class QueryConfig {
   bool intra_partition_plan = true;
   std::string output = "count";
   uint64_t limit = ~0ull;
-  std::chrono::seconds time_limit = std::chrono::seconds(36000);
+  std::chrono::seconds time_limit = std::chrono::seconds(3600);
   QueryMode mode = QueryMode::Execute;
 
   explicit QueryConfig(const std::string& config_str = "") {

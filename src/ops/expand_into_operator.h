@@ -59,6 +59,8 @@ class ExpandIntoOperator : public TraverseOperator {
     return expandInner<QueryType::Execute>(batch_size, ctx);
   }
 
+  bool extend_vertex() const override { return false; }
+
   uint32_t expandAndProfileInner(uint32_t batch_size, TraverseContext* ctx) const override {
     if (ctx->getQueryType() == QueryType::Profile) return expandInner<QueryType::Profile>(batch_size, ctx);
     if (ctx->getQueryType() == QueryType::ProfileCandidateSIEffect)
@@ -126,7 +128,7 @@ class ExpandIntoOperator : public TraverseOperator {
       }
     auto graph = ctx->getDataGraph<G>();
     while (ctx->hasNextInput()) {
-      auto& input = ctx->copyOutput(ctx->getCurrentInput());
+      CompressedSubgraphs& input = ctx->copyOutput(ctx->getCurrentInput());
       auto key_vertex_id = input.getKeyVal(query_vertex_indices_.at(target_vertex_));
       auto key_neighbors = graph->getInNeighborsWithHint(key_vertex_id, ALL_LABEL, 0);
       bool add = true;
@@ -193,6 +195,9 @@ class ExpandIntoOperator : public TraverseOperator {
           constexpr(sensitive_to_hint<G>) {
             key_neighbors = graph->getInNeighborsWithHint(key_vertex_id, parent_labels_[parent_idx], parent_idx);
           }
+        if (input.getSet(id) == nullptr) {
+          LOG(FATAL) << "input set is nullptr.";
+        }
         intersect(*(input.getSet(id)), key_neighbors, &new_set);
         if
           constexpr(isProfileMode(profile)) {

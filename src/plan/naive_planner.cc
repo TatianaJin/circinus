@@ -109,7 +109,7 @@ unordered_map<VertexID, double> NaivePlanner::dfsComputeCost(QueryVertexID qid, 
     ret[v] = 1;
   }
 
-  auto[qnbrs, qcnt] = query_graph_->getOutNeighbors(qid);
+  auto[qnbrs, qcnt] = ordered_query_graph_.getOutNeighbors(qid);
   if (!with_traversal) {
     /* For a DFS tree from qid in the given cc:
      * 1) initialize the weights of leaf candidates as 1;
@@ -139,7 +139,7 @@ unordered_map<VertexID, double> NaivePlanner::dfsComputeCost(QueryVertexID qid, 
           }
         }
         if (!(cover_bits >> nbr & 1) && num != 0) {
-          sum /= num / 2;
+          sum /= num / 1.2;
         }
         pair.second *= sum;
       }
@@ -182,7 +182,7 @@ unordered_map<VertexID, double> NaivePlanner::dfsComputeCost(QueryVertexID qid, 
       }
       if ((cover_bits >> nbr & 1) == 0) {
         visited[nbr] = true;
-        auto[set_nbrs, set_cnt] = query_graph_->getOutNeighbors(nbr);
+        auto[set_nbrs, set_cnt] = ordered_query_graph_.getOutNeighbors(nbr);
         unordered_set<VertexID> set_candidate(candidate_views[nbr].begin(), candidate_views[nbr].end());
         for (uint32_t j = 0; j < set_cnt; ++j) {  // for each two-hop descendant node, compute cost for each candidate
           QueryVertexID set_nbr = set_nbrs[j];
@@ -329,7 +329,7 @@ double NaivePlanner::estimateCardinality(const GraphBase* data_graph,
     break;
   }
 
-  // DLOG(INFO) << "cost: " << ret;
+  // LOG(INFO) << "cost: " << ret;
   return ret;
 }
 
@@ -513,17 +513,25 @@ ExecutionPlan* NaivePlanner::generatePlanWithDynamicCover(const GraphBase* data_
 
 QueryVertexID NaivePlanner::selectParallelizingQueryVertex(
     uint64_t cover_bits, const std::vector<QueryVertexID>& parallelizing_qv_candidates) {
-  for (auto v : parallelizing_qv_candidates) {  // pick a parallelizing qv from the candidates which is in cover
-    if (cover_bits >> v & 1) {
-      return v;
+  if (!parallelizing_qv_candidates.empty()) {
+    for (auto v : parallelizing_qv_candidates) {  // pick a parallelizing qv from the candidates which is in cover
+      if (cover_bits >> v & 1) {
+        return v;
+      }
     }
   }
-  // if none of the candidate is in cover, pick the first cover vertex in the order
-  for (auto v : matching_order_) {
-    if (cover_bits >> v & 1) {
-      return v;
+  // select parallelizing query vertex greater than threshold
+  double threshold = 0.05;
+  const std::vector<double>& step_costs = plan_.getStepCosts();
+  double sum_costs = std::accumulate(step_costs.begin(), step_costs.end(), 0.0);
+  double prefix_sum = 0.0;
+  for (uint32_t i = 0; i < matching_order_.size(); ++i) {
+    prefix_sum += step_costs[i];
+    if (prefix_sum / sum_costs > threshold) {
+      return i == 1 ? matching_order_[i] : matching_order_[i - 1];
     }
   }
+
   CHECK(false) << "cannot find a valid parallelizing qv";
   return DUMMY_QUERY_VERTEX;
 }
@@ -682,6 +690,11 @@ const std::vector<QueryVertexID>& NaivePlanner::generateOrder(const GraphBase* d
       CHECK_EQ(use_order->size(), query_graph_->getNumVertices());
       matching_order_ = *use_order;
     }
+  }
+
+  if (!matching_order_.empty()) {
+    ordered_query_graph_ = *query_graph_;
+    ordered_query_graph_.sortEdgesByOrder(matching_order_);
   }
   return matching_order_;
 }

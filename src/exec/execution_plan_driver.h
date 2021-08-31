@@ -31,6 +31,7 @@ namespace circinus {
 
 class ExecutionPlanDriverBase : public PlanDriver {
  protected:
+  uint32_t batch_size_;
   BacktrackingPlan* plan_;
   std::unique_ptr<CandidateResult> candidate_result_ = nullptr;
   ExecutionResult* result_;  // owned by ExecutorManager
@@ -47,11 +48,15 @@ class ExecutionPlanDriverBase : public PlanDriver {
 
   void finishPlan(ThreadsafeQueue<ServerEvent>* reply_queue);
 
-  void taskTimeOut(TaskBase* task, ThreadsafeQueue<ServerEvent>* reply_queue) override;
+  void taskTimeOut(std::unique_ptr<TaskBase>& task, ThreadsafeQueue<ServerEvent>* reply_queue) override;
 
-  inline void collectTaskInfo(TaskBase* task) const {
+  inline void collectTaskInfo(std::unique_ptr<TaskBase>& task) const {
     result_->addEnumerateTime(task->getExecutionTime());
     result_->collect(task);
+  }
+
+  inline void addTaskToQueue(ThreadsafeTaskQueue* task_queue, std::unique_ptr<TaskBase>& task) {
+    task_queue->putTask(std::move(task));
   }
 
   template <typename TaskType, typename... Args>
@@ -74,14 +79,14 @@ class ExecutionPlanDriver : public ExecutionPlanDriverBase {
 
   void init(QueryId qid, QueryContext* query_ctx, ExecutionContext& ctx, ThreadsafeTaskQueue& task_queue) override;
 
-  void taskFinish(TaskBase* task, ThreadsafeTaskQueue* task_queue, ThreadsafeQueue<ServerEvent>* reply_queue) override;
+  void taskFinish(std::unique_ptr<TaskBase>& task, ThreadsafeTaskQueue* task_queue,
+                  ThreadsafeQueue<ServerEvent>* reply_queue) override;
 };
 
 /** Alternative to ExecutionPlanDriver, supports matching-parallel execution.
  */
 class MatchingParallelExecutionPlanDriver : public ExecutionPlanDriverBase {
  private:
-  uint32_t batch_size_;
   std::unique_ptr<InputOperator> input_op_ = nullptr;
   std::vector<bool> task_depleted_;
   std::vector<CandidateSetView> candidates_;
@@ -92,9 +97,10 @@ class MatchingParallelExecutionPlanDriver : public ExecutionPlanDriverBase {
 
   void init(QueryId qid, QueryContext* query_ctx, ExecutionContext& ctx, ThreadsafeTaskQueue& task_queue) override;
 
-  void taskFinish(TaskBase* task, ThreadsafeTaskQueue* task_queue, ThreadsafeQueue<ServerEvent>* reply_queue) override;
+  void taskFinish(std::unique_ptr<TaskBase>& task, ThreadsafeTaskQueue* task_queue,
+                  ThreadsafeQueue<ServerEvent>* reply_queue) override;
 
-  void taskTimeOut(TaskBase* task, ThreadsafeQueue<ServerEvent>* reply_queue) override;
+  void taskTimeOut(std::unique_ptr<TaskBase>& task, ThreadsafeQueue<ServerEvent>* reply_queue) override;
 };
 
 }  // namespace circinus

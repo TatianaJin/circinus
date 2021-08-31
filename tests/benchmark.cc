@@ -216,7 +216,7 @@ class Benchmark {
                                  std::to_string(index) + '_' + FLAGS_filter + '_' + FLAGS_vertex_cover + '_' +
                                  FLAGS_match_order + '_' + FLAGS_pqv + "_" + FLAGS_profile_file_extra;
         auto profile_file = circinus::Path::join(FLAGS_profile_prefix, profile_file_name);
-        LOG(INFO) << "-------------" << profile_file;
+        LOG(INFO) << "------------- profile_file " << profile_file;
         auto ofs = circinus::openOutputFile(profile_file);
         ofs << std::string_view((char*)msg.data(), msg.size());
         msg = reply.pop();

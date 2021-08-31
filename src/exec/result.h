@@ -50,11 +50,11 @@ class CandidateResult : public Result {
 
   virtual ~CandidateResult() {}
 
-  virtual void collect(TaskBase* task);
+  virtual void collect(std::unique_ptr<TaskBase>& task);
 
   virtual std::vector<std::vector<VertexID>> getCandidateCardinality() const;
 
-  virtual void merge(TaskBase* task);
+  virtual void merge(std::unique_ptr<TaskBase>& task);
 
   virtual void removeInvalid(QueryVertexID query_vertex);
 
@@ -96,9 +96,9 @@ class PartitionedCandidateResult : public CandidateResult {
     }
   }
 
-  void collect(TaskBase* task) override;
+  void collect(std::unique_ptr<TaskBase>& task) override;
 
-  void merge(TaskBase* task) override;
+  void merge(std::unique_ptr<TaskBase>& task) override;
 
   void removeInvalid(QueryVertexID query_vertex) override;
 
@@ -154,7 +154,7 @@ class ExecutionResult : public Result {
   inline Outputs& getOutputs() { return outputs_; }
   inline QueryResult& getQueryResult() { return result_; }
 
-  virtual void collect(TaskBase* task) {}
+  virtual void collect(std::unique_ptr<TaskBase>& task) {}
 };
 
 class ProfiledExecutionResult : public ExecutionResult {
@@ -173,7 +173,7 @@ class ProfiledExecutionResult : public ExecutionResult {
 
   const auto& getProfiledPlanStrings() const { return profiled_plan_str_; }
 
-  void collect(TaskBase* task) override;
+  void collect(std::unique_ptr<TaskBase>& task) override;
 };
 
 }  // namespace circinus

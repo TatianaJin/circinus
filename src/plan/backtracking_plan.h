@@ -31,6 +31,7 @@ namespace circinus {
 class BacktrackingPlan {
   std::vector<ExecutionPlan*> plans_;
   std::vector<std::pair<uint32_t, std::vector<CandidateScope>>> partitioned_plans_;
+  std::vector<std::pair<uint32_t, std::vector<QueryVertexID>>> parallel_opids_;
   std::vector<std::unique_ptr<LogicalCompressedInputOperator>> input_operators_;  // size = plans_.size();
 
  public:
@@ -49,6 +50,8 @@ class BacktrackingPlan {
   inline uint32_t getNumPartitionedPlans() const { return partitioned_plans_.size(); }
   inline const auto& getPartitionedPlan(uint32_t idx) const { return partitioned_plans_[idx]; }
 
+  inline const auto& getParallelOpids(uint32_t idx) const { return parallel_opids_[idx]; }
+
   // TODO(engineering): merge plans with the same compression and order for better log/profile readabiliity?
   inline uint32_t addPlan(ExecutionPlan* plan) {
     plans_.push_back(plan);
@@ -64,6 +67,14 @@ class BacktrackingPlan {
 
   inline void addPartitionedPlan(std::pair<uint32_t, std::vector<CandidateScope>>&& partitioned_plan) {
     partitioned_plans_.emplace_back(std::move(partitioned_plan));
+  }
+
+  inline void addParallelOpids(std::vector<std::pair<uint32_t, std::vector<QueryVertexID>>>&& parallel_opids) {
+    parallel_opids_ = std::move(parallel_opids);
+  }
+
+  inline void addParallelOpid(std::pair<uint32_t, std::vector<QueryVertexID>>&& parallel_opid) {
+    parallel_opids_.emplace_back(std::move(parallel_opid));
   }
 
   inline void addInputOperator(std::unique_ptr<LogicalCompressedInputOperator>&& op) {
