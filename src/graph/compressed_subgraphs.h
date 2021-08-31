@@ -308,6 +308,8 @@ class CompressedSubgraphs {
   /** Get the matching set of the non-key vertex at key_idx. */
   const VertexSet& getSet(uint32_t key_idx) const { return sets_[key_idx]; }
 
+  const std::vector<VertexSet>& getSets() const { return sets_; }
+
   void UpdateSets(uint32_t set_idx, VertexSet&& new_set) { sets_[set_idx] = std::move(new_set); }
   void UpdateSets(uint32_t set_idx, const VertexSet& new_set) { sets_[set_idx] = new_set; }
 

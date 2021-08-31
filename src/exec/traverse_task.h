@@ -44,8 +44,8 @@ class TraverseChainTask : public TaskBase {
  protected:
   const GraphBase* graph_ = nullptr;
   const uint32_t batch_size_;
-  std::vector<Operator*> operators_;
-  const std::shared_ptr<InputOperator> input_op_;
+  const std::vector<Operator*> operators_;
+  const std::unique_ptr<InputOperator> input_op_;
   const std::vector<CandidateSetView>* candidates_;
 
   std::vector<ProfileInfo> profile_info_;
@@ -55,20 +55,19 @@ class TraverseChainTask : public TaskBase {
   uint32_t start_level_;
   uint32_t end_level_;
   TaskStatus task_status_;
-  std::shared_ptr<std::vector<CompressedSubgraphs>> inputs_;
+  std::vector<CompressedSubgraphs> inputs_;
   uint32_t start_index_ = 0;
   uint32_t input_size_ = 0;
 
  public:
   TraverseChainTask(QueryId qid, TaskId tid, std::chrono::time_point<std::chrono::steady_clock> stop_time,
-                    uint32_t batch_size, const std::vector<Operator*>& ops,
-                    const std::shared_ptr<InputOperator>& input_op, const GraphBase* graph,
-                    const std::vector<CandidateSetView>* candidates, QueryType query_type)
+                    uint32_t batch_size, const std::vector<Operator*>& ops, std::unique_ptr<InputOperator>&& input_op,
+                    const GraphBase* graph, const std::vector<CandidateSetView>* candidates, QueryType query_type)
       : TaskBase(qid, tid, stop_time),
         graph_(graph),
         batch_size_(batch_size),
         operators_(ops),
-        input_op_(input_op),
+        input_op_(std::move(input_op)),
         candidates_(candidates),
         query_type_(query_type) {
     start_level_ = 0;
@@ -78,15 +77,14 @@ class TraverseChainTask : public TaskBase {
   }
 
   TraverseChainTask(QueryId qid, TaskId tid, std::chrono::time_point<std::chrono::steady_clock> stop_time,
-                    uint32_t batch_size, const std::vector<Operator*>& ops,
-                    const std::shared_ptr<InputOperator>& input_op, const GraphBase* graph,
-                    const std::vector<CandidateSetView>* candidates, QueryType query_type, uint32_t start_level,
-                    uint32_t end_level, TaskStatus task_status)
+                    uint32_t batch_size, const std::vector<Operator*>& ops, std::unique_ptr<InputOperator>&& input_op,
+                    const GraphBase* graph, const std::vector<CandidateSetView>* candidates, QueryType query_type,
+                    uint32_t start_level, uint32_t end_level, TaskStatus task_status)
       : TaskBase(qid, tid, stop_time),
         graph_(graph),
         batch_size_(batch_size),
         operators_(ops),
-        input_op_(input_op),
+        input_op_(std::move(input_op)),
         candidates_(candidates),
         query_type_(query_type),
         start_level_(start_level),
@@ -96,22 +94,21 @@ class TraverseChainTask : public TaskBase {
   }
 
   TraverseChainTask(QueryId qid, TaskId tid, std::chrono::time_point<std::chrono::steady_clock> stop_time,
-                    uint32_t batch_size, const std::vector<Operator*>& ops,
-                    const std::shared_ptr<InputOperator>& input_op, const GraphBase* graph,
-                    const std::vector<CandidateSetView>* candidates, QueryType query_type, uint32_t start_level,
-                    uint32_t end_level, TaskStatus task_status,
-                    std::shared_ptr<std::vector<CompressedSubgraphs>> inputs, uint32_t start_index, uint32_t input_size)
+                    uint32_t batch_size, const std::vector<Operator*>& ops, std::unique_ptr<InputOperator>&& input_op,
+                    const GraphBase* graph, const std::vector<CandidateSetView>* candidates, QueryType query_type,
+                    uint32_t start_level, uint32_t end_level, TaskStatus task_status,
+                    const std::vector<CompressedSubgraphs>&& inputs, uint32_t start_index, uint32_t input_size)
       : TaskBase(qid, tid, stop_time),
         graph_(graph),
         batch_size_(batch_size),
         operators_(ops),
-        input_op_(input_op),
+        input_op_(std::move(input_op)),
         candidates_(candidates),
         query_type_(query_type),
         start_level_(start_level),
         end_level_(end_level),
         task_status_(task_status),
-        inputs_(inputs),
+        inputs_(std::move(inputs)),
         start_index_(start_index),
         input_size_(input_size) {
     CHECK(!candidates_->empty());
@@ -130,12 +127,12 @@ class TraverseChainTask : public TaskBase {
   void run(uint32_t executor_idx) override {
     auto start = std::chrono::steady_clock::now();
     if (task_status_ == TaskStatus::Normal) {
+      if (input_size_ == 0) {
+        inputs_ = std::move(input_op_->getInputs(graph_, *candidates_));
+        input_size_ = inputs_.size();
+      }
       setupOutputs();
       if (!setupTraverseContexts()) return;
-      if (input_size_ == 0) {
-        inputs_ = std::make_shared<std::vector<CompressedSubgraphs>>(input_op_->getInputs(graph_, *candidates_));
-        input_size_ = inputs_->size();
-      }
     }
     if (verboseExecutionLog()) {
       std::stringstream ss;
@@ -153,7 +150,7 @@ class TraverseChainTask : public TaskBase {
     // TODO(tatiana): support match limit
     // auto profile_output = "Task_" + std::to_string(task_id_);
     // ProfilerStart(profile_output.data());
-    execute<QueryType::Execute>(*inputs_, start_index_, input_size_, start_level_, executor_idx);
+    execute<QueryType::Execute>(inputs_, start_index_, input_size_, start_level_, executor_idx);
     // ProfilerStop();
     if (end_level_ == operators_.size() - 1) {
       new_count = dynamic_cast<OutputOperator*>(operators_.back())->getOutput()->getCount(executor_idx);
@@ -161,11 +158,11 @@ class TraverseChainTask : public TaskBase {
     auto end = std::chrono::steady_clock::now();
     if (shortExecutionLog()) {
       if (start_level_ == 0) {
-        LOG(INFO) << "Task " << task_id_ << " input " << inputs_->size() << '/'
-                  << getNumSubgraphs(*inputs_, 0, inputs_->size()) << " count " << (new_count - old_count) << " ("
+        LOG(INFO) << "Task " << task_id_ << " input " << inputs_.size() << '/'
+                  << getNumSubgraphs(inputs_, 0, inputs_.size()) << " count " << (new_count - old_count) << " ("
                   << old_count << " to " << new_count << "), time usage: " << toSeconds(start, end) << "s.";
       } else {
-        LOG(INFO) << "Inherit Task " << task_id_ << " input " << inputs_->size() << " count " << (new_count - old_count)
+        LOG(INFO) << "Inherit Task " << task_id_ << " input " << inputs_.size() << " count " << (new_count - old_count)
                   << " (" << old_count << " to " << new_count << "), time usage: " << toSeconds(start, end) << "s.";
       }
     }
@@ -173,15 +170,15 @@ class TraverseChainTask : public TaskBase {
 
   void profile(uint32_t executor_idx) override {
     if (task_status_ == TaskStatus::Normal) {
-      setupOutputs();
-      if (!setupTraverseContexts()) return;
       profile_info_.resize(operators_.size() + 1);  // traverse chain + input operator
       if (input_size_ == 0) {
         std::vector<CompressedSubgraphs> inputs;
         input_op_->inputAndProfile(graph_, *candidates_, &inputs, &profile_info_.front());
-        inputs_ = std::make_shared<std::vector<CompressedSubgraphs>>(std::move(inputs));
-        input_size_ = inputs_->size();
+        inputs_ = std::move(inputs);
+        input_size_ = inputs_.size();
       }
+      setupOutputs();
+      if (!setupTraverseContexts()) return;
     }
     // auto profile_output = "Profile_Task_" + std::to_string(task_id_);
     // ProfilerStart(profile_output.data());
@@ -192,7 +189,7 @@ class TraverseChainTask : public TaskBase {
     if (end_level_ == operators_.size() - 1) {
       old_count = dynamic_cast<OutputOperator*>(operators_.back())->getOutput()->getCount(executor_idx);
     }
-    execute<QueryType::Profile>(*inputs_, start_index_, input_size_, start_level_, executor_idx);
+    execute<QueryType::Profile>(inputs_, start_index_, input_size_, start_level_, executor_idx);
     if (task_status_ == TaskStatus::Normal) {
       DCHECK_LT(start_level_, operators_.size());
       DCHECK_LT(end_level_, operators_.size());
@@ -205,11 +202,11 @@ class TraverseChainTask : public TaskBase {
     }
     auto end = std::chrono::steady_clock::now();
     if (start_level_ == 0) {
-      LOG(INFO) << "Task " << task_id_ << " input " << inputs_->size() << '/'
-                << getNumSubgraphs(*inputs_, 0, inputs_->size()) << " count " << (new_count - old_count) << " ("
+      LOG(INFO) << "Task " << task_id_ << " input " << inputs_.size() << '/'
+                << getNumSubgraphs(inputs_, 0, inputs_.size()) << " count " << (new_count - old_count) << " ("
                 << old_count << " to " << new_count << "), time usage: " << toSeconds(start, end) << "s.";
     } else {
-      LOG(INFO) << "Inherit Task " << task_id_ << " input " << inputs_->size() << " count " << (new_count - old_count)
+      LOG(INFO) << "Inherit Task " << task_id_ << " input " << inputs_.size() << " count " << (new_count - old_count)
                 << " (" << old_count << " to " << new_count << "), time usage: " << toSeconds(start, end) << "s.";
     }
     // ProfilerStop();
@@ -237,13 +234,13 @@ class TraverseChainTask : public TaskBase {
   }
 
   void setupOutputs() {
-    auto output_size = input_op_->getOutputSize();
+    uint32_t key_size = inputs_.front().getKeys().size();
+    uint32_t set_size = inputs_.front().getSets().size();
+    auto output_size = std::make_pair(key_size, key_size + set_size);
     outputs_.resize(end_level_ - start_level_);
-    for (uint32_t i = 0; i < operators_.size() - 1; ++i) {
+    for (uint32_t i = start_level_; i < end_level_; ++i) {
       output_size = ((const TraverseOperator*)operators_[i])->getOutputSize(output_size);
-      if (start_level_ <= i && i < end_level_) {
-        outputs_[i - start_level_].resize(batch_size_, CompressedSubgraphs(output_size.first, output_size.second));
-      }
+      outputs_[i - start_level_].resize(batch_size_, CompressedSubgraphs(output_size.first, output_size.second));
     }
   }
 
@@ -332,12 +329,12 @@ class TraverseTask : public TraverseChainTask {
 
  public:
   TraverseTask(QueryId query_id, TaskId task_id, std::chrono::time_point<std::chrono::steady_clock> stop_time,
-               uint32_t batch_size, const std::vector<Operator*>& operators,
-               const std::shared_ptr<InputOperator>& input_op, const std::vector<CandidateScope>& scopes,
-               const GraphBase* graph, const std::vector<CandidateSetView>* candidates, QueryType query_type,
-               uint32_t start_level, uint32_t end_level, TaskStatus task_status)
-      : TraverseChainTask(query_id, task_id, stop_time, batch_size, operators, input_op, graph, candidates, query_type,
-                          start_level, end_level, task_status),
+               uint32_t batch_size, const std::vector<Operator*>& operators, std::unique_ptr<InputOperator>&& input_op,
+               const std::vector<CandidateScope>& scopes, const GraphBase* graph,
+               const std::vector<CandidateSetView>* candidates, QueryType query_type, uint32_t start_level,
+               uint32_t end_level, TaskStatus task_status)
+      : TraverseChainTask(query_id, task_id, stop_time, batch_size, operators, std::move(input_op), graph, candidates,
+                          query_type, start_level, end_level, task_status),
         partitioned_graph_(dynamic_cast<const ReorderedPartitionedGraph*>(graph)),
         scopes_(scopes) {
     CHECK(partitioned_graph_ != nullptr);
@@ -345,13 +342,13 @@ class TraverseTask : public TraverseChainTask {
   }
 
   TraverseTask(QueryId query_id, TaskId task_id, std::chrono::time_point<std::chrono::steady_clock> stop_time,
-               uint32_t batch_size, const std::vector<Operator*>& operators,
-               const std::shared_ptr<InputOperator>& input_op, const std::vector<CandidateScope>& scopes,
-               const GraphBase* graph, const std::vector<CandidateSetView>* candidates, QueryType query_type,
-               uint32_t start_level, uint32_t end_level, TaskStatus task_status,
-               std::shared_ptr<std::vector<CompressedSubgraphs>> inputs, uint32_t start_index, uint32_t input_size)
-      : TraverseChainTask(query_id, task_id, stop_time, batch_size, operators, input_op, graph, candidates, query_type,
-                          start_level, end_level, task_status, inputs, start_index, input_size),
+               uint32_t batch_size, const std::vector<Operator*>& operators, std::unique_ptr<InputOperator>&& input_op,
+               const std::vector<CandidateScope>& scopes, const GraphBase* graph,
+               const std::vector<CandidateSetView>* candidates, QueryType query_type, uint32_t start_level,
+               uint32_t end_level, TaskStatus task_status, const std::vector<CompressedSubgraphs>&& inputs,
+               uint32_t start_index, uint32_t input_size)
+      : TraverseChainTask(query_id, task_id, stop_time, batch_size, operators, std::move(input_op), graph, candidates,
+                          query_type, start_level, end_level, task_status, std::move(inputs), start_index, input_size),
         partitioned_graph_(dynamic_cast<const ReorderedPartitionedGraph*>(graph)),
         scopes_(scopes) {
     CHECK(partitioned_graph_ != nullptr);
