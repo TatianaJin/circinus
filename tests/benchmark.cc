@@ -231,7 +231,7 @@ class Benchmark {
   void batch_run(const std::string& dataset, uint32_t query_size, const std::string& match_order, std::ostream* out) {
     (*out) << "dataset,query_size,query_mode,query_index,elapsed_execution_time,filter_time,plan_time,"
               "enumerate_time,n_embeddings,"
-              "order\n";
+              "order,max_task_time\n";
     for (uint32_t i = 1; i <= 200; ++i) {
       run(dataset, query_size, "dense", i, match_order, out);
     }

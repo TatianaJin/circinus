@@ -155,7 +155,7 @@ void ExecutionPlanDriver::init(QueryId qid, QueryContext* query_ctx, ExecutionCo
     // FIXME(tatiana): share hashmap etc. across traverse context when their candidate scopes are the same?
     addTaskToQueue<TraverseTask>(&task_queue, qid, plan_idx, query_ctx->stop_time, ctx.first.getBatchSize(), ops,
                                  std::move(input_operator), scopes, query_ctx->data_graph, &candidates_[i], query_type_,
-                                 0, end_level, TaskStatus::Normal);
+                                 end_level, TaskStatus::Normal);
   }
 }
 
@@ -172,12 +172,11 @@ void ExecutionPlanDriver::taskFinish(std::unique_ptr<TaskBase>& task, Threadsafe
     uint32_t task_id = traverse_task->getTaskId();
     std::chrono::time_point<std::chrono::steady_clock> stop_time = traverse_task->getStopTime();
     auto& ops = plan_->getOperators(task_id);
-    std::unique_ptr<InputOperator> dummy_input_op = nullptr;
 
-    addTaskToQueue<TraverseTask>(task_queue, qid, task_id, stop_time, batch_size_, ops, std::move(dummy_input_op),
-                                 traverse_task->getScopes(), traverse_task->getDataGraph(),
-                                 traverse_task->getCandidates(), query_type_, traverse_task->getEndLevel(),
-                                 ops.size() - 1, TaskStatus::Normal, std::move(inputs), input_index, input_size);
+    addTaskToQueue<TraverseTask>(task_queue, qid, task_id, stop_time, batch_size_, ops, traverse_task->getScopes(),
+                                 traverse_task->getDataGraph(), traverse_task->getCandidates(), query_type_,
+                                 traverse_task->getEndLevel(), ops.size() - 1, TaskStatus::Normal, std::move(inputs),
+                                 input_index, input_size);
 
     ++task_counters_[task->getTaskId()];
 
