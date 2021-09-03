@@ -22,6 +22,7 @@ DECLARE_int32(num_cores);
 DECLARE_int32(profile);
 DECLARE_uint64(set_pruning_threshold);
 DECLARE_bool(label_filter);
+DECLARE_int32(candidate_set_intersection);
 
 // query optimization
 DECLARE_bool(intersection_count_coefficient);

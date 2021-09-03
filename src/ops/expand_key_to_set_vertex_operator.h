@@ -29,7 +29,7 @@
 
 namespace circinus {
 
-template <typename G>
+template <typename G, bool intersect_candidates>
 class ExpandKeyToSetVertexOperator : public ExpandVertexOperator {
  public:
   ExpandKeyToSetVertexOperator(const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
@@ -73,7 +73,8 @@ class ExpandKeyToSetVertexOperator : public ExpandVertexOperator {
       const auto& input = ctx->getCurrentInput();
       auto exceptions = input.getExceptions(same_label_key_indices_, same_label_set_indices_);
       std::vector<VertexID> new_set;
-      expandFromParents<G, profile, true>(input, ctx->getDataGraph<G>(), ctx, parent_indices_, exceptions, &new_set);
+      expandFromParents<G, profile, intersect_candidates>(input, ctx->getDataGraph<G>(), ctx, parent_indices_,
+                                                          exceptions, &new_set);
       if
         constexpr(isProfileMode(profile)) {
           ctx->total_num_input_subgraphs += ctx->getCurrentInput().getNumSubgraphs();
@@ -83,7 +84,9 @@ class ExpandKeyToSetVertexOperator : public ExpandVertexOperator {
             for (uint32_t j = 0; j < parent_indices_.size(); ++j) {
               uint32_t key_vid = input.getKeyVal(parent_indices_[j]);
               parent_tuple[j] = key_vid;
-              ctx->updateDistinctSICount(j, parent_tuple, j);
+              if (j != 0 || intersect_candidates) {
+                ctx->updateDistinctSICount(j, parent_tuple, j);
+              }
             }
           }
         }

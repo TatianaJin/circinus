@@ -46,7 +46,7 @@ inline TraverseOperator* newTraverseOp(GraphType g_type, Args... args) {
 }
 
 template <template <typename, bool> typename OpType, typename... Args>
-inline TraverseOperator* newTraverseOp(GraphType g_type, Args... args) {
+[[deprecated]] inline TraverseOperator* newTraverseOp(GraphType g_type, Args... args) {
   switch (g_type) {
   case GraphType::Normal:
     return new OpType<Graph, true>(std::forward<Args>(args)...);
@@ -56,6 +56,35 @@ inline TraverseOperator* newTraverseOp(GraphType g_type, Args... args) {
     return new OpType<GraphView<GraphPartitionBase>, true>(std::forward<Args>(args)...);
   case GraphType::BipartiteGraphView:
     return new OpType<GraphView<BipartiteGraph>, false>(std::forward<Args>(args)...);
+  }
+  LOG(FATAL) << "Unknown graph type " << ((uint32_t)g_type);
+  return nullptr;
+}
+
+template <template <typename, bool> typename OpType, typename... Args>
+inline TraverseOperator* newTraverseOp(GraphType g_type, bool intersect_candidates, Args... args) {
+  if (intersect_candidates) {
+    switch (g_type) {
+    case GraphType::Normal:
+      return new OpType<Graph, true>(std::forward<Args>(args)...);
+    case GraphType::Partitioned:
+      return new OpType<ReorderedPartitionedGraph, true>(std::forward<Args>(args)...);
+    case GraphType::GraphView:
+      return new OpType<GraphView<GraphPartitionBase>, true>(std::forward<Args>(args)...);
+    case GraphType::BipartiteGraphView:
+      return new OpType<GraphView<BipartiteGraph>, false>(std::forward<Args>(args)...);  // no need to intersect
+    }
+  } else {
+    switch (g_type) {
+    case GraphType::Normal:
+      return new OpType<Graph, true>(std::forward<Args>(args)...);  // must intersect to ensure correctness now
+    case GraphType::Partitioned:
+      return new OpType<ReorderedPartitionedGraph, false>(std::forward<Args>(args)...);
+    case GraphType::GraphView:
+      return new OpType<GraphView<GraphPartitionBase>, false>(std::forward<Args>(args)...);
+    case GraphType::BipartiteGraphView:
+      return new OpType<GraphView<BipartiteGraph>, false>(std::forward<Args>(args)...);
+    }
   }
   LOG(FATAL) << "Unknown graph type " << ((uint32_t)g_type);
   return nullptr;

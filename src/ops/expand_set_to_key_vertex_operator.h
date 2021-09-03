@@ -88,7 +88,7 @@ class ExpandSetToKeyVertexTraverseContext : public ExpandVertexTraverseContext {
   }
 };
 
-template <typename G>
+template <typename G, bool intersect_candidates>
 class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
   std::vector<LabelID> parent_labels_;
 
@@ -146,9 +146,13 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
 
  protected:
   template <typename ForwardIter>
-  bool isInCandidates(VertexID key, ForwardIter& begin, ForwardIter end) const {
-    begin = std::lower_bound(begin, end, key);
-    return begin != end && *begin == key;
+  inline bool isInCandidates(VertexID key, ForwardIter& begin, ForwardIter end) const {
+    if
+      constexpr(intersect_candidates) {
+        begin = std::lower_bound(begin, end, key);
+        return begin != end && *begin == key;
+      }
+    return true;
   }
 
   std::tuple<uint32_t, uint32_t, uint32_t> getMinimumParent(TraverseContext* ctx) const {
@@ -421,7 +425,9 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
           continue;
         }
         parent_tuple[depth] = parent_vid;
-        ctx->updateDistinctSICount(depth, parent_tuple, depth);
+        if (depth != 0 || intersect_candidates) {
+          ctx->updateDistinctSICount(depth, parent_tuple, depth);
+        }
         if (depth == last_depth) {
           ++set_index[depth];
         } else {

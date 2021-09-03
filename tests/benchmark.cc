@@ -49,8 +49,8 @@ DEFINE_string(query_mode, "dense", "Dense or sparse query");
 DEFINE_uint64(query_size, 8, "The query size.");
 DEFINE_uint64(match_limit, 1e5, "The limit of matches to find");
 DEFINE_uint64(query_index, 1, "The index of query in the same category");
-DEFINE_string(match_order, "", "Matching order");
-DEFINE_string(filter, "nlf", "Candidate pruning strategy");
+DEFINE_string(match_order, "cfl", "Matching order");
+DEFINE_string(filter, "cfl", "Candidate pruning strategy");
 DEFINE_int32(profile, 0, "0 means no profiling, 1 means to profile the execution, 2 means to profile min SI count");
 DEFINE_string(profile_prefix, "/data/share/users/byli/circinus/evaluation/profile/", "Profile file prefix");
 DEFINE_string(vertex_cover, "static", "Vertex cover strategy: static, dynamic, all");
@@ -261,7 +261,7 @@ void run_benchmark(const std::string& query_file, Benchmark& benchmark, std::ost
       dataset = config.dataset;
       benchmark.loadDataset(dataset, load_time, FLAGS_partition);
     }
-    benchmark.run(config.dataset, config.query_size, config.query_mode, config.query_index, config.match_order, out);
+    benchmark.run(config.dataset, config.query_size, config.query_mode, config.query_index, FLAGS_match_order, out);
   }
 }
 

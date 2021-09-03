@@ -61,6 +61,9 @@ class ExecutionPlan {
   uint32_t partition_id_ = 0;  // TODO(tatiana): obsolete
   uint64_t query_cover_bits_ = 0;
 
+  // transient variable for populating plan
+  bool last_op_ = false;
+
   void addKeys(const std::vector<QueryVertexID>& keys_to_add, std::vector<QueryVertexID>& set_vertices,
                uint32_t& n_keys) {
     for (auto v : keys_to_add) {
@@ -250,6 +253,17 @@ class ExecutionPlan {
     if (root->getNext() != nullptr) {
       printOperatorChain(root->getNext(), indent + "| ");
     }
+  }
+
+  inline bool opToIntersectCandidates(QueryVertexID target_vertex) const {
+    if (FLAGS_candidate_set_intersection == 2) {
+      return dynamic_cover_key_level_.count(target_vertex) == 1;
+    }
+    if (FLAGS_candidate_set_intersection == 1) {
+      return !last_op_;
+    }
+    CHECK_EQ(FLAGS_candidate_set_intersection, 0);
+    return true;
   }
 
   virtual TraverseOperator* newExpandEdgeKeyToKeyOperator(

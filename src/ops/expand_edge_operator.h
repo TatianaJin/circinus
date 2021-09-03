@@ -87,21 +87,21 @@ class ExpandEdgeOperator : public TraverseOperator {
                                                          const std::vector<uint32_t>& same_label_key_indices,
                                                          const std::vector<uint32_t>& same_label_set_indices,
                                                          uint64_t set_pruning_threshold, SubgraphFilter* filter,
-                                                         GraphType graph_type);
+                                                         GraphType graph_type, bool intersect_candidates);
 
   static TraverseOperator* newExpandEdgeKeyToSetOperator(QueryVertexID parent_vertex, QueryVertexID target_vertex,
                                                          const unordered_map<QueryVertexID, uint32_t>& indices,
                                                          const std::vector<uint32_t>& same_label_key_indices,
                                                          const std::vector<uint32_t>& same_label_set_indices,
                                                          uint64_t set_pruning_threshold, SubgraphFilter* filter,
-                                                         GraphType graph_type);
+                                                         GraphType graph_type, bool intersect_candidates);
 
   static TraverseOperator* newExpandEdgeSetToKeyOperator(QueryVertexID parent_vertex, QueryVertexID target_vertex,
                                                          const unordered_map<QueryVertexID, uint32_t>& indices,
                                                          const std::vector<uint32_t>& same_label_key_indices,
                                                          const std::vector<uint32_t>& same_label_set_indices,
                                                          uint64_t set_pruning_threshold, SubgraphFilter* filter,
-                                                         GraphType graph_type);
+                                                         GraphType graph_type, bool intersect_candidates);
 
   ExpandEdgeOperator(uint32_t parent_index, uint32_t target_index, QueryVertexID parent, QueryVertexID target,
                      const std::vector<uint32_t>& same_label_key_indices,

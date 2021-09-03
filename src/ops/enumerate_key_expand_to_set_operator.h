@@ -109,7 +109,7 @@ class EnumerateTraverseContext : public ExpandVertexTraverseContext {
   }
 };
 
-template <typename G>
+template <typename G, bool intersect_candidates>
 class EnumerateKeyExpandToSetOperator : public ExpandVertexOperator {
   const std::vector<QueryVertexID> keys_to_enumerate_;  // parent query vertices whose matches are enumerated as key
   std::vector<uint32_t> existing_key_parent_indices_;   // input indices of parent query vertices in key
@@ -184,8 +184,8 @@ class EnumerateKeyExpandToSetOperator : public ExpandVertexOperator {
   bool expandInner(TraverseContext* ctx) const;
 };
 
-template <typename G>
-EnumerateKeyExpandToSetOperator<G>::EnumerateKeyExpandToSetOperator(
+template <typename G, bool intersect_candidates>
+EnumerateKeyExpandToSetOperator<G, intersect_candidates>::EnumerateKeyExpandToSetOperator(
     const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
     const unordered_map<QueryVertexID, uint32_t>& input_query_vertex_indices,
     const unordered_map<QueryVertexID, uint32_t>& output_query_vertex_indices,
@@ -244,8 +244,9 @@ EnumerateKeyExpandToSetOperator<G>::EnumerateKeyExpandToSetOperator(
   CHECK_EQ(query_vertex_indices_[target_vertex_], output_query_vertex_indices.size() - n_input_keys - 1);
 }
 
-template <typename G>
-std::vector<std::unique_ptr<GraphPartitionBase>> EnumerateKeyExpandToSetOperator<G>::computeGraphPartitions(
+template <typename G, bool intersect_candidates>
+std::vector<std::unique_ptr<GraphPartitionBase>>
+EnumerateKeyExpandToSetOperator<G, intersect_candidates>::computeGraphPartitions(
     const ReorderedPartitionedGraph* g, const std::vector<CandidateScope>& candidate_scopes) const {
   std::vector<std::unique_ptr<GraphPartitionBase>> ret;
   ret.reserve(parents_.size());
@@ -267,9 +268,10 @@ std::vector<std::unique_ptr<GraphPartitionBase>> EnumerateKeyExpandToSetOperator
   return ret;
 }
 
-template <typename G>
+template <typename G, bool intersect_candidates>
 template <QueryType profile>
-uint32_t EnumerateKeyExpandToSetOperator<G>::expandInner(uint32_t batch_size, TraverseContext* base_ctx) const {
+uint32_t EnumerateKeyExpandToSetOperator<G, intersect_candidates>::expandInner(uint32_t batch_size,
+                                                                               TraverseContext* base_ctx) const {
   auto ctx = dynamic_cast<EnumerateTraverseContext*>(base_ctx);
   DCHECK(ctx != nullptr) << "Expect pointer to EnumerateTraverseContext but got " << getTypename(*ctx);
   uint32_t n_outputs = 0;
@@ -315,14 +317,18 @@ uint32_t EnumerateKeyExpandToSetOperator<G>::expandInner(uint32_t batch_size, Tr
         auto neighbors = ctx->getDataGraph<G>()->getOutNeighborsWithHint(key_vid, target_label_, pidx);
         if (ctx->target_sets[enumerate_key_depth].empty()) {
           DCHECK_EQ(enumerate_key_depth, 0);
-          intersect(*ctx->getCandidateSet(), neighbors, &ctx->target_sets[enumerate_key_depth + 1],
-                    ctx->existing_vertices);
+          if (intersect_candidates) {
+            intersect(*ctx->getCandidateSet(), neighbors, &ctx->target_sets[enumerate_key_depth + 1],
+                      ctx->existing_vertices);
+          } else {
+            removeExceptions(neighbors, &ctx->target_sets[enumerate_key_depth + 1], ctx->existing_vertices);
+          }
         } else {
           intersect(ctx->target_sets[enumerate_key_depth], neighbors, &ctx->target_sets[enumerate_key_depth + 1],
                     ctx->existing_vertices);
         }
         ctx->updateIntersection<profile>(
-            (ctx->target_sets[enumerate_key_depth].empty() ? ctx->getCandidateSet()->size()
+            (ctx->target_sets[enumerate_key_depth].empty() ? ctx->getCandidateSet()->size() * intersect_candidates
                                                            : ctx->target_sets[enumerate_key_depth].size()) +
                 neighbors.size(),
             ctx->target_sets[enumerate_key_depth + 1].size(), pidx, key_vid);
@@ -405,9 +411,9 @@ uint32_t EnumerateKeyExpandToSetOperator<G>::expandInner(uint32_t batch_size, Tr
   return n_outputs;
 }
 
-template <typename G>
+template <typename G, bool intersect_candidates>
 template <QueryType profile>
-bool EnumerateKeyExpandToSetOperator<G>::expandInner(
+bool EnumerateKeyExpandToSetOperator<G, intersect_candidates>::expandInner(
     TraverseContext* base_ctx) const {  // handles a new input and init the transient states
   auto ctx = (EnumerateTraverseContext*)base_ctx;
   auto& input = ctx->getCurrentInput();
@@ -460,27 +466,34 @@ bool EnumerateKeyExpandToSetOperator<G>::expandInner(
   if (existing_key_parent_indices_.size() == 1) {
     uint32_t key_vid = input.getKeyVal(existing_key_parent_indices_[0]);
     auto neighbors = ctx->getDataGraph<G>()->getOutNeighborsWithHint(key_vid, target_label_, 0);
-    if
-      constexpr(isProfileCandidateSIEffect(profile)) {
-        intersectCandidateSetWithProfile(*ctx->getCandidateSet(), neighbors, &target_set, ctx->existing_vertices, ctx);
-        return target_set.empty();
-      }
-    intersect(*ctx->getCandidateSet(), neighbors, &target_set, ctx->existing_vertices);
-    if
-      constexpr(isProfileMode(profile)) {
-        ctx->updateIntersection<profile>(ctx->getCandidateSet()->size() + neighbors.size(), target_set.size(), 0,
-                                         key_vid);
-      }
+    if (intersect_candidates) {
+      if
+        constexpr(isProfileCandidateSIEffect(profile)) {
+          intersectCandidateSetWithProfile(*ctx->getCandidateSet(), neighbors, &target_set, ctx->existing_vertices,
+                                           ctx);
+          return target_set.empty();
+        }
+      intersect(*ctx->getCandidateSet(), neighbors, &target_set, ctx->existing_vertices);
+      if
+        constexpr(isProfileMode(profile)) {
+          ctx->updateIntersection<profile>(ctx->getCandidateSet()->size() + neighbors.size(), target_set.size(), 0,
+                                           key_vid);
+        }
+    } else {
+      removeExceptions(neighbors, &target_set, ctx->existing_vertices);
+    }
   } else {
-    expandFromParents<G, profile, true>(input, ctx->getDataGraph<G>(), ctx, existing_key_parent_indices_,
-                                        ctx->existing_vertices, &target_set);
+    expandFromParents<G, profile, intersect_candidates>(
+        input, ctx->getDataGraph<G>(), ctx, existing_key_parent_indices_, ctx->existing_vertices, &target_set);
     if
       constexpr(isProfileWithMiniIntersectionMode(profile)) {
         auto& parent_tuple = ctx->getParentTuple();
         for (uint32_t j = 0; j < existing_key_parent_indices_.size(); ++j) {
           uint32_t key_vid = input.getKeyVal(parent_indices_[j]);
           parent_tuple[j] = key_vid;
-          ctx->updateDistinctSICount(j, parent_tuple, j);
+          if (j != 0 || intersect_candidates) {
+            ctx->updateDistinctSICount(j, parent_tuple, j);
+          }
         }
       }
   }

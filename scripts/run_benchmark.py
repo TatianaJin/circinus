@@ -12,6 +12,7 @@ def get_args():
   parser.add_argument('-p', '--project_dir', help='Circinus project dir.', required=True)
   parser.add_argument('-t', '--time_out', default=300, type=int, help='Query timeout.')
   parser.add_argument('-m', '--match', default='Benchmark', help='The executable for running circinus.')
+  parser.add_argument('--threads', default=1, help='The parallelism for query execution.')
 
   # workload
   group = parser.add_mutually_exclusive_group(required=True)
@@ -29,6 +30,7 @@ def get_args():
   parser.add_argument('--upg', '--use_partitioned_graph', type=int, default=1, choices=[0, 1])
   parser.add_argument('--ipp', '--intra_partition_plan', type=int, default=1, choices=[0, 1])
   parser.add_argument('--pqv', default='none', choices=['none', 'cc'])
+  parser.add_argument('--csi', '--candidate_set_intersection', type=int, default=0, choices=[0, 1, 2], help="0: infer by graph type, 1: except for last traverse op, 2: except for expand to set.")
 
   args = parser.parse_args()
   args.bin_dir = osp.join(args.project_dir, "build", "tests")
@@ -40,7 +42,7 @@ def get_args():
 def get_log_path(args):
   base = "_".join([
     str(x) for x in (args.match, args.limit, args.batch, args.filter, args.order, args.strategy, "partition{0}".format(args.partition),
-                     "upg{0}".format(args.upg), "ipp{0}".format(args.ipp), args.pqv, args.config) if x is not None
+                     "upg{0}".format(args.upg), "ipp{0}".format(args.ipp), args.pqv, "thread{0}".format(args.threads), 'csi{0}'.format(args.csi), args.config) if x is not None
   ])
   path = osp.join(args.log_dir, base)
   if args.profile is not None:  # for profiling, we output the profile for each query separately in a folder with the result log
@@ -53,8 +55,8 @@ def get_log_path(args):
 
 
 def get_common_flags(args, log):
-  return "-match_limit {0} -batch_size {1} -filter {2} -vertex_cover {3} -output_file {4} -match_order {5} -upg {upg} -ipp {ipp} -pqv {pqv} -partition {partition}".format(
-    args.limit, args.batch, args.filter, args.strategy, log, args.order, upg=args.upg, ipp=args.ipp, pqv=args.pqv, partition=args.partition)
+  return "-match_limit {0} -batch_size {1} -filter {2} -vertex_cover {3} -output_file {4} -match_order {5} -upg {upg} -ipp {ipp} -pqv {pqv} -partition {partition} -num_cores {threads} -candidate_set_intersection {csi}".format(
+    args.limit, args.batch, args.filter, args.strategy, log, args.order, upg=args.upg, ipp=args.ipp, pqv=args.pqv, partition=args.partition, threads=args.threads, csi=args.csi)
 
 
 def run_batch(args):
@@ -86,7 +88,7 @@ def run_query(config, args, log_dir, common_flags):
   try:
     result = subprocess.run([osp.join(args.bin_dir, args.match), *cmd_args.split(' ')], stderr=subprocess.PIPE, timeout=args.time_out)
     print(config)
-    if result.returncode is not 0:
+    if result.returncode != 0:
       with open('error_log', 'a') as errlog:
         print('Error {config},{code}\n{msg}'.format(config=config, code=result.returncode, msg=result.stderr.decode('utf-8').rstrip()))
         errlog.write('{config},{code}\n'.format(config=config, code=result.returncode))

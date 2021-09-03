@@ -23,6 +23,8 @@ DEFINE_uint64(set_pruning_threshold, 0,
               "threshold. If 0, use the label frequency of the pruning query vertex. Default is 0.");
 DEFINE_bool(label_filter, true,
             "Whether to use label as a hint to filter neighbors before intersection during backtracking");
+DEFINE_int32(candidate_set_intersection, 0,
+             "0: infer by graph type, 1: except for last traverse op, 2: except for expand to set");
 
 DEFINE_bool(standalone, false,
             "In standalone mode, a Circinus server is launched together with a simple command line driver.");

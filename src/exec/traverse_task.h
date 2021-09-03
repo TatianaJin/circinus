@@ -45,7 +45,7 @@ class TraverseChainTask : public TaskBase {
   const GraphBase* graph_ = nullptr;
   const uint32_t batch_size_;
   const std::vector<Operator*> operators_;
-  const std::unique_ptr<InputOperator> input_op_;
+  const std::unique_ptr<InputOperator> input_op_ = nullptr;
   const std::vector<CandidateSetView>* candidates_;
 
   std::vector<ProfileInfo> profile_info_;
@@ -69,17 +69,18 @@ class TraverseChainTask : public TaskBase {
         operators_(ops),
         input_op_(std::move(input_op)),
         candidates_(candidates),
-        query_type_(query_type) {
-    start_level_ = 0;
-    end_level_ = operators_.size() - 1;
-    task_status_ = TaskStatus::Normal;
+        query_type_(query_type),
+        start_level_(0),
+        end_level_(operators_.size() - 1),
+        task_status_(TaskStatus::Normal) {
     CHECK(!candidates_->empty());
   }
 
+  // for head task
   TraverseChainTask(QueryId qid, TaskId tid, std::chrono::time_point<std::chrono::steady_clock> stop_time,
                     uint32_t batch_size, const std::vector<Operator*>& ops, std::unique_ptr<InputOperator>&& input_op,
                     const GraphBase* graph, const std::vector<CandidateSetView>* candidates, QueryType query_type,
-                    uint32_t start_level, uint32_t end_level, TaskStatus task_status)
+                    uint32_t end_level, TaskStatus task_status)
       : TaskBase(qid, tid, stop_time),
         graph_(graph),
         batch_size_(batch_size),
@@ -87,22 +88,22 @@ class TraverseChainTask : public TaskBase {
         input_op_(std::move(input_op)),
         candidates_(candidates),
         query_type_(query_type),
-        start_level_(start_level),
+        start_level_(0),
         end_level_(end_level),
         task_status_(task_status) {
     CHECK(!candidates_->empty());
   }
 
+  // for task starting from partial embeddings
   TraverseChainTask(QueryId qid, TaskId tid, std::chrono::time_point<std::chrono::steady_clock> stop_time,
-                    uint32_t batch_size, const std::vector<Operator*>& ops, std::unique_ptr<InputOperator>&& input_op,
-                    const GraphBase* graph, const std::vector<CandidateSetView>* candidates, QueryType query_type,
-                    uint32_t start_level, uint32_t end_level, TaskStatus task_status,
-                    const std::vector<CompressedSubgraphs>&& inputs, uint32_t start_index, uint32_t input_size)
+                    uint32_t batch_size, const std::vector<Operator*>& ops, const GraphBase* graph,
+                    const std::vector<CandidateSetView>* candidates, QueryType query_type, uint32_t start_level,
+                    uint32_t end_level, TaskStatus task_status, const std::vector<CompressedSubgraphs>&& inputs,
+                    uint32_t start_index, uint32_t input_size)
       : TaskBase(qid, tid, stop_time),
         graph_(graph),
         batch_size_(batch_size),
         operators_(ops),
-        input_op_(std::move(input_op)),
         candidates_(candidates),
         query_type_(query_type),
         start_level_(start_level),
@@ -112,6 +113,8 @@ class TraverseChainTask : public TaskBase {
         start_index_(start_index),
         input_size_(input_size) {
     CHECK(!candidates_->empty());
+    DCHECK_NE(input_size_, 0);
+    DCHECK(!inputs_.empty());
   }
 
   const GraphBase* getDataGraph() const override { return graph_; }
@@ -122,13 +125,12 @@ class TraverseChainTask : public TaskBase {
   std::vector<CompressedSubgraphs>& getLastOutput() { return outputs_[end_level_ - 1]; }
   const uint32_t getLastOutputSize() const { return traverse_context_[end_level_ - 1]->getOutputSize(); }
 
-  void setTaskStatus(TaskStatus task_status) { task_status_ = task_status; }
-
   void run(uint32_t executor_idx) override {
     auto start = std::chrono::steady_clock::now();
     if (task_status_ == TaskStatus::Normal) {
       if (input_size_ == 0) {
         inputs_ = std::move(input_op_->getInputs(graph_, *candidates_));
+        if (inputs_.empty()) return;
         input_size_ = inputs_.size();
       }
       setupOutputs();
@@ -172,9 +174,8 @@ class TraverseChainTask : public TaskBase {
     if (task_status_ == TaskStatus::Normal) {
       profile_info_.resize(operators_.size() + 1);  // traverse chain + input operator
       if (input_size_ == 0) {
-        std::vector<CompressedSubgraphs> inputs;
-        input_op_->inputAndProfile(graph_, *candidates_, &inputs, &profile_info_.front());
-        inputs_ = std::move(inputs);
+        input_op_->inputAndProfile(graph_, *candidates_, &inputs_, &profile_info_.front());
+        if (inputs_.empty()) return;
         input_size_ = inputs_.size();
       }
       setupOutputs();
@@ -273,7 +274,8 @@ class TraverseChainTask : public TaskBase {
           task_status_ = TaskStatus::Suspended;
           return true;
         }
-      } else if (task_status_ == TaskStatus::Suspended) {
+      } else if (task_status_ == TaskStatus::Suspended) {  // when a suspended task is resumed, we need to first
+                                                           // recreate the stack until the last level
         task_status_ = TaskStatus::Normal;
         return false;
       }
@@ -331,10 +333,10 @@ class TraverseTask : public TraverseChainTask {
   TraverseTask(QueryId query_id, TaskId task_id, std::chrono::time_point<std::chrono::steady_clock> stop_time,
                uint32_t batch_size, const std::vector<Operator*>& operators, std::unique_ptr<InputOperator>&& input_op,
                const std::vector<CandidateScope>& scopes, const GraphBase* graph,
-               const std::vector<CandidateSetView>* candidates, QueryType query_type, uint32_t start_level,
-               uint32_t end_level, TaskStatus task_status)
+               const std::vector<CandidateSetView>* candidates, QueryType query_type, uint32_t end_level,
+               TaskStatus task_status)
       : TraverseChainTask(query_id, task_id, stop_time, batch_size, operators, std::move(input_op), graph, candidates,
-                          query_type, start_level, end_level, task_status),
+                          query_type, end_level, task_status),
         partitioned_graph_(dynamic_cast<const ReorderedPartitionedGraph*>(graph)),
         scopes_(scopes) {
     CHECK(partitioned_graph_ != nullptr);
@@ -342,13 +344,12 @@ class TraverseTask : public TraverseChainTask {
   }
 
   TraverseTask(QueryId query_id, TaskId task_id, std::chrono::time_point<std::chrono::steady_clock> stop_time,
-               uint32_t batch_size, const std::vector<Operator*>& operators, std::unique_ptr<InputOperator>&& input_op,
-               const std::vector<CandidateScope>& scopes, const GraphBase* graph,
-               const std::vector<CandidateSetView>* candidates, QueryType query_type, uint32_t start_level,
-               uint32_t end_level, TaskStatus task_status, const std::vector<CompressedSubgraphs>&& inputs,
-               uint32_t start_index, uint32_t input_size)
-      : TraverseChainTask(query_id, task_id, stop_time, batch_size, operators, std::move(input_op), graph, candidates,
-                          query_type, start_level, end_level, task_status, std::move(inputs), start_index, input_size),
+               uint32_t batch_size, const std::vector<Operator*>& operators, const std::vector<CandidateScope>& scopes,
+               const GraphBase* graph, const std::vector<CandidateSetView>* candidates, QueryType query_type,
+               uint32_t start_level, uint32_t end_level, TaskStatus task_status,
+               const std::vector<CompressedSubgraphs>&& inputs, uint32_t start_index, uint32_t input_size)
+      : TraverseChainTask(query_id, task_id, stop_time, batch_size, operators, graph, candidates, query_type,
+                          start_level, end_level, task_status, std::move(inputs), start_index, input_size),
         partitioned_graph_(dynamic_cast<const ReorderedPartitionedGraph*>(graph)),
         scopes_(scopes) {
     CHECK(partitioned_graph_ != nullptr);

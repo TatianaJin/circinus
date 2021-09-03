@@ -203,7 +203,9 @@ class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
               for (uint32_t j = 0; j < parents_.size(); ++j) {
                 uint32_t key_vid = input.getKeyVal(parent_indices_[j]);
                 parent_tuple[j] = key_vid;
-                ctx->updateDistinctSICount(j, parent_tuple, j);
+                if (j != 0 || intersect_candidates) {
+                  ctx->updateDistinctSICount(j, parent_tuple, j);
+                }
               }
             }
         }

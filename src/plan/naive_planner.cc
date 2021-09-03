@@ -526,7 +526,7 @@ QueryVertexID NaivePlanner::selectParallelizingQueryVertex(
   const std::vector<double>& step_costs = plan_.getStepCosts();
   double sum_costs = std::accumulate(step_costs.begin(), step_costs.end(), 0.0);
   double prefix_sum = 0.0;
-  for (uint32_t i = 0; i < matching_order_.size(); ++i) {
+  for (uint32_t i = 1; i < matching_order_.size(); ++i) {
     prefix_sum += step_costs[i];
     if (prefix_sum / sum_costs > threshold) {
       return i == 1 ? matching_order_[i] : matching_order_[i - 1];
