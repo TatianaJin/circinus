@@ -26,9 +26,9 @@
 
 namespace circinus {
 
-template <typename Set1, typename Set2>
+template <typename Set1, typename Set2, typename V = VertexID>
 inline void intersectIter(const std::enable_if_t<!std::is_same_v<Set1, VertexSetView>, Set1>& set1, const Set2& set2,
-                          std::vector<VertexID>* intersection, const unordered_set<VertexID>& except) {
+                          std::vector<V>* intersection, const unordered_set<V>& except) {
   // LOG(FATAL) << "should not enter this function " << getTypename(set1) << ", " << getTypename(set2);
   intersection->reserve(set1.size());
   if
@@ -36,7 +36,7 @@ inline void intersectIter(const std::enable_if_t<!std::is_same_v<Set1, VertexSet
       if (set2.getRanges().size() == 1) {
         auto lower_bound = set2.getRanges().front().first;
         auto end = lower_bound + set2.getRanges().front().second;
-        for (VertexID vid : set1) {
+        for (V vid : set1) {
           lower_bound = lowerBound(lower_bound, end, vid);
           // if lower_bound is out of range, all elements in the rest of set2 are smaller than the rest of set1
           if (lower_bound == end) {
@@ -49,7 +49,7 @@ inline void intersectIter(const std::enable_if_t<!std::is_same_v<Set1, VertexSet
     }
 
   auto lower_bound = set2.begin();
-  for (VertexID vid : set1) {
+  for (V vid : set1) {
     lower_bound = lowerBound(lower_bound, set2.end(), vid);
     // if lower_bound is out of range, all elements in the rest of set2 are smaller than the rest of set1
     if (lower_bound == set2.end()) {
@@ -59,9 +59,9 @@ inline void intersectIter(const std::enable_if_t<!std::is_same_v<Set1, VertexSet
   }
 }
 
-template <typename Set1, typename Set2>
+template <typename Set1, typename Set2, typename V = VertexID>
 inline void intersectIter(const std::enable_if_t<std::is_same_v<Set1, VertexSetView>, Set1>& set1, const Set2& set2,
-                          std::vector<VertexID>* intersection, const unordered_set<VertexID>& except) {
+                          std::vector<V>* intersection, const unordered_set<V>& except) {
   intersection->reserve(set1.size());
   if
     constexpr(std::is_same_v<Set2, VertexSetView>) {
@@ -101,9 +101,9 @@ inline void intersectIter(const std::enable_if_t<std::is_same_v<Set1, VertexSetV
  *
  * Set1 and Set2 should be forward iterable and provide the size() function.
  */
-template <typename Set1, typename Set2>
-inline void intersect(const Set1& set1, const Set2& set2, std::vector<VertexID>* intersection,
-                      const unordered_set<VertexID>& except = {}) {
+template <typename Set1, typename Set2, typename V = VertexID>
+inline void intersect(const Set1& set1, const Set2& set2, std::vector<V>* intersection,
+                      const unordered_set<V>& except = {}) {
   if (set1.size() > set2.size()) {
     return intersectIter<Set2, Set1>(set2, set1, intersection, except);
   }
@@ -113,9 +113,9 @@ inline void intersect(const Set1& set1, const Set2& set2, std::vector<VertexID>*
 /**
  * Set should be forward iterable and provide the size() function
  */
-template <typename Set>
-inline void intersect(const unordered_set<VertexID>& set1, const Set& set2, std::vector<VertexID>* intersection,
-                      const unordered_set<VertexID>& except = {}) {
+template <typename Set, typename V = VertexID>
+inline void intersect(const unordered_set<V>& set1, const Set& set2, std::vector<V>* intersection,
+                      const unordered_set<V>& except = {}) {
   intersection->reserve(std::min((size_t)set2.size(), set1.size()));
   for (auto vid : set2) {
     if (set1.count(vid) && except.count(vid) == 0) intersection->emplace_back(vid);
@@ -128,8 +128,8 @@ inline void intersect(const unordered_set<VertexID>& set1, const Set& set2, std:
  *
  * @param intersection The non-const pointer to set1.
  */
-template <typename Set>
-void intersectInplace(const std::vector<VertexID>& set1, const Set& set2, std::vector<VertexID>* intersection) {
+template <typename Set, typename V = VertexID>
+void intersectInplace(const std::vector<V>& set1, const Set& set2, std::vector<V>* intersection) {
   uint32_t size = 0;
   auto lb = set2.begin();
   auto end = set2.end();

@@ -2,9 +2,14 @@
 
 import argparse
 import pandas as pd
+import numpy as np
 
 from os import path as osp
 from os import listdir
+from sklearn.linear_model import LinearRegression, ElasticNet, Ridge
+from sklearn.model_selection import KFold
+from sklearn.neural_network import MLPRegressor
+from scipy.sparse import csr_matrix
 from sys import stderr
 from tqdm import tqdm
 
@@ -17,6 +22,7 @@ def get_args():
   parser.add_argument('-m', '--missing', help='The config file for getting missing queries')
   parser.add_argument('--config', help='Config output path')
   parser.add_argument('--parallel', action='store_true', help='Parallel execution analysis')
+  parser.add_argument('--topo', help='The file path of query graph topological features')
 
   args = parser.parse_args()
   return args, parser
@@ -67,9 +73,11 @@ def get_config(target, config_file):
 
 
 def parallel_analysis(target):
-  target = target[['enumerate_time', 'max_task_time', 'elapsed_time']]
+  #elapsed = 'elapsed_execution_time'
+  elapsed = 'elapsed_time'
+  target = target[['enumerate_time', 'max_task_time', elapsed]]
   print("========== parallel ratio = enumerate_time / elapsed_time ==========")
-  print((target['enumerate_time'] / target['elapsed_time']).describe())
+  print((target['enumerate_time'] / target[elapsed]).describe())
   print("======= dominant task ratio = max_task_time / enumerate_time =======")
   max_task_ratio = target['max_task_time'] / target['enumerate_time']
   print(max_task_ratio.describe())
@@ -123,6 +131,107 @@ def read_profile(profile_path, df):
   return df.append(update) if df is not None else update
 
 
+def topo_performance_analysis(target, topo_path, baseline_file):
+  query_configs = []
+  label_sequence_map = dict()
+  indptr = [0]  # csr row list
+  indices = []  # csr column list
+  data = []  # csr values
+  objectives = []
+  target = target.reset_index().set_index(['query_mode', 'query_size', 'query_index'])
+  with open(topo_path, 'r') as f:
+    for line in f:
+      line = line.strip()
+      splits = line.split(',')
+      query_mode, query_size, query_index = splits[0].rsplit('/', 1)[1].rsplit("_", 3)[1:]
+      query_config = (query_mode, int(query_size), int(query_index.split(".", 1)[0]))
+      if query_config not in target.index:
+        continue
+      for kv in splits[1:]:
+        k, v = kv.split(':')
+        if k.startswith("clique") or k.startswith("cycle"):
+        #if not k.startswith("clique"):
+          continue
+        idx = label_sequence_map.setdefault(k, len(label_sequence_map))
+        indices.append(idx)
+        data.append(int(v))
+      indptr.append(len(indices))
+      query_configs.append(query_config)
+      objectives.append(target.loc[query_config][['enumerate_time', 'n_embeddings', 'plan_time']].values)
+  sparse_features = csr_matrix((data, indices, indptr), dtype=int)
+  objectives = np.array(objectives)
+  #reg = Ridge(solver='sag', alpha=0.05, normalize=True).fit(sparse_features, objectives[:,1])
+  print("dimensionality", len(label_sequence_map))
+  for train_idx, validate_idx in KFold(n_splits=2, shuffle=True).split(sparse_features, objectives[:, 1]):
+    reg = LinearRegression(normalize=True).fit(sparse_features[train_idx], objectives[:, 1][train_idx])
+    print("Train R square =", reg.score(sparse_features[train_idx], objectives[:, 1][train_idx]))
+    print("Validate R square =", reg.score(sparse_features[validate_idx], objectives[:, 1][validate_idx]))
+    feature_weights = np.absolute(reg.coef_)
+    top_coef_features = feature_weights.argsort()[:][::-1]
+    feature_weight_rank = [None] * len(feature_weights)
+    for i, feature_idx in enumerate(top_coef_features):
+      feature_weight_rank[feature_idx] = i
+    feature_id_name = [None] * len(label_sequence_map)
+    for k, v in label_sequence_map.items():
+      feature_id_name[v] = k
+    print("----- top 20 feature weight -----")
+    for idx in top_coef_features[:20]:
+      print(feature_id_name[idx], reg.coef_[idx], sparse_features.getcol(idx).sum())
+    feature_occurrence = np.array([sparse_features.getcol(i).sum() for i in range(0, len(label_sequence_map))])
+    occurence_rank = feature_occurrence.argsort()[-1:-21:-1]
+    print("----- top 20 feature occurence -----")
+    for idx in occurence_rank:
+      print(feature_id_name[idx], feature_weight_rank[idx], reg.coef_[idx], feature_occurrence[idx])
+
+
+def topo_performance_analysis2(target, topo_path, baseline_file):
+  topo = pd.read_csv(topo_path)
+  topo_features = [x for x in topo.columns if x != "query"]
+  query_config = topo['query'].str.rsplit("/", 1).str[1].str.rsplit("_", 3)
+  topo["query_mode"] = query_config.str[1]
+  topo["query_size"] = pd.to_numeric(query_config.str[2])
+  topo["query_index"] = pd.to_numeric(query_config.str[-1].str.split(".").str[0])
+  topo.drop(columns=['query'], inplace=True)
+  print("dense >>>>>>>>>>>>>>>>>>>>>>")
+  print(topo.loc[topo['query_mode'] == "dense"].describe())
+  print("sparse >>>>>>>>>>>>>>>>>>>>>>")
+  print(topo.loc[topo['query_mode'] == "sparse"].describe())
+
+  topo = topo.loc[topo['query_mode'] == "dense"]
+  topo = topo.set_index(['query_mode', 'query_size', 'query_index']).sort_index()
+  target = target.reset_index().set_index(['query_mode', 'query_size', 'query_index'])
+  data = target.join(topo, how='inner')
+
+  reg = LinearRegression().fit(data[topo_features], data['enumerate_time'])
+  print("R square =", reg.score(data[topo_features], data['enumerate_time']))
+  print("model", reg.coef_, reg.intercept_)
+  clf = MLPRegressor(solver='lbfgs', learning_rate='adaptive', random_state=None, max_iter=1000).fit(data[topo_features].values,
+                                                                                                     data['n_embeddings'].values)
+  print("R-square", clf.score(data[topo_features].values, data['n_embeddings'].values))
+
+  if baseline_file is not None:
+    baseline = read(baseline_file)[["enumerate_time"]].dropna().reset_index().set_index(['query_mode', 'query_size', 'query_index'])
+    data = baseline.join(data, lsuffix='_target', rsuffix='_base', how='inner')
+
+    data["time_diff"] = data['enumerate_time_target'] - data['enumerate_time_base']
+    clf = MLPRegressor(solver='lbfgs', learning_rate='adaptive', random_state=None, max_iter=1000).fit(data[topo_features].values,
+                                                                                                       data['time_diff'].values)
+    print("time diff R-square", clf.score(data[topo_features].values, data['time_diff'].values))
+    print("======= largest time diff =======")
+    print(data.nlargest(10, 'time_diff')[['time_diff', *topo_features]])
+    print("======= smallest time diff =======")
+    print(data.nsmallest(10, 'time_diff')[['time_diff', *topo_features]])
+    print("======= largest count =======")
+    print(data.nlargest(10, 'n_embeddings')[['n_embeddings', *topo_features]])
+    print("======= largest time =======")
+    print(data.nlargest(10, 'enumerate_time_target')[['enumerate_time_target', *topo_features]])
+    print("======= smallest time =======")
+    print(data.nsmallest(10, 'enumerate_time_target')[['enumerate_time_target', *topo_features]])
+    #reg = LinearRegression().fit(data[topo_features], data['enumerate_time_target'] - data['enumerate_time_base'])
+    #print("R square =", reg.score(data[topo_features], data['enumerate_time_target'] - data['enumerate_time_base']))
+    #print("model", reg.coef_, reg.intercept_)
+
+
 def analyze_profile(folder):
   profiles = [name for name in listdir(folder) if name != "log" and not name.endswith(".swp") and not name.endswith(".log")]
 
@@ -168,3 +277,5 @@ if __name__ == '__main__':
     get_config(target, args.config)
   if args.parallel:
     parallel_analysis(target)
+  if args.topo:
+    topo_performance_analysis(target, args.topo, args.time)

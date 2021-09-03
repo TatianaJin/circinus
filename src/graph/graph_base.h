@@ -39,9 +39,10 @@ class GraphBase {
 
   /* storage */
   std::vector<EdgeID> vlist_;    // size n_vertices_ + 1, { i: the id of the first edge of vertex i }
-  std::vector<VertexID> elist_;  // size n_edges_, { i : the destination vertex id of edge i}
+  std::vector<VertexID> elist_;  // size n_edges_ * 2, { i : the destination vertex id of edge i}
 
  public:
+  using VID = VertexID;
   static std::unique_ptr<GraphBase> loadGraphFromBinary(std::istream& input);
 
   GraphBase() {}

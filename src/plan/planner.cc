@@ -374,12 +374,8 @@ void Planner::parallelizePartitionedPlans(
       if (verbosePlannerLog()) {
         LOG(INFO) << "parallel_qv = " << parallel_qv << " partitioning_qvs [" << ss.str() << " ]";
       }
-    } else {  // replace existing logical input operator
-      // template
-      std::vector<QueryVertexID> pqvs(1, parallel_qv);
-      // std::vector<QueryVertexID> pqvs(partitioning_qvs.size() + 1);
-      // std::copy(partitioning_qvs.begin(), partitioning_qvs.end(), pqvs.begin());
-      // pqvs.back() = parallel_qv;
+    } else if (partitioning_qvs.empty()) {  // replace existing logical input operator
+      std::vector<QueryVertexID> pqvs{parallel_qv};
       auto logical_plan = backtracking_plan_->getPlan(partition.first);
       backtracking_plan_->replaceInputOperator(
           partition.first,

@@ -43,13 +43,16 @@ struct QueryEdge {
  * QueryGraph must have zero-indexed continuous vertex ids.
  */
 class QueryGraph {
+ public:
+  using VID = QueryVertexID;
+
  protected:
   QueryVertexID n_vertices_ = 0;
   EdgeID n_edges_ = 0;
   QueryVertexID max_degree_ = 0;  // out degree
 
   std::vector<EdgeID> vlist_;         // size n_vertices_ + 1, { i: the id of the first edge of vertex i }
-  std::vector<QueryVertexID> elist_;  // size n_edges_, { i : the destination vertex id of edge i}
+  std::vector<QueryVertexID> elist_;  // size n_edges_ * 2, { i : the destination vertex id of edge i}
   std::vector<LabelID> labels_;       // size n_vertices_, { i : the label of vertex i }
   unordered_map<LabelID, uint32_t> vertex_cardinality_by_label_;
 
@@ -68,6 +71,7 @@ class QueryGraph {
   explicit QueryGraph(const std::string& path);
 
   inline QueryVertexID getNumVertices() const { return n_vertices_; }
+  inline EdgeID getNumEdges() const { return n_edges_; }
   inline QueryVertexID getGraphMaxDegree() const { return max_degree_; }
   inline uint32_t getVertexCardinalityByLabel(LabelID label) const {
     auto pos = vertex_cardinality_by_label_.find(label);
