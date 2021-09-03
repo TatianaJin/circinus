@@ -104,6 +104,10 @@ class TraverseChainTask : public TaskBase {
         start_level_(0),
         end_level_(end_level),
         task_status_(task_status) {
+    start_level_ = 0;
+    if (end_level == 0) {
+      end_level_ = operators_.size() - 1;
+    }
     CHECK(!candidates_->empty());
   }
 
@@ -200,7 +204,10 @@ class TraverseChainTask : public TaskBase {
     if (task_status_ == TaskStatus::Normal) {
       if (input_size_ == 0) {
         inputs_ = std::move(input_op_->getInputs(graph_, *candidates_));
-        if (inputs_.empty()) return;
+        // if input is pruned to empty, return
+        if (inputs_.empty()) {
+          return;
+        }
         input_size_ = inputs_.size();
       }
       setupOutputs();
@@ -327,6 +334,7 @@ class TraverseChainTask : public TaskBase {
   void setupOutputs() {
     uint32_t key_size = inputs_.front().getKeys().size();
     uint32_t set_size = inputs_.front().getSets().size();
+
     auto output_size = std::make_pair(key_size, key_size + set_size);
     outputs_.resize(end_level_ - start_level_);
     for (uint32_t i = start_level_; i < end_level_; ++i) {
