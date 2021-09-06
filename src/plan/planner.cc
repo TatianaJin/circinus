@@ -334,6 +334,9 @@ std::vector<std::pair<uint32_t, std::vector<CandidateScope>>> Planner::generateL
       // assign plan to scope
       partition_plans.emplace_back(plan_pos->second, scopes);
     }
+    if (global_plan_idx != -1) {
+      LOG(INFO) << "global plan idx " << global_plan_idx;
+    }
     return partition_plans;
   }
   // generate a different plan for each backtracking scope
@@ -462,7 +465,8 @@ void Planner::parallelizePartitionedPlans(
 std::vector<std::pair<uint32_t, std::vector<QueryVertexID>>> Planner::generateParallelQueryVertex(
     const std::vector<std::pair<uint32_t, std::vector<CandidateScope>>>& partition_plans) {
   std::vector<std::pair<uint32_t, std::vector<QueryVertexID>>> parallel_opids(partition_plans.size());
-  for (auto& partition : partition_plans) {
+  for (uint32_t pidx = 0; pidx < partition_plans.size(); ++pidx) {
+    auto& partition = partition_plans[pidx];
     QueryVertexID parallel_qv = planners_[partition.first]->selectParallelizingQueryVertex(
         backtracking_plan_->getPlan(partition.first)->getQueryCoverBits(), std::vector<QueryVertexID>{});
     const std::vector<QueryVertexID>& matching_order = planners_[partition.first]->getMatchingOrder();
@@ -477,8 +481,8 @@ std::vector<std::pair<uint32_t, std::vector<QueryVertexID>>> Planner::generatePa
         ++prefix_vertex_num;
       }
       if (prefix_vertex_num == parallel_qv_order) {
-        std::vector<QueryVertexID> opid(1, i + 1);
-        parallel_opids[partition.first] = std::make_pair(partition.first, std::move(opid));
+        std::vector<QueryVertexID> opid{i + 1};
+        parallel_opids[pidx] = std::make_pair(partition.first, std::move(opid));
         break;
       }
     }

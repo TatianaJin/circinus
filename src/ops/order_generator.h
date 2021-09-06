@@ -29,6 +29,7 @@
 #include "ops/logical/filter/filter.h"
 #include "ops/logical/filter/tso_filter.h"
 #include "utils/query_utils.h"
+#include "utils/utils.h"
 
 namespace circinus {
 class OrderGenerator {
@@ -316,7 +317,9 @@ class OrderGenerator {
     }
 
     if (is_tree_leaf && cur_tree_path.size() > 1) {
-      LOG(INFO) << "[CFL] tree path" << toString(cur_tree_path);
+      if (verbosePlannerLog()) {
+        LOG(INFO) << "[CFL] tree path" << toString(cur_tree_path);
+      }
       tree_paths.emplace_back(cur_tree_path);
     }
     cur_tree_path.pop_back();

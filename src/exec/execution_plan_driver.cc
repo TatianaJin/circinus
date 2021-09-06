@@ -148,7 +148,10 @@ void ExecutionPlanDriver::init(QueryId qid, QueryContext* query_ctx, ExecutionCo
     std::vector<QueryVertexID> opids = plan_->getParallelOpids(i).second;
     if (!opids.empty()) {
       end_level = opids.front();
-      LOG(INFO) << "plan " << plan_idx << ", segment step " << opids.front();
+      if (shortExecutionLog()) {
+        LOG(INFO) << "plan " << plan_idx << ", segment step " << opids.front() << '/'
+                  << plan_->getOperators(plan_idx).size();
+      }
     }
     auto partitioned_result = dynamic_cast<PartitionedCandidateResult*>(candidate_result_.get());
     candidates_[i] = partitioned_result->getCandidatesByScopes(scopes);

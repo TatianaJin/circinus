@@ -376,7 +376,7 @@ class TraverseTask : public TraverseChainTask {
     for (size_t i = start_level_; i < end_level_; ++i) {
       auto op = operators[i];
       auto traverse_op = dynamic_cast<TraverseOperator*>(op);
-      CHECK(traverse_op != nullptr);
+      CHECK(traverse_op != nullptr) << i << '/' << end_level_ << ' ' << op->toString();
       data_graphs_for_operators.emplace_back(traverse_op->computeGraphPartitions(g, scopes));
     }
     return data_graphs_for_operators;

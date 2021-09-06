@@ -74,7 +74,7 @@ void CandidatePruningPlanDriver::initPhase1TasksForPartitionedGraph(QueryId qid,
 void CandidatePruningPlanDriver::init(QueryId qid, QueryContext* query_ctx, ExecutionContext& ctx,
                                       ThreadsafeTaskQueue& task_queue) {
   finish_event_ = std::make_unique<ServerEvent>(ServerEvent::CandidatePhase);
-  LOG(INFO) << (finish_event_ == nullptr);
+  DLOG(INFO) << (finish_event_ == nullptr);
   finish_event_->query_id = qid;
   if (plan_->getPhase() == 1) {
     LOG(INFO) << "Candidate pruning phase 1";
