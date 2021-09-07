@@ -22,6 +22,7 @@ def get_args():
   parser.add_argument('-m', '--missing', help='The config file for getting missing queries')
   parser.add_argument('--config', help='Config output path')
   parser.add_argument('--parallel', action='store_true', help='Parallel execution analysis')
+  parser.add_argument('--plan', help='The baseline file for comparing plan time')
   parser.add_argument('--topo', help='The file path of query graph topological features')
 
   args = parser.parse_args()
@@ -44,18 +45,18 @@ def check_embeddings(target, groundtruth_file):
   return 0
 
 
-def compare_enumerate_time(target, baseline_file):
-  baseline = read(baseline_file)[["enumerate_time"]].dropna()
+def compare_time(target, baseline_file, time_name='enumerate_time'):
+  baseline = read(baseline_file)[[time_name]].dropna()
   print("Complete queries (target/baseline):\t{0}/{1}".format(len(target), len(baseline)))
-  comparison = baseline.join(target[['enumerate_time']], lsuffix='_base', rsuffix='_check').dropna()
-  speedup = comparison['enumerate_time_base'] - comparison['enumerate_time_check']
+  comparison = baseline.join(target[[time_name]], lsuffix='_base', rsuffix='_check').dropna()
+  speedup = comparison[time_name + '_base'] - comparison[time_name + '_check']
   comparison['speedup'] = speedup
-  comparison['speedup_ratio'] = speedup / comparison['enumerate_time_base']
+  comparison['speedup_ratio'] = speedup / comparison[time_name + '_base']
   print(comparison[['speedup', 'speedup_ratio']].describe())
   print("Total speedup (seconds)", speedup.sum())
   # print(comparison.iloc[speedup.argmin()])
   if sum(speedup < 0) > 0:
-    print(comparison[["speedup", 'enumerate_time_base', 'speedup_ratio']].loc[speedup < 0].sort_values(by='speedup', ascending=True))
+    print(comparison[["speedup", time_name + '_base', 'speedup_ratio']].loc[speedup < 0].sort_values(by='speedup', ascending=True))
 
 
 def get_missing_query_config(target, config_file):
@@ -150,7 +151,7 @@ def topo_performance_analysis(target, topo_path, baseline_file):
       for kv in splits[1:]:
         k, v = kv.split(':')
         if k.startswith("clique") or k.startswith("cycle"):
-        #if not k.startswith("clique"):
+          #if not k.startswith("clique"):
           continue
         idx = label_sequence_map.setdefault(k, len(label_sequence_map))
         indices.append(idx)
@@ -232,7 +233,7 @@ def topo_performance_analysis2(target, topo_path, baseline_file):
     #print("model", reg.coef_, reg.intercept_)
 
 
-def analyze_profile(folder):
+def analyze_profile(folder, corr=True, candidate=False, cost_time_reg=True):
   profiles = [name for name in listdir(folder) if name != "log" and not name.endswith(".swp") and not name.endswith(".log")]
 
   df = None
@@ -240,22 +241,35 @@ def analyze_profile(folder):
     df = read_profile(osp.join(folder, name), df)
   #print(df)
   pd.set_option('display.max_rows', None)  # print all rows without ellipsis
-  print("================================== Correlation ==================================")
-  print(df[['cost', 'si_count', 'si_input', 'time']].corr())
-  print("=============================== Correlation By Op ===============================")
-  print(df.groupby('op')[['cost', 'si_count', 'si_input', 'time']].corr(min_periods=1))
-  print("========================== Correlation By Op w/ Parent ==========================")
-  print(df.groupby(['op', 'n_parents'])[['cost', 'si_count', 'si_input', 'time']].corr(min_periods=1))
-  print("============================== Correlation By Step ==============================")
-  print(df.groupby('step')[['cost', 'si_count', 'si_input', 'time']].corr(min_periods=1))
-  print("=========================== Correlation By Query Mode ===========================")
-  print(df.groupby('mode')[['cost', 'si_count', 'si_input', 'time']].corr(min_periods=1))
-  print("========================== Correlation By Parent Count ==========================")
-  print(df.groupby('n_parents')[['cost', 'si_count', 'si_input', 'time']].corr(min_periods=1))
-  print("========================== Candidate si effect ==========================")
-  print(df['candidate_si_effect'].describe())
-  print(df.groupby('step')['candidate_si_effect'].describe())
-  print(df.groupby('op')['candidate_si_effect'].describe())
+  if corr:
+    print("================================== Correlation ==================================")
+    print(df[['cost', 'si_count', 'si_input', 'time']].corr())
+    print("=============================== Correlation By Op ===============================")
+    print(df.groupby('op')[['cost', 'si_count', 'si_input', 'time']].corr(min_periods=1))
+    print("========================== Correlation By Op w/ Parent ==========================")
+    print(df.groupby(['op', 'n_parents'])[['cost', 'si_count', 'si_input', 'time']].corr(min_periods=1))
+    print("============================== Correlation By Step ==============================")
+    print(df.groupby('step')[['cost', 'si_count', 'si_input', 'time']].corr(min_periods=1))
+    print("=========================== Correlation By Query Mode ===========================")
+    print(df.groupby('mode')[['cost', 'si_count', 'si_input', 'time']].corr(min_periods=1))
+    print("========================== Correlation By Parent Count ==========================")
+    print(df.groupby('n_parents')[['cost', 'si_count', 'si_input', 'time']].corr(min_periods=1))
+  if candidate:
+    print("========================== Candidate si effect ==========================")
+    print(df['candidate_si_effect'].describe())
+    print(df.groupby('step')['candidate_si_effect'].describe())
+    print(df.groupby('op')['candidate_si_effect'].describe())
+  if cost_time_reg:
+    reg = LinearRegression().fit(df[['cost']], df['time'])
+    print("R square =", reg.score(df[['cost']], df['time']))
+    print("model", reg.coef_, reg.intercept_)
+    print(df[['cost', 'time']].loc[df['time'] > 1000].nsmallest(10, 'cost'))
+    print(df[['cost', 'time']].loc[df['time'] > 1000].nlargest(10, 'cost'))
+
+
+def plan_time_analysis(target, baseline_file):
+  compare_time(target, baseline_file, 'plan_time')
+  print(target.nlargest(10, 'plan_time'))
 
 
 if __name__ == '__main__':
@@ -269,7 +283,7 @@ if __name__ == '__main__':
   if args.check:
     print("Mismatch:\t{0}".format(check_embeddings(target, args.check)))
   if args.time:
-    compare_enumerate_time(target, args.time)
+    compare_time(target, args.time)
   if args.missing:
     print("Total elapsed backtracking time", target['elapsed_time'].sum())
     get_missing_query_config(target, args.missing)
@@ -279,3 +293,5 @@ if __name__ == '__main__':
     parallel_analysis(target)
   if args.topo:
     topo_performance_analysis(target, args.topo, args.time)
+  if args.plan:
+    plan_time_analysis(target, args.plan)

@@ -366,11 +366,12 @@ std::vector<double> NaivePlanner::getParallelizingQueryVertexWeights(
 
 double NaivePlanner::estimateExpandCost(const GraphBase* data_graph,
                                         const std::vector<CandidateSetView>* candidate_views,
-                                        const std::vector<std::vector<double>>& car,
+                                        std::vector<unordered_map<uint64_t, double>>& car,
                                         const unordered_set<QueryVertexID>& existing_vertices, uint32_t level,
                                         uint32_t idx, uint32_t parent) {
   if (candidate_views == nullptr) {  // update the estimation of computation for set to key / expand into
-    return car[level - 1][parent];
+    return estimateCardinality(candidate_cardinality_, data_graph, candidate_views, covers_[level - 1][parent],
+                               level - 1);
   }
 
   auto cover_bits = covers_[level][idx].cover_bits;
@@ -398,7 +399,8 @@ double NaivePlanner::estimateExpandCost(const GraphBase* data_graph,
   if (FLAGS_intersection_count_coefficient) {  // compute the cost by intersection count
     // expand from key
     // if (key_parent_cnt == 0) key_parent_cnt = 1;
-    double cost = key_parent_cnt * car[level - 1][parent];
+    double cost = key_parent_cnt *
+                  getCardinality(car, level - 1, covers_[level - 1][parent].cover_bits, data_graph, candidate_views);
     if (target_in_cover) {
       if (set_parent_cnt == 0) {  // key to key only
         return cost;
@@ -406,35 +408,37 @@ double NaivePlanner::estimateExpandCost(const GraphBase* data_graph,
       // computation cost for expand-into / expand-from-set
       if (key_parent_cnt == 0) {  // set to key
         auto key_bits = parent_cover_bits | (1 << set_parent);
-        cost = estimateCardinality(data_graph, *candidate_views, key_bits, level - 1);
+        cost = getCardinality(car, level - 1, key_bits, data_graph, candidate_views);
       }
       auto key_bits = parent_cover_bits | (1 << target_vertex);  // including target
-      return cost + set_parent_cnt * estimateCardinality(data_graph, *candidate_views, key_bits, level);
+      return cost + set_parent_cnt * getCardinality(car, level, key_bits, data_graph, candidate_views);
     }
     if (set_parent_cnt > 0) {  // enumerate key expand to set
       // computation cost to expand from enumerated parents
-      return cost + set_parent_cnt * estimateCardinality(data_graph, *candidate_views, cover_bits, level - 1);
+      return cost + set_parent_cnt * getCardinality(car, level - 1, cover_bits, data_graph, candidate_views);
     }
     return cost;  // key to set
   }
 
   if (target_in_cover) {                                       // compute the cost by the number of compressed groups
     auto key_bits = parent_cover_bits | (1 << target_vertex);  // including target
-    return estimateCardinality(data_graph, *candidate_views, key_bits, level);
+    return getCardinality(car, level, key_bits, data_graph, candidate_views);
   } else if (set_parent_cnt > 0) {
-    return estimateCardinality(data_graph, *candidate_views, cover_bits, level - 1);
+    return getCardinality(car, level - 1, cover_bits, data_graph, candidate_views);
   }
-  return car[level - 1][parent];
+  return getCardinality(car, level - 1, covers_[level - 1][parent].cover_bits, data_graph, candidate_views);
 }
 
 ExecutionPlan* NaivePlanner::generatePlanWithDynamicCover(const GraphBase* data_graph,
                                                           const std::vector<CandidateSetView>* candidate_views) {
   if (verbosePlannerLog()) {
-    std::stringstream ss;
-    for (auto& view : *candidate_views) {
-      ss << " " << view.size();
+    if (candidate_views != nullptr) {
+      std::stringstream ss;
+      for (auto& view : *candidate_views) {
+        ss << " " << view.size();
+      }
+      LOG(INFO) << "generatePlanWithDynamicCover candidates" << ss.str();
     }
-    LOG(INFO) << "generatePlanWithDynamicCover candidates" << ss.str();
     LOG(INFO) << "use_two_hop_traversal_ " << use_two_hop_traversal_;
   }
 
@@ -448,15 +452,8 @@ ExecutionPlan* NaivePlanner::generatePlanWithDynamicCover(const GraphBase* data_
 
   std::vector<std::vector<double>> costs_car(covers_.size());  // dp table: cost of each subquery given a cover
   std::vector<std::vector<uint32_t>> pre(covers_.size());      // best parent of cover for backtracing
-  std::vector<std::vector<double>> car(covers_.size());  // cardinality estimation of compressed groups for each step
-
-  /* estimate the compressed group cardinality for each subquery given each cover */
-  for (uint32_t i = 0; i < covers_.size(); ++i) {
-    car[i].resize(covers_[i].size());
-    for (uint32_t j = 0; j < covers_[i].size(); ++j) {
-      car[i][j] = estimateCardinality(candidate_cardinality_, data_graph, candidate_views, covers_[i][j], i);
-    }
-  }
+  // cardinality estimation of compressed groups for each step
+  std::vector<unordered_map<uint64_t, double>> car(covers_.size());
 
   /* dynamic programming to compute costs for sequences */
   unordered_set<QueryVertexID> existing_vertices;

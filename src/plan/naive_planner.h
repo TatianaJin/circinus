@@ -183,7 +183,7 @@ class NaivePlanner {
   }
 
   double estimateExpandCost(const GraphBase* data_graph, const std::vector<CandidateSetView>* candidate_views,
-                            const std::vector<std::vector<double>>& car,
+                            std::vector<unordered_map<uint64_t, double>>& car,
                             const unordered_set<QueryVertexID>& existing_vertices, uint32_t level, uint32_t idx,
                             uint32_t parent);
 
@@ -234,6 +234,16 @@ class NaivePlanner {
       const std::vector<std::vector<double>>& costs_car, const std::vector<std::vector<uint32_t>>& pre, int best_idx);
 
   void logCoverSpace();
+
+  inline double getCardinality(std::vector<unordered_map<uint64_t, double>>& car, uint32_t level, uint64_t cover_bits,
+                               const GraphBase* data_graph, const std::vector<CandidateSetView>* candidate_views) {
+    auto pos = car[level].find(cover_bits);
+    if (pos == car[level].end()) {
+      auto cardinality = estimateCardinality(data_graph, *candidate_views, cover_bits, level);
+      pos = car[level].insert({cover_bits, cardinality}).first;
+    }
+    return pos->second;
+  }
 };
 
 }  // namespace circinus
