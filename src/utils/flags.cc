@@ -36,4 +36,7 @@ DEFINE_bool(intersection_count_coefficient, true,
             "If true, use estimated intersection count to calcuate costs for dynamic covers; otherwise, use estimated "
             "compressed group cardinality.");
 
+DEFINE_string(cost_learner, "",
+              "The address of the cost learner which uses machine learning to learn costs for compression plan.");
+
 DEFINE_int32(verbosity, circinus::FULL_LOG, "The verbosity level of logs");

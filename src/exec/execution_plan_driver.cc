@@ -125,6 +125,10 @@ void ExecutionPlanDriver::init(QueryId qid, QueryContext* query_ctx, ExecutionCo
                                ThreadsafeTaskQueue& task_queue) {
   ExecutionPlanDriverBase::init(qid, query_ctx, ctx, task_queue);
 
+  query_ = &query_ctx->query_graph;
+  n_partitions_ = query_ctx->query_config.use_partitioned_graph ? query_ctx->graph_metadata->numPartitions() : 1;
+  n_labels_ = query_ctx->data_graph->getNumLabels();
+
   auto n_plans = plan_->getNumPartitionedPlans();
   // TODO(tatiana): handle the case with no plan (no match after pruning)
   CHECK_NE(n_plans, 0) << "The case of no plan is not handled yet";
@@ -188,6 +192,12 @@ void ExecutionPlanDriver::taskFinish(std::unique_ptr<TaskBase>& task, Threadsafe
   } else {
     collectTaskInfo(task);
     if (--task_counters_[task->getTaskId()] == 0 && ++n_finished_tasks_ == task_counters_.size()) {
+      if (cost_learner_client_ != nullptr) {
+        auto profiled = dynamic_cast<ProfiledExecutionResult*>(result_);
+        if (profiled != nullptr) {
+          cost_learner_client_->sendUpdates(profiled, plan_, query_, n_partitions_, n_labels_, candidates_);
+        }
+      }
       finishPlan(reply_queue);
     }
   }

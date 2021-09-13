@@ -26,6 +26,7 @@ DECLARE_int32(candidate_set_intersection);
 
 // query optimization
 DECLARE_bool(intersection_count_coefficient);
+DECLARE_string(cost_learner);
 
 DECLARE_bool(standalone);
 DECLARE_string(data_dir);

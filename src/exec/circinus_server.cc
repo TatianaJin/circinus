@@ -187,7 +187,7 @@ void CircinusServer::handleCandidatePhase(const Event& event) {
         !active_queries_[event.query_id].query_context.query_config.use_partitioned_graph) {
       plan_driver = std::make_unique<MatchingParallelExecutionPlanDriver>(plan);
     } else {
-      plan_driver = std::make_unique<ExecutionPlanDriver>(plan);
+      plan_driver = std::make_unique<ExecutionPlanDriver>(plan, &zmq_ctx_);
     }
     active_queries_[event.query_id].plan_time = toSeconds(now, std::chrono::high_resolution_clock::now());
     LOG(INFO) << "Generated backtracking plan in " << active_queries_[event.query_id].plan_time << " seconds";

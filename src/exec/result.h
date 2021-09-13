@@ -170,6 +170,7 @@ class ProfiledExecutionResult : public ExecutionResult {
   }
 
   void setProfiledPlan(uint32_t profile_idx, const std::vector<Operator*>& ops, const InputOperator* input_op);
+  const auto& getProfile(uint32_t profile_idx) const { return profiles_[profile_idx]; }
 
   const auto& getProfiledPlanStrings() const { return profiled_plan_str_; }
 

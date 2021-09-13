@@ -79,6 +79,7 @@ class QueryGraph {
   }
   inline QueryVertexID getVertexOutDegree(QueryVertexID id) const { return vlist_[id + 1] - vlist_[id]; }
   inline LabelID getVertexLabel(QueryVertexID id) const { return labels_[id]; }
+  inline const auto& getLabelArray() const { return labels_; }
 
   /** * @returns a pair { starting neighbor pointer, out degree } */
   inline std::pair<const QueryVertexID*, uint32_t> getOutNeighbors(QueryVertexID id) const {

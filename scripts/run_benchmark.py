@@ -13,6 +13,7 @@ def get_args():
   parser.add_argument('-t', '--time_out', default=300, type=int, help='Query timeout.')
   parser.add_argument('-m', '--match', default='Benchmark', help='The executable for running circinus.')
   parser.add_argument('--threads', default=1, help='The parallelism for query execution.')
+  parser.add_argument('--cost_learner', default="", help='The cost learner address (default: disabled).')
 
   # workload
   group = parser.add_mutually_exclusive_group(required=True)
@@ -55,8 +56,8 @@ def get_log_path(args):
 
 
 def get_common_flags(args, log):
-  return "-match_limit {0} -batch_size {1} -filter {2} -vertex_cover {3} -output_file {4} -match_order {5} -upg {upg} -ipp {ipp} -pqv {pqv} -partition {partition} -num_cores {threads} -candidate_set_intersection {csi}".format(
-    args.limit, args.batch, args.filter, args.strategy, log, args.order, upg=args.upg, ipp=args.ipp, pqv=args.pqv, partition=args.partition, threads=args.threads, csi=args.csi)
+  return "-match_limit {0} -batch_size {1} -filter {2} -vertex_cover {3} -output_file {4} -match_order {5} -upg {upg} -ipp {ipp} -pqv {pqv} -partition {partition} -num_cores {threads} -candidate_set_intersection {csi} -cost_learner {cost_learner}".format(
+    args.limit, args.batch, args.filter, args.strategy, log, args.order, upg=args.upg, ipp=args.ipp, pqv=args.pqv, partition=args.partition, threads=args.threads, csi=args.csi, cost_learner=args.cost_learner)
 
 
 def run_batch(args):

@@ -318,8 +318,9 @@ std::vector<std::pair<uint32_t, std::vector<CandidateScope>>> Planner::generateL
             planners_.pop_back();
             if (global_plan_idx == -1) {
               auto candidate_views = result->getCandidates();
+              // for global plan use candidate cardinality product for lightweight cover selection
               plan = generateLogicalExecutionPlan(getCardinality(candidate_views), DUMMY_QUERY_VERTEX, &candidate_views,
-                                                  &partitioning_qvs);
+                                                  &partitioning_qvs, nullptr, false);
               CHECK(plan != nullptr);  // the entire problem does not have a match if nullptr
               global_plan_idx = backtracking_plan_->addPlan(plan);
             }
@@ -577,7 +578,7 @@ ExecutionPlan* Planner::generateLogicalExecutionPlan(const std::vector<VertexID>
                                                      QueryVertexID require_only,
                                                      const std::vector<CandidateSetView>* candidate_views,
                                                      const std::vector<QueryVertexID>* partitioning_qvs,
-                                                     const std::vector<QueryVertexID>* use_order) {
+                                                     const std::vector<QueryVertexID>* use_order, bool use_cover_path) {
   if (verbosePlannerLog()) {
     std::stringstream ss;
     for (auto c : candidate_cardinality) {
@@ -638,7 +639,8 @@ ExecutionPlan* Planner::generateLogicalExecutionPlan(const std::vector<VertexID>
     break;
   }
   case CompressionStrategy::Dynamic: {
-    plan = planner->generatePlanWithDynamicCover(query_context_->data_graph, candidate_views);
+    plan =
+        planner->generatePlanWithDynamicCover(query_context_->data_graph, use_cover_path ? candidate_views : nullptr);
     plan->setInputAreKeys(plan->isInCover(plan->getRootQueryVertexID()) &&
                           (plan->getToKeyLevel(plan->getRootQueryVertexID()) == 0));
     break;

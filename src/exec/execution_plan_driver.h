@@ -18,6 +18,9 @@
 #include <utility>
 #include <vector>
 
+#include "zmq.hpp"
+
+#include "exec/executor_to_cost_learner_client.h"
 #include "exec/plan_driver.h"
 #include "exec/profile_task.h"
 #include "exec/result.h"
@@ -74,8 +77,18 @@ class ExecutionPlanDriverBase : public PlanDriver {
 /** Supports partition-parallel execution.
  */
 class ExecutionPlanDriver : public ExecutionPlanDriverBase {
+  QueryGraph* query_ = nullptr;
+  uint32_t n_partitions_ = 0;
+  uint32_t n_labels_ = 0;
+  std::unique_ptr<ExecutorToCostLearnerClient> cost_learner_client_;
+
  public:
-  explicit ExecutionPlanDriver(BacktrackingPlan* plan) : ExecutionPlanDriverBase(plan) {}
+  ExecutionPlanDriver(BacktrackingPlan* plan, zmq::context_t* zmq_ctx) : ExecutionPlanDriverBase(plan) {
+    if (!FLAGS_cost_learner.empty()) {
+      CHECK_NOTNULL(zmq_ctx);
+      cost_learner_client_ = std::make_unique<ExecutorToCostLearnerClient>(zmq_ctx, FLAGS_cost_learner);
+    }
+  }
 
   void init(QueryId qid, QueryContext* query_ctx, ExecutionContext& ctx, ThreadsafeTaskQueue& task_queue) override;
 

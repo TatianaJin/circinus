@@ -212,6 +212,7 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
   last_op_ = false;
   // handle following traversals
   for (uint32_t i = 1; i < matching_order.size(); ++i) {
+    auto input_cover_bits = getCoverBit(i);
     for (uint32_t set_i = 0; set_i < set_vertices.size(); ++set_i) {
       DCHECK_EQ(query_vertex_indices_[set_vertices[set_i]], set_i);
     }
@@ -271,6 +272,7 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
     }
     last_op_ = (i == matching_order_.size() - 1);
 
+    op_input_subquery_cover_.emplace_back(i, input_cover_bits, false);
     if (i == 1) {  // the first edge: target has one and only one parent
       if (cover_table_[target_vertex] != 1 && !add_keys_at_level[i].empty()) {
         prev = newEnumerateKeyExpandToSetOperator(key_parents, target_vertex, add_keys_at_level[i],
@@ -299,6 +301,7 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
           prev = current;
           last_op_ = (i == matching_order_.size() - 1);
           current = newExpandIntoOperator(set_parents, target_vertex, key_parents, label_existing_vertices_map);
+          op_input_subquery_cover_.emplace_back(i + 1, input_cover_bits | 1 << target_vertex, true);
         } else if (key_parents.size() == 1) {
           current = newExpandEdgeKeyToKeyOperator(key_parents.front(), target_vertex, same_label_indices);
         } else if (key_parents.size() > 1) {

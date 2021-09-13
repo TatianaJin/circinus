@@ -64,6 +64,9 @@ class ExecutionPlan {
   // transient variable for populating plan
   bool last_op_ = false;
 
+  // for profile, subquery size, cover bits, remove parent edge flag
+  std::vector<std::tuple<uint32_t, uint64_t, bool>> op_input_subquery_cover_;
+
   void addKeys(const std::vector<QueryVertexID>& keys_to_add, std::vector<QueryVertexID>& set_vertices,
                uint32_t& n_keys) {
     for (auto v : keys_to_add) {
@@ -75,6 +78,16 @@ class ExecutionPlan {
       v_idx = n_keys++;
       cover_table_[v] = 1;
     }
+  }
+
+  inline uint64_t getCoverBit(uint32_t size) const {
+    uint64_t bits = 0;
+    for (uint32_t i = 0; i < size; ++i) {
+      if (isInCover(matching_order_[i])) {
+        bits |= 1 << matching_order_[i];
+      }
+    }
+    return bits;
   }
 
  public:
@@ -106,6 +119,8 @@ class ExecutionPlan {
 
   inline void setStepCosts(std::vector<double>&& step_costs) { step_costs_ = std::move(step_costs); }
   inline const auto& getStepCosts() const { return step_costs_; }
+
+  const auto& getOpInputSubqueryCover() const { return op_input_subquery_cover_; }
 
   void printPhysicalPlan() const {
     if (operators_.empty()) return;

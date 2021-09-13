@@ -45,18 +45,34 @@ def check_embeddings(target, groundtruth_file):
   return 0
 
 
-def compare_time(target, baseline_file, time_name='enumerate_time'):
-  baseline = read(baseline_file)[[time_name]].dropna()
-  print("Complete queries (target/baseline):\t{0}/{1}".format(len(target), len(baseline)))
-  comparison = baseline.join(target[[time_name]], lsuffix='_base', rsuffix='_check').dropna()
-  speedup = comparison[time_name + '_base'] - comparison[time_name + '_check']
+def compare_time(target, baseline_file, time_name=['enumerate_time']):
+  if time_name is None or len(time_name) == 0:
+      return
+  baseline = read(baseline_file)[time_name].dropna()
+  if len(time_name) == 1:
+      print("Complete queries (target/baseline):\t{0}/{1}".format(len(target), len(baseline)))
+      target = target[time_name]
+      comparison_name = time_name[0]
+  else:
+      print("Complete queries (target/baseline):\t{0}/{1}".format(len(target), len(baseline)))
+      baseline['sum_time'] = baseline[time_name[0]]
+      for col in time_name[1:]:
+          baseline['sum_time'] += baseline[col]
+      #baseline = baseline[['sum_time']]
+      target['sum_time'] = target[time_name[0]]
+      for col in time_name[1:]:
+          target['sum_time'] += target[col]
+      #target = target[['sum_time']]
+      comparison_name = 'sum_time'
+  comparison = baseline.join(target, lsuffix='_base', rsuffix='_check').dropna()
+  speedup = comparison[comparison_name + '_base'] - comparison[comparison_name + '_check']
   comparison['speedup'] = speedup
-  comparison['speedup_ratio'] = speedup / comparison[time_name + '_base']
+  comparison['speedup_ratio'] = speedup / comparison[comparison_name + '_base']
   print(comparison[['speedup', 'speedup_ratio']].describe())
   print("Total speedup (seconds)", speedup.sum())
   # print(comparison.iloc[speedup.argmin()])
   if sum(speedup < 0) > 0:
-    print(comparison[["speedup", time_name + '_base', 'speedup_ratio']].loc[speedup < 0].sort_values(by='speedup', ascending=True))
+    print(comparison[["speedup", comparison_name + '_base', 'speedup_ratio']].loc[speedup < 0].sort_values(by='speedup', ascending=True))
 
 
 def get_missing_query_config(target, config_file):
@@ -268,8 +284,10 @@ def analyze_profile(folder, corr=True, candidate=False, cost_time_reg=True):
 
 
 def plan_time_analysis(target, baseline_file):
-  compare_time(target, baseline_file, 'plan_time')
+  compare_time(target, baseline_file, ['plan_time', 'enumerate_time'])
   print(target.nlargest(10, 'plan_time'))
+  print("< 1 second query total plan time", target['plan_time'].loc[target['enumerate_time'] < 1].sum(), "total enumerate time", target['enumerate_time'].loc[target['enumerate_time'] < 1].sum(), "count",len(target['plan_time'].loc[target['enumerate_time'] < 1]))
+  print("total plan time", target['plan_time'].sum(), "total enumerate time", target['enumerate_time'].sum(), "count",len(target['plan_time']))
 
 
 if __name__ == '__main__':

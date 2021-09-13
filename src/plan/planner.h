@@ -113,7 +113,8 @@ class Planner {
   ExecutionPlan* generateLogicalExecutionPlan(const std::vector<VertexID>& cardinality, QueryVertexID require_only,
                                               const std::vector<CandidateSetView>* candidate_views = nullptr,
                                               const std::vector<QueryVertexID>* partitioning_qvs = nullptr,
-                                              const std::vector<QueryVertexID>* use_order = nullptr);
+                                              const std::vector<QueryVertexID>* use_order = nullptr,
+                                              bool use_cover_path = true);
 
   void exhaustivePartitionPlan(std::vector<std::vector<CandidateScope>>& partitioned_plans, uint32_t level,
                                uint32_t partition_num, const std::vector<QueryVertexID>& partitioning_qv,

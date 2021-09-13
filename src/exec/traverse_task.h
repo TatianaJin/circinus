@@ -143,8 +143,8 @@ class TraverseChainTask : public TaskBase {
       }
       LOG(INFO) << "-------- Task " << task_id_ << " candidate sizes " << ss.str();
     }
-    uint32_t old_count = 0;
-    uint32_t new_count = 0;
+    uint64_t old_count = 0;
+    uint64_t new_count = 0;
 
     if (end_level_ == operators_.size() - 1) {
       old_count = dynamic_cast<OutputOperator*>(operators_.back())->getOutput()->getCount(executor_idx);
@@ -185,8 +185,8 @@ class TraverseChainTask : public TaskBase {
     // ProfilerStart(profile_output.data());
     // TODO(tatiana): support match limit
     auto start = std::chrono::steady_clock::now();
-    uint32_t old_count = 0;
-    uint32_t new_count = 0;
+    uint64_t old_count = 0;
+    uint64_t new_count = 0;
     if (end_level_ == operators_.size() - 1) {
       old_count = dynamic_cast<OutputOperator*>(operators_.back())->getOutput()->getCount(executor_idx);
     }
