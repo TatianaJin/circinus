@@ -87,10 +87,11 @@ class ExpandEdgeKeyToSetOperator : public ExpandEdgeOperator {
     return {input_key_size.first, input_key_size.second + 1};
   }
 
-  std::unique_ptr<TraverseContext> initTraverseContext(const CandidateSetView* candidates,
-                                                       std::vector<CompressedSubgraphs>* outputs, const void* graph,
-                                                       QueryType profile) const override {
-    return std::make_unique<ExpandEdgeTraverseContext>(candidates, graph, outputs, profile, intersect_candidates);
+  std::unique_ptr<TraverseContext> initTraverseContext(
+      const CandidateSetView* candidates, std::vector<CompressedSubgraphs>* outputs, const void* graph,
+      QueryType profile, const unordered_set<VertexID>* candidate_hashmap) const override {
+    return std::make_unique<ExpandEdgeTraverseContext>(candidates, graph, outputs, profile, intersect_candidates,
+                                                       candidate_hashmap);
   }
 
  private:
@@ -129,8 +130,9 @@ class ExpandEdgeKeyToSetOperator : public ExpandEdgeOperator {
 class ExpandEdgeKeyToKeyTraverseContext : public ExpandEdgeTraverseContext, public TargetBuffer {
  public:
   ExpandEdgeKeyToKeyTraverseContext(const CandidateSetView* candidates, const void* graph,
-                                    std::vector<CompressedSubgraphs>* outputs, QueryType profile, bool hash_candidates)
-      : ExpandEdgeTraverseContext(candidates, graph, outputs, profile, hash_candidates) {}
+                                    std::vector<CompressedSubgraphs>* outputs, QueryType profile, bool hash_candidates,
+                                    const unordered_set<VertexID>* candidate_hashmap)
+      : ExpandEdgeTraverseContext(candidates, graph, outputs, profile, hash_candidates, candidate_hashmap) {}
 
   std::unique_ptr<TraverseContext> clone() const override {
     return std::make_unique<ExpandEdgeKeyToKeyTraverseContext>(*this);
@@ -175,11 +177,11 @@ class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
     return {input_key_size.first + 1, input_key_size.second + 1};
   }
 
-  std::unique_ptr<TraverseContext> initTraverseContext(const CandidateSetView* candidates,
-                                                       std::vector<CompressedSubgraphs>* outputs, const void* graph,
-                                                       QueryType profile) const override {
+  std::unique_ptr<TraverseContext> initTraverseContext(
+      const CandidateSetView* candidates, std::vector<CompressedSubgraphs>* outputs, const void* graph,
+      QueryType profile, const unordered_set<VertexID>* candidate_hashmap) const override {
     return std::make_unique<ExpandEdgeKeyToKeyTraverseContext>(candidates, graph, outputs, profile,
-                                                               intersect_candidates);
+                                                               intersect_candidates, candidate_hashmap);
   }
 
  private:
@@ -267,7 +269,7 @@ class ExpandEdgeSetToKeyTraverseContext : public ExpandEdgeTraverseContext {
   ExpandEdgeSetToKeyTraverseContext(const CandidateSetView* candidates, const void* graph,
                                     std::vector<CompressedSubgraphs>* outputs, QueryType profile,
                                     uint64_t candidate_neighbor_size = 0)
-      : ExpandEdgeTraverseContext(candidates, graph, outputs, profile, false),
+      : ExpandEdgeTraverseContext(candidates, graph, outputs, profile, false, nullptr),
         candidates_(candidates),
         candidates_neighbor_size_(candidate_neighbor_size) {}
 
@@ -526,9 +528,9 @@ class ExpandEdgeSetToKeyOperator : public ExpandEdgeOperator {
     return {input_key_size.first + 1, input_key_size.second + 1};
   }
 
-  std::unique_ptr<TraverseContext> initTraverseContext(const CandidateSetView* candidates,
-                                                       std::vector<CompressedSubgraphs>* outputs, const void* graph,
-                                                       QueryType profile) const override {
+  std::unique_ptr<TraverseContext> initTraverseContext(
+      const CandidateSetView* candidates, std::vector<CompressedSubgraphs>* outputs, const void* graph,
+      QueryType profile, const unordered_set<VertexID>* candidate_hashmap) const override {
     auto ret = std::make_unique<ExpandEdgeSetToKeyTraverseContext>(candidates, graph, outputs, profile);
     if (ret->init<G>(*candidates, parent_label_)) return nullptr;  // prune the whole traverse chain
     return ret;
@@ -559,10 +561,10 @@ class ExpandEdgeSetToKeyOperator : public ExpandEdgeOperator {
     /* ByParent requires all parent to be processed before the outputs become ready, and thus the output size is unknown
      * in advance and unbounded. ByExtension incurs extra set intersection, but the output size can be bounded. */
     if (std::min(ctx->getCandidateSet()->size(), set_neighbor_size) <=
-        cap) {  // here we use set_neighbor_size to approximate the output size. as long as the
-                // output size does not exceed cap, ByParent is preferred than ByExtension.
-                // TODO(tatiana): consider better estimation on the output size
-      return ByParent;
+        cap) {             // here we use set_neighbor_size to approximate the output size. as long as the
+                           // output size does not exceed cap, ByParent is preferred than ByExtension.
+                           // TODO(tatiana): consider better estimation on the output size
+      return ByExtension;  // return ByParent;
     }
     return ByExtension;
   }

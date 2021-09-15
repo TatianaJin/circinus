@@ -470,6 +470,10 @@ std::vector<std::pair<uint32_t, std::vector<QueryVertexID>>> Planner::generatePa
     auto& partition = partition_plans[pidx];
     QueryVertexID parallel_qv = planners_[partition.first]->selectParallelizingQueryVertex(
         backtracking_plan_->getPlan(partition.first)->getQueryCoverBits(), std::vector<QueryVertexID>{});
+    if (parallel_qv == DUMMY_QUERY_VERTEX) {
+      parallel_opids[pidx] = std::make_pair(partition.first, std::vector<QueryVertexID>());
+      continue;
+    }
     const std::vector<QueryVertexID>& matching_order = planners_[partition.first]->getMatchingOrder();
     // find matching order of parallel_qv
     uint32_t parallel_qv_order =
@@ -534,7 +538,6 @@ BacktrackingPlan* Planner::generateExecutionPlan(const CandidateResult* result, 
 
   auto t1 = std::chrono::steady_clock::now();
   LOG(INFO) << ">>>>>>>>>> Time to generateLogicalPlans " << toSeconds(t0, t1) << "s";
-  std::vector<std::pair<uint32_t, std::vector<QueryVertexID>>> parallel_opids;
   // 4. parallelize partitioned plans for better concurrency and load balance
   if (multithread) {
     // parallelizePartitionedPlans(partitioning_qv, &partition_plans, partitioned_result);
@@ -542,7 +545,9 @@ BacktrackingPlan* Planner::generateExecutionPlan(const CandidateResult* result, 
 
     // auto t2 = std::chrono::steady_clock::now();
     // LOG(INFO) << ">>>>>>>>>> Time to parallelizePartitionedPlans " << toSeconds(t1, t2) << "s";
-    parallel_opids = generateParallelQueryVertex(partition_plans);
+
+    // FIXME(tatiana): remove?
+    backtracking_plan_->addParallelOpids(generateParallelQueryVertex(partition_plans));
   }
 
   // TODO(tatiana): check for prunable partitioned plans
@@ -564,7 +569,6 @@ BacktrackingPlan* Planner::generateExecutionPlan(const CandidateResult* result, 
   }
 
   backtracking_plan_->addPartitionedPlans(std::move(partition_plans));
-  backtracking_plan_->addParallelOpids(std::move(parallel_opids));
   return backtracking_plan_.get();
 }
 

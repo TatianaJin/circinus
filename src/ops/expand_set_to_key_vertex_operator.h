@@ -106,9 +106,9 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
 
   inline void setParentLabels(std::vector<LabelID>&& parent_labels) { parent_labels_ = std::move(parent_labels); }
 
-  std::unique_ptr<TraverseContext> initTraverseContext(const CandidateSetView* candidates,
-                                                       std::vector<CompressedSubgraphs>* outputs, const void* graph,
-                                                       QueryType profile) const override {
+  std::unique_ptr<TraverseContext> initTraverseContext(
+      const CandidateSetView* candidates, std::vector<CompressedSubgraphs>* outputs, const void* graph,
+      QueryType profile, const unordered_set<VertexID>* candidate_hashmap) const override {
     return std::make_unique<ExpandSetToKeyVertexTraverseContext>(candidates, graph, outputs, profile, parents_.size());
   }
 

@@ -510,7 +510,8 @@ ExecutionPlan* NaivePlanner::generatePlanWithDynamicCover(const GraphBase* data_
 }
 
 QueryVertexID NaivePlanner::selectParallelizingQueryVertex(
-    uint64_t cover_bits, const std::vector<QueryVertexID>& parallelizing_qv_candidates) {
+    uint64_t cover_bits, const std::vector<QueryVertexID>& parallelizing_qv_candidates,
+    double parallelization_threshold) {
   if (!parallelizing_qv_candidates.empty()) {
     for (auto v : parallelizing_qv_candidates) {  // pick a parallelizing qv from the candidates which is in cover
       if (cover_bits >> v & 1) {
@@ -519,9 +520,12 @@ QueryVertexID NaivePlanner::selectParallelizingQueryVertex(
     }
   }
   // select parallelizing query vertex greater than threshold
-  double threshold = 0.05;
+  constexpr double threshold = 0.05;
   const std::vector<double>& step_costs = plan_.getStepCosts();
   double sum_costs = std::accumulate(step_costs.begin(), step_costs.end(), 0.0);
+  if (sum_costs <= parallelization_threshold) {
+    return DUMMY_QUERY_VERTEX;
+  }
   double prefix_sum = 0.0;
   for (uint32_t i = 1; i < matching_order_.size(); ++i) {
     prefix_sum += step_costs[i];

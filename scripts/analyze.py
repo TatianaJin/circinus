@@ -249,7 +249,7 @@ def topo_performance_analysis2(target, topo_path, baseline_file):
     #print("model", reg.coef_, reg.intercept_)
 
 
-def analyze_profile(folder, corr=True, candidate=False, cost_time_reg=True):
+def analyze_profile(folder, corr=True, candidate=False, cost_time_reg=True, si_count_time_reg=True):
   profiles = [name for name in listdir(folder) if name != "log" and not name.endswith(".swp") and not name.endswith(".log")]
 
   df = None
@@ -257,6 +257,12 @@ def analyze_profile(folder, corr=True, candidate=False, cost_time_reg=True):
     df = read_profile(osp.join(folder, name), df)
   #print(df)
   pd.set_option('display.max_rows', None)  # print all rows without ellipsis
+  if si_count_time_reg:
+    count_time = df.groupby('query')[['si_count', 'time']].sum()
+    reg = LinearRegression().fit(count_time[['si_count']], count_time['time'])
+    print("R square =", reg.score(count_time[['si_count']], count_time['time']))
+    print("model", reg.coef_, reg.intercept_)
+    print(count_time.loc[count_time['time'] < 1000]['si_count'].describe())
   if corr:
     print("================================== Correlation ==================================")
     print(df[['cost', 'si_count', 'si_input', 'time']].corr())

@@ -99,9 +99,9 @@ class TraverseOperator : public Operator {
   virtual std::vector<std::unique_ptr<GraphPartitionBase>> computeGraphPartitions(
       const ReorderedPartitionedGraph* g, const std::vector<CandidateScope>& candidate_scopes) const = 0;
 
-  virtual std::unique_ptr<TraverseContext> initTraverseContext(const CandidateSetView* candidates,
-                                                               std::vector<CompressedSubgraphs>* outputs,
-                                                               const void* graph, QueryType profile) const = 0;
+  virtual std::unique_ptr<TraverseContext> initTraverseContext(
+      const CandidateSetView* candidates, std::vector<CompressedSubgraphs>* outputs, const void* graph,
+      QueryType profile, const unordered_set<VertexID>* candidate_hashmap = nullptr) const = 0;
 
   virtual std::pair<uint32_t, uint32_t> getOutputSize(const std::pair<uint32_t, uint32_t>& input_key_size) const = 0;
 

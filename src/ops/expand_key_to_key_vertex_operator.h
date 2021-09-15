@@ -81,9 +81,9 @@ class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
     return {input_key_size.first + 1, input_key_size.second + 1};
   }
 
-  std::unique_ptr<TraverseContext> initTraverseContext(const CandidateSetView* candidates,
-                                                       std::vector<CompressedSubgraphs>* outputs, const void* graph,
-                                                       QueryType profile) const override {
+  std::unique_ptr<TraverseContext> initTraverseContext(
+      const CandidateSetView* candidates, std::vector<CompressedSubgraphs>* outputs, const void* graph,
+      QueryType profile, const unordered_set<VertexID>* candidate_hashmap) const override {
     auto ret =
         std::make_unique<ExpandKeyToKeyVertexTraverseContext>(candidates, graph, outputs, profile, parents_.size());
 #ifdef INTERSECTION_CACHE

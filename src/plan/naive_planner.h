@@ -134,7 +134,8 @@ class NaivePlanner {
   inline const std::vector<QueryVertexID>& getMatchingOrder() { return matching_order_; }
 
   QueryVertexID selectParallelizingQueryVertex(uint64_t cover_bits,
-                                               const std::vector<QueryVertexID>& parallelizing_qv_candidates);
+                                               const std::vector<QueryVertexID>& parallelizing_qv_candidates,
+                                               double parallelization_threshold = 5e5);
 
  private:
   /* Start of implementations of compression strategy */
@@ -237,9 +238,27 @@ class NaivePlanner {
 
   inline double getCardinality(std::vector<unordered_map<uint64_t, double>>& car, uint32_t level, uint64_t cover_bits,
                                const GraphBase* data_graph, const std::vector<CandidateSetView>* candidate_views) {
+    if
+      constexpr(false) {
+        // share costs among identical covers across levels
+        auto pos = car.front().find(cover_bits);
+        if (pos == car.front().end()) {
+          auto cardinality = estimateCardinality(data_graph, *candidate_views, cover_bits, level);
+          pos = car.front().insert({cover_bits, cardinality}).first;
+        }
+        return pos->second;
+      }
+    // seperate cover cost for each level
     auto pos = car[level].find(cover_bits);
     if (pos == car[level].end()) {
       auto cardinality = estimateCardinality(data_graph, *candidate_views, cover_bits, level);
+      if
+        constexpr(false && level > 1) {
+          auto last_pos = car[level - 1].find(cover_bits);
+          if (last_pos != car[level - 1].end()) {
+            cardinality = std::min(cardinality, last_pos->second);
+          }
+        }
       pos = car[level].insert({cover_bits, cardinality}).first;
     }
     return pos->second;

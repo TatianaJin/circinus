@@ -49,7 +49,6 @@ class InputOperator : public Operator {
                                std::vector<CompressedSubgraphs>* output, ProfileInfo* info) const {
     auto start = std::chrono::high_resolution_clock::now();
     *output = getInputs(g, candidates);
-    LOG(INFO) << "------------";
     auto end = std::chrono::high_resolution_clock::now();
     info->total_time_in_milliseconds += toMilliseconds(start, end);
   }

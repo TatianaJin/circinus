@@ -70,9 +70,9 @@ class ExpandIntoOperator : public TraverseOperator {
     return expandInner<QueryType::ProfileWithMiniIntersection>(batch_size, ctx);
   }
 
-  std::unique_ptr<TraverseContext> initTraverseContext(const CandidateSetView* candidates,
-                                                       std::vector<CompressedSubgraphs>* outputs, const void* graph,
-                                                       QueryType profile) const override {
+  std::unique_ptr<TraverseContext> initTraverseContext(
+      const CandidateSetView* candidates, std::vector<CompressedSubgraphs>* outputs, const void* graph,
+      QueryType profile, const unordered_set<VertexID>* candidate_hashmap) const override {
     return std::make_unique<ExpandVertexTraverseContext>(candidates, graph, outputs, profile, parents_.size());
   }
 

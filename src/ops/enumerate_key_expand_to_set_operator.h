@@ -144,9 +144,9 @@ class EnumerateKeyExpandToSetOperator : public ExpandVertexOperator {
     return expandInner<QueryType::ProfileWithMiniIntersection>(batch_size, ctx);
   }
 
-  std::unique_ptr<TraverseContext> initTraverseContext(const CandidateSetView* candidates,
-                                                       std::vector<CompressedSubgraphs>* outputs, const void* graph,
-                                                       QueryType profile) const override {
+  std::unique_ptr<TraverseContext> initTraverseContext(
+      const CandidateSetView* candidates, std::vector<CompressedSubgraphs>* outputs, const void* graph,
+      QueryType profile, const unordered_set<VertexID>* candidate_hashmap) const override {
     auto ret = std::make_unique<EnumerateTraverseContext>(
         candidates, graph, outputs, profile, keys_to_enumerate_.size(), query_vertex_indices_.size(),
         query_vertex_indices_.size() - 1 - query_vertex_indices_.at(target_vertex_),

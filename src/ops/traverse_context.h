@@ -53,6 +53,15 @@ class TraverseContext : public ProfileInfo {
   inline auto getOutputSize() const { return output_idx_; }
   inline auto getQueryType() const { return query_type_; }
 
+  bool canSplitInput() const { return input_index_ + 1 < input_end_index_; }
+  std::pair<const CompressedSubgraphs*, uint32_t> splitInput() {
+    // uint32_t split_count = (input_end_index_ - input_index_) / 2;  // equally divide by 2
+    uint32_t split_count = input_end_index_ - input_index_ - 1;
+    DCHECK_GT(split_count, 0);
+    input_end_index_ -= split_count;
+    return std::make_pair(&(*current_inputs_)[input_end_index_], split_count);
+  }
+
   template <typename G>
   inline const G* getDataGraph() const {
     return reinterpret_cast<const G*>(current_data_graph_);
@@ -67,6 +76,10 @@ class TraverseContext : public ProfileInfo {
   }
 
   inline void setOutputBuffer(std::vector<CompressedSubgraphs>& outputs) { outputs_ = &outputs; }
+  inline void setOutputBuffer(std::vector<CompressedSubgraphs>& outputs, uint32_t existing_size) {
+    outputs_ = &outputs;
+    output_idx_ = existing_size;
+  }
   inline void popOutputs(uint32_t size) { output_idx_ -= size; }
   inline void popOutput() { --output_idx_; }
   inline void resetOutputs() { output_idx_ = 0; }

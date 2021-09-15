@@ -34,15 +34,22 @@ class ExpandEdgeTraverseContext : public TraverseContext, public IntersectionCac
 #else
 class ExpandEdgeTraverseContext : public TraverseContext {
 #endif
-  std::shared_ptr<unordered_set<VertexID>> candidate_set_;
+  unordered_set<VertexID> candidate_set_;
+  const unordered_set<VertexID>* candidate_hashmap_;
   unordered_set<VertexID> parent_set_;  // for profile
 
  public:
   ExpandEdgeTraverseContext(const CandidateSetView* candidates, const void* graph,
-                            std::vector<CompressedSubgraphs>* outputs, QueryType profile, bool hash_candidates)
+                            std::vector<CompressedSubgraphs>* outputs, QueryType profile, bool hash_candidates,
+                            const unordered_set<VertexID>* candidate_hashmap)
       : TraverseContext(graph, outputs, profile) {
     if (hash_candidates) {
-      candidate_set_ = std::make_shared<unordered_set<VertexID>>(candidates->begin(), candidates->end());
+      if (candidate_hashmap != nullptr) {
+        candidate_hashmap_ = candidate_hashmap;
+      } else {
+        candidate_set_ = unordered_set<VertexID>(candidates->begin(), candidates->end());
+        candidate_hashmap_ = &candidate_set_;
+      }
     }
   }
 
@@ -65,7 +72,7 @@ class ExpandEdgeTraverseContext : public TraverseContext {
 
   inline bool hasIntersectionParent(VertexID parent_match) { return parent_set_.insert(parent_match).second; }
 
-  const unordered_set<VertexID>& getCandidateSet() const { return *candidate_set_; }
+  const unordered_set<VertexID>& getCandidateSet() const { return *candidate_hashmap_; }
 };
 
 class ExpandEdgeOperator : public TraverseOperator {

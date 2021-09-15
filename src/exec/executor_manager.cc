@@ -61,6 +61,8 @@ void ExecutorManager::run(QueryId qid, QueryContext* query_ctx, std::unique_ptr<
               .insert({qid, std::make_pair(std::make_pair(getExecutionConfig(), nullptr), std::move(plan_driver))})
               .first;
     } else if (plan_driver != nullptr) {
+      // reset max parallelism for a new driver
+      ctx_pos->second.first.first.setMaxParallelism(executors_.getNumExecutors() * SHARDING_FACTOR);
       ctx_pos->second.second = std::move(plan_driver);  // update driver
     }
     driver = ctx_pos->second.second.get();

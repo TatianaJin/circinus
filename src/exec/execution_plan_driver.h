@@ -32,6 +32,8 @@
 
 namespace circinus {
 
+#define DEFAULT_SUSPEND_INTERVAL 0.2
+
 class ExecutionPlanDriverBase : public PlanDriver {
  protected:
   uint32_t batch_size_;
@@ -41,7 +43,15 @@ class ExecutionPlanDriverBase : public PlanDriver {
   std::chrono::time_point<std::chrono::high_resolution_clock> start_time_;
   QueryType query_type_;
   std::vector<std::vector<CandidateSetView>> candidates_;
+  std::vector<std::vector<std::shared_ptr<unordered_set<VertexID>>>> candidate_hashmaps_;
   bool is_time_out_ = false;
+
+  constexpr static float running_average_decay_ = 0.5;
+  double running_average_enumerate_time_ = DEFAULT_SUSPEND_INTERVAL;
+  double min_suspend_interval_ = DEFAULT_SUSPEND_INTERVAL;
+  double suspend_interval_ = DEFAULT_SUSPEND_INTERVAL;  // determined by average task enumerate time and min interval
+  uint32_t max_parallelism_ = 1;
+  uint32_t n_finished_task_instances_ = 0;
 
  public:
   explicit ExecutionPlanDriverBase(BacktrackingPlan* plan) : plan_(plan) {}
@@ -53,7 +63,10 @@ class ExecutionPlanDriverBase : public PlanDriver {
 
   void taskTimeOut(std::unique_ptr<TaskBase>& task, ThreadsafeQueue<ServerEvent>* reply_queue) override;
 
-  inline void collectTaskInfo(std::unique_ptr<TaskBase>& task) const {
+  inline void collectTaskInfo(std::unique_ptr<TaskBase>& task) {
+    running_average_enumerate_time_ = running_average_enumerate_time_ * (1 - running_average_decay_) +
+                                      running_average_decay_ * task->getExecutionTime();
+    ++n_finished_task_instances_;
     result_->addEnumerateTime(task->getExecutionTime());
     result_->collect(task);
   }
@@ -70,6 +83,10 @@ class ExecutionPlanDriverBase : public PlanDriver {
     } else {
       task = new TaskType(std::forward<Args>(args)...);
     }
+    if (std::is_same_v<TaskType, TraverseTask>) {
+      ((TraverseTask*)task)->setSuspendInterval(suspend_interval_);
+      ((TraverseTask*)task)->setSplitSize(max_parallelism_);
+    }
     task_queue->putTask(task);
   }
 };
@@ -81,6 +98,7 @@ class ExecutionPlanDriver : public ExecutionPlanDriverBase {
   uint32_t n_partitions_ = 0;
   uint32_t n_labels_ = 0;
   std::unique_ptr<ExecutorToCostLearnerClient> cost_learner_client_;
+  uint32_t n_pending_tasks_ = 0;
 
  public:
   ExecutionPlanDriver(BacktrackingPlan* plan, zmq::context_t* zmq_ctx) : ExecutionPlanDriverBase(plan) {
