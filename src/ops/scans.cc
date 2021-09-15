@@ -46,6 +46,20 @@ class LDFScanBase : public Scan {
   void scan(const Graph* g, ScanContext* ctx) const override {
     auto& input = *g->getVerticesByLabel(label_);
     if (ctx->scan_offset >= ctx->scan_end) return;
+    if (ctx->vertex_id == ctx->seed.first) {
+      if (input[ctx->scan_offset] > ctx->seed.second || input[ctx->scan_end - 1] < ctx->seed.second) {
+        return;
+      }
+      while (ctx->scan_offset < ctx->scan_end) {
+        auto v = input[ctx->scan_offset++];
+        if (v != ctx->seed.second) continue;
+        if (g->getVertexOutDegree(v) >= min_out_degree_ &&
+            (!directed || (static_cast<const DirectedGraph*>(g)->getVertexInDegree(v) >= min_in_degree_)) &&
+            validate(*g, v)) {
+          ctx->candidates.push_back(v);
+        }
+      }
+    }
     while (ctx->scan_offset < ctx->scan_end) {
       auto v = input[ctx->scan_offset++];
       if (g->getVertexOutDegree(v) >= min_out_degree_ &&
@@ -60,6 +74,18 @@ class LDFScanBase : public Scan {
     DCHECK(!directed) << "now graph partition only support undirected graph";
     auto range_start = g->getVertexRangeByLabel(label_).first;
     if (ctx->scan_offset >= ctx->scan_end) return;
+    if (ctx->vertex_id == ctx->seed.first) {
+      if (range_start + ctx->scan_offset > ctx->seed.second || range_start + (ctx->scan_end - 1) < ctx->seed.second) {
+        return;
+      }
+      while (ctx->scan_offset < ctx->scan_end) {
+        auto v = range_start + ctx->scan_offset++;
+        if (v != ctx->seed.second) continue;
+        if (g->getVertexOutDegree(v) >= min_out_degree_ && validate(*g, v)) {
+          ctx->candidates.push_back(v);
+        }
+      }
+    }
     while (ctx->scan_offset < ctx->scan_end) {
       auto v = range_start + ctx->scan_offset++;
       if (g->getVertexOutDegree(v) >= min_out_degree_ && validate(*g, v)) {
@@ -91,6 +117,8 @@ class LDFFullScanBase : public LDFScanBase<directed> {
     if (ctx->scan_offset >= ctx->scan_end) return;
     while (ctx->scan_offset < ctx->scan_end) {
       auto v = g->getVertexGlobalId(ctx->scan_offset++);
+      LOG(INFO) << v;
+      if (v != ctx->seed.second) continue;
       if (g->getVertexLabel(v) == this->label_ && g->getVertexOutDegree(v) >= this->min_out_degree_ &&
           (!directed || (static_cast<const DirectedGraph*>(g)->getVertexInDegree(v) >= this->min_in_degree_)) &&
           this->validate(*g, v)) {

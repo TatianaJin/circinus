@@ -65,6 +65,7 @@ using circinus::Profiler;
 using circinus::QueryType;
 using circinus::TraverseOperator;
 using circinus::INVALID_VERTEX_ID;
+using circinus::DUMMY_QUERY_VERTEX;
 // logical filter
 using circinus::LogicalCFLFilter;
 using circinus::LogicalGQLFilter;
@@ -103,7 +104,7 @@ std::pair<std::vector<std::vector<VertexID>>, std::vector<VertexID>> getCandidat
     if (filter_str.compare("ldf") && filter_str.compare("dpiso")) {
       scan->addFilter(std::make_unique<NLFFilter>(&q, v));
     }
-    auto scan_ctx = scan->initScanContext(0);
+    auto scan_ctx = scan->initScanContext(v, 0, {DUMMY_QUERY_VERTEX, 0});
     scan->scan(&g, &scan_ctx);
     candidates[v] = std::move(scan_ctx.candidates);
     candidate_size[v] = candidates[v].size();
@@ -116,7 +117,7 @@ std::pair<std::vector<std::vector<VertexID>>, std::vector<VertexID>> getCandidat
     auto metadata = GraphMetadata(g);
     std::unique_ptr<LogicalNeighborhoodFilter> logical_filter;
     if (filter_str.compare("cfl") == 0) {
-      logical_filter = std::make_unique<LogicalCFLFilter>(metadata, &q, candidate_size);
+      logical_filter = std::make_unique<LogicalCFLFilter>(metadata, &q, candidate_size, DUMMY_QUERY_VERTEX);
     } else if (filter_str.compare("dpiso") == 0) {
       logical_filter = std::make_unique<LogicalDAFFilter>(metadata, &q, candidate_size);
     } else if (filter_str.compare("tso") == 0) {
@@ -159,15 +160,15 @@ std::vector<QueryVertexID> getOrder(const Graph* data_graph, const QueryGraph* q
   OrderGenerator order_generator =
       OrderGenerator((const GraphBase*)data_graph, metadata, query_graph, candidate_views, candidate_sizes);
   if (filter_str.compare("cfl") == 0) {
-    return order_generator.getOrder(OrderStrategy::CFL);
+    return order_generator.getOrder(OrderStrategy::CFL, DUMMY_QUERY_VERTEX);
   } else if (filter_str.compare("dpiso") == 0) {
-    return order_generator.getOrder(OrderStrategy::DAF);
+    return order_generator.getOrder(OrderStrategy::DAF, DUMMY_QUERY_VERTEX);
   } else if (filter_str.compare("tso") == 0) {
-    return order_generator.getOrder(OrderStrategy::TSO);
+    return order_generator.getOrder(OrderStrategy::TSO, DUMMY_QUERY_VERTEX);
   } else if (filter_str.compare("gql") == 0) {
-    return order_generator.getOrder(OrderStrategy::GQL);
+    return order_generator.getOrder(OrderStrategy::GQL, DUMMY_QUERY_VERTEX);
   } else {
-    return order_generator.getOrder(OrderStrategy::None);
+    return order_generator.getOrder(OrderStrategy::None, DUMMY_QUERY_VERTEX);
   }
 }
 

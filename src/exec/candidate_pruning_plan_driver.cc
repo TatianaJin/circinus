@@ -50,7 +50,8 @@ void CandidatePruningPlanDriver::initPhase1TasksForPartitionedGraph(QueryId qid,
       auto& scan = scans[task_id];
       if (scan != nullptr) {
         task_counters_[task_id] += scan->getParallelism();
-        tasks.push_back(new ScanTask(qid, task_id, query_ctx->stop_time, 0, scan.get(), query_ctx->data_graph, i));
+        tasks.push_back(new ScanTask(qid, task_id, query_ctx->stop_time, 0, scan.get(), query_ctx->data_graph, i,
+                                     query_ctx->query_config.seed));
         operators_.push_back(std::move(scan));
       } else {
         DLOG(INFO) << "partition " << i << '/' << n_partitions << " no candidates for " << task_id;
@@ -93,7 +94,8 @@ void CandidatePruningPlanDriver::init(QueryId qid, QueryContext* query_ctx, Exec
       CHECK(scan != nullptr) << task_id;
       task_counters_[task_id] = scan->getParallelism();
       for (uint32_t i = 0; i < scan->getParallelism(); ++i) {
-        task_queue.putTask(new ScanTask(qid, task_id, query_ctx->stop_time, i, scan.get(), query_ctx->data_graph));
+        task_queue.putTask(new ScanTask(qid, task_id, query_ctx->stop_time, i, scan.get(), query_ctx->data_graph,
+                                        query_ctx->query_config.seed));
       }
       DLOG(INFO) << "Query " << qid << " Task " << task_id << " " << scan->getParallelism() << " shard(s)";
       operators_.push_back(std::move(scan));
@@ -102,20 +104,20 @@ void CandidatePruningPlanDriver::init(QueryId qid, QueryContext* query_ctx, Exec
     LOG(INFO) << "Candidate pruning phase 3";
     auto filters = plan_->getFilterOperators(*query_ctx->graph_metadata, ctx.first);
     CHECK_NE(filters.size(), 0) << "The case of no candidate is not handled yet";
+    task_counters_.resize(filters.size());
     for (auto& filter : filters) {
       operators_.push_back(std::move(filter));
     }
-    task_counters_.resize(filters.size());
-    uint32_t task_id = 0;
+    LOG(INFO) << "The first filter of pruning phase 3, id is " << n_finished_tasks_;
     auto filter = dynamic_cast<NeighborhoodFilter*>(operators_[n_finished_tasks_].get());
     // Parallelism
     QueryVertexID query_vertex = filter->getQueryVertex();
     uint64_t input_size = (*result_->getMergedCandidates())[query_vertex].size();
     filter->setInputSize(input_size);
     filter->setParallelism((input_size + FLAGS_batch_size - 1) / FLAGS_batch_size);
-    task_counters_[task_id] = filter->getParallelism();
+    task_counters_[n_finished_tasks_] = filter->getParallelism();
     for (uint32_t i = 0; i < filter->getParallelism(); ++i) {
-      task_queue.putTask(new NeighborhoodFilterTask(qid, task_id, query_ctx->stop_time, i, filter,
+      task_queue.putTask(new NeighborhoodFilterTask(qid, n_finished_tasks_, query_ctx->stop_time, i, filter,
                                                     query_ctx->data_graph, result_->getMergedCandidates()));
     }
   }

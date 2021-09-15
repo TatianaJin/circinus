@@ -24,9 +24,11 @@
 #include "algorithms/minimum_weight_vertex_cover.h"
 #include "graph/graph.h"
 #include "graph/query_graph.h"
+#include "graph/types.h"
 #include "ops/filters.h"
 #include "ops/scans.h"
 
+using circinus::DUMMY_QUERY_VERTEX;
 using circinus::ExecutionConfig;
 using circinus::Graph;
 using circinus::Scan;
@@ -126,7 +128,7 @@ TEST_F(TestFilterAndMWVC, FilterCorrectness) {
       for (uint32_t v = 0; v < q.getNumVertices(); ++v) {
         config.setInputSize(g.getVertexCardinalityByLabel(q.getVertexLabel(v)));
         auto scan = Scan::newLDFScan(q.getVertexLabel(v), q.getVertexOutDegree(v), 0, config, 1);
-        auto scan_ctx = scan->initScanContext(0);
+        auto scan_ctx = scan->initScanContext(v, 0, {DUMMY_QUERY_VERTEX, 0});
         scan->scan(&g, &scan_ctx);
         size_t ldf_output_size = scan_ctx.candidates.size();
         std::vector<VertexID> candidates;
@@ -169,7 +171,7 @@ TEST_F(TestFilterAndMWVC, MWVC) {
         config.setInputSize(g.getVertexCardinalityByLabel(q.getVertexLabel(v)));
         auto scan = Scan::newLDFScan(q.getVertexLabel(v), q.getVertexOutDegree(v), 0, config, 1);
         scan->addFilter(std::make_unique<NLFFilter>(&q, v));
-        auto scan_ctx = scan->initScanContext(0);
+        auto scan_ctx = scan->initScanContext(v, 0, {DUMMY_QUERY_VERTEX, 0});
         scan->scan(&g, &scan_ctx);
         candidates[v] = std::move(scan_ctx.candidates);
       }

@@ -25,6 +25,7 @@
 #include "graph/compressed_subgraphs.h"
 #include "graph/graph.h"
 #include "graph/query_graph.h"
+#include "graph/types.h"
 #include "ops/expand_edge_operator.h"
 #include "ops/filters.h"
 #include "ops/scans.h"
@@ -41,6 +42,7 @@ using circinus::NLFFilter;
 using circinus::QueryGraph;
 using circinus::QueryVertexID;
 using circinus::VertexID;
+using circinus::DUMMY_QUERY_VERTEX;
 
 class PrintExecutionPlan : public testing::Test {
  protected:
@@ -73,7 +75,7 @@ class PrintExecutionPlan : public testing::Test {
       config.setInputSize(g.getVertexCardinalityByLabel(q.getVertexLabel(v)));
       auto scan = circinus::Scan::newLDFScan(q.getVertexLabel(v), q.getVertexOutDegree(v), 0, config, 1);
       scan->addFilter(std::make_unique<NLFFilter>(&q, v));
-      auto scan_ctx = scan->initScanContext(0);
+      auto scan_ctx = scan->initScanContext(v, 0, {DUMMY_QUERY_VERTEX, 0});
       scan->scan(&g, &scan_ctx);
       candidates[v] = std::move(scan_ctx.candidates);
     }
@@ -104,7 +106,7 @@ class PrintExecutionPlan : public testing::Test {
                            circinus::GraphType::Normal);
       ExecutionPlan* plan;
       circinus::GraphMetadata meta(g);
-      planner.generateOrder(&g, meta, &views, candidate_cardinality, circinus::OrderStrategy::CFL);
+      planner.generateOrder(&g, meta, &views, candidate_cardinality, circinus::OrderStrategy::CFL, DUMMY_QUERY_VERTEX);
       if (dynamic) {
         plan = planner.generatePlanWithDynamicCover(&g, nullptr);
       } else {

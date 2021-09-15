@@ -35,8 +35,11 @@ struct ScanContext {
   std::vector<VertexID> candidates;  // output
   VertexID scan_offset = -1;
   VertexID scan_end = 0;
+  QueryVertexID vertex_id;
+  std::pair<QueryVertexID, VertexID> seed = std::make_pair(DUMMY_QUERY_VERTEX, 0);
 
-  ScanContext(VertexID offset, VertexID end) : scan_offset(offset), scan_end(end) {}
+  ScanContext(VertexID offset, VertexID end, QueryVertexID vertex, std::pair<QueryVertexID, VertexID> seed_qv_dv)
+      : scan_offset(offset), scan_end(end), vertex_id(vertex), seed(seed_qv_dv) {}
 };
 
 /**
@@ -67,16 +70,17 @@ class Scan : public Operator {
   inline void addFilter(std::unique_ptr<LocalFilter>&& filter) { filters_.push_back(std::move(filter)); }
 
   inline uint32_t getParallelism() const { return parallelism_; }
-  inline ScanContext initScanContext(uint32_t task_idx) const {
+  inline ScanContext initScanContext(QueryVertexID vertex, uint32_t task_idx,
+                                     std::pair<QueryVertexID, VertexID> seed) const {
     DCHECK_LT(task_idx, parallelism_);
     auto chunk_size = scan_size_ / parallelism_;
     CHECK_NE(chunk_size, 0) << "scan_size=" << scan_size_ << ", parallelism=" << parallelism_;
     if (task_idx < scan_size_ % parallelism_) {
       auto offset = (chunk_size + 1) * task_idx;
-      return ScanContext(offset, offset + chunk_size + 1);
+      return ScanContext(offset, offset + chunk_size + 1, vertex, seed);
     }
     auto offset = chunk_size * task_idx + (scan_size_ % parallelism_);
-    return ScanContext(offset, offset + chunk_size);
+    return ScanContext(offset, offset + chunk_size, vertex, seed);
   }
 
   std::string toString() const override {

@@ -92,6 +92,8 @@ class NaivePlanner {
     CHECK_LE(query_graph->getNumVertices(), 64);
   }
 
+  NaivePlanner(QueryGraph* query_graph, GraphType type) : query_graph_(query_graph), plan_(type) {}
+
   /** Generates a plan with a static cover for partial match compression. */
   ExecutionPlan* generatePlan();
 
@@ -116,8 +118,14 @@ class NaivePlanner {
   const std::vector<QueryVertexID>& generateOrder(const GraphBase* data_graph, const GraphMetadata& metadata,
                                                   const std::vector<CandidateSetView>* candidate_views,
                                                   const std::vector<VertexID>& candidate_cardinality,
-                                                  OrderStrategy order_strategy,
+                                                  OrderStrategy order_strategy, QueryVertexID seed_qv,
                                                   const std::vector<QueryVertexID>* use_order = nullptr);
+
+  /** Generates query vertex matching order for online query.
+   *
+   * Starting from the seed vertex, generate the order by the bfs tree.
+   */
+  const std::vector<QueryVertexID>& generateOrder(QueryVertexID seed_qv);
 
   /** Select a query vertex to parallelize the plan and compute the weights (estimation of the associated backtracking
    * search space) for all its candidates. */

@@ -26,9 +26,20 @@
 namespace circinus {
 
 LogicalCFLFilter::LogicalCFLFilter(const GraphMetadata& metadata, const QueryGraph* query_graph,
-                                   const std::vector<VertexID>& candidate_size)
-    : LogicalNeighborhoodFilter(query_graph), two_core_solver_(query_graph) {
-  start_vertex_ = getStartVertex(metadata, query_graph, candidate_size);
+                                   const std::vector<VertexID>& candidate_size, QueryVertexID seed_qv)
+    : LogicalNeighborhoodFilter(query_graph), two_core_solver_(query_graph), start_vertex_(seed_qv) {
+  if (start_vertex_ == DUMMY_QUERY_VERTEX) {
+    start_vertex_ = getStartVertex(metadata, query_graph, candidate_size);
+  }
+  generateBFSTree(query_graph);
+}
+
+LogicalCFLFilter::LogicalCFLFilter(const QueryGraph* query_graph, QueryVertexID seed_qv)
+    : LogicalNeighborhoodFilter(query_graph), two_core_solver_(query_graph), start_vertex_(seed_qv) {
+  generateBFSTree(query_graph);
+}
+
+void LogicalCFLFilter::generateBFSTree(const QueryGraph* query_graph) {
   if (verbosePlannerLog()) {
     LOG(INFO) << "start_vertex " << start_vertex_;
   }
@@ -121,6 +132,22 @@ std::vector<std::unique_ptr<NeighborhoodFilter>> LogicalCFLFilter::toPhysicalOpe
 
   return ret;
 }
+
+// std::vector<std::unique_ptr<Extender>> LogicalCFLFilter::toPhysicalExtenders(const GraphMetadata& metadata,
+//                                                                              ExecutionConfig& exec) {
+//   std::vector<std::unique_ptr<Extender>> ret;
+//   for (uint32_t i = 0; i < level_num_; ++i) {
+//     for (uint32_t j = level_offset_[i]; j < level_offset_[i + 1]; ++j) {
+//       QueryVertexID query_vertex = bfs_order_[j];
+//       TreeNode& node = bfs_tree_[query_vertex];
+//       for (auto& child : node.children_.size()) {
+//         ret.emplace_back(std::make_unique<Extender>(exec, query_graph_, query_vertex, child));
+//       }
+//     }
+//   }
+//   return ret;
+// }
+
 std::vector<QueryVertexID> LogicalCFLFilter::getTopThree(const GraphMetadata& metadata, const QueryGraph* q) {
   auto rank_compare = [](std::pair<QueryVertexID, double> l, std::pair<QueryVertexID, double> r) {
     return l.second < r.second;

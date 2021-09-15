@@ -126,6 +126,26 @@ void ExecutionPlanDriverBase::taskTimeOut(std::unique_ptr<TaskBase>& task, Threa
   }
 }
 
+void OnlineQueryExecutionPlanDriver::init(QueryId qid, QueryContext* query_ctx, ExecutionContext& ctx,
+                                          ThreadsafeTaskQueue& task_queue) {
+  ExecutionPlanDriverBase::init(qid, query_ctx, ctx, task_queue);
+  VertexID seed_data_vertex = query_ctx->query_config.seed.second;
+  task_counters_.resize(1, 1);
+  dynamic_cast<OutputOperator*>(plan_->getOutputOperator(0))->setOutput(&result_->getOutputs());
+  std::vector<Operator*>& ops = plan_->getOperators(0);
+  addTaskToQueue<TraverseChainTask>(&task_queue, qid, 0, query_ctx->stop_time, ctx.first.getBatchSize(), ops,
+                                    query_ctx->data_graph, query_type_, seed_data_vertex);
+  LOG(INFO) << "------------";
+}
+
+void OnlineQueryExecutionPlanDriver::taskFinish(std::unique_ptr<TaskBase>& task, ThreadsafeTaskQueue* task_queue,
+                                                ThreadsafeQueue<ServerEvent>* reply_queue) {
+  collectTaskInfo(task);
+  if (--task_counters_[task->getTaskId()] == 0 && ++n_finished_tasks_ == task_counters_.size()) {
+    finishPlan(reply_queue);
+  }
+}
+
 void ExecutionPlanDriver::init(QueryId qid, QueryContext* query_ctx, ExecutionContext& ctx,
                                ThreadsafeTaskQueue& task_queue) {
   ExecutionPlanDriverBase::init(qid, query_ctx, ctx, task_queue);

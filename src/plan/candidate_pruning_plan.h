@@ -84,8 +84,9 @@ class CandidatePruningPlan {
 
   const auto& getScanQueryVertices() const { return scan_.getQueryVertices(); }
 
-  void newCFLFilter(const QueryGraph* q, const GraphMetadata& metadata, const std::vector<VertexID>& candidate_size) {
-    neighbor_filters_.emplace_back(std::make_unique<LogicalCFLFilter>(metadata, q, candidate_size));
+  void newCFLFilter(const QueryGraph* q, const GraphMetadata& metadata, const std::vector<VertexID>& candidate_size,
+                    QueryVertexID seed_qv) {
+    neighbor_filters_.emplace_back(std::make_unique<LogicalCFLFilter>(metadata, q, candidate_size, seed_qv));
   }
 
   void newDAFFilter(const QueryGraph* q, const GraphMetadata& metadata, const std::vector<VertexID>& candidate_size) {
@@ -98,6 +99,12 @@ class CandidatePruningPlan {
 
   void newGQLFilter(const QueryGraph* q) { neighbor_filters_.push_back(std::make_unique<LogicalGQLFilter>(q)); }
 
+  // std::vector<std::unique_ptr<Extender>> getExtender(const GraphMetadata& metadata, ExecutionConfig& exec_conf) {
+  //   std::vector<std::unique_ptr<Extender>> ret;
+  //   for (auto& filter : neighbor_filters_) {
+  //     auto extender = filter->toPhysicalExtenders(metadata, exec_conf);
+  //   }
+  // }
   /**
    * The returned filters should be executed sequentially, while each filter is executed in parallel.
    */

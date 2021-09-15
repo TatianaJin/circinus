@@ -141,8 +141,6 @@ class ExpandEdgeKeyToKeyTraverseContext : public ExpandEdgeTraverseContext, publ
 
 template <typename G, bool intersect_candidates>
 class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
-  unordered_set<VertexID> candidate_set_;
-
  public:
   CONSTRUCT(KeyToKey)
 
@@ -235,6 +233,9 @@ class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
     auto parent_match = input.getKeyVal(parent_index_);
     auto exceptions = input.getExceptions(same_label_key_indices_, same_label_set_indices_);
     if (!intersect_candidates) {
+      if (ctx->getDataGraph<G>() == nullptr) {
+        LOG(FATAL) << "no graph";
+      }
       auto neighbors = ctx->getDataGraph<G>()->getOutNeighborsWithHint(parent_match, target_label_, 0);
       removeExceptions(neighbors, &current_targets, exceptions);
     } else {
@@ -362,7 +363,7 @@ class CurrentResultsByParent : public CurrentResults {
   }
 
   uint32_t getResults(uint32_t cap) override {
-    auto& parent_set = *input_->getSet(parent_index_);
+    auto& parent_set = *(input_->getSet(parent_index_));
     unordered_map<VertexID, int> group_index;
     uint32_t old_count = ctx_->getOutputSize();
     auto target_label = owner_->getTargetLabel();
@@ -532,7 +533,9 @@ class ExpandEdgeSetToKeyOperator : public ExpandEdgeOperator {
       const CandidateSetView* candidates, std::vector<CompressedSubgraphs>* outputs, const void* graph,
       QueryType profile, const unordered_set<VertexID>* candidate_hashmap) const override {
     auto ret = std::make_unique<ExpandEdgeSetToKeyTraverseContext>(candidates, graph, outputs, profile);
-    if (ret->init<G>(*candidates, parent_label_)) return nullptr;  // prune the whole traverse chain
+    if (candidates != nullptr) {
+      if (ret->init<G>(*candidates, parent_label_)) return nullptr;  // prune the whole traverse chain
+    }
     return ret;
   }
 
@@ -581,7 +584,7 @@ class ExpandEdgeSetToKeyOperator : public ExpandEdgeOperator {
         needed -= got;
 
         if (needed == 0) {
-          return cap - needed;
+          return cap;
         }
 
         if

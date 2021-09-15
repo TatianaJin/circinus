@@ -49,7 +49,7 @@ class TraverseChainTask : public TaskBase {
   const uint32_t batch_size_;
   const std::vector<Operator*> operators_;
   const std::unique_ptr<InputOperator> input_op_ = nullptr;
-  const std::vector<CandidateSetView>* candidates_;
+  const std::vector<CandidateSetView>* candidates_ = nullptr;
   using CandidateHashmaps = std::vector<std::shared_ptr<unordered_set<VertexID>>>;
   const CandidateHashmaps* candidate_hashmaps_ = nullptr;
 
@@ -71,6 +71,8 @@ class TraverseChainTask : public TaskBase {
   uint32_t split_size_ = 1;
   std::vector<std::pair<uint32_t, std::vector<CompressedSubgraphs>>> splits_;
 
+  VertexID seed_data_vertex_ = INVALID_VERTEX_ID;
+
  public:
   TraverseChainTask(QueryId qid, TaskId tid, std::chrono::time_point<std::chrono::steady_clock> stop_time,
                     uint32_t batch_size, const std::vector<Operator*>& ops, std::unique_ptr<InputOperator>&& input_op,
@@ -87,6 +89,20 @@ class TraverseChainTask : public TaskBase {
         task_status_(TaskStatus::Normal) {
     CHECK(!candidates_->empty());
   }
+
+  // for online task with seed data vertex
+  TraverseChainTask(QueryId qid, TaskId tid, std::chrono::time_point<std::chrono::steady_clock> stop_time,
+                    uint32_t batch_size, const std::vector<Operator*>& ops, const GraphBase* graph,
+                    QueryType query_type, VertexID seed_data_vertex)
+      : TaskBase(qid, tid, stop_time),
+        graph_(graph),
+        batch_size_(batch_size),
+        operators_(ops),
+        query_type_(query_type),
+        start_level_(0),
+        end_level_(operators_.size() - 1),
+        task_status_(TaskStatus::Normal),
+        seed_data_vertex_(seed_data_vertex) {}
 
   // for head task
   TraverseChainTask(QueryId qid, TaskId tid, std::chrono::time_point<std::chrono::steady_clock> stop_time,
@@ -106,7 +122,7 @@ class TraverseChainTask : public TaskBase {
         task_status_(task_status) {
     start_level_ = 0;
     if (end_level == 0) {
-      end_level_ = operators_.size() - 1;
+      end_level_ = ops.size() - 1;
     }
     CHECK(!candidates_->empty());
   }
@@ -203,22 +219,32 @@ class TraverseChainTask : public TaskBase {
     start_time_ = std::chrono::steady_clock::now();
     if (task_status_ == TaskStatus::Normal) {
       if (input_size_ == 0) {
-        inputs_ = std::move(input_op_->getInputs(graph_, *candidates_));
-        // if input is pruned to empty, return
-        if (inputs_.empty()) {
-          return;
+        if (seed_data_vertex_ != INVALID_VERTEX_ID) {
+          inputs_ = std::vector<CompressedSubgraphs>({CompressedSubgraphs(seed_data_vertex_)});
+          input_size_ = 1;
+        } else {
+          if (verboseExecutionLog()) {
+            std::stringstream ss;
+            for (auto& x : *candidates_) {
+              ss << x.size() << " ";
+            }
+            LOG(INFO) << "-------- Task " << task_id_ << " candidate sizes " << ss.str();
+          }
+          inputs_ = std::move(input_op_->getInputs(graph_, *candidates_));
+          // if input is pruned to empty, return
+          if (inputs_.empty()) {
+            return;
+          }
+          input_size_ = inputs_.size();
         }
-        input_size_ = inputs_.size();
+        LOG(INFO) << input_size_;
       }
       setupOutputs();
-      if (!setupTraverseContexts()) return;
-    }
-    if (verboseExecutionLog()) {
-      std::stringstream ss;
-      for (auto& x : *candidates_) {
-        ss << x.size() << " ";
+      if (seed_data_vertex_ != INVALID_VERTEX_ID) {
+        if (!setupTraverseContextsWithoutCandidate()) return;
+      } else {
+        if (!setupTraverseContexts()) return;
       }
-      LOG(INFO) << "-------- Task " << task_id_ << " candidate sizes " << ss.str();
     }
     uint64_t old_count = 0;
     uint64_t new_count = 0;
@@ -322,6 +348,24 @@ class TraverseChainTask : public TaskBase {
       // now assume all query vertices have candidate sets
       auto ctx = createTraverseContext(&(*candidates_)[traverse->getTargetQueryVertex()],
                                        outputs_[level - start_level_], level, traverse, query_type_, hashmap);
+      if (ctx == nullptr) return false;
+      traverse_context_.emplace_back(std::move(ctx));
+      // LOG(INFO) << "set candidates for " << traverse->getTargetQueryVertex() << " " << traverse->toString();
+      traverse = dynamic_cast<TraverseOperator*>(traverse->getNext());
+      ++level;
+    }
+    return true;
+  }
+
+  bool setupTraverseContextsWithoutCandidate() {
+    auto op = operators_[start_level_];
+    auto traverse = dynamic_cast<TraverseOperator*>(op);
+    uint32_t level = start_level_;
+    traverse_context_.reserve(end_level_ - start_level_);
+    while (level < end_level_) {
+      DCHECK(traverse != nullptr);
+      // now assume all query vertices have candidate sets
+      auto ctx = createTraverseContext(nullptr, outputs_[level - start_level_], level, traverse, query_type_, nullptr);
       if (ctx == nullptr) return false;
       traverse_context_.emplace_back(std::move(ctx));
       // LOG(INFO) << "set candidates for " << traverse->getTargetQueryVertex() << " " << traverse->toString();

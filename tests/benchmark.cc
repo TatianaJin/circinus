@@ -63,6 +63,7 @@ DEFINE_bool(ipp, true, "Use intra-partition for plan if true, otherwise use actu
 DEFINE_string(pqv, "none", "The strategy to choose pqv");
 DEFINE_bool(utht, false, "Use two hop traversal");
 DEFINE_string(profile_file_extra, "", "profile file name extra info");
+DEFINE_string(seed, "", "seed info");
 
 class QueryConfig {
  public:
@@ -195,6 +196,9 @@ class Benchmark {
     config << "cps=" << FLAGS_filter << ",cs=" << FLAGS_vertex_cover << ",limit=" << FLAGS_match_limit
            << ",mo=" << match_order << ",pqv=" << FLAGS_pqv << ",ipp=" << FLAGS_ipp << ",upg=" << FLAGS_upg
            << ",utht=" << FLAGS_utht;
+    if (FLAGS_seed != "") {
+      config << ",seed=" << FLAGS_seed;
+    }
 
     if (FLAGS_profile == 1) {
       config << ",mode=profile";

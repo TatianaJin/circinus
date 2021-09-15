@@ -67,8 +67,8 @@ struct ServerEvent {
   }
 };
 
-enum class CandidatePruningStrategy : uint16_t { None = 0, Adaptive, LDF, NLF, CFL, DAF, GQL, TSO };
-enum class OrderStrategy : uint16_t { None = 0, CFL, DAF, GQL, TSO };
+enum class CandidatePruningStrategy : uint16_t { None = 0, Adaptive, LDF, NLF, CFL, DAF, GQL, TSO, Online };
+enum class OrderStrategy : uint16_t { None = 0, CFL, DAF, GQL, TSO, Online };
 enum class CompressionStrategy : uint16_t { None = 0, Static, Dynamic };
 enum class PQVStrategy : uint16_t { None = 0, ClosenessCentrality };
 enum class QueryMode : uint16_t { Execute = 0, Profile, Explain, ProfileSI, ProfileCandidateSI };
@@ -106,7 +106,7 @@ class QueryConfig {
       {"none", CandidatePruningStrategy::None}, {"adaptive", CandidatePruningStrategy::Adaptive},
       {"ldf", CandidatePruningStrategy::LDF},   {"nlf", CandidatePruningStrategy::NLF},
       {"cfl", CandidatePruningStrategy::CFL},   {"daf", CandidatePruningStrategy::DAF},
-      {"gql", CandidatePruningStrategy::GQL}};
+      {"gql", CandidatePruningStrategy::GQL},   {"online", CandidatePruningStrategy::Online}};
   static inline const unordered_map<std::string, QueryMode> modes = {
       {"execute", QueryMode::Execute},
       {"profile", QueryMode::Profile},
@@ -114,11 +114,9 @@ class QueryConfig {
       {"profile_si", QueryMode::ProfileSI},
       {"profile_candidate", QueryMode::ProfileCandidateSI},
   };
-  static inline const unordered_map<std::string, OrderStrategy> order_strategies = {{"none", OrderStrategy::None},
-                                                                                    {"cfl", OrderStrategy::CFL},
-                                                                                    {"daf", OrderStrategy::DAF},
-                                                                                    {"gql", OrderStrategy::GQL},
-                                                                                    {"tso", OrderStrategy::TSO}};
+  static inline const unordered_map<std::string, OrderStrategy> order_strategies = {
+      {"none", OrderStrategy::None}, {"cfl", OrderStrategy::CFL}, {"daf", OrderStrategy::DAF},
+      {"gql", OrderStrategy::GQL},   {"tso", OrderStrategy::TSO}, {"online", OrderStrategy::Online}};
 
   std::string matching_order;  // FIXME(tatiana): support custom order or deprecate this
   CandidatePruningStrategy candidate_pruning_strategy = CandidatePruningStrategy::CFL;
@@ -133,6 +131,9 @@ class QueryConfig {
   uint64_t limit = ~0ull;
   std::chrono::seconds time_limit = std::chrono::seconds(3600);
   QueryMode mode = QueryMode::Execute;
+
+  // seed node
+  std::pair<QueryVertexID, VertexID> seed = std::make_pair(DUMMY_QUERY_VERTEX, 0);
 
   explicit QueryConfig(const std::string& config_str = "") {
     uint32_t tok_start = 0;
@@ -151,7 +152,12 @@ class QueryConfig {
       }
       std::string value(config_str.data() + tok_start, i - tok_start);
       tok_start = i + 1;
-      if (key == "cps" || key == "candidate_pruning_strategy") {
+      if (key == "seed") {
+        std::string::size_type n = value.find(":");
+        std::string seed_qv = value.substr(0, n);
+        std::string seed_dv = value.substr(n + 1);
+        seed = std::make_pair(std::stol(seed_qv), std::stoull(seed_dv));
+      } else if (key == "cps" || key == "candidate_pruning_strategy") {
         validateConfig(candidate_pruning_strategy, value, candidate_pruning_strategies, "candidate pruning strategy");
       } else if (key == "mo" || key == "matching_order") {
         validateConfig(order_strategy, value, order_strategies, "order strategy");

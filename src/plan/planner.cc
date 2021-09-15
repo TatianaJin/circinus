@@ -93,6 +93,7 @@ CandidatePruningPlan* Planner::updateCandidatePruningPlan(const CandidateResult*
   CHECK(result != nullptr);
   auto part_cardinality = result->getCandidateCardinality();
   auto& q = query_context_->query_graph;
+  QueryVertexID seed_qv = query_context_->query_config.seed.first;
   auto& strategy = query_context_->query_config.candidate_pruning_strategy;
   auto n_qvs = part_cardinality[0].size();
   std::vector<VertexID> cardinality(n_qvs, 0);
@@ -110,6 +111,15 @@ CandidatePruningPlan* Planner::updateCandidatePruningPlan(const CandidateResult*
   }
   auto phase = candidate_pruning_plan_.completePhase();
   if (phase == 2) {
+    // switch (strategy) {
+    // case CandidatePruningStrategy::CFL: {
+    //   candidate_pruning_plan_.newCFLFilter(&q, metadata, cardinality, seed_qv);
+    //   break;
+    // }
+    // default:
+    //   candidate_pruning_plan_.setFinished();
+    // }
+    // return &candidate_pruning_plan_;
     // TODO(tatiana): now we skip phase 2 as it is not easy to parallelize forward construction due to set union
     phase = candidate_pruning_plan_.completePhase();
   }
@@ -121,7 +131,7 @@ CandidatePruningPlan* Planner::updateCandidatePruningPlan(const CandidateResult*
       break;
     }
     case CandidatePruningStrategy::CFL: {
-      candidate_pruning_plan_.newCFLFilter(&q, metadata, cardinality);
+      candidate_pruning_plan_.newCFLFilter(&q, metadata, cardinality, seed_qv);
       break;
     }
     case CandidatePruningStrategy::GQL: {
@@ -268,7 +278,7 @@ void Planner::newInputOperators(ExecutionPlan* logical_plan, const std::vector<Q
   }
 }
 
-std::vector<std::pair<uint32_t, std::vector<CandidateScope>>> Planner::generateLogicalPlans(
+std::pair<int, std::vector<std::pair<uint32_t, std::vector<CandidateScope>>>> Planner::generateLogicalPlans(
     const std::vector<QueryVertexID>& partitioning_qvs, const std::vector<std::vector<CandidateScope>>& partitions,
     PartitionedCandidateResult* result) {
   std::vector<std::pair<uint32_t, std::vector<CandidateScope>>> partition_plans;
@@ -321,7 +331,7 @@ std::vector<std::pair<uint32_t, std::vector<CandidateScope>>> Planner::generateL
     if (global_plan_idx != -1) {
       LOG(INFO) << "global plan idx " << global_plan_idx;
     }
-    return partition_plans;
+    return {global_plan_idx, partition_plans};
   }
   // generate a different plan for each backtracking scope
   for (auto& scopes : partitions) {
@@ -335,7 +345,7 @@ std::vector<std::pair<uint32_t, std::vector<CandidateScope>>> Planner::generateL
     }
     partition_plans.emplace_back(backtracking_plan_->addPlan(plan), scopes);
   }
-  return partition_plans;
+  return {-1, partition_plans};
 }
 
 void Planner::parallelizePartitionedPlans(
@@ -448,6 +458,44 @@ std::vector<std::pair<uint32_t, std::vector<QueryVertexID>>> Planner::generatePa
   return std::move(parallel_opids);
 }
 
+BacktrackingPlan* Planner::generateExecutionPlan(std::pair<QueryVertexID, VertexID> seed, bool multithread) {
+  backtracking_plan_ = std::make_unique<BacktrackingPlan>();
+  /* The data graph representation varies depending on the execution strategy.
+   * For query execution with partitioned graphs, use GraphView. For query on normal graphs, use Normal;
+   * For query using an auxiliary bipartite-graph-based index, use BipartiteGraphView. */
+  const QueryGraph& query_graph = query_context_->query_graph;
+  const ReorderedPartitionedGraph* data_graph = dynamic_cast<ReorderedPartitionedGraph*>(query_context_->data_graph);
+  if (query_graph.getVertexLabel(seed.first) != data_graph->getVertexLabel(seed.second)) {
+    return nullptr;
+  }
+
+  GraphType graph_type =
+      query_context_->query_config.use_auxiliary_index
+          ? GraphType::BipartiteGraphView
+          : (query_context_->graph_metadata->numPartitions() > 1 ? GraphType::Partitioned : GraphType::Normal);
+  planners_.push_back(std::make_unique<NaivePlanner>(&query_context_->query_graph, graph_type));
+
+  auto& planner = planners_.back();
+
+  auto& order = planner->generateOrder(seed.first);
+
+  if (order.empty()) {
+    return nullptr;
+  }
+
+  if (shortPlannerLog()) {
+    LOG(INFO) << "Order:" << toString(order);
+  }
+
+  ExecutionPlan* plan = nullptr;
+  LOG(INFO) << "-------------";
+  plan = planner->generatePlan();
+  plan->setInputAreKeys(plan->isInCover(plan->getRootQueryVertexID()));
+
+  backtracking_plan_->addPlan(plan);
+  return backtracking_plan_.get();
+}
+
 // TODO(engineering): classes in plan should not know classes in exec
 BacktrackingPlan* Planner::generateExecutionPlan(const CandidateResult* result, bool multithread) {
   backtracking_plan_ = std::make_unique<BacktrackingPlan>();
@@ -476,7 +524,7 @@ BacktrackingPlan* Planner::generateExecutionPlan(const CandidateResult* result, 
 
   auto t0 = std::chrono::steady_clock::now();
   // 3. for each scope, generate a logical execution plan
-  auto partition_plans = generateLogicalPlans(partitioning_qv, partitions, partitioned_result);
+  auto[global_plan_idx, partition_plans] = generateLogicalPlans(partitioning_qv, partitions, partitioned_result);
 
   if (verbosePlannerLog()) {
     for (auto& pair : partition_plans) {
@@ -574,7 +622,8 @@ ExecutionPlan* Planner::generateLogicalExecutionPlan(const std::vector<VertexID>
   auto& planner = planners_.back();
 
   auto& order = planner->generateOrder(query_context_->data_graph, *query_context_->graph_metadata, candidate_views,
-                                       candidate_cardinality, query_context_->query_config.order_strategy, use_order);
+                                       candidate_cardinality, query_context_->query_config.order_strategy,
+                                       query_context_->query_config.seed.first, use_order);
 
   if (order.empty()) {
     return nullptr;

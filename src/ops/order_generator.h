@@ -43,47 +43,52 @@ class OrderGenerator {
     }
   };
   std::unordered_map<std::pair<QueryVertexID, QueryVertexID>, BipartiteGraph, hash_pair> bg_map_;
+  QueryVertexID seed_qv_;
 
-  const GraphBase* data_graph_;
+  const GraphBase* data_graph_ = nullptr;
   const QueryGraph* query_graph_;
-  const std::vector<CandidateSetView>& candidates_;
-  const std::vector<VertexID>& candidate_sizes_;
-  const GraphMetadata& metadata_;
+  const std::vector<CandidateSetView>* candidates_ = nullptr;
+  const std::vector<VertexID>* candidate_sizes_ = nullptr;
+  const GraphMetadata* metadata_ = nullptr;
 
  public:
   OrderGenerator(const GraphBase* data_graph, const GraphMetadata& metadata, const QueryGraph* query_graph,
                  const std::vector<CandidateSetView>& candidates, const std::vector<VertexID>& candidate_sizes)
       : data_graph_(data_graph),
         query_graph_(query_graph),
-        candidates_(candidates),
-        candidate_sizes_(candidate_sizes),
-        metadata_(metadata) {}
+        candidates_(&candidates),
+        candidate_sizes_(&candidate_sizes),
+        metadata_(&metadata) {}
+
+  OrderGenerator(const QueryGraph* query_graph, QueryVertexID seed_qv) : query_graph_(query_graph), seed_qv_(seed_qv) {}
 
   const BipartiteGraph* getBipartiteGraph(QueryVertexID v1, QueryVertexID v2) {
     std::pair<QueryVertexID, QueryVertexID> p(v1, v2);
     auto bg = bg_map_.find(p);
     if (bg == bg_map_.end()) {
       BipartiteGraph newbg(v1, v2);
-      newbg.populateGraph(data_graph_, candidates_);
+      newbg.populateGraph(data_graph_, *candidates_);
       auto res = bg_map_.insert({p, std::move(newbg)});
       bg = res.first;
     }
     return &(bg->second);
   }
 
-  std::vector<QueryVertexID> getOrder(OrderStrategy order_strategy) {
+  std::vector<QueryVertexID> getOrder(OrderStrategy order_strategy, QueryVertexID seed_qv) {
     switch (order_strategy) {
     case OrderStrategy::None:
     case OrderStrategy::CFL:
-      return getCFLOrder();
+      return getCFLOrder(seed_qv);
     case OrderStrategy::DAF:
       return getDAFOrder();
     case OrderStrategy::TSO:
       return getTSOOrder();
     case OrderStrategy::GQL:
       return getGQLOrder();
+    case OrderStrategy::Online:
+      return getOnlineOrder(seed_qv);
     }
-    return getCFLOrder();  // default
+    return getCFLOrder(seed_qv);  // default
   }
 
   QueryVertexID selectGQLStartVertex() {
@@ -91,7 +96,7 @@ class OrderGenerator {
     QueryVertexID qg_v_cnt = query_graph_->getNumVertices();
     for (QueryVertexID i = 1; i < qg_v_cnt; ++i) {
       QueryVertexID cur_vertex = i;
-      uint32_t size1 = candidates_[cur_vertex].size(), size2 = candidates_[start_vertex].size();
+      uint32_t size1 = (*candidates_)[cur_vertex].size(), size2 = (*candidates_)[start_vertex].size();
       if (size1 < size2) {
         start_vertex = cur_vertex;
       } else if (size1 == size2 &&
@@ -122,11 +127,11 @@ class OrderGenerator {
 
     for (QueryVertexID i = 1; i < qg_v_cnt; ++i) {
       QueryVertexID next_vertex = 0;
-      QueryVertexID min_value = metadata_.getNumVertices() + 1;
+      QueryVertexID min_value = (*metadata_).getNumVertices() + 1;
       for (QueryVertexID j = 0; j < qg_v_cnt; ++j) {
         QueryVertexID cur_vertex = j;
         if (!visited_vertices[cur_vertex] && adjacent_vertices[cur_vertex]) {
-          uint32_t cnt = candidates_[cur_vertex].size();
+          uint32_t cnt = (*candidates_)[cur_vertex].size();
           if (cnt < min_value) {
             min_value = cnt;
             next_vertex = cur_vertex;
@@ -144,7 +149,7 @@ class OrderGenerator {
 
   // FIXME(tatiana): need to support adaptive ordering strategy
   std::vector<QueryVertexID> getDAFOrder() {
-    auto logical_filter = LogicalDAFFilter(metadata_, query_graph_, candidate_sizes_);
+    auto logical_filter = LogicalDAFFilter((*metadata_), query_graph_, *candidate_sizes_);
     return logical_filter.getBfsOrder();
   }
 
@@ -161,13 +166,13 @@ class OrderGenerator {
     auto last_edge = getBipartiteGraph(path[begin], path[end]);
     if (last_edge->getNumEdges() == 0) {
       DLOG(INFO) << "no edge for BipartiteGraph between " << path[begin] << " and " << path[end] << " "
-                 << candidates_[begin].size() << " to " << candidates_[end].size();
+                 << (*candidates_)[begin].size() << " to " << (*candidates_)[end].size();
       return true;
     }
     children.resize(last_edge->getNumVertices());
 
     uint32_t sum = 0;
-    for (auto& v : candidates_[path[begin]]) {
+    for (auto& v : (*candidates_)[path[begin]]) {
       uint32_t offset = last_edge->getOffset(v);
       children[offset] = last_edge->getVertexOutDegree(v);
       sum += children[offset];
@@ -181,14 +186,14 @@ class OrderGenerator {
       auto edge = getBipartiteGraph(path[begin], path[end]);
       if (edge->getNumEdges() == 0) {
         DLOG(INFO) << "no edge for BipartiteGraph between " << path[begin] << " and " << path[end] << " "
-                   << candidates_[begin].size() << " to " << candidates_[end].size();
+                   << (*candidates_)[begin].size() << " to " << (*candidates_)[end].size();
         return true;
       }
       parent.resize(edge->getNumVertices());
 
       sum = 0;
       CHECK_EQ(path[end], last_edge->getSourceId());
-      for (auto& v : candidates_[path[begin]]) {
+      for (auto& v : (*candidates_)[path[begin]]) {
         uint32_t local_sum = 0;
         auto vertex_view = edge->getOutNeighborsWithHint(v);
         for (auto nbr : vertex_view) {
@@ -232,7 +237,7 @@ class OrderGenerator {
   }
 
   std::vector<QueryVertexID> getTSOOrder() {
-    auto logical_filter = LogicalTSOFilter(metadata_, query_graph_, candidate_sizes_);
+    auto logical_filter = LogicalTSOFilter((*metadata_), query_graph_, *candidate_sizes_);
     const std::vector<TreeNode>& tree = logical_filter.getTree();
     const std::vector<QueryVertexID>& dfs_order = logical_filter.getDfsOrder();
 
@@ -347,7 +352,7 @@ class OrderGenerator {
           LOG(WARNING) << "path score is 0, path starts from " << paths[i][path_root_vertex_idx];
         }
         double cur_value = paths_embededdings_num[i][path_root_vertex_idx] /
-                           (double)(candidates_[paths[i][path_root_vertex_idx]].size());
+                           (double)((*candidates_)[paths[i][path_root_vertex_idx]].size());
         if (cur_value < min_value) {
           min_value = cur_value;
           selected_path_index = i;
@@ -367,8 +372,13 @@ class OrderGenerator {
     }
   }
 
-  std::vector<QueryVertexID> getCFLOrder() {
-    auto logical_filter = LogicalCFLFilter(metadata_, query_graph_, candidate_sizes_);
+  std::vector<QueryVertexID> getOnlineOrder(QueryVertexID seed_qv) {
+    auto logical_filter = LogicalCFLFilter(query_graph_, seed_qv);
+    return logical_filter.getBfsOrder();
+  }
+
+  std::vector<QueryVertexID> getCFLOrder(QueryVertexID seed_qv) {
+    auto logical_filter = LogicalCFLFilter((*metadata_), query_graph_, *candidate_sizes_, seed_qv);
     const std::vector<TreeNode>& tree = logical_filter.getTree();
     const std::vector<QueryVertexID>& bfs_order = logical_filter.getBfsOrder();
 
@@ -469,7 +479,7 @@ class OrderGenerator {
 
     // Order the leaves.
     sort(leaves.begin(), leaves.end(),
-         [&](QueryVertexID l, QueryVertexID r) { return candidates_[l].size() < candidates_[r].size(); });
+         [&](QueryVertexID l, QueryVertexID r) { return (*candidates_)[l].size() < (*candidates_)[r].size(); });
     for (QueryVertexID leaf : leaves) {
       if (!visited_vertices[leaf]) {
         order[selected_vertices_count++] = leaf;  // no need to update visited_vertices

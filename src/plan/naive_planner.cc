@@ -55,6 +55,10 @@ ExecutionPlan* NaivePlanner::generatePlan() {
 
   // get a smallest minimum weight vertex cover of the query graph
   auto log_cardinality = logCardinality();
+  log_cardinality.push_back(0);
+  for (uint32_t i = 1; i < matching_order_.size(); ++i) {
+    log_cardinality.push_back(1);
+  }
   WeightedBnB vertex_cover_solver(query_graph_, log_cardinality);
   vertex_cover_solver.computeVertexCover();
   auto& covers = vertex_cover_solver.getBestCovers();
@@ -680,24 +684,32 @@ const std::vector<QueryVertexID>& NaivePlanner::generateOrder(const GraphBase* d
                                                               const GraphMetadata& metadata,
                                                               const std::vector<CandidateSetView>* candidate_views,
                                                               const std::vector<VertexID>& candidate_cardinality,
-                                                              OrderStrategy order_strategy,
+                                                              OrderStrategy order_strategy, QueryVertexID seed_qv,
                                                               const std::vector<QueryVertexID>* use_order) {
   matching_order_.clear();
   if (hasValidCandidate()) {
     if (use_order == nullptr) {
       auto order_generator =
           OrderGenerator(data_graph, metadata, query_graph_, *candidate_views, candidate_cardinality);
-      matching_order_ = order_generator.getOrder(order_strategy);
+      matching_order_ = order_generator.getOrder(order_strategy, seed_qv);
     } else {
       CHECK_EQ(use_order->size(), query_graph_->getNumVertices());
       matching_order_ = *use_order;
     }
   }
+  // matching_order_ = {0, 1, 3, 4, 2, 7, 5, 6};
+  // matching_order_ = {2, 7, 5, 6, 0, 3, 1, 4};
 
   if (!matching_order_.empty()) {
     ordered_query_graph_ = *query_graph_;
     ordered_query_graph_.sortEdgesByOrder(matching_order_);
   }
+  return matching_order_;
+}
+
+const std::vector<QueryVertexID>& NaivePlanner::generateOrder(QueryVertexID seed_qv) {
+  auto order_generator = OrderGenerator(query_graph_, seed_qv);
+  matching_order_ = order_generator.getOrder(OrderStrategy::Online, seed_qv);
   return matching_order_;
 }
 

@@ -278,6 +278,9 @@ class ExecutionPlan {
     if (FLAGS_candidate_set_intersection == 1) {
       return !last_op_;
     }
+    if (FLAGS_candidate_set_intersection == 3) {
+      return false;
+    }
     CHECK_EQ(FLAGS_candidate_set_intersection, 0);
     return true;
   }

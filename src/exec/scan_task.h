@@ -30,9 +30,9 @@ class ScanTask : public TaskBase {
 
  public:
   ScanTask(QueryId query_id, TaskId task_id, std::chrono::time_point<std::chrono::steady_clock> stop_time,
-           uint32_t shard_id, const Scan* scan, const GraphBase* graph)
+           uint32_t shard_id, const Scan* scan, const GraphBase* graph, std::pair<QueryVertexID, VertexID> seed)
       : TaskBase(query_id, task_id, stop_time),
-        scan_context_(scan->initScanContext(shard_id)),
+        scan_context_(scan->initScanContext(task_id, shard_id, seed)),
         scan_(scan),
         graph_(graph) {
     CHECK(dynamic_cast<const Graph*>(graph_) != nullptr);
@@ -41,9 +41,10 @@ class ScanTask : public TaskBase {
   }
 
   ScanTask(QueryId query_id, TaskId task_id, std::chrono::time_point<std::chrono::steady_clock> stop_time,
-           uint32_t shard_id, const Scan* scan, const GraphBase* graph, uint32_t partition)
+           uint32_t shard_id, const Scan* scan, const GraphBase* graph, uint32_t partition,
+           std::pair<QueryVertexID, VertexID> seed)
       : TaskBase(query_id, task_id, stop_time),
-        scan_context_(scan->initScanContext(shard_id)),
+        scan_context_(scan->initScanContext(task_id, shard_id, seed)),
         scan_(scan),
         graph_(graph),
         partition_(partition) {

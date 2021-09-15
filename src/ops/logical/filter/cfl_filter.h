@@ -27,6 +27,7 @@
 namespace circinus {
 
 class NeighborhoodFilter;  // forward declaration
+class Extender;            // forward declaration
 
 class LogicalCFLFilter : public LogicalNeighborhoodFilter {
  private:
@@ -39,10 +40,19 @@ class LogicalCFLFilter : public LogicalNeighborhoodFilter {
 
  public:
   LogicalCFLFilter(const GraphMetadata& metadata, const QueryGraph* query_graph,
-                   const std::vector<VertexID>& candidate_size);
+                   const std::vector<VertexID>& candidate_size, QueryVertexID seed_qv);
+
+  /* Generating the BFS tree by Online query.
+   */
+  LogicalCFLFilter(const QueryGraph* query_graph, QueryVertexID seed_qv);
+
+  void generateBFSTree(const QueryGraph* query_graph);
 
   std::vector<std::unique_ptr<NeighborhoodFilter>> toPhysicalOperators(const GraphMetadata& metadata,
                                                                        ExecutionConfig& exec) override;
+
+  // std::vector<std::unique_ptr<Extender>> toPhysicalExtenders(const GraphMetadata& metadata,
+  //                                                            ExecutionConfig& exec) override;
 
   QueryVertexID getStartVertex(const GraphMetadata& metadata, const QueryGraph* query_graph,
                                const std::vector<VertexID>& candidate_size);

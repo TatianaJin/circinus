@@ -80,6 +80,8 @@ class Planner {
 
   BacktrackingPlan* generateExecutionPlan(const std::vector<std::vector<VertexID>>*, bool multithread = true);
 
+  BacktrackingPlan* generateExecutionPlan(const std::pair<QueryVertexID, VertexID> seed, bool multithread = true);
+
  private:
   static inline std::vector<VertexID> getCardinality(const std::vector<CandidateSetView>& candidate_views) {
     std::vector<VertexID> cardinality;
@@ -137,8 +139,10 @@ class Planner {
       uint32_t partition_num, const std::vector<QueryVertexID>& partitioning_qvs,
       PartitionedCandidateResult* partitioned_candidates);
 
-  /** Generate logical plans and assign for each partition a logical plan */
-  virtual std::vector<std::pair<uint32_t, std::vector<CandidateScope>>> generateLogicalPlans(
+  /** Generate logical plans and assign for each partition a logical plan
+   *  @return pair(global_plan_idx, partition_plans)
+   * */
+  virtual std::pair<int, std::vector<std::pair<uint32_t, std::vector<CandidateScope>>>> generateLogicalPlans(
       const std::vector<QueryVertexID>& partitioning_qvs, const std::vector<std::vector<CandidateScope>>& partitions,
       PartitionedCandidateResult* result);
 
