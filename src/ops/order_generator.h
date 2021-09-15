@@ -46,6 +46,7 @@ class OrderGenerator {
     }
   };
   std::unordered_map<std::pair<QueryVertexID, QueryVertexID>, BipartiteGraph, hash_pair> bg_map_;
+  QueryVertexID seed_qv_;
 
   const GraphBase* data_graph_ = nullptr;
   const QueryGraph* query_graph_;

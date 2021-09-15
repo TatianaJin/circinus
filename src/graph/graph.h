@@ -21,10 +21,10 @@
 
 #include "glog/logging.h"
 
-#include "./metis.h"
 #include "graph/graph_base.h"
 #include "graph/types.h"
 #include "graph/vertex_set_view.h"
+#include "metis.h"
 #include "utils/hashmap.h"
 
 namespace circinus {
@@ -46,6 +46,8 @@ class Graph : public GraphBase {
    */
   explicit Graph(const std::string& path, bool build_label_index = true);
   Graph() {}
+
+  void loadUndirectedGraphEdgeList(const std::string& path);
 
   void buildLabelIndex();
 

@@ -55,6 +55,8 @@ class ReorderedPartitionedGraph : public GraphBase {
 
   explicit ReorderedPartitionedGraph(const Graph& graph, uint32_t n_partitions = 20, bool sort_by_degree = true);
 
+  explicit ReorderedPartitionedGraph(const std::string& path, const std::string& part_path, uint32_t n_partitions,
+                                     bool sort_by_degree);
   ReorderedPartitionedGraph() {}  // for loading from binary
 
   inline uint32_t getNumPartitions() const { return n_partitions_; }

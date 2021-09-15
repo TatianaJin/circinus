@@ -113,6 +113,23 @@ class GraphBase {
     return std::make_pair(std::move(parts), objval);
   }
 
+  /** Use Fennel to compute graph partitions. Directly read partitions file.
+   * @param partitions_file_path.
+   * @returns The number of edge cuts among partitions.
+   */
+  std::vector<idx_t> getFennelParts(const std::string& path) {
+    auto part_file = openFile(path);
+    VertexID v_part;
+    std::vector<idx_t> parts;
+    parts.resize(n_vertices_);
+
+    for (VertexID id = 0; id < n_vertices_; ++id) {
+      part_file >> v_part;
+      parts[id] = v_part;
+    }
+    return std::move(parts);
+  }
+
   virtual void clear() {
     vlist_.clear();
     elist_.clear();
@@ -133,6 +150,8 @@ class GraphBase {
    * e src_id dst_id 0     => n_edges lines, put the end vertex with smaller id first for each edge
    */
   std::vector<LabelID> loadUndirectedGraph(const std::string& path);
+  std::vector<LabelID> loadUndirectedGraphFromEdgeList(const std::string& path);
+  std::vector<LabelID> loadTVEUndirectedGraphToGrasperGraph(const std::string& path);
   virtual void dumpToFile(const std::string& path) const = 0;
   inline void saveAsBinary(const std::string& path) const {
     auto output = openOutputFile(path, std::ios::out | std::ios::binary);

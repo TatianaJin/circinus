@@ -42,6 +42,8 @@ Graph::Graph(const std::string& path, bool build_label_index) {
   }
 }
 
+void Graph::loadUndirectedGraphEdgeList(const std::string& path) { labels_ = loadUndirectedGraphFromEdgeList(path); }
+
 void Graph::dumpToFile(const std::string& path) const {
   auto output = openOutputFile(path);
   output << "t " << getNumVertices() << ' ' << getNumEdges() << '\n';
