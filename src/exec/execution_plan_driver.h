@@ -120,6 +120,18 @@ class OnlineQueryExecutionPlanDriver : public ExecutionPlanDriverBase {
                   ThreadsafeQueue<ServerEvent>* reply_queue) override;
 };
 
+/** Execution plan driver of online query with seed vertex
+ */
+class OnlineQueryExecutionPlanDriver : public ExecutionPlanDriverBase {
+ public:
+  OnlineQueryExecutionPlanDriver(BacktrackingPlan* plan) : ExecutionPlanDriverBase(plan) {}
+
+  void init(QueryId qid, QueryContext* query_ctx, ExecutionContext& ctx, ThreadsafeTaskQueue& task_queue) override;
+
+  void taskFinish(std::unique_ptr<TaskBase>& task, ThreadsafeTaskQueue* task_queue,
+                  ThreadsafeQueue<ServerEvent>* reply_queue) override;
+};
+
 /** Supports partition-parallel execution.
  */
 class ExecutionPlanDriver : public ExecutionPlanDriverBase {
