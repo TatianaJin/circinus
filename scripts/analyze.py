@@ -90,8 +90,8 @@ def get_config(target, config_file):
 
 
 def parallel_analysis(target):
-  #elapsed = 'elapsed_execution_time'
-  elapsed = 'elapsed_time'
+  elapsed = 'elapsed_execution_time'
+  #elapsed = 'elapsed_time'
   target = target[['enumerate_time', 'max_task_time', elapsed]]
   print("========== parallel ratio = enumerate_time / elapsed_time ==========")
   print((target['enumerate_time'] / target[elapsed]).describe())
@@ -308,8 +308,9 @@ if __name__ == '__main__':
     print("Mismatch:\t{0}".format(check_embeddings(target, args.check)))
   if args.time:
     compare_time(target, args.time)
+    compare_time(target, args.time, time_name=['elapsed_execution_time'])
   if args.missing:
-    print("Total elapsed backtracking time", target['elapsed_time'].sum())
+    print("Total elapsed backtracking time", target['elapsed_execution_time'].sum())
     get_missing_query_config(target, args.missing)
   if args.config:
     get_config(target, args.config)

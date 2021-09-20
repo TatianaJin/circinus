@@ -34,9 +34,12 @@ constexpr QueryVertexID DUMMY_QUERY_VERTEX = UINT32_MAX;
 
 enum class GraphType : uint32_t { Normal, Partitioned, GraphView, BipartiteGraphView };
 
-// TODO(tatiana): remove inverse type
-enum class CandidateScopeType : uint8_t { All = 0, Partition = 1, Range = 2, PartitionRange = 3, Inverse = 5 };
+// TODO(tatiana): remove inverse type?
+enum class CandidateScopeType : uint8_t { All = 0, Partition = 1, Range = 2, PartitionRange = 3, Inverse = 4 };
 inline std::string CANDIDATE_SCOPE_TYPE_NAMES[5] = {"All", "Partition", "Range", "PRange", "Inverse"};
+inline std::ostream& operator<<(std::ostream& os, CandidateScopeType type) {
+  return os << CANDIDATE_SCOPE_TYPE_NAMES[(uint8_t)type];
+}
 
 class CandidateScope {
  private:

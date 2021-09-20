@@ -29,10 +29,12 @@
 namespace circinus {
 
 class BacktrackingPlan {
+  // logical
   std::vector<ExecutionPlan*> plans_;
-  std::vector<std::pair<uint32_t, std::vector<CandidateScope>>> partitioned_plans_;
-  std::vector<std::pair<uint32_t, std::vector<QueryVertexID>>> parallel_opids_;
   std::vector<std::unique_ptr<LogicalCompressedInputOperator>> input_operators_;  // size = plans_.size();
+  // partitioned and parallel
+  std::vector<std::pair<uint32_t, std::vector<CandidateScope>>> partitioned_plans_;
+  std::vector<bool> segment_mask_;
 
  public:
   std::vector<Operator*>& getOperators(uint32_t plan_idx = 0) { return plans_[plan_idx]->getOperators(); }
@@ -44,13 +46,16 @@ class BacktrackingPlan {
   }
 
   inline const auto& getPlans() const { return plans_; }
-
   inline const auto& getPlan(uint32_t idx) const { return plans_[idx]; }
+  inline auto getNumInputOperators() const { return input_operators_.size(); }
 
   inline uint32_t getNumPartitionedPlans() const { return partitioned_plans_.size(); }
   inline const auto& getPartitionedPlan(uint32_t idx) const { return partitioned_plans_[idx]; }
 
-  inline const auto& getParallelOpids(uint32_t idx) const { return parallel_opids_[idx]; }
+  inline bool toSegment(uint32_t idx) const {
+    DCHECK_LT(idx, segment_mask_.size());
+    return segment_mask_[idx];
+  }
 
   // TODO(engineering): merge plans with the same compression and order for better log/profile readabiliity?
   inline uint32_t addPlan(ExecutionPlan* plan) {
@@ -65,23 +70,14 @@ class BacktrackingPlan {
     partitioned_plans_ = std::move(partitioned_plans);
   }
 
-  inline void addPartitionedPlan(std::pair<uint32_t, std::vector<CandidateScope>>&& partitioned_plan) {
-    partitioned_plans_.emplace_back(std::move(partitioned_plan));
-  }
-
-  inline void addParallelOpids(std::vector<std::pair<uint32_t, std::vector<QueryVertexID>>>&& parallel_opids) {
-    parallel_opids_ = std::move(parallel_opids);
-  }
-
-  inline void addParallelOpid(std::pair<uint32_t, std::vector<QueryVertexID>>&& parallel_opid) {
-    parallel_opids_.emplace_back(std::move(parallel_opid));
+  inline void setPartitionedPlanSegmentMask(std::vector<bool>&& segment_mask) {
+    segment_mask_ = std::move(segment_mask);
   }
 
   inline void addInputOperator(std::unique_ptr<LogicalCompressedInputOperator>&& op) {
     input_operators_.push_back(std::move(op));
   }
 
-  inline auto getNumInputOperators() const { return input_operators_.size(); }
   inline void replaceInputOperator(uint32_t idx, std::unique_ptr<LogicalCompressedInputOperator>&& op) {
     input_operators_[idx] = std::move(op);
   }

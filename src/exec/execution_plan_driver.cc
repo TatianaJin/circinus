@@ -14,8 +14,10 @@
 
 #include "exec/execution_plan_driver.h"
 
+#include <algorithm>
 #include <chrono>
 #include <memory>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -135,16 +137,24 @@ void ExecutionPlanDriver::init(QueryId qid, QueryContext* query_ctx, ExecutionCo
   auto n_plans = plan_->getNumPartitionedPlans();
   // TODO(tatiana): handle the case with no plan (no match after pruning)
   CHECK_NE(n_plans, 0) << "The case of no plan is not handled yet";
-  // FIXME(tatiana): rank partitioned plans by their weights
-  task_counters_.resize(plan_->getPlans().size(), 0);  // one task per partition
+  task_counters_.resize(plan_->getPlans().size(), 0);
   candidates_.resize(n_plans);
-  candidate_hashmaps_.resize(n_plans);
   batch_size_ = ctx.first.getBatchSize();
   for (uint32_t i = 0; i < n_plans; ++i) {
     ++task_counters_[plan_->getPartitionedPlan(i).first];
   }
   n_pending_tasks_ += n_plans;
-  QueryVertexID pqv = DUMMY_QUERY_VERTEX;
+
+  // >>>>> hard code now to share hashmaps of candidate sets
+  candidate_hashmaps_.resize(n_plans);
+  auto candidate_views = candidate_result_->getCandidates();
+  std::vector<std::shared_ptr<unordered_set<VertexID>>> full_candidate_hashmaps;
+  full_candidate_hashmaps.reserve(candidate_views.size());
+  for (auto& view : candidate_views) {
+    full_candidate_hashmaps.push_back(std::make_shared<unordered_set<VertexID>>(view.begin(), view.end()));
+  }
+  // <<<<< hard code now to share hashmaps of candidate sets
+
   for (uint32_t i = 0; i < n_plans; ++i) {
     auto plan_idx = plan_->getPartitionedPlan(i).first;
     // all plans share the same output
@@ -156,45 +166,26 @@ void ExecutionPlanDriver::init(QueryId qid, QueryContext* query_ctx, ExecutionCo
     std::vector<Operator*>& ops = plan_->getOperators(plan_idx);
     uint32_t end_level = ops.size() - 1;
 
-    if
-      constexpr(false) {
-        // if parallel query vertex exists, use pqv to divide execution
-        std::vector<QueryVertexID> opids = plan_->getParallelOpids(i).second;
-        if (!opids.empty()) {
-          end_level = opids.front();
-          if (shortExecutionLog()) {
-            LOG(INFO) << "plan " << plan_idx << ", segment step " << opids.front() << '/'
-                      << plan_->getOperators(plan_idx).size();
-          }
-        }
-      }
-
     auto partitioned_result = dynamic_cast<PartitionedCandidateResult*>(candidate_result_.get());
     candidates_[i] = partitioned_result->getCandidatesByScopes(scopes);
 
-    // hard code now to share hashmaps of candidate sets
+    // >>>>> hard code now to share hashmaps of candidate sets
     candidate_hashmaps_[i].resize(scopes.size(), nullptr);
-    if (i == 0) {
-      for (uint32_t qv = 0; qv < scopes.size(); ++qv) {
-        if (scopes[qv].getType() != CandidateScopeType::All) {
-          CHECK_EQ(pqv, DUMMY_QUERY_VERTEX) << "Assume only one pqv now";
-          pqv = qv;
-        }
-        auto& set = candidates_[0][qv];
-        candidate_hashmaps_[0][qv] = std::make_shared<unordered_set<VertexID>>(set.begin(), set.end());
-      }
-    } else {
-      for (uint32_t qv = 0; qv < scopes.size(); ++qv) {
-        if (scopes[qv].getType() != CandidateScopeType::All) {
-          CHECK_EQ(pqv, qv) << "All partitioned plans should share the same pqv";
-          auto& set = candidates_[i][qv];
-          candidate_hashmaps_[i][qv] = std::make_shared<unordered_set<VertexID>>(set.begin(), set.end());
-        } else {
-          candidate_hashmaps_[i][qv] = candidate_hashmaps_[0][qv];
-        }
+    for (uint32_t qv = 0; qv < scopes.size(); ++qv) {
+      if (scopes[qv].getType() != CandidateScopeType::All) {
+        auto& set = candidates_[i][qv];
+        candidate_hashmaps_[i][qv] = std::make_shared<unordered_set<VertexID>>(set.begin(), set.end());
+      } else {
+        candidate_hashmaps_[i][qv] = full_candidate_hashmaps[qv];
       }
     }
+    // <<<<< hard code now to share hashmaps of candidate sets
 
+    if (max_parallelism_ > 1 && plan_->toSegment(i)) {
+      suspend_interval_ = DEFAULT_SUSPEND_INTERVAL;
+    } else {
+      suspend_interval_ = 0;
+    }
     addTaskToQueue<TraverseTask>(&task_queue, qid, plan_idx, query_ctx->stop_time, ctx.first.getBatchSize(), ops,
                                  std::move(input_operator), scopes, query_ctx->data_graph, &candidates_[i], query_type_,
                                  end_level, TaskStatus::Normal, &candidate_hashmaps_[i]);
@@ -208,20 +199,20 @@ void ExecutionPlanDriver::taskFinish(std::unique_ptr<TaskBase>& task, Threadsafe
   if (traverse_task->getTaskStatus() == TaskStatus::Suspended) {
     if (n_pending_tasks_ > max_parallelism_) {
       suspend_interval_ =
-          std::max(min_suspend_interval_, running_average_enumerate_time_ * n_pending_tasks_ / max_parallelism_);
+          std::max(min_suspend_interval_, running_average_enumerate_time_ * (n_pending_tasks_ / max_parallelism_));
     } else {
-      suspend_interval_ = std::max(min_suspend_interval_, running_average_enumerate_time_);
+      suspend_interval_ = min_suspend_interval_;
     }
     auto splits = traverse_task->getSplits();
     if (!splits.empty()) {
+      n_pending_tasks_ += splits.size();
+      task_counters_[task->getTaskId()] += splits.size();
+      uint32_t qid = traverse_task->getQueryId();
+      uint32_t task_id = traverse_task->getTaskId();
+      std::chrono::time_point<std::chrono::steady_clock> stop_time = traverse_task->getStopTime();
+      auto& ops = plan_->getOperators(task_id);
       for (auto& split : splits) {
         auto input_size = split.second.size();
-        uint32_t qid = traverse_task->getQueryId();
-        uint32_t task_id = traverse_task->getTaskId();
-        std::chrono::time_point<std::chrono::steady_clock> stop_time = traverse_task->getStopTime();
-        auto& ops = plan_->getOperators(task_id);
-        ++n_pending_tasks_;
-        ++task_counters_[task->getTaskId()];
         addTaskToQueue<TraverseTask>(task_queue, qid, task_id, stop_time, batch_size_, ops, traverse_task->getScopes(),
                                      traverse_task->getDataGraph(), traverse_task->getCandidates(), query_type_,
                                      split.first, ops.size() - 1, TaskStatus::Normal, std::move(split.second), 0,
@@ -241,6 +232,7 @@ void ExecutionPlanDriver::taskFinish(std::unique_ptr<TaskBase>& task, Threadsafe
           cost_learner_client_->sendUpdates(profiled, plan_, query_, n_partitions_, n_labels_, candidates_);
         }
       }
+      DCHECK_EQ(n_pending_tasks_, 0);
       finishPlan(reply_queue);
     }
   }

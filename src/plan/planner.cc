@@ -257,24 +257,6 @@ std::vector<std::vector<CandidateScope>> Planner::generatePartitionedScopes(
   return partitioned_plans;
 }
 
-// TODO(tatiana): remove obsolete functions
-std::vector<std::pair<uint32_t, std::vector<CandidateScope>>> Planner::generatePartitionedPlans(
-    const std::vector<QueryVertexID>& partitioning_qv) {
-  // CHECK_EQ(partitioning_qv.size(), 1);  // consider the locality indicator only, no. tasks equal to no. partitions
-  DLOG(INFO) << "partitioning_qv = " << partitioning_qv.front();
-  std::vector<std::pair<uint32_t, std::vector<CandidateScope>>> ret;
-  ret.reserve(backtracking_plan_->getPlans().size() * ((1 << partitioning_qv.size()) - 1));
-
-  auto n_qvs = query_context_->query_graph.getNumVertices();
-
-  for (uint32_t i = 0; i < backtracking_plan_->getPlans().size(); ++i) {
-    ret.emplace_back(i, std::vector<CandidateScope>(n_qvs));
-    ret.back().second[partitioning_qv.front()].usePartition(backtracking_plan_->getPlan(i)->getPartitionId());
-  }
-  LOG(INFO) << "Partition qeury vertex size: " << partitioning_qv.size() << ",  partition plan size:" << ret.size();
-  return ret;
-}
-
 void Planner::newInputOperators(ExecutionPlan* logical_plan, const std::vector<QueryVertexID>* partitioning_qvs) {
   if (partitioning_qvs == nullptr || partitioning_qvs->empty()) {
     backtracking_plan_->addInputOperator(std::make_unique<LogicalCompressedInputOperator>(
@@ -305,11 +287,11 @@ std::vector<std::pair<uint32_t, std::vector<CandidateScope>>> Planner::generateL
       auto graph_partition = scopes[primary_pqv].getPartition();
       auto plan_pos = scope_partition_to_plan_idx.find(graph_partition);
       if (plan_pos == scope_partition_to_plan_idx.end()) {  // plan not generated yet, generate intra partition plan
-        LOG(INFO) << "Generate Plan " << backtracking_plan_->getPlans().size() << " for intra-partition "
-                  << graph_partition;
+        if (shortPlannerLog()) {
+          LOG(INFO) << "Generate Plan " << backtracking_plan_->getPlans().size() << " for intra-partition "
+                    << graph_partition;
+        }
         std::vector<CandidateScope> plan_scopes(n_qvs, scopes[primary_pqv]);
-        // std::vector<CandidateScope> plan_scopes(n_qvs);
-        // plan_scopes[primary_pqv] = scopes[primary_pqv];
         auto& stats = candidate_cardinality[graph_partition];
         auto candidate_views = result->getCandidatesByScopes(plan_scopes);
         auto plan = generateLogicalExecutionPlan(stats, primary_pqv, &candidate_views, &partitioning_qvs);
@@ -322,6 +304,7 @@ std::vector<std::pair<uint32_t, std::vector<CandidateScope>>> Planner::generateL
               plan = generateLogicalExecutionPlan(getCardinality(candidate_views), DUMMY_QUERY_VERTEX, &candidate_views,
                                                   &partitioning_qvs, nullptr, false);
               CHECK(plan != nullptr);  // the entire problem does not have a match if nullptr
+              plan->setStepCosts(std::vector<double>(plan->getStepCosts().size()));
               global_plan_idx = backtracking_plan_->addPlan(plan);
             }
             plan_pos = scope_partition_to_plan_idx.insert({graph_partition, global_plan_idx}).first;
@@ -359,108 +342,78 @@ void Planner::parallelizePartitionedPlans(
     const std::vector<QueryVertexID>& partitioning_qvs,
     std::vector<std::pair<uint32_t, std::vector<CandidateScope>>>* partitioned_plans,
     PartitionedCandidateResult* result) {
-  // TODO(tatiana): handle when candidate views are not available
-  /* get weights for each plan partition */
-  double max_weight = 0;
-  std::vector<std::pair<QueryVertexID, std::vector<double>>> plan_weights;
-  plan_weights.reserve(partitioned_plans->size());
-  for (auto& partition : *partitioned_plans) {
-    auto candidate_views = result->getCandidatesByScopes(partition.second);
-    auto[parallel_qv, weights] = planners_[partition.first]->computeParallelVertexWeights(
-        query_context_->data_graph, candidate_views, partitioning_qvs);
-    std::stringstream ss;
-    bool parallel_qv_is_pqv = false;
-    for (auto v : partitioning_qvs) {
-      ss << ' ' << v;
-      if (v == parallel_qv) parallel_qv_is_pqv = true;
-    }
-    if (parallel_qv_is_pqv || backtracking_plan_->getPlan(partition.first)->getMatchingOrder()[0] == parallel_qv) {
-      if (verbosePlannerLog()) {
-        LOG(INFO) << "parallel_qv = " << parallel_qv << " partitioning_qvs [" << ss.str() << " ]";
-      }
-    } else if (partitioning_qvs.empty()) {  // replace existing logical input operator
-      std::vector<QueryVertexID> pqvs{parallel_qv};
-      auto logical_plan = backtracking_plan_->getPlan(partition.first);
-      backtracking_plan_->replaceInputOperator(
-          partition.first,
-          std::make_unique<PartitionedLogicalCompressedInputOperator>(
-              &query_context_->query_graph, logical_plan->inputAreKeys(), logical_plan->getMatchingOrder(), pqvs));
-      LOG(INFO) << "Regenerate input operator as parallel qv is not pqv. parallel_qv = " << parallel_qv
-                << " partitioning_qvs [" << ss.str() << " ]";
-    }
-    auto sum = std::accumulate(weights.begin(), weights.end(), 0.0);
-    plan_weights.emplace_back(parallel_qv, std::move(weights));
-    max_weight = std::max(sum, max_weight);
-  }
+  parallelizePartitionedPlans(partitioning_qvs, partitioned_plans, result, 5e5, 5e5);
+}
 
-  /* split candidates of parallelizing qv into buckets by limiting each bucket weight */
-  double bucket_weight_limit = max_weight / 10.0;
-  double max_bucket_weight = 0, max_single_vertex_weight = 0;
-  if (verbosePlannerLog()) {
-    LOG(INFO) << "===== Parallelizing plans =====";
-    LOG(INFO) << "max weight " << max_weight << ", limit " << bucket_weight_limit;
-    LOG(INFO) << "Partitioned plan count before " << partitioned_plans->size();
-  }
+void Planner::parallelizePartitionedPlans(
+    const std::vector<QueryVertexID>& partitioning_qvs,
+    std::vector<std::pair<uint32_t, std::vector<CandidateScope>>>* partitioned_plans,
+    PartitionedCandidateResult* result, double bucket_weight_limit, double parallelization_threshold) {
   std::vector<std::pair<uint32_t, std::vector<CandidateScope>>> parallelized_partitioned_plans;
+  std::vector<bool> segment_mask;
   parallelized_partitioned_plans.reserve(partitioned_plans->size());
-  QueryVertexID parallelizing_qv = DUMMY_QUERY_VERTEX;
-  for (uint32_t i = 0; i < partitioned_plans->size(); ++i) {
-    auto& pair = (*partitioned_plans)[i];
-    parallelizing_qv = plan_weights[i].first;
-    const auto& weights = plan_weights[i].second;
+  segment_mask.reserve(partitioned_plans->size());
+  for (auto& partition : *partitioned_plans) {
+    auto& step_costs = backtracking_plan_->getPlan(partition.first)->getStepCosts();
+    auto sum_costs = std::accumulate(step_costs.begin(), step_costs.end(), 0.) + 1.;
+    if (sum_costs <= parallelization_threshold) {
+      parallelized_partitioned_plans.push_back(std::move(partition));
+      segment_mask.push_back(false);
+      continue;
+    }
 
+    auto candidate_views = result->getCandidatesByScopes(partition.second);
+    auto& plan = backtracking_plan_->getPlan(partition.first);
+    auto parallel_qv = plan->getMatchingOrder().front();
+    if (!plan->isInCover(parallel_qv)) {
+      parallel_qv = plan->getMatchingOrder()[1];
+      CHECK(plan->isInCover(parallel_qv));
+    }
+
+    auto weights = planners_[partition.first]->getParallelizingQueryVertexWeights(
+        parallel_qv, query_context_->data_graph, candidate_views, plan->getQueryCoverBits());
+    auto sum_weight = std::accumulate(weights.begin(), weights.end(), 0);
+
+    // bucket_weight_limit = sum_weight * parallelization_threshold / sum_costs;
+    auto partition_bucket_weight_limit = std::max(bucket_weight_limit, sum_weight / 100.);
+    if (sum_weight < partition_bucket_weight_limit) {
+      parallelized_partitioned_plans.push_back(std::move(partition));
+      segment_mask.push_back(true);
+      continue;
+    }
     double bucket_weight = 0;
-    for (uint32_t l = 0, r = 0; r < weights.size(); ++r) {
+    for (uint32_t l = 0, r = 0; r < weights.size(); ++r) {  // l and r both inclusive
       bucket_weight += weights[r];
-      max_single_vertex_weight = std::max(bucket_weight, max_single_vertex_weight);
-      if (bucket_weight > bucket_weight_limit) {
-        if (l == r) {
-          if (bucket_weight > max_bucket_weight) {
-            max_bucket_weight = bucket_weight;
-          }
-          parallelized_partitioned_plans.emplace_back(pair);
-          parallelized_partitioned_plans.back().second[parallelizing_qv].addRange(l, r);
-          if (verbosePlannerLog()) {
-            LOG(INFO) << "Partition " << (parallelized_partitioned_plans.size() - 1) << " plan " << pair.first
-                      << " weight " << bucket_weight;
-          }
-          l = r + 1;
-          bucket_weight = 0;
-        } else {
+      if (bucket_weight > partition_bucket_weight_limit) {
+        if (l != r) {
           bucket_weight -= weights[r];
-          if (bucket_weight > max_bucket_weight) {
-            max_bucket_weight = bucket_weight;
-          }
-          parallelized_partitioned_plans.emplace_back(pair);
-          parallelized_partitioned_plans.back().second[parallelizing_qv].addRange(l, r - 1);
-          if (verbosePlannerLog()) {
-            LOG(INFO) << "Partition " << (parallelized_partitioned_plans.size() - 1) << " plan " << pair.first
-                      << " weight " << bucket_weight;
-          }
-          l = r;
           --r;
-          bucket_weight = 0;
         }
-      } else if (r == weights.size() - 1) {
-        if (bucket_weight > max_bucket_weight) {
-          max_bucket_weight = bucket_weight;
-        }
-        parallelized_partitioned_plans.emplace_back(std::move(pair));
+        parallelized_partitioned_plans.emplace_back(partition);
+        parallelized_partitioned_plans.back().second[parallel_qv].addRange(l, r);
         if (verbosePlannerLog()) {
-          LOG(INFO) << "Partition " << (parallelized_partitioned_plans.size() - 1) << " plan " << pair.first
+          LOG(INFO) << "Partition " << (parallelized_partitioned_plans.size() - 1) << " plan " << partition.first
                     << " weight " << bucket_weight;
         }
-        if (l > 0) {
-          parallelized_partitioned_plans.back().second[parallelizing_qv].addRange(l, r);
+        l = r + 1;
+        bucket_weight = 0;
+        segment_mask.push_back(true);
+      } else if (r == weights.size() - 1) {
+        parallelized_partitioned_plans.emplace_back(std::move(partition));
+        if (verbosePlannerLog()) {
+          LOG(INFO) << "Partition " << (parallelized_partitioned_plans.size() - 1) << " plan " << partition.first
+                    << " weight " << bucket_weight;
         }
+        CHECK_GT(l, 0);
+        parallelized_partitioned_plans.back().second[parallel_qv].addRange(l, r);
+        segment_mask.push_back(true);
       }
     }
   }
-  partitioned_plans->swap(parallelized_partitioned_plans);
 
-  if (verbosePlannerLog()) {
-    LOG(INFO) << "max_bucket_weight " << max_bucket_weight << " single vertex max weight " << max_single_vertex_weight;
-  }
+  DCHECK_EQ(segment_mask.size(), parallelized_partitioned_plans.size());
+  partitioned_plans->swap(parallelized_partitioned_plans);
+  backtracking_plan_->setPartitionedPlanSegmentMask(std::move(segment_mask));
 }
 
 std::vector<std::pair<uint32_t, std::vector<QueryVertexID>>> Planner::generateParallelQueryVertex(
@@ -540,14 +493,10 @@ BacktrackingPlan* Planner::generateExecutionPlan(const CandidateResult* result, 
   LOG(INFO) << ">>>>>>>>>> Time to generateLogicalPlans " << toSeconds(t0, t1) << "s";
   // 4. parallelize partitioned plans for better concurrency and load balance
   if (multithread) {
-    // parallelizePartitionedPlans(partitioning_qv, &partition_plans, partitioned_result);
-    // CHECK_EQ(backtracking_plan_->getPlans().size(), backtracking_plan_->getNumInputOperators());
-
-    // auto t2 = std::chrono::steady_clock::now();
-    // LOG(INFO) << ">>>>>>>>>> Time to parallelizePartitionedPlans " << toSeconds(t1, t2) << "s";
-
-    // FIXME(tatiana): remove?
-    backtracking_plan_->addParallelOpids(generateParallelQueryVertex(partition_plans));
+    parallelizePartitionedPlans(partitioning_qv, &partition_plans, partitioned_result);
+    CHECK_EQ(backtracking_plan_->getPlans().size(), backtracking_plan_->getNumInputOperators());
+    auto t2 = std::chrono::steady_clock::now();
+    LOG(INFO) << ">>>>>>>>>> Time to parallelizePartitionedPlans " << toSeconds(t1, t2) << "s";
   }
 
   // TODO(tatiana): check for prunable partitioned plans

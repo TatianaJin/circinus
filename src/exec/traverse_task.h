@@ -15,7 +15,9 @@
 #pragma once
 
 #include <stdint.h>
+#include <algorithm>
 #include <memory>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -142,29 +144,34 @@ class TraverseChainTask : public TaskBase {
 
   std::vector<std::pair<uint32_t, std::vector<CompressedSubgraphs>>> getSplits() { return std::move(splits_); }
 
+  /** @returns Whether to suspend task for creating new tasks on splits. */
   template <QueryType profile>
-  std::vector<std::pair<uint32_t, std::vector<CompressedSubgraphs>>> splitInput() {
-    std::vector<std::pair<uint32_t, std::vector<CompressedSubgraphs>>> res;
+  bool splitInput() {
     if (split_level_ <= start_level_) {  // if split from start level, directly get from input
       if (traverse_context_[0]->canSplitInput()) {
         auto[ptr, size] = traverse_context_[0]->splitInput();
         // LOG(INFO) << "Split start " << start_level_ << " size " << size << " interval " << suspend_interval_;
-        res.emplace_back(start_level_, std::vector<CompressedSubgraphs>(ptr, ptr + size));
-        return res;
+        splits_.emplace_back(start_level_, std::vector<CompressedSubgraphs>(ptr, ptr + size));
+        if (splits_.size() == split_size_) {
+          return true;
+        }
       }
       split_level_ = start_level_ + 1;
     }
     auto split_max_level = std::min(suspended_level_, (uint32_t)operators_.size() - 2);
-    if (split_level_ == split_max_level) return res;
+    if (split_level_ == split_max_level) return split_level_ >= operators_.size() - 2;
 
     if (traverse_context_[split_level_ - start_level_]->canSplitInput()) {
       auto[ptr, size] = traverse_context_[split_level_ - start_level_]->splitInput();
       // LOG(INFO) << "Split input " << split_level_ << " size " << size << " interval " << suspend_interval_;
-      res.emplace_back(split_level_, std::vector<CompressedSubgraphs>(ptr, ptr + size));
+      splits_.emplace_back(split_level_, std::vector<CompressedSubgraphs>(ptr, ptr + size));
+      if (splits_.size() == split_size_) {
+        return true;
+      }
     }
 
     // split from intermediate level
-    while (split_level_ < split_max_level && res.size() < split_size_) {
+    while (split_level_ < split_max_level && splits_.size() < split_size_) {
       auto ctx = traverse_context_[split_level_ - start_level_ - 1].get();
       auto original_buffer = ctx->getOutputs();
       std::vector<CompressedSubgraphs> temp_output_buffer = *original_buffer;
@@ -182,10 +189,10 @@ class TraverseChainTask : public TaskBase {
       } else {
         temp_output_buffer.erase(temp_output_buffer.begin() + size, temp_output_buffer.end());
         // LOG(INFO) << "Split middle " << split_level_ << " size " << size << " interval " << suspend_interval_;
-        res.emplace_back(split_level_, std::move(temp_output_buffer));
+        splits_.emplace_back(split_level_, std::move(temp_output_buffer));
       }
     }
-    return res;
+    return splits_.size() == split_size_ || split_level_ >= operators_.size() - 2;
   }
 
   void run(uint32_t executor_idx) override {
@@ -212,11 +219,15 @@ class TraverseChainTask : public TaskBase {
     if (end_level_ == operators_.size() - 1) {
       old_count = dynamic_cast<OutputOperator*>(operators_.back())->getOutput()->getCount(executor_idx);
     }
-    // TODO(tatiana): support match limit
+    // TODO(engineering): support match limit
     // auto profile_output = "Task_" + std::to_string(task_id_);
     // ProfilerStart(profile_output.data());
     execute<QueryType::Execute>(inputs_, start_index_, input_size_, start_level_, executor_idx);
     // ProfilerStop();
+
+    if (task_status_ == TaskStatus::Normal) {
+      CHECK(splits_.empty());
+    }
     if (end_level_ == operators_.size() - 1) {
       new_count = dynamic_cast<OutputOperator*>(operators_.back())->getOutput()->getCount(executor_idx);
     }
@@ -247,7 +258,7 @@ class TraverseChainTask : public TaskBase {
     }
     // auto profile_output = "Profile_Task_" + std::to_string(task_id_);
     // ProfilerStart(profile_output.data());
-    // TODO(tatiana): support match limit
+    // TODO(engineering): support match limit
     start_time_ = std::chrono::steady_clock::now();
     uint64_t old_count = 0;
     uint64_t new_count = 0;
@@ -256,6 +267,7 @@ class TraverseChainTask : public TaskBase {
     }
     execute<QueryType::Profile>(inputs_, start_index_, input_size_, start_level_, executor_idx);
     if (task_status_ == TaskStatus::Normal) {
+      CHECK(splits_.empty());
       DCHECK_LT(start_level_, operators_.size());
       DCHECK_LT(end_level_, operators_.size());
       for (uint32_t i = start_level_; i < end_level_; ++i) {
@@ -267,10 +279,15 @@ class TraverseChainTask : public TaskBase {
     }
     auto end = std::chrono::steady_clock::now();
     if (shortExecutionLog()) {
-      if (start_level_ == 0) {
+      if (task_status_ == TaskStatus::Suspended) {
+        LOG(INFO) << "Suspended Task " << task_id_ << " split " << split_level_ << " size " << splits_.size()
+                  << " suspend " << suspended_level_ << '/' << (operators_.size() - 1)
+                  << " time usage: " << toSeconds(start_time_, end) << "s. suspend interval " << suspend_interval_;
+      } else if (start_level_ == 0) {
         LOG(INFO) << "Task " << task_id_ << " input " << inputs_.size() << '/'
                   << getNumSubgraphs(inputs_, 0, inputs_.size()) << " count " << (new_count - old_count) << " ("
-                  << old_count << " to " << new_count << "), time usage: " << toSeconds(start_time_, end) << "s.";
+                  << old_count << " to " << new_count << "), time usage: " << toSeconds(start_time_, end)
+                  << "s. suspend interval " << suspend_interval_;
       } else {
         LOG(INFO) << "Inherit Task " << task_id_ << ':' << start_level_ << " input " << inputs_.size() << " count "
                   << (new_count - old_count) << " (" << old_count << " to " << new_count
@@ -350,9 +367,10 @@ class TraverseChainTask : public TaskBase {
       ctx->setInput(input, start_index, start_index + input_size);
       if (suspend_interval_ != 0 && toSeconds(start_time_, std::chrono::steady_clock::now()) >= suspend_interval_) {
         suspended_level_ = level;
-        splits_ = std::move(splitInput<profile>());
-        task_status_ = TaskStatus::Suspended;
-        return true;
+        if (splitInput<profile>()) {  // do not suspend if no splits
+          task_status_ = TaskStatus::Suspended;
+          return true;
+        }
       }
     } else if (level == suspended_level_) {  // when a suspended task is resumed, we need to first recreate the stack
                                              // until the last level

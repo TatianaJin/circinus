@@ -123,7 +123,7 @@ class Planner {
   /* start of interface for specifying parallelization strategy */
 
   /** Generate parallel query vertex for each partition plan */
-  std::vector<std::pair<uint32_t, std::vector<QueryVertexID>>> generateParallelQueryVertex(
+  [[deprecated]] std::vector<std::pair<uint32_t, std::vector<QueryVertexID>>> generateParallelQueryVertex(
       const std::vector<std::pair<uint32_t, std::vector<CandidateScope>>>& partition_plans);
 
   /** Select query vertices by which the backtracking search space is partitioned.  */
@@ -147,11 +147,12 @@ class Planner {
       const std::vector<QueryVertexID>& partitioning_qvs,
       std::vector<std::pair<uint32_t, std::vector<CandidateScope>>>* partitioned_plans, PartitionedCandidateResult*);
 
+  void parallelizePartitionedPlans(const std::vector<QueryVertexID>& partitioning_qvs,
+                                   std::vector<std::pair<uint32_t, std::vector<CandidateScope>>>* partitioned_plans,
+                                   PartitionedCandidateResult*, double weight_limit, double parallelization_threshold);
+
   /** Generate logical input operators that are aware of partitioning */
   virtual void newInputOperators(ExecutionPlan* plan, const std::vector<QueryVertexID>* partitioning_qvs = nullptr);
-
-  virtual std::vector<std::pair<uint32_t, std::vector<CandidateScope>>> generatePartitionedPlans(
-      const std::vector<QueryVertexID>& partitioning_qv);  // based on indicator partition only
 
   /* end of interface for specifying parallelization strategy */
 };

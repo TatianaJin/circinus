@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <cmath>
 #include <string>
 #include <tuple>
@@ -131,11 +132,19 @@ class NaivePlanner {
                                                                                candidate_views, cover_bits));
   }
 
-  inline const std::vector<QueryVertexID>& getMatchingOrder() { return matching_order_; }
+  /* start of parallelization strategy */
+
+  std::vector<double> getParallelizingQueryVertexWeights(QueryVertexID partition_qv, const GraphBase* data_graph,
+                                                         const std::vector<CandidateSetView>& candidate_views,
+                                                         uint64_t cover_bits);
 
   QueryVertexID selectParallelizingQueryVertex(uint64_t cover_bits,
                                                const std::vector<QueryVertexID>& parallelizing_qv_candidates,
                                                double parallelization_threshold = 5e5);
+
+  /* end of parallelization strategy */
+
+  inline const std::vector<QueryVertexID>& getMatchingOrder() const { return matching_order_; }
 
  private:
   /* Start of implementations of compression strategy */
@@ -198,13 +207,6 @@ class NaivePlanner {
                                                  const std::vector<QueryVertexID>& cc, bool with_traversal = false);
 
   /* End of implementations of compression strategy */
-
-  /* start of parallelization strategy */
-
-  std::vector<double> getParallelizingQueryVertexWeights(QueryVertexID partition_qv, const GraphBase* data_graph,
-                                                         const std::vector<CandidateSetView>& candidate_views,
-                                                         uint64_t cover_bits);
-  /* end of parallelization strategy */
 
   bool hasValidCandidate() const;
 

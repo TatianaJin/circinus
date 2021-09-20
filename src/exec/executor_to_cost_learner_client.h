@@ -12,6 +12,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 #include "zmq.hpp"
 #include "zmq_addon.hpp"
@@ -123,7 +124,6 @@ class ExecutorToCostLearnerClient {
       msg->addmem(nbrs.first, nbrs.second * sizeof(QueryVertexID));
     }
   }
-
 };  // class ExecutorToCostLearnerClient
 
 }  // namespace circinus

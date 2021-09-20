@@ -69,7 +69,7 @@ def run_batch(args):
   log_dir, log = get_log_path(args)
 
   with open(log, 'a') as log_f:
-    log_f.write("dataset,query_size,query_mode,query_index,elapsed_time,filter_time,plan_time,enumerate_time,n_embeddings,order,max_task_time\n")
+    log_f.write("dataset,query_size,query_mode,query_index,elapsed_execution_time,filter_time,plan_time,enumerate_time,n_embeddings,order,max_task_time\n")
 
   common_flags = get_common_flags(args, log)
   with open(config_path, 'r') as config_f:
@@ -112,5 +112,5 @@ if __name__ == '__main__':
   else:
     log_dir, log = get_log_path(args)
     with open(log, 'a') as log_f:
-      log_f.write("dataset,query_size,query_mode,query_index,elapsed_time,filter_time,plan_time,enumerate_time,n_embeddings,order,max_task_time\n")
+      log_f.write("dataset,query_size,query_mode,query_index,elapsed_execution_time,filter_time,plan_time,enumerate_time,n_embeddings,order,max_task_time\n")
     run_query(args.query, args, log_dir, get_common_flags(args, log))
