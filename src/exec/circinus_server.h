@@ -161,8 +161,13 @@ class CircinusServer {
       LOG(INFO) << "Candidate generation finished. Start backtracking.";
 
       auto plan = query_state.planner->generateExecutionPlan(query_state.query_context.query_config.seed);
-      std::unique_ptr<PlanDriver> plan_driver = std::make_unique<OnlineQueryExecutionPlanDriver>(plan);
 
+      if (plan == nullptr) {
+        finishQuery(query_index, nullptr, "");
+        return;
+      }
+
+      std::unique_ptr<PlanDriver> plan_driver = std::make_unique<OnlineQueryExecutionPlanDriver>(plan);
       query_state.plan_time = toSeconds(now, std::chrono::high_resolution_clock::now());
       LOG(INFO) << "Generated backtracking plan in " << query_state.plan_time << " seconds";
       executor_manager_.run(query_index, &query_state.query_context, std::move(plan_driver));

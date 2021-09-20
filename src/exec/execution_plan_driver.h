@@ -95,8 +95,11 @@ class ExecutionPlanDriverBase : public PlanDriver {
 /** Execution plan driver of online query with seed vertex
  */
 class OnlineQueryExecutionPlanDriver : public ExecutionPlanDriverBase {
+ protected:
+  uint32_t n_pending_tasks_ = 0;
+
  public:
-  OnlineQueryExecutionPlanDriver(BacktrackingPlan* plan) : ExecutionPlanDriverBase(plan) {}
+  explicit OnlineQueryExecutionPlanDriver(BacktrackingPlan* plan) : ExecutionPlanDriverBase(plan) {}
 
   void init(QueryId qid, QueryContext* query_ctx, ExecutionContext& ctx, ThreadsafeTaskQueue& task_queue) override;
 

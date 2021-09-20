@@ -131,6 +131,7 @@ void OnlineQueryExecutionPlanDriver::init(QueryId qid, QueryContext* query_ctx, 
   ExecutionPlanDriverBase::init(qid, query_ctx, ctx, task_queue);
   VertexID seed_data_vertex = query_ctx->query_config.seed.second;
   task_counters_.resize(1, 1);
+  n_pending_tasks_ += 1;
   dynamic_cast<OutputOperator*>(plan_->getOutputOperator(0))->setOutput(&result_->getOutputs());
   std::vector<Operator*>& ops = plan_->getOperators(0);
   addTaskToQueue<TraverseChainTask>(&task_queue, qid, 0, query_ctx->stop_time, ctx.first.getBatchSize(), ops,
@@ -140,9 +141,37 @@ void OnlineQueryExecutionPlanDriver::init(QueryId qid, QueryContext* query_ctx, 
 
 void OnlineQueryExecutionPlanDriver::taskFinish(std::unique_ptr<TaskBase>& task, ThreadsafeTaskQueue* task_queue,
                                                 ThreadsafeQueue<ServerEvent>* reply_queue) {
-  collectTaskInfo(task);
-  if (--task_counters_[task->getTaskId()] == 0 && ++n_finished_tasks_ == task_counters_.size()) {
-    finishPlan(reply_queue);
+  auto traverse_task = dynamic_cast<TraverseChainTask*>(task.get());
+  if (traverse_task->getTaskStatus() == TaskStatus::Suspended) {
+    if (n_pending_tasks_ > max_parallelism_) {
+      suspend_interval_ =
+          std::max(min_suspend_interval_, running_average_enumerate_time_ * n_pending_tasks_ / max_parallelism_);
+    } else {
+      suspend_interval_ = std::max(min_suspend_interval_, running_average_enumerate_time_);
+    }
+    auto splits = traverse_task->getSplits();
+    if (!splits.empty()) {
+      for (auto& split : splits) {
+        auto input_size = split.second.size();
+        uint32_t qid = traverse_task->getQueryId();
+        uint32_t task_id = traverse_task->getTaskId();
+        std::chrono::time_point<std::chrono::steady_clock> stop_time = traverse_task->getStopTime();
+        auto& ops = plan_->getOperators(task_id);
+        ++n_pending_tasks_;
+        ++task_counters_[task->getTaskId()];
+        addTaskToQueue<TraverseChainTask>(
+            task_queue, qid, task_id, stop_time, batch_size_, ops, traverse_task->getDataGraph(), nullptr, query_type_,
+            split.first, ops.size() - 1, TaskStatus::Normal, std::move(split.second), 0, input_size, nullptr);
+      }
+    }
+    traverse_task->setSuspendInterval(suspend_interval_);
+    // put into the queue for continuing execution
+    addTaskToQueue(task_queue, task);
+  } else {
+    collectTaskInfo(task);
+    if (--task_counters_[task->getTaskId()] == 0 && ++n_finished_tasks_ == task_counters_.size()) {
+      finishPlan(reply_queue);
+    }
   }
 }
 

@@ -280,7 +280,10 @@ void CircinusServer::finishQuery(uint32_t query_index, void* result, const std::
   query.planner = nullptr;
   reusable_indices_.push_back(query_index);
   if (error.empty()) {
-    if (query.query_context.query_config.output == "count") {
+    if (result == nullptr) {
+      std::string reply = "no matching";
+      replyToClient(query.client_addr, reply.data(), reply.size(), true);
+    } else if (query.query_context.query_config.output == "count") {
       auto res = reinterpret_cast<QueryResult*>(result);
       res->filter_time = query.filter_time;
       res->plan_time = query.plan_time;

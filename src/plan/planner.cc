@@ -465,7 +465,8 @@ BacktrackingPlan* Planner::generateExecutionPlan(std::pair<QueryVertexID, Vertex
    * For query using an auxiliary bipartite-graph-based index, use BipartiteGraphView. */
   const QueryGraph& query_graph = query_context_->query_graph;
   const ReorderedPartitionedGraph* data_graph = dynamic_cast<ReorderedPartitionedGraph*>(query_context_->data_graph);
-  if (query_graph.getVertexLabel(seed.first) != data_graph->getVertexLabel(seed.second)) {
+  if (query_graph.getVertexLabel(seed.first) != ALL_LABEL &&
+      query_graph.getVertexLabel(seed.first) != data_graph->getVertexLabel(seed.second)) {
     return nullptr;
   }
 
