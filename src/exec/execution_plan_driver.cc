@@ -245,7 +245,7 @@ void ExecutionPlanDriver::taskFinish(std::unique_ptr<TaskBase>& task, Threadsafe
                                      ThreadsafeQueue<ServerEvent>* reply_queue) {
   DCHECK_LT(task->getTaskId(), task_counters_.size());
   auto traverse_task = dynamic_cast<TraverseTask*>(task.get());
-  if (traverse_task->getTaskStatus() == TaskStatus::Suspended) {
+  if (traverse_task->getTaskStatus() == TaskStatus::Suspended || traverse_task->getTaskStatus() == TaskStatus::Split) {
     if (n_pending_tasks_ > max_parallelism_) {
       suspend_interval_ =
           std::max(min_suspend_interval_, running_average_enumerate_time_ * (n_pending_tasks_ / max_parallelism_));
@@ -253,24 +253,28 @@ void ExecutionPlanDriver::taskFinish(std::unique_ptr<TaskBase>& task, Threadsafe
       suspend_interval_ = min_suspend_interval_;
     }
     auto splits = traverse_task->getSplits();
-    if (!splits.empty()) {
-      n_pending_tasks_ += splits.size();
-      task_counters_[task->getTaskId()] += splits.size();
-      uint32_t qid = traverse_task->getQueryId();
-      uint32_t task_id = traverse_task->getTaskId();
-      std::chrono::time_point<std::chrono::steady_clock> stop_time = traverse_task->getStopTime();
-      auto& ops = plan_->getOperators(task_id);
-      for (auto& split : splits) {
-        auto input_size = split.second.size();
-        addTaskToQueue<TraverseTask>(task_queue, qid, task_id, stop_time, batch_size_, ops, traverse_task->getScopes(),
-                                     traverse_task->getDataGraph(), traverse_task->getCandidates(), query_type_,
-                                     split.first, ops.size() - 1, TaskStatus::Normal, std::move(split.second), 0,
-                                     input_size, traverse_task->getCandidateHashmaps());
-      }
+    CHECK(!splits.empty());
+    n_pending_tasks_ += splits.size();
+    task_counters_[task->getTaskId()] += splits.size();
+    uint32_t qid = traverse_task->getQueryId();
+    uint32_t task_id = traverse_task->getTaskId();
+    std::chrono::time_point<std::chrono::steady_clock> stop_time = traverse_task->getStopTime();
+    auto& ops = plan_->getOperators(task_id);
+    for (auto& split : splits) {
+      auto input_size = split.second.size();
+      addTaskToQueue<TraverseTask>(task_queue, qid, task_id, stop_time, batch_size_, ops, traverse_task->getScopes(),
+                                   traverse_task->getDataGraph(), traverse_task->getCandidates(), query_type_,
+                                   split.first, ops.size() - 1, TaskStatus::Normal, std::move(split.second), 0,
+                                   input_size, traverse_task->getCandidateHashmaps());
     }
-    traverse_task->setSuspendInterval(suspend_interval_);
-    // put into the queue for continuing execution
-    addTaskToQueue(task_queue, task);
+    if (traverse_task->getTaskStatus() == TaskStatus::Suspended) {
+      traverse_task->setSuspendInterval(suspend_interval_);
+      // put into the queue for continuing execution
+      addTaskToQueue(task_queue, task);
+    } else {
+      --n_pending_tasks_;
+      --task_counters_[task->getTaskId()];
+    }
   } else {
     --n_pending_tasks_;
     collectTaskInfo(task);

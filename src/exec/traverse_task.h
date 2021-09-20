@@ -39,7 +39,7 @@
 namespace circinus {
 
 // TODO(tatiana): move def to .cc
-enum class TaskStatus : uint64_t { Normal, Suspended };
+enum class TaskStatus : uint64_t { Normal, Suspended, Split };
 /**
  * For single-thread query execution
  */
@@ -179,7 +179,7 @@ class TraverseChainTask : public TaskBase {
       split_level_ = start_level_ + 1;
     }
     auto split_max_level = std::min(suspended_level_, (uint32_t)operators_.size() - 2);
-    if (split_level_ == split_max_level) return split_level_ >= operators_.size() - 2;
+    if (split_level_ == split_max_level) return !splits_.empty() && split_level_ >= operators_.size() - 2;
 
     if (traverse_context_[split_level_ - start_level_]->canSplitInput()) {
       auto[ptr, size] = traverse_context_[split_level_ - start_level_]->splitInput();
@@ -212,7 +212,7 @@ class TraverseChainTask : public TaskBase {
         splits_.emplace_back(split_level_, std::move(temp_output_buffer));
       }
     }
-    return splits_.size() == split_size_ || split_level_ >= operators_.size() - 2;
+    return splits_.size() == split_size_ || (!splits_.empty() && split_level_ >= operators_.size() - 2);
   }
 
   void run(uint32_t executor_idx) override {
@@ -258,9 +258,6 @@ class TraverseChainTask : public TaskBase {
     execute<QueryType::Execute>(inputs_, start_index_, input_size_, start_level_, executor_idx);
     // ProfilerStop();
 
-    if (task_status_ == TaskStatus::Normal) {
-      CHECK(splits_.empty());
-    }
     if (end_level_ == operators_.size() - 1) {
       new_count = dynamic_cast<OutputOperator*>(operators_.back())->getOutput()->getCount(executor_idx);
     }
@@ -276,6 +273,7 @@ class TraverseChainTask : public TaskBase {
                   << "s.";
       }
     }
+    checkSplits();
   }
 
   void profile(uint32_t executor_idx) override {
@@ -289,8 +287,6 @@ class TraverseChainTask : public TaskBase {
       setupOutputs();
       if (!setupTraverseContexts()) return;
     }
-    // auto profile_output = "Profile_Task_" + std::to_string(task_id_);
-    // ProfilerStart(profile_output.data());
     // TODO(engineering): support match limit
     start_time_ = std::chrono::steady_clock::now();
     uint64_t old_count = 0;
@@ -299,14 +295,6 @@ class TraverseChainTask : public TaskBase {
       old_count = dynamic_cast<OutputOperator*>(operators_.back())->getOutput()->getCount(executor_idx);
     }
     execute<QueryType::Profile>(inputs_, start_index_, input_size_, start_level_, executor_idx);
-    if (task_status_ == TaskStatus::Normal) {
-      CHECK(splits_.empty());
-      DCHECK_LT(start_level_, operators_.size());
-      DCHECK_LT(end_level_, operators_.size());
-      for (uint32_t i = start_level_; i < end_level_; ++i) {
-        profile_info_[i + 1] += *traverse_context_[i - start_level_];
-      }
-    }
     if (end_level_ == operators_.size() - 1) {
       new_count = dynamic_cast<OutputOperator*>(operators_.back())->getOutput()->getCount(executor_idx);
     }
@@ -327,7 +315,14 @@ class TraverseChainTask : public TaskBase {
                   << "), time usage: " << toSeconds(start_time_, end) << "s.";
       }
     }
-    // ProfilerStop();
+    if (task_status_ == TaskStatus::Normal) {
+      DCHECK_LT(start_level_, operators_.size());
+      DCHECK_LT(end_level_, operators_.size());
+      for (uint32_t i = start_level_; i < end_level_; ++i) {
+        profile_info_[i + 1] += *traverse_context_[i - start_level_];
+      }
+      checkSplits();
+    }
   }
 
  protected:
@@ -461,6 +456,13 @@ class TraverseChainTask : public TaskBase {
       }
 
     return finished;
+  }
+
+  void checkSplits() {
+    if (task_status_ == TaskStatus::Normal && !splits_.empty()) {
+      LOG(INFO) << "------------------------------------------------ Task finished with splits.";
+      task_status_ = TaskStatus::Split;
+    }
   }
 };
 
