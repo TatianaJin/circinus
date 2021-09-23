@@ -233,9 +233,7 @@ class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
     auto parent_match = input.getKeyVal(parent_index_);
     auto exceptions = input.getExceptions(same_label_key_indices_, same_label_set_indices_);
     if (!intersect_candidates) {
-      if (ctx->getDataGraph<G>() == nullptr) {
-        LOG(FATAL) << "no graph";
-      }
+      DCHECK(ctx->getDataGraph<G>() != nullptr) << "no graph";
       auto neighbors = ctx->getDataGraph<G>()->getOutNeighborsWithHint(parent_match, target_label_, 0);
       removeExceptions(neighbors, &current_targets, exceptions);
     } else {
@@ -533,8 +531,8 @@ class ExpandEdgeSetToKeyOperator : public ExpandEdgeOperator {
       const CandidateSetView* candidates, std::vector<CompressedSubgraphs>* outputs, const void* graph,
       QueryType profile, const unordered_set<VertexID>* candidate_hashmap) const override {
     auto ret = std::make_unique<ExpandEdgeSetToKeyTraverseContext>(candidates, graph, outputs, profile);
-    if (candidates != nullptr) {
-      if (ret->init<G>(*candidates, parent_label_)) return nullptr;  // prune the whole traverse chain
+    if (candidates != nullptr && ret->init<G>(*candidates, parent_label_)) {
+      return nullptr;  // prune the whole traverse chain
     }
     return ret;
   }

@@ -27,15 +27,16 @@ namespace circinus {
 
 LogicalCFLFilter::LogicalCFLFilter(const GraphMetadata& metadata, const QueryGraph* query_graph,
                                    const std::vector<VertexID>& candidate_size, QueryVertexID seed_qv)
-    : LogicalNeighborhoodFilter(query_graph), two_core_solver_(query_graph), start_vertex_(seed_qv) {
+    : LogicalNeighborhoodFilter(query_graph), start_vertex_(seed_qv), two_core_solver_(query_graph) {
   if (start_vertex_ == DUMMY_QUERY_VERTEX) {
     start_vertex_ = getStartVertex(metadata, query_graph, candidate_size);
   }
   generateBFSTree(query_graph);
 }
 
+// TODO(tatiana): no need for 2core solver given the start vertex
 LogicalCFLFilter::LogicalCFLFilter(const QueryGraph* query_graph, QueryVertexID seed_qv)
-    : LogicalNeighborhoodFilter(query_graph), two_core_solver_(query_graph), start_vertex_(seed_qv) {
+    : LogicalNeighborhoodFilter(query_graph), start_vertex_(seed_qv), two_core_solver_(query_graph) {
   generateBFSTree(query_graph);
 }
 

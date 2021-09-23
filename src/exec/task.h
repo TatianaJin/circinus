@@ -30,6 +30,7 @@ class TaskBase {
   uint16_t query_id_;
   uint16_t task_id_;
   double time_ = 0;
+  std::chrono::time_point<std::chrono::steady_clock> start_time_;
   std::chrono::time_point<std::chrono::steady_clock> stop_time_;
 
  public:
@@ -52,9 +53,9 @@ class TaskBase {
   virtual void profile(uint32_t executor_idx) { run(executor_idx); }
 
   inline void runWithTiming(uint32_t executor_idx) {
-    auto start = std::chrono::high_resolution_clock::now();
+    start_time_ = std::chrono::steady_clock::now();
     run(executor_idx);
-    time_ += toSeconds(start, std::chrono::high_resolution_clock::now());
+    time_ += toSeconds(start_time_, std::chrono::steady_clock::now());
   }
 
   /* @returns Execution time in seconds */

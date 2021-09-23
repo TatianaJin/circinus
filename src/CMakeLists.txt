@@ -25,6 +25,7 @@ set(circinus_exec_sources
   ${PROJECT_SOURCE_DIR}/src/exec/executor_manager.cc
   ${PROJECT_SOURCE_DIR}/src/exec/execution_plan_driver.cc
   ${PROJECT_SOURCE_DIR}/src/exec/result.cc
+  ${PROJECT_SOURCE_DIR}/src/exec/traverse_task.cc
 )
 set(circinus_graph_sources
   ${PROJECT_SOURCE_DIR}/src/graph/candidate_set_view.cc

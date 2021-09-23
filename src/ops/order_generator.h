@@ -43,7 +43,6 @@ class OrderGenerator {
     }
   };
   std::unordered_map<std::pair<QueryVertexID, QueryVertexID>, BipartiteGraph, hash_pair> bg_map_;
-  QueryVertexID seed_qv_;
 
   const GraphBase* data_graph_ = nullptr;
   const QueryGraph* query_graph_;
@@ -60,7 +59,7 @@ class OrderGenerator {
         candidate_sizes_(&candidate_sizes),
         metadata_(&metadata) {}
 
-  OrderGenerator(const QueryGraph* query_graph, QueryVertexID seed_qv) : query_graph_(query_graph), seed_qv_(seed_qv) {}
+  explicit OrderGenerator(const QueryGraph* query_graph) : query_graph_(query_graph) {}
 
   const BipartiteGraph* getBipartiteGraph(QueryVertexID v1, QueryVertexID v2) {
     std::pair<QueryVertexID, QueryVertexID> p(v1, v2);

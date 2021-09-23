@@ -39,7 +39,8 @@ CandidatePruningPlan* Planner::generateCandidatePruningPlan() {
   auto& q = query_context_->query_graph;
   auto& strategy = query_context_->query_config.candidate_pruning_strategy;
   switch (strategy) {
-  case CandidatePruningStrategy::None: {
+  case CandidatePruningStrategy::None:
+  case CandidatePruningStrategy::Online: {
     candidate_pruning_plan_.setFinished();
     return &candidate_pruning_plan_;
   }
@@ -460,9 +461,6 @@ std::vector<std::pair<uint32_t, std::vector<QueryVertexID>>> Planner::generatePa
 
 BacktrackingPlan* Planner::generateExecutionPlan(std::pair<QueryVertexID, VertexID> seed, bool multithread) {
   backtracking_plan_ = std::make_unique<BacktrackingPlan>();
-  /* The data graph representation varies depending on the execution strategy.
-   * For query execution with partitioned graphs, use GraphView. For query on normal graphs, use Normal;
-   * For query using an auxiliary bipartite-graph-based index, use BipartiteGraphView. */
   const QueryGraph& query_graph = query_context_->query_graph;
   const ReorderedPartitionedGraph* data_graph = dynamic_cast<ReorderedPartitionedGraph*>(query_context_->data_graph);
   if (query_graph.getVertexLabel(seed.first) != ALL_LABEL &&
@@ -470,11 +468,7 @@ BacktrackingPlan* Planner::generateExecutionPlan(std::pair<QueryVertexID, Vertex
     return nullptr;
   }
 
-  GraphType graph_type =
-      query_context_->query_config.use_auxiliary_index
-          ? GraphType::BipartiteGraphView
-          : (query_context_->graph_metadata->numPartitions() > 1 ? GraphType::Partitioned : GraphType::Normal);
-  planners_.push_back(std::make_unique<NaivePlanner>(&query_context_->query_graph, graph_type));
+  planners_.push_back(std::make_unique<NaivePlanner>(&query_context_->query_graph, getGraphType()));
 
   auto& planner = planners_.back();
 
@@ -488,9 +482,7 @@ BacktrackingPlan* Planner::generateExecutionPlan(std::pair<QueryVertexID, Vertex
     LOG(INFO) << "Order:" << toString(order);
   }
 
-  ExecutionPlan* plan = nullptr;
-  LOG(INFO) << "-------------";
-  plan = planner->generatePlan();
+  ExecutionPlan* plan = planner->generatePlan();
   plan->setInputAreKeys(plan->isInCover(plan->getRootQueryVertexID()));
 
   backtracking_plan_->addPlan(plan);
@@ -608,15 +600,7 @@ ExecutionPlan* Planner::generateLogicalExecutionPlan(const std::vector<VertexID>
     }
   }
 
-  /* The data graph representation varies depending on the execution strategy.
-   * For query execution with partitioned graphs, use GraphView. For query on normal graphs, use Normal;
-   * For query using an auxiliary bipartite-graph-based index, use BipartiteGraphView. */
-  GraphType graph_type =
-      toPartitionCandidates()
-          ? GraphType::GraphView
-          : (query_context_->query_config.use_auxiliary_index
-                 ? GraphType::BipartiteGraphView
-                 : (query_context_->graph_metadata->numPartitions() > 1 ? GraphType::Partitioned : GraphType::Normal));
+  GraphType graph_type = toPartitionCandidates() ? GraphType::GraphView : getGraphType();
   planners_.push_back(std::make_unique<NaivePlanner>(&query_context_->query_graph,
                                                      query_context_->query_config.use_two_hop_traversal,
                                                      std::move(cardinality), graph_type));

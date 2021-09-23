@@ -152,37 +152,36 @@ class CircinusServer {
       // auto str = plan->toString();
       // query_state.query_context.query_config.output = "plan";
       // finishQuery(query_index, &str, "");
-    } else if (query_state.query_context.query_config.order_strategy == OrderStrategy::Online) {
-      if (query_state.query_context.query_config.isProfileMode()) {
-        query_state.query_context.query_config.output = "profile_count";
-      }
-      auto now = std::chrono::high_resolution_clock::now();
-      FLAGS_candidate_set_intersection = 3;
-      LOG(INFO) << "Candidate generation finished. Start backtracking.";
-
-      auto plan = query_state.planner->generateExecutionPlan(query_state.query_context.query_config.seed);
-
-      if (plan == nullptr) {
-        finishQuery(query_index, nullptr, "");
-        return;
-      }
-
-      std::unique_ptr<PlanDriver> plan_driver = std::make_unique<OnlineQueryExecutionPlanDriver>(plan);
-      query_state.plan_time = toSeconds(now, std::chrono::high_resolution_clock::now());
-      LOG(INFO) << "Generated backtracking plan in " << query_state.plan_time << " seconds";
-      executor_manager_.run(query_index, &query_state.query_context, std::move(plan_driver));
     } else {  // enter actual execution phases
       if (query_state.query_context.query_config.isProfileMode()) {
         query_state.query_context.query_config.output = "profile_count";
       }
-      query_state.filter_start_time = std::chrono::high_resolution_clock::now();
+      if (query_state.query_context.query_config.order_strategy == OrderStrategy::Online) {
+        FLAGS_candidate_set_intersection = 3;  // no intersection with candidate sets
+        LOG(INFO) << "Skipped candidate generation. Start backtracking.";
 
-      CandidatePruningPlan* plan = nullptr;
-      // phase 1: preprocessing
-      plan = query_state.planner->generateCandidatePruningPlan();
-      // asynchronous execution, a CandidatePhase event will be generated when preprocessing finish
-      executor_manager_.run(query_index, &query_state.query_context,
-                            std::make_unique<CandidatePruningPlanDriver>(plan));
+        auto now = std::chrono::high_resolution_clock::now();
+        auto plan = query_state.planner->generateExecutionPlan(query_state.query_context.query_config.seed);
+        query_state.plan_time = toSeconds(now, std::chrono::high_resolution_clock::now());
+        LOG(INFO) << "Generated backtracking plan in " << query_state.plan_time << " seconds";
+
+        if (plan == nullptr) {
+          finishQuery(query_index, nullptr, "");
+          return;
+        }
+
+        std::unique_ptr<PlanDriver> plan_driver = std::make_unique<OnlineQueryExecutionPlanDriver>(plan);
+        executor_manager_.run(query_index, &query_state.query_context, std::move(plan_driver));
+      } else {
+        query_state.filter_start_time = std::chrono::high_resolution_clock::now();
+
+        CandidatePruningPlan* plan = nullptr;
+        // phase 1: preprocessing
+        plan = query_state.planner->generateCandidatePruningPlan();
+        // asynchronous execution, a CandidatePhase event will be generated when preprocessing finish
+        executor_manager_.run(query_index, &query_state.query_context,
+                              std::make_unique<CandidatePruningPlanDriver>(plan));
+      }
     }
   }
 

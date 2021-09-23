@@ -55,9 +55,9 @@ ExecutionPlan* NaivePlanner::generatePlan() {
 
   // get a smallest minimum weight vertex cover of the query graph
   auto log_cardinality = logCardinality();
-  log_cardinality.push_back(0);
-  for (uint32_t i = 1; i < matching_order_.size(); ++i) {
-    log_cardinality.push_back(1);
+  if (log_cardinality.empty()) {
+    log_cardinality.resize(query_graph_->getNumVertices(), 1);
+    log_cardinality.front() = 0;
   }
   WeightedBnB vertex_cover_solver(query_graph_, log_cardinality);
   vertex_cover_solver.computeVertexCover();
@@ -708,7 +708,7 @@ const std::vector<QueryVertexID>& NaivePlanner::generateOrder(const GraphBase* d
 }
 
 const std::vector<QueryVertexID>& NaivePlanner::generateOrder(QueryVertexID seed_qv) {
-  auto order_generator = OrderGenerator(query_graph_, seed_qv);
+  auto order_generator = OrderGenerator(query_graph_);
   matching_order_ = order_generator.getOrder(OrderStrategy::Online, seed_qv);
   return matching_order_;
 }

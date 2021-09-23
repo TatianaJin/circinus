@@ -53,6 +53,7 @@ class ExecutionPlanDriverBase : public PlanDriver {
   double suspend_interval_ = DEFAULT_SUSPEND_INTERVAL;  // determined by average task enumerate time and min interval
   uint32_t max_parallelism_ = 1;
   uint32_t n_finished_task_instances_ = 0;
+  uint32_t n_pending_tasks_ = 0;
 
  public:
   explicit ExecutionPlanDriverBase(BacktrackingPlan* plan) : plan_(plan) {}
@@ -64,6 +65,7 @@ class ExecutionPlanDriverBase : public PlanDriver {
 
   void taskTimeOut(std::unique_ptr<TaskBase>& task, ThreadsafeQueue<ServerEvent>* reply_queue) override;
 
+ protected:
   inline void collectTaskInfo(std::unique_ptr<TaskBase>& task) {
     running_average_enumerate_time_ = running_average_enumerate_time_ * (1 - running_average_decay_) +
                                       running_average_decay_ * task->getExecutionTime();
@@ -90,14 +92,15 @@ class ExecutionPlanDriverBase : public PlanDriver {
     }
     task_queue->putTask(task);
   }
+
+  template <typename TaskType>
+  void handleSupendedTask(std::unique_ptr<TaskBase>&, ThreadsafeTaskQueue*);
 };
 
 /** Execution plan driver of online query with seed vertex
  */
 class OnlineQueryExecutionPlanDriver : public ExecutionPlanDriverBase {
  protected:
-  uint32_t n_pending_tasks_ = 0;
-
  public:
   explicit OnlineQueryExecutionPlanDriver(BacktrackingPlan* plan) : ExecutionPlanDriverBase(plan) {}
 
@@ -114,7 +117,6 @@ class ExecutionPlanDriver : public ExecutionPlanDriverBase {
   uint32_t n_partitions_ = 0;
   uint32_t n_labels_ = 0;
   std::unique_ptr<ExecutorToCostLearnerClient> cost_learner_client_;
-  uint32_t n_pending_tasks_ = 0;
 
  public:
   ExecutionPlanDriver(BacktrackingPlan* plan, zmq::context_t* zmq_ctx) : ExecutionPlanDriverBase(plan) {

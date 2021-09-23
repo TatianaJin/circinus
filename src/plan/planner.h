@@ -82,7 +82,7 @@ class Planner {
 
   BacktrackingPlan* generateExecutionPlan(const std::pair<QueryVertexID, VertexID> seed, bool multithread = true);
 
- private:
+ protected:
   static inline std::vector<VertexID> getCardinality(const std::vector<CandidateSetView>& candidate_views) {
     std::vector<VertexID> cardinality;
     cardinality.reserve(candidate_views.size());
@@ -109,6 +109,15 @@ class Planner {
       }
     }
     return ret;
+  }
+
+  /* The data graph representation varies depending on the execution strategy.
+   * For query execution with partitioned graphs, use GraphView. For query on normal graphs, use Normal;
+   * For query using an auxiliary bipartite-graph-based index, use BipartiteGraphView. */
+  inline GraphType getGraphType() const {
+    return query_context_->query_config.use_auxiliary_index
+               ? GraphType::BipartiteGraphView
+               : (query_context_->graph_metadata->numPartitions() > 1 ? GraphType::Partitioned : GraphType::Normal);
   }
 
   /** Generates order, then compression strategy, and then operators */
