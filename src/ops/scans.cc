@@ -84,6 +84,7 @@ class LDFScanBase : public Scan {
         if (g->getVertexOutDegree(v) >= min_out_degree_ && validate(*g, v)) {
           ctx->candidates.push_back(v);
         }
+        break;
       }
     }
     while (ctx->scan_offset < ctx->scan_end) {
@@ -148,6 +149,17 @@ class DegreeScanBase : public Scan {
       if (g->getVertexOutDegree(v) >= min_out_degree_ &&
           (!directed || (static_cast<const DirectedGraph*>(g)->getVertexInDegree(v) >= min_in_degree_)) &&
           validate(*g, v)) {
+        ctx->candidates.push_back(v);
+      }
+    }
+  }
+
+  void scan(const GraphPartition* g, ScanContext* ctx) const override {
+    if (ctx->scan_offset >= ctx->scan_end) return;
+    auto range_start = g->getPartitionOffset();
+    while (ctx->scan_offset < ctx->scan_end) {
+      auto v = range_start + ctx->scan_offset++;
+      if (g->getVertexOutDegree(v) >= min_out_degree_ && validate(*g, v)) {
         ctx->candidates.push_back(v);
       }
     }

@@ -63,7 +63,7 @@ class CandidatePruningPlan {
       auto filters = logical_filter->toPhysicalOperators(metadata, exec_conf);
       DCHECK_EQ(filters.size(), ret.size()) << scan_.getQueryVertices().size();
       for (uint32_t i = 0; i < ret.size(); ++i) {
-        if (ret[i] != nullptr) {
+        if (ret[i] != nullptr && filters[i] != nullptr) {
           ret[i]->addFilter(std::move(filters[i]));
         }
       }

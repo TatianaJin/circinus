@@ -32,7 +32,6 @@ class LocalFilter;  // forward declaration
 
 class LogicalNLFFilter : public LogicalLocalFilter {
  private:
-  std::vector<LabelID> labels_;
   std::vector<unordered_map<LabelID, uint32_t>> out_neighbor_label_frequency_;
   std::vector<unordered_map<LabelID, uint32_t>> in_neighbor_label_frequency_;
   bool maximum_neighbor_degree_filter_ = false;
@@ -47,7 +46,9 @@ class LogicalNLFFilter : public LogicalLocalFilter {
     for (uint32_t qi = 0; qi < query_vertices.size(); ++qi) {
       auto neighbors = q.getOutNeighbors(query_vertices[qi]);
       for (uint32_t i = 0; i < neighbors.second; ++i) {
-        out_neighbor_label_frequency_[qi][q.getVertexLabel(neighbors.first[i])] += 1;
+        auto qv_label = q.getVertexLabel(neighbors.first[i]);
+        if (qv_label == ALL_LABEL) continue;
+        out_neighbor_label_frequency_[qi][qv_label] += 1;
       }
     }
     if (maximum_neighbor_degree_filter_) {
@@ -68,11 +69,15 @@ class LogicalNLFFilter : public LogicalLocalFilter {
     for (uint32_t qi = 0; qi < query_vertices.size(); ++qi) {
       auto neighbors = q.getOutNeighbors(query_vertices[qi]);
       for (uint32_t i = 0; i < neighbors.second; ++i) {
-        out_neighbor_label_frequency_[qi][q.getVertexLabel(neighbors.first[i])] += 1;
+        auto qv_label = q.getVertexLabel(neighbors.first[i]);
+        if (qv_label == ALL_LABEL) continue;
+        out_neighbor_label_frequency_[qi][qv_label] += 1;
       }
       auto in_neighbors = q.getInNeighbors(query_vertices[qi]);
       for (uint32_t i = 0; i < in_neighbors.second; ++i) {
-        in_neighbor_label_frequency_[qi][q.getVertexLabel(in_neighbors.first[i])] += 1;
+        auto qv_label = q.getVertexLabel(in_neighbors.first[i]);
+        if (qv_label == ALL_LABEL) continue;
+        in_neighbor_label_frequency_[qi][qv_label] += 1;
       }
     }
   }

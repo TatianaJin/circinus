@@ -35,16 +35,28 @@ std::vector<std::unique_ptr<LocalFilter>> LogicalNLFFilter::toPhysicalOperators(
   ret.reserve(size);
   if (metadata.isSortedByLabel()) {
     for (uint32_t i = 0; i < size; ++i) {
-      ret.push_back(std::make_unique<QuickNLFFilter>(out_neighbor_label_frequency_[i]));
+      if (out_neighbor_label_frequency_[i].empty()) {
+        ret.push_back(nullptr);
+      } else {
+        ret.push_back(std::make_unique<QuickNLFFilter>(out_neighbor_label_frequency_[i]));
+      }
     }
   } else if (maximum_neighbor_degree_filter_) {
     for (uint32_t i = 0; i < size; ++i) {
-      ret.push_back(
-          std::make_unique<MNDNLFFilter>(std::move(out_neighbor_label_frequency_[i]), maximum_neighbor_degrees_[i]));
+      if (out_neighbor_label_frequency_[i].empty()) {
+        ret.push_back(nullptr);
+      } else {
+        ret.push_back(
+            std::make_unique<MNDNLFFilter>(std::move(out_neighbor_label_frequency_[i]), maximum_neighbor_degrees_[i]));
+      }
     }
   } else {
     for (uint32_t i = 0; i < size; ++i) {
-      ret.push_back(std::make_unique<NLFFilter>(std::move(out_neighbor_label_frequency_[i])));
+      if (out_neighbor_label_frequency_[i].empty()) {
+        ret.push_back(nullptr);
+      } else {
+        ret.push_back(std::make_unique<NLFFilter>(std::move(out_neighbor_label_frequency_[i])));
+      }
     }
   }
   if (metadata.isDirected()) {

@@ -33,7 +33,7 @@ std::vector<std::unique_ptr<Scan>> LogicalLDFScan::toPhysicalOperators(const Gra
     // estimate scan workload
     ScanWorkload workload;
     workload.output_cardinality = metadata.getNumVertices();
-    if (metadata.hasLabelFrequency()) {
+    if (metadata.hasLabelFrequency() && labels_[i] != ALL_LABEL) {
       workload.output_cardinality = std::min(workload.output_cardinality, metadata.getLabelFrequency(labels_[i]));
     }
     if (metadata.hasOutDegreeFrequency()) {
@@ -50,7 +50,7 @@ std::vector<std::unique_ptr<Scan>> LogicalLDFScan::toPhysicalOperators(const Gra
       continue;
     }
     // instantiate physial scan operators
-    if (metadata.isLabeled()) {
+    if (metadata.isLabeled() && labels_[i] != ALL_LABEL) {
       // 2 for finding label range, 1 for building label index, 0 for full scan
       uint32_t label_pruning_method = metadata.isSortedByLabel() ? 2 : metadata.hasLabelIndex();
       workload.scan_cardinality =
