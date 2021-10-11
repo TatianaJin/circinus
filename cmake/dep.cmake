@@ -74,6 +74,17 @@ else()
   message(STATUS "gperf not found")
 endif()
 
+find_path(bliss_INCLUDE NAMES bliss/graph.hh HINTS ${THIRDPARTY_DIR})
+find_library(bliss_LIBRARY NAMES bliss HINTS ${THIRDPARTY_DIR}/bliss)
+message(STATUS "Finding bliss")
+message(STATUS "  (Headers)    ${bliss_INCLUDE}")
+message(STATUS "  (Library)    ${bliss_LIBRARY}")
+if (bliss_INCLUDE AND bliss_LIBRARY)
+  list(APPEND EXTERNAL_INCLUDES ${bliss_INCLUDE})
+  list(APPEND EXTERNAL_LIBRARY ${bliss_LIBRARY})
+else()
+  message(ERROR "bliss not found")
+endif()
 
 set(install_metis false)
 # Workaround for avoiding repeated build due to BUILD_IN_SOURCE

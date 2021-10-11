@@ -11,8 +11,13 @@ Circinus has the following required dependencies:
 - GCC (>= 8.2.0, requires c++17 support)
 - Gflags
 - Glog
+- [bliss-0.73](http://www.tcs.hut.fi/Software/bliss/bliss-0.73.zip)
 
 For testing, Circinus uses [googletest](https://github.com/google/googletest/releases/tag/release-1.8.0) (needed when `cmake -DBUILD_TESTS=ON`).
+
+#### Installing Bliss
+
+A bash script `scripts/install_bliss.sh` is provided to download and install bliss in the `third_party` folder.
 
 
 ### Build

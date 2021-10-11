@@ -90,6 +90,8 @@ add_executable(GraphPartitionAnalysis src/tools/graph_partition_analysis.cc)
 target_link_libraries(GraphPartitionAnalysis circinus ${EXTERNAL_LIBRARY})
 add_executable(QueryTopologyCheck src/tools/query_topology_check.cc)
 target_link_libraries(QueryTopologyCheck circinus ${EXTERNAL_LIBRARY})
+add_executable(BreakSymmetry src/tools/break_symmetry.cc)
+target_link_libraries(BreakSymmetry circinus ${EXTERNAL_LIBRARY})
 
 # Tests
 if (BUILD_TESTS)
