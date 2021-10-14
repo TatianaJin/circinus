@@ -30,6 +30,7 @@
 #include "graph/partitioned_graph.h"
 #include "graph/types.h"
 #include "ops/filters/subgraph_filter.h"
+#include "ops/filters/target_filter.h"
 #include "ops/operator.h"
 #include "ops/traverse_context.h"
 #include "utils/query_utils.h"
@@ -42,25 +43,27 @@ class TraverseOperator : public Operator {
   const QueryVertexID target_vertex_;
   LabelID target_label_ = ALL_LABEL;
 
-  /* for non-repeated-vertex check */
+  /* for non-repeated-vertex check and/or automorphism elimination */
   uint64_t set_pruning_threshold_ = ~0u;
   std::vector<uint32_t> same_label_key_indices_;
   std::vector<uint32_t> same_label_set_indices_;
-  SubgraphFilter* const subgraph_filter_ = nullptr;  // owned by the execution plan
+  std::unique_ptr<SubgraphFilter> subgraph_filter_ = nullptr;
+  std::unique_ptr<TargetFilter> target_filter_ = nullptr;
 
   std::vector<std::pair<bool, uint32_t>> matching_order_indices_;
 
  public:
-  TraverseOperator(QueryVertexID target_vertex, SubgraphFilter* filter)
-      : target_vertex_(target_vertex), subgraph_filter_(filter) {}
+  TraverseOperator(QueryVertexID target_vertex, std::unique_ptr<SubgraphFilter>&& filter)
+      : target_vertex_(target_vertex), subgraph_filter_(std::move(filter)) {}
+
   TraverseOperator(QueryVertexID target_vertex, const std::vector<uint32_t>& same_label_key_indices,
                    const std::vector<uint32_t>& same_label_set_indices, uint64_t set_pruning_threshold,
-                   SubgraphFilter* filter = nullptr)
+                   std::unique_ptr<SubgraphFilter>&& filter = nullptr)
       : target_vertex_(target_vertex),
         set_pruning_threshold_(set_pruning_threshold),
         same_label_key_indices_(same_label_key_indices),
         same_label_set_indices_(same_label_set_indices),
-        subgraph_filter_(filter) {}
+        subgraph_filter_(std::move(filter)) {}
   virtual ~TraverseOperator() {}
 
   /* setters */
@@ -69,6 +72,49 @@ class TraverseOperator : public Operator {
   }
   inline void setTargetLabel(LabelID l) { target_label_ = l; }
 
+  inline void filterTargets(std::vector<VertexID>* targets, const CompressedSubgraphs& group) const {
+    if (target_filter_ == nullptr) return;
+    target_filter_->filter(targets, group);
+  }
+
+  /** @returns True if target is to be pruned. */
+  inline bool filterTarget(VertexID target, const CompressedSubgraphs& group) const {
+    if (target_filter_ == nullptr) return false;
+    return target_filter_->filter(target, group);
+  }
+
+  // TODO(tatiana): add degree filter for non-candidate-intersection cases
+  void addFilters(const std::vector<std::pair<bool, uint32_t>>& lt_constraints,
+                  const std::vector<std::pair<bool, uint32_t>>& gt_constraints) {
+    std::vector<uint32_t> expand_lt_conditions, expand_gt_conditions;      // key indices
+    std::vector<uint32_t> subgraph_lt_conditions, subgraph_gt_conditions;  // set indices
+    for (auto& p : lt_constraints) {
+      if (p.first) {
+        expand_lt_conditions.push_back(p.second);
+      } else {
+        subgraph_lt_conditions.push_back(p.second);
+      }
+    }
+    for (auto& p : gt_constraints) {
+      if (p.first) {
+        expand_gt_conditions.push_back(p.second);
+      } else {
+        subgraph_gt_conditions.push_back(p.second);
+      }
+    }
+    if (!subgraph_lt_conditions.empty() || !subgraph_gt_conditions.empty()) {
+      if (subgraph_filter_ == nullptr) {
+        subgraph_filter_ = SubgraphFilter::newPartialOrderSubgraphFilter(
+            std::move(subgraph_lt_conditions), std::move(subgraph_gt_conditions), matching_order_indices_.back());
+      } else {
+        subgraph_filter_ = subgraph_filter_->addPartialOrderSubgraphFilter(
+            std::move(subgraph_lt_conditions), std::move(subgraph_gt_conditions), matching_order_indices_.back());
+      }
+    }
+    if (expand_lt_conditions.empty() && expand_gt_conditions.empty()) return;
+    target_filter_ = TargetFilter::newTargetFilter(std::move(expand_lt_conditions), std::move(expand_gt_conditions));
+  }
+
   /* getters */
   inline const auto& getSameLabelKeyIndices() const { return same_label_key_indices_; }
   inline const auto& getSameLabelSetIndices() const { return same_label_set_indices_; }
@@ -76,6 +122,7 @@ class TraverseOperator : public Operator {
   inline QueryVertexID getTargetQueryVertex() const { return target_vertex_; }
   inline const auto& getMatchingOrderIndices() const { return matching_order_indices_; }
   inline auto getTargetLabel() const { return target_label_; }
+  TargetFilter* getTargetFilter() const { return target_filter_.get(); }
 
   inline bool filter(const CompressedSubgraphs& subgraphs) const {
     DCHECK(subgraph_filter_ != nullptr);

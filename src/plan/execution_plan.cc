@@ -359,14 +359,13 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
 TraverseOperator* ExecutionPlan::newExpandEdgeKeyToKeyOperator(
     QueryVertexID parent_vertex, QueryVertexID target_vertex,
     const std::array<std::vector<uint32_t>, 2>& same_label_indices) {
-  SubgraphFilter* filter = nullptr;
+  std::unique_ptr<SubgraphFilter> filter = nullptr;
 #ifdef USE_FILTER
   filter = SubgraphFilter::newSetPrunningSubgraphFilter(same_label_indices[0]);
-  subgraph_filters_.push_back(filter);
 #endif
   auto ret = ExpandEdgeOperator::newExpandEdgeKeyToKeyOperator(
       parent_vertex, target_vertex, query_vertex_indices_, same_label_indices[1], same_label_indices[0],
-      getSetPruningThreshold(target_vertex), filter, graph_type_, opToIntersectCandidates(target_vertex));
+      getSetPruningThreshold(target_vertex), std::move(filter), graph_type_, opToIntersectCandidates(target_vertex));
   setMatchingOrderIndices(target_vertex, ret);
   operators_.push_back(ret);
   return ret;
@@ -375,22 +374,21 @@ TraverseOperator* ExecutionPlan::newExpandEdgeKeyToKeyOperator(
 TraverseOperator* ExecutionPlan::newExpandEdgeKeyToSetOperator(
     QueryVertexID parent_vertex, QueryVertexID target_vertex,
     const std::array<std::vector<uint32_t>, 2>& same_label_indices) {
-  SubgraphFilter* filter = nullptr;
+  std::unique_ptr<SubgraphFilter> filter = nullptr;
 #ifdef USE_FILTER
   if (same_label_indices[0].empty()) {
-    subgraph_filters_.push_back(SubgraphFilter::newDummyFilter());
+    filter = SubgraphFilter::newDummyFilter();
   } else {
     std::vector<std::vector<uint32_t>> pruning_sets(1);
     pruning_sets.front().resize(same_label_indices[0].size() + 1);
     std::copy(same_label_indices[0].begin(), same_label_indices[0].end(), pruning_sets.front().begin());
     pruning_sets.front().back() = query_vertex_indices_[target_vertex];
-    subgraph_filters_.push_back(SubgraphFilter::newSetPrunningSubgraphFilter(std::move(pruning_sets)));
+    filter = SubgraphFilter::newSetPrunningSubgraphFilter(std::move(pruning_sets));
   }
-  filter = subgraph_filters_.back();
 #endif
   auto ret = ExpandEdgeOperator::newExpandEdgeKeyToSetOperator(
       parent_vertex, target_vertex, query_vertex_indices_, same_label_indices[1], same_label_indices[0],
-      getSetPruningThreshold(target_vertex), filter, graph_type_, opToIntersectCandidates(target_vertex));
+      getSetPruningThreshold(target_vertex), std::move(filter), graph_type_, opToIntersectCandidates(target_vertex));
   setMatchingOrderIndices(target_vertex, ret);
   operators_.push_back(ret);
   return ret;
@@ -412,31 +410,27 @@ TraverseOperator* ExecutionPlan::newExpandEdgeSetToKeyOperator(
     }
     target_same_label_set_indices.pop_back();
   }
+  std::unique_ptr<SubgraphFilter> filter = nullptr;
 #ifdef USE_FILTER
   if (target_same_label_indices[0].size() < 2 && parent_same_label_set_indices.size() < 2) {
-    subgraph_filters_.push_back(SubgraphFilter::newDummyFilter());
+    filter = SubgraphFilter::newDummyFilter();
   } else if (target_same_label_indices[0].size() < 2) {
-    subgraph_filters_.push_back(SubgraphFilter::newSetPrunningSubgraphFilter(parent_same_label_set_indices));
+    filter = SubgraphFilter::newSetPrunningSubgraphFilter(parent_same_label_set_indices);
   } else if (parent_same_label_set_indices.size() < 2) {
-    subgraph_filters_.push_back(SubgraphFilter::newSetPrunningSubgraphFilter(target_same_label_indices[0]));
+    filter = SubgraphFilter::newSetPrunningSubgraphFilter(target_same_label_indices[0]);
   } else {
     // if parent and target are of the same label, only one group of pruning sets
     if (query_graph_->getVertexLabel(parent_vertex) == query_graph_->getVertexLabel(target_vertex)) {
-      subgraph_filters_.push_back(SubgraphFilter::newSetPrunningSubgraphFilter(target_same_label_indices[0]));
+      filter = SubgraphFilter::newSetPrunningSubgraphFilter(target_same_label_indices[0]);
     } else {
       std::vector<std::vector<uint32_t>> pruning_sets{target_same_label_indices[0], parent_same_label_set_indices};
-      subgraph_filters_.push_back(SubgraphFilter::newSetPrunningSubgraphFilter(std::move(pruning_sets)));
+      filter = SubgraphFilter::newSetPrunningSubgraphFilter(std::move(pruning_sets));
     }
   }
-  auto ret = ExpandEdgeOperator::newExpandEdgeSetToKeyOperator(
-      parent_vertex, target_vertex, query_vertex_indices_, target_same_label_indices[1], target_same_label_set_indices,
-      getSetPruningThreshold(target_vertex), subgraph_filters_.back(), graph_type_,
-      opToIntersectCandidates(target_vertex));
-#else
-  auto ret = ExpandEdgeOperator::newExpandEdgeSetToKeyOperator(
-      parent_vertex, target_vertex, query_vertex_indices_, target_same_label_indices[1], target_same_label_set_indices,
-      getSetPruningThreshold(target_vertex), nullptr, graph_type_, opToIntersectCandidates(target_vertex));
 #endif
+  auto ret = ExpandEdgeOperator::newExpandEdgeSetToKeyOperator(
+      parent_vertex, target_vertex, query_vertex_indices_, target_same_label_indices[1], target_same_label_set_indices,
+      getSetPruningThreshold(target_vertex), std::move(filter), graph_type_, opToIntersectCandidates(target_vertex));
   ((ExpandEdgeOperator*)ret)
       ->setParentLabel(FLAGS_label_filter ? query_graph_->getVertexLabel(parent_vertex) : ALL_LABEL);
   setMatchingOrderIndices(target_vertex, ret);
@@ -448,13 +442,13 @@ TraverseOperator* ExecutionPlan::newExpandIntoOperator(const std::vector<QueryVe
                                                        QueryVertexID target_vertex,
                                                        const std::vector<QueryVertexID>& prev_key_parents,
                                                        std::vector<std::vector<uint32_t>>&& pruning_set_indices) {
-  SubgraphFilter* filter = nullptr;
+  std::unique_ptr<SubgraphFilter> filter = nullptr;
 #ifdef USE_FILTER
   filter = createFilter(std::move(pruning_set_indices));
 #endif
   TraverseOperator* ret =
       newTraverseOp<ExpandIntoOperator>(graph_type_, parents, target_vertex, query_vertex_indices_, prev_key_parents,
-                                        filter, getParentLabels(*query_graph_, parents));
+                                        std::move(filter), getParentLabels(*query_graph_, parents));
   operators_.push_back(ret);
   return ret;
 }
@@ -462,7 +456,7 @@ TraverseOperator* ExecutionPlan::newExpandIntoOperator(const std::vector<QueryVe
 TraverseOperator* ExecutionPlan::newExpandSetVertexOperator(
     std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
     const std::array<std::vector<uint32_t>, 2>& same_label_indices) {
-  SubgraphFilter* filter = nullptr;
+  std::unique_ptr<SubgraphFilter> filter = nullptr;
 #ifdef USE_FILTER
   if (same_label_indices[0].empty()) {
     filter = SubgraphFilter::newDummyFilter();
@@ -473,11 +467,10 @@ TraverseOperator* ExecutionPlan::newExpandSetVertexOperator(
     pruning_sets.front().back() = query_vertex_indices_[target_vertex];
     filter = SubgraphFilter::newSetPrunningSubgraphFilter(std::move(pruning_sets));
   }
-  subgraph_filters_.push_back(filter);
 #endif
   TraverseOperator* ret = newTraverseOp<ExpandKeyToSetVertexOperator>(
       graph_type_, opToIntersectCandidates(target_vertex), parents, target_vertex, query_vertex_indices_,
-      same_label_indices[1], same_label_indices[0], getSetPruningThreshold(target_vertex), filter);
+      same_label_indices[1], same_label_indices[0], getSetPruningThreshold(target_vertex), std::move(filter));
   setMatchingOrderIndices(target_vertex, ret);
   operators_.push_back(ret);
   return ret;
@@ -504,13 +497,13 @@ TraverseOperator* ExecutionPlan::newExpandSetToKeyVertexOperator(
             [&same_label_parent_indices](uint32_t idx) { return same_label_parent_indices.count(idx) == 1; }),
         target_same_label_set_indices.end());
   }
-  SubgraphFilter* filter = nullptr;
+  std::unique_ptr<SubgraphFilter> filter = nullptr;
 #ifdef USE_FILTER
   filter = createFilter(std::move(pruning_set_indices));
 #endif
   TraverseOperator* ret = newTraverseOp<ExpandSetToKeyVertexOperator>(
       graph_type_, opToIntersectCandidates(target_vertex), parents, target_vertex, query_vertex_indices_,
-      same_label_indices[1], target_same_label_set_indices, getSetPruningThreshold(target_vertex), filter,
+      same_label_indices[1], target_same_label_set_indices, getSetPruningThreshold(target_vertex), std::move(filter),
       getParentLabels(*query_graph_, parents));
   setMatchingOrderIndices(target_vertex, ret);
   operators_.push_back(ret);
@@ -520,14 +513,13 @@ TraverseOperator* ExecutionPlan::newExpandSetToKeyVertexOperator(
 TraverseOperator* ExecutionPlan::newExpandKeyKeyVertexOperator(
     std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
     const std::array<std::vector<uint32_t>, 2>& same_label_indices) {
-  SubgraphFilter* filter = nullptr;
+  std::unique_ptr<SubgraphFilter> filter = nullptr;
 #ifdef USE_FILTER
   filter = SubgraphFilter::newSetPrunningSubgraphFilter(same_label_indices[0]);
-  subgraph_filters_.push_back(filter);
 #endif
   TraverseOperator* ret = newTraverseOp<ExpandKeyToKeyVertexOperator>(
       graph_type_, opToIntersectCandidates(target_vertex), parents, target_vertex, query_vertex_indices_,
-      same_label_indices[1], same_label_indices[0], getSetPruningThreshold(target_vertex), filter);
+      same_label_indices[1], same_label_indices[0], getSetPruningThreshold(target_vertex), std::move(filter));
   setMatchingOrderIndices(target_vertex, ret);
   operators_.push_back(ret);
   return ret;
@@ -568,7 +560,7 @@ TraverseOperator* ExecutionPlan::newEnumerateKeyExpandToSetOperator(
   auto enumerated_key_pruning_indices =
       getPruningSets(keys_to_enumerate, label_existing_vertices_map, pruning_labels, pruning_set_indices);
   std::vector<uint64_t> pruning_set_thresholds(pruning_set_indices.size(), FLAGS_set_pruning_threshold);
-  SubgraphFilter* filter = createFilter(std::move(pruning_set_indices));
+  auto filter = createFilter(std::move(pruning_set_indices));
   if (FLAGS_set_pruning_threshold == 0) {
     for (auto& pair : pruning_labels) {
       if (pair.second != -1) {
@@ -580,7 +572,7 @@ TraverseOperator* ExecutionPlan::newEnumerateKeyExpandToSetOperator(
   TraverseOperator* ret = newTraverseOp<EnumerateKeyExpandToSetOperator>(
       graph_type_, opToIntersectCandidates(target_vertex), parents, target_vertex, input_query_vertex_indices,
       query_vertex_indices_, keys_to_enumerate, cover_table_, same_label_indices,
-      std::move(enumerated_key_pruning_indices), filter);
+      std::move(enumerated_key_pruning_indices), std::move(filter));
   setMatchingOrderIndices(target_vertex, ret);
   operators_.push_back(ret);
   return ret;

@@ -44,9 +44,9 @@ namespace circinus {
   ExpandEdge##name##Operator(uint32_t parent_index, uint32_t target_index, QueryVertexID parent, QueryVertexID target, \
                              const std::vector<uint32_t>& same_label_key_indices,                                      \
                              const std::vector<uint32_t>& same_label_set_indices, uint64_t set_pruning_threshold,      \
-                             SubgraphFilter* filter)                                                                   \
+                             std::unique_ptr<SubgraphFilter>&& filter)                                                 \
       : ExpandEdgeOperator(parent_index, target_index, parent, target, same_label_key_indices, same_label_set_indices, \
-                           set_pruning_threshold, filter) {}
+                           set_pruning_threshold, std::move(filter)) {}
 
 template <typename G, bool intersect_candidates>
 class ExpandEdgeKeyToSetOperator : public ExpandEdgeOperator {
@@ -104,8 +104,11 @@ class ExpandEdgeKeyToSetOperator : public ExpandEdgeOperator {
     if (!intersect_candidates) {
       auto neighbors = ctx->getDataGraph<G>()->getOutNeighborsWithHint(parent_match, target_label_, 0);
       removeExceptions(neighbors, &targets, exceptions);
+      if (!targets.empty()) {
+        filterTargets(&targets, input);  // enforce partial order
+      }
     } else {
-      expandFromParent<G, profile>(ctx, parent_match, exceptions, &targets);
+      expandFromParent<G, profile>(ctx, parent_match, exceptions, &targets, input);
     }
 
     if (targets.empty()) {
@@ -236,8 +239,11 @@ class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
       DCHECK(ctx->getDataGraph<G>() != nullptr) << "no graph";
       auto neighbors = ctx->getDataGraph<G>()->getOutNeighborsWithHint(parent_match, target_label_, 0);
       removeExceptions(neighbors, &current_targets, exceptions);
+      if (!current_targets.empty()) {
+        filterTargets(&current_targets, input);  // enforce partial order
+      }
     } else {
-      expandFromParent<G, profile>(ctx, parent_match, exceptions, &current_targets);
+      expandFromParent<G, profile>(ctx, parent_match, exceptions, &current_targets, input);
     }
   }
 };  // class ExpandEdgeKeyToKeyOperator
@@ -325,6 +331,9 @@ class CurrentResultsByCandidate : public CurrentResults {
       if (exceptions.count(candidate)) {
         continue;
       }
+      if (owner_->filterTarget(candidate, *input_)) {
+        continue;
+      }
       auto neighbors = data_graph->getInNeighborsWithHint(candidate, parent_label_, 0);
       intersect(*parent_set, neighbors, &parents);  // No need for exceptions
       if
@@ -373,7 +382,8 @@ class CurrentResultsByParent : public CurrentResults {
       std::vector<VertexID> targets;
       auto neighbors = graph->getOutNeighborsWithHint(parent_match, target_label, 0);
       if (isProfileCandidateSIEffect(profile)) {
-        intersectCandidateSetWithProfile(candidates, neighbors, &targets, exceptions_, ctx_);
+        intersectCandidateSetWithProfile(candidates, neighbors, &targets, exceptions_, ctx_, *input_,
+                                         owner_->getTargetFilter());
       } else {
         if (intersect_candidates) {
           intersect(candidates, neighbors, &targets, exceptions_);
@@ -383,6 +393,9 @@ class CurrentResultsByParent : public CurrentResults {
             }
         } else {
           removeExceptions(neighbors, &targets, exceptions_);
+        }
+        if (!targets.empty()) {
+          owner_->filterTargets(&targets, *input_);
         }
       }
       for (auto target : targets) {
@@ -405,7 +418,7 @@ class CurrentResultsByParent : public CurrentResults {
 #endif
     return ctx_->getOutputSize() - old_count;
   }
-};
+};  // class CurrentResultsByParent
 
 template <QueryType profile, typename G, bool intersect_candidates>
 class CurrentResultsByExtension : public CurrentResults {
@@ -473,7 +486,8 @@ class CurrentResultsByExtension : public CurrentResults {
     auto neighbors = g->getOutNeighborsWithHint(parent_match, owner_->getTargetLabel(), 0);
     auto& candidates = *((ExpandEdgeSetToKeyTraverseContext*)ctx_)->getCandidateSet();
     if (isProfileCandidateSIEffect(profile)) {
-      intersectCandidateSetWithProfile(candidates, neighbors, &current_extensions, current_exceptions_, ctx_);
+      intersectCandidateSetWithProfile(candidates, neighbors, &current_extensions, current_exceptions_, ctx_, *input_,
+                                       owner_->getTargetFilter());
     } else {
       if (intersect_candidates) {
         intersect(candidates, neighbors, &current_extensions, current_exceptions_);
@@ -483,6 +497,9 @@ class CurrentResultsByExtension : public CurrentResults {
           }
       } else {
         removeExceptions(neighbors, &current_extensions, current_exceptions_);
+      }
+      if (!current_extensions.empty()) {
+        owner_->filterTargets(&current_extensions, *input_);
       }
     }
     for (VertexID neighbor : current_extensions) {
@@ -631,23 +648,25 @@ class ExpandEdgeSetToKeyOperator : public ExpandEdgeOperator {
 TraverseOperator* ExpandEdgeOperator::newExpandEdgeKeyToSetOperator(
     QueryVertexID parent_vertex, QueryVertexID target_vertex, const unordered_map<QueryVertexID, uint32_t>& indices,
     const std::vector<uint32_t>& same_label_key_indices, const std::vector<uint32_t>& same_label_set_indices,
-    uint64_t set_pruning_threshold, SubgraphFilter* filter, GraphType graph_type, bool intersect_candidates) {
+    uint64_t set_pruning_threshold, std::unique_ptr<SubgraphFilter>&& filter, GraphType graph_type,
+    bool intersect_candidates) {
   DCHECK_GT(indices.count(parent_vertex), 0);
   DCHECK_GT(indices.count(target_vertex), 0);
   return newTraverseOp<ExpandEdgeKeyToSetOperator>(
       graph_type, intersect_candidates, indices.at(parent_vertex), indices.at(target_vertex), parent_vertex,
-      target_vertex, same_label_key_indices, same_label_set_indices, set_pruning_threshold, filter);
+      target_vertex, same_label_key_indices, same_label_set_indices, set_pruning_threshold, std::move(filter));
 }
 
 TraverseOperator* ExpandEdgeOperator::newExpandEdgeKeyToKeyOperator(
     QueryVertexID parent_vertex, QueryVertexID target_vertex, const unordered_map<QueryVertexID, uint32_t>& indices,
     const std::vector<uint32_t>& same_label_key_indices, const std::vector<uint32_t>& same_label_set_indices,
-    uint64_t set_pruning_threshold, SubgraphFilter* filter, GraphType graph_type, bool intersect_candidates) {
+    uint64_t set_pruning_threshold, std::unique_ptr<SubgraphFilter>&& filter, GraphType graph_type,
+    bool intersect_candidates) {
   DCHECK_GT(indices.count(parent_vertex), 0);
   DCHECK_GT(indices.count(target_vertex), 0);
   return newTraverseOp<ExpandEdgeKeyToKeyOperator>(
       graph_type, intersect_candidates, indices.at(parent_vertex), indices.at(target_vertex), parent_vertex,
-      target_vertex, same_label_key_indices, same_label_set_indices, set_pruning_threshold, filter);
+      target_vertex, same_label_key_indices, same_label_set_indices, set_pruning_threshold, std::move(filter));
 }
 
 // tricky case: expand, look up group for each match of target, and copy parent to set for each group; or
@@ -656,12 +675,13 @@ TraverseOperator* ExpandEdgeOperator::newExpandEdgeKeyToKeyOperator(
 TraverseOperator* ExpandEdgeOperator::newExpandEdgeSetToKeyOperator(
     QueryVertexID parent_vertex, QueryVertexID target_vertex, const unordered_map<QueryVertexID, uint32_t>& indices,
     const std::vector<uint32_t>& same_label_key_indices, const std::vector<uint32_t>& same_label_set_indices,
-    uint64_t set_pruning_threshold, SubgraphFilter* filter, GraphType graph_type, bool intersect_candidates) {
+    uint64_t set_pruning_threshold, std::unique_ptr<SubgraphFilter>&& filter, GraphType graph_type,
+    bool intersect_candidates) {
   DCHECK_GT(indices.count(parent_vertex), 0);
   DCHECK_GT(indices.count(target_vertex), 0);
   return newTraverseOp<ExpandEdgeSetToKeyOperator>(
       graph_type, intersect_candidates, indices.at(parent_vertex), indices.at(target_vertex), parent_vertex,
-      target_vertex, same_label_key_indices, same_label_set_indices, set_pruning_threshold, filter);
+      target_vertex, same_label_key_indices, same_label_set_indices, set_pruning_threshold, std::move(filter));
 }
 
 }  // namespace circinus

@@ -97,9 +97,10 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
                                const unordered_map<QueryVertexID, uint32_t>& query_vertex_indices,
                                const std::vector<uint32_t>& same_label_key_indices,
                                const std::vector<uint32_t>& same_label_set_indices, uint64_t set_pruning_threshold,
-                               SubgraphFilter* subgraph_filter = nullptr, std::vector<LabelID>&& parent_labels = {})
+                               std::unique_ptr<SubgraphFilter>&& subgraph_filter = nullptr,
+                               std::vector<LabelID>&& parent_labels = {})
       : ExpandVertexOperator(parents, target_vertex, query_vertex_indices, same_label_key_indices,
-                             same_label_set_indices, set_pruning_threshold, subgraph_filter),
+                             same_label_set_indices, set_pruning_threshold, std::move(subgraph_filter)),
         parent_labels_(std::move(parent_labels)) {
     if (parent_labels_.empty()) parent_labels_.resize(parents.size(), ALL_LABEL);
   }
@@ -294,6 +295,9 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
       if (ctx->getExceptions().count(vid)) {
         continue;
       }
+      if (filterTarget(vid, input)) {  // enforce partial order
+        continue;
+      }
       output_num += validateTarget<profile>(ctx, vid, input, 0, buffer);
       if (output_num == batch_size) {
         break;
@@ -331,7 +335,8 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
           for (size_t idx = 0; idx < ranges[range_i].second; ++idx) {
             VertexID key_vertex_id = ranges[range_i].first[idx];
 
-            if (ctx->getExceptions().count(key_vertex_id) == 0 && ctx->visitOnce(key_vertex_id)) {
+            if (ctx->getExceptions().count(key_vertex_id) == 0 && ctx->visitOnce(key_vertex_id) &&
+                !filterTarget(key_vertex_id, input)) {
               if (!isInCandidates(key_vertex_id, begin, candidate_end)) {
                 if
                   constexpr(isProfileCandidateSIEffect(profile)) ctx->candidate_si_diff += 1;
@@ -344,7 +349,7 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
                 for (++idx; idx < ranges[range_i].second; ++idx) {
                   auto vid = ranges[range_i].first[idx];
 
-                  if (ctx->getExceptions().count(vid) == 0 && ctx->visitOnce(vid)) {
+                  if (ctx->getExceptions().count(vid) == 0 && ctx->visitOnce(vid) && !filterTarget(vid, input)) {
                     if (isInCandidates(vid, begin, candidate_end)) {
                       extensions.push(vid);
                     } else {
@@ -356,7 +361,7 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
                 for (++range_i; range_i < ranges.size(); ++range_i) {
                   for (size_t idx = 0; idx < ranges[range_i].second; ++idx) {
                     auto vid = ranges[range_i].first[idx];
-                    if (ctx->getExceptions().count(vid) == 0 && ctx->visitOnce(vid)) {
+                    if (ctx->getExceptions().count(vid) == 0 && ctx->visitOnce(vid) && !filterTarget(vid, input)) {
                       if (isInCandidates(vid, begin, candidate_end)) {
                         extensions.push(vid);
                       } else {
@@ -374,7 +379,8 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
       } else {
         for (auto iter = out_neighbors.begin(); iter != out_neighbors.end(); ++iter) {
           VertexID key_vertex_id = *iter;
-          if (ctx->getExceptions().count(key_vertex_id) == 0 && ctx->visitOnce(key_vertex_id)) {
+          if (ctx->getExceptions().count(key_vertex_id) == 0 && ctx->visitOnce(key_vertex_id) &&
+              !filterTarget(key_vertex_id, input)) {
             if (!isInCandidates(key_vertex_id, begin, candidate_end)) {
               if
                 constexpr(isProfileCandidateSIEffect(profile)) ctx->candidate_si_diff += 1;
@@ -385,7 +391,7 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
               // store the remaining extensions for next batch output
               for (++iter; iter != out_neighbors.end(); ++iter) {
                 auto vid = *iter;
-                if (ctx->getExceptions().count(vid) == 0 && ctx->visitOnce(vid)) {
+                if (ctx->getExceptions().count(vid) == 0 && ctx->visitOnce(vid) && !filterTarget(vid, input)) {
                   if (isInCandidates(vid, begin, candidate_end)) {
                     extensions.push(vid);
                   } else {

@@ -26,6 +26,7 @@
 #include "graph/query_graph.h"
 #include "graph/types.h"
 #include "plan/execution_plan.h"
+#include "utils/hashmap.h"
 
 namespace circinus {
 

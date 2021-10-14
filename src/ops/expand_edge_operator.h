@@ -93,28 +93,32 @@ class ExpandEdgeOperator : public TraverseOperator {
                                                          const unordered_map<QueryVertexID, uint32_t>& indices,
                                                          const std::vector<uint32_t>& same_label_key_indices,
                                                          const std::vector<uint32_t>& same_label_set_indices,
-                                                         uint64_t set_pruning_threshold, SubgraphFilter* filter,
-                                                         GraphType graph_type, bool intersect_candidates);
+                                                         uint64_t set_pruning_threshold,
+                                                         std::unique_ptr<SubgraphFilter>&& filter, GraphType graph_type,
+                                                         bool intersect_candidates);
 
   static TraverseOperator* newExpandEdgeKeyToSetOperator(QueryVertexID parent_vertex, QueryVertexID target_vertex,
                                                          const unordered_map<QueryVertexID, uint32_t>& indices,
                                                          const std::vector<uint32_t>& same_label_key_indices,
                                                          const std::vector<uint32_t>& same_label_set_indices,
-                                                         uint64_t set_pruning_threshold, SubgraphFilter* filter,
-                                                         GraphType graph_type, bool intersect_candidates);
+                                                         uint64_t set_pruning_threshold,
+                                                         std::unique_ptr<SubgraphFilter>&& filter, GraphType graph_type,
+                                                         bool intersect_candidates);
 
   static TraverseOperator* newExpandEdgeSetToKeyOperator(QueryVertexID parent_vertex, QueryVertexID target_vertex,
                                                          const unordered_map<QueryVertexID, uint32_t>& indices,
                                                          const std::vector<uint32_t>& same_label_key_indices,
                                                          const std::vector<uint32_t>& same_label_set_indices,
-                                                         uint64_t set_pruning_threshold, SubgraphFilter* filter,
-                                                         GraphType graph_type, bool intersect_candidates);
+                                                         uint64_t set_pruning_threshold,
+                                                         std::unique_ptr<SubgraphFilter>&& filter, GraphType graph_type,
+                                                         bool intersect_candidates);
 
   ExpandEdgeOperator(uint32_t parent_index, uint32_t target_index, QueryVertexID parent, QueryVertexID target,
                      const std::vector<uint32_t>& same_label_key_indices,
                      const std::vector<uint32_t>& same_label_set_indices, uint64_t set_pruning_threshold,
-                     SubgraphFilter* filter)
-      : TraverseOperator(target, same_label_key_indices, same_label_set_indices, set_pruning_threshold, filter),
+                     std::unique_ptr<SubgraphFilter>&& filter)
+      : TraverseOperator(target, same_label_key_indices, same_label_set_indices, set_pruning_threshold,
+                         std::move(filter)),
         parent_index_(parent_index),
         target_index_(target_index),
         parent_id_(parent) {}
@@ -144,7 +148,7 @@ class ExpandEdgeOperator : public TraverseOperator {
 
   template <typename G, QueryType profile>
   inline void expandFromParent(TraverseContext* ctx, VertexID parent_match, const unordered_set<VertexID>& exceptions,
-                               std::vector<VertexID>* targets) const {
+                               std::vector<VertexID>* targets, const CompressedSubgraphs& input) const {
     auto g = ctx->getDataGraph<G>();
     auto dctx = dynamic_cast<ExpandEdgeTraverseContext*>(ctx);
 #ifdef INTERSECTION_CACHE
@@ -159,11 +163,18 @@ class ExpandEdgeOperator : public TraverseOperator {
       dctx->cacheIntersection(parent_match, *targets);
     }
     removeExceptions(targets, exceptions);
+    {  // enforce partial order
+      filterTargets(targets, input);
+    }
 #else
     auto neighbors = g->getOutNeighborsWithHint(parent_match, target_label_, 0);
     if
       constexpr(isProfileCandidateSIEffect(profile)) {
         removeExceptions(neighbors, targets, exceptions);
+        {  // enforce partial order
+          filterTargets(targets, input);
+          if (targets->empty()) return;
+        }
         auto target_size = targets->size();
         intersectInplace(targets, dctx->getCandidateSet());
         ctx->candidate_si_diff += target_size - targets->size();
@@ -178,6 +189,9 @@ class ExpandEdgeOperator : public TraverseOperator {
             ->updateIntersection<profile>(dctx->getCandidateSet().size() + neighbors.size(), targets->size(),
                                           parent_match);
       }
+    {  // enforce partial order
+      filterTargets(targets, input);
+    }
 #endif
   }
 

@@ -143,6 +143,15 @@ inline std::string toString(const std::vector<V>& vec) {
   return ss.str();
 }
 
+template <typename ForwardIt>
+inline std::string toString(ForwardIt begin, ForwardIt end) {
+  std::stringstream ss;
+  for (auto iter = begin; iter != end; ++iter) {
+    ss << ' ' << *iter;
+  }
+  return ss.str();
+}
+
 // FIXME(tatiana): move to traverse utils
 inline void removeExceptions(const VertexSetView& set, std::vector<VertexID>* res,
                              const unordered_set<VertexID>& except = {}) {

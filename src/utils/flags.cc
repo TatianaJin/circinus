@@ -39,4 +39,6 @@ DEFINE_bool(intersection_count_coefficient, true,
 DEFINE_string(cost_learner, "",
               "The address of the cost learner which uses machine learning to learn costs for compression plan.");
 
+DEFINE_bool(break_symmetry, false, "If true, break symmetry to avoid automorphism in matching");
+
 DEFINE_int32(verbosity, circinus::FULL_LOG, "The verbosity level of logs");

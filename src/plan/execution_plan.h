@@ -41,8 +41,6 @@ class ExecutionPlan {
   const QueryGraph* query_graph_;
 
   std::vector<Operator*> operators_;  // TODO(tatiana): use unique_ptr?
-  // TODO(tatiana): change to use unique_ptr
-  std::vector<SubgraphFilter*> subgraph_filters_;  // owned, need to delete upon destruction
 
   /* matching order related */
   std::vector<QueryVertexID> matching_order_;
@@ -95,10 +93,6 @@ class ExecutionPlan {
   explicit ExecutionPlan(GraphType graph_type = GraphType::Normal) : graph_type_(graph_type) {}
 
   ~ExecutionPlan() {
-    for (auto filter : subgraph_filters_) {
-      delete filter;
-    }
-    subgraph_filters_.clear();
     for (auto& op : operators_) {
       delete op;
     }
@@ -166,6 +160,8 @@ class ExecutionPlan {
   inline bool isInCover(QueryVertexID id) const { return cover_table_[id] == 1; }
   inline const uint32_t getToKeyLevel(QueryVertexID id) const { return dynamic_cover_key_level_.find(id)->second; }
 
+  inline uint32_t getQueryVertexOutputIndex(QueryVertexID qv) const { return query_vertex_indices_.at(qv); }
+
  protected:
   inline void setMatchingOrderIndices(QueryVertexID target_vertex, TraverseOperator* op) {
     std::vector<std::pair<bool, uint32_t>> matching_order_indices;
@@ -177,14 +173,13 @@ class ExecutionPlan {
     op->setTargetLabel(FLAGS_label_filter ? query_graph_->getVertexLabel(target_vertex) : ALL_LABEL);
   }
 
-  inline SubgraphFilter* createFilter(std::vector<std::vector<uint32_t>>&& pruning_set_indices) {
-    SubgraphFilter* filter = nullptr;
+  inline std::unique_ptr<SubgraphFilter> createFilter(std::vector<std::vector<uint32_t>>&& pruning_set_indices) {
+    std::unique_ptr<SubgraphFilter> filter = nullptr;
     if (pruning_set_indices.empty()) {
       filter = SubgraphFilter::newDummyFilter();
     } else {
       filter = SubgraphFilter::newSetPrunningSubgraphFilter(std::move(pruning_set_indices));
     }
-    subgraph_filters_.push_back(filter);
     return filter;
   }
 

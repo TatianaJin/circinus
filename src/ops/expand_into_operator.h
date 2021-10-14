@@ -43,9 +43,10 @@ class ExpandIntoOperator : public TraverseOperator {
  public:
   ExpandIntoOperator(const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
                      const unordered_map<QueryVertexID, uint32_t>& query_vertex_indices,
-                     const std::vector<QueryVertexID>& prev_key_parents, SubgraphFilter* subgraph_filter = nullptr,
+                     const std::vector<QueryVertexID>& prev_key_parents,
+                     std::unique_ptr<SubgraphFilter>&& subgraph_filter = nullptr,
                      std::vector<LabelID>&& parent_labels = {})
-      : TraverseOperator(target_vertex, subgraph_filter),
+      : TraverseOperator(target_vertex, std::move(subgraph_filter)),
         parents_(parents),
         query_vertex_indices_(query_vertex_indices),
         key_parents_(prev_key_parents),

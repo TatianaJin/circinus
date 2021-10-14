@@ -42,9 +42,9 @@ class ExpandVertexOperator : public TraverseOperator {
                        const unordered_map<QueryVertexID, uint32_t>& query_vertex_indices,
                        const std::vector<uint32_t>& same_label_key_indices,
                        const std::vector<uint32_t>& same_label_set_indices, uint64_t set_pruning_threshold,
-                       SubgraphFilter* subgraph_filter)
+                       std::unique_ptr<SubgraphFilter>&& subgraph_filter)
       : TraverseOperator(target_vertex, same_label_key_indices, same_label_set_indices, set_pruning_threshold,
-                         subgraph_filter),
+                         std::move(subgraph_filter)),
         parents_(parents),
         query_vertex_indices_(query_vertex_indices),
         parent_indices_(parents.size()) {
@@ -119,6 +119,10 @@ class ExpandVertexOperator : public TraverseOperator {
       constexpr(isProfileMode(profile)) { ctx->updateIntersectInfo(si_input_size, targets->size()); }
     if (targets->empty()) {
       return;
+    }
+    {  // enforce partial order
+      filterTargets(targets, input);
+      if (targets->empty()) return;
     }
     for (uint32_t i = loop_idx; i < parent_indices.size(); ++i) {
       auto si_input_size = targets->size() + neighbor_sets[i].size();

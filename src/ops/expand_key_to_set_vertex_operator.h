@@ -36,9 +36,9 @@ class ExpandKeyToSetVertexOperator : public ExpandVertexOperator {
                                const unordered_map<QueryVertexID, uint32_t>& query_vertex_indices,
                                const std::vector<uint32_t>& same_label_key_indices,
                                const std::vector<uint32_t>& same_label_set_indices, uint64_t set_pruning_threshold,
-                               SubgraphFilter* filter = nullptr)
+                               std::unique_ptr<SubgraphFilter>&& sfilter = nullptr)
       : ExpandVertexOperator(parents, target_vertex, query_vertex_indices, same_label_key_indices,
-                             same_label_set_indices, set_pruning_threshold, filter) {}
+                             same_label_set_indices, set_pruning_threshold, std::move(sfilter)) {}
 
   uint32_t expand(uint32_t batch_size, TraverseContext* ctx) const override {
     return expandInner<QueryType::Execute>(batch_size, ctx);

@@ -129,7 +129,8 @@ class EnumerateKeyExpandToSetOperator : public ExpandVertexOperator {
                                   const std::vector<QueryVertexID>& keys_to_enumerate,
                                   const std::vector<int>& cover_table,
                                   const std::array<std::vector<uint32_t>, 2>& same_label_indices,
-                                  std::vector<int>&& enumerated_key_pruning_indices, SubgraphFilter* filter);
+                                  std::vector<int>&& enumerated_key_pruning_indices,
+                                  std::unique_ptr<SubgraphFilter>&& sfilter);
 
   uint32_t expand(uint32_t batch_size, TraverseContext* ctx) const override {
     return expandInner<QueryType::Execute>(batch_size, ctx);
@@ -191,13 +192,13 @@ EnumerateKeyExpandToSetOperator<G, intersect_candidates>::EnumerateKeyExpandToSe
     const unordered_map<QueryVertexID, uint32_t>& output_query_vertex_indices,
     const std::vector<QueryVertexID>& keys_to_enumerate, const std::vector<int>& cover_table,
     const std::array<std::vector<uint32_t>, 2>& same_label_indices, std::vector<int>&& enumerated_key_pruning_indices,
-    SubgraphFilter* subgraph_filter)
+    std::unique_ptr<SubgraphFilter>&& subgraph_filter)
     : ExpandVertexOperator(parents, target_vertex, output_query_vertex_indices, same_label_indices[1],
-                           same_label_indices[0], ~0u, subgraph_filter),
+                           same_label_indices[0], ~0u, std::move(subgraph_filter)),
       keys_to_enumerate_(keys_to_enumerate),
       cover_table_(cover_table),
       enumerated_key_pruning_indices_(std::move(enumerated_key_pruning_indices)) {
-  CHECK(subgraph_filter != nullptr);
+  CHECK(subgraph_filter_ != nullptr);
   CHECK_EQ(enumerated_key_pruning_indices_.size(), keys_to_enumerate_.size());
 
   unordered_set<QueryVertexID> keys_to_enumerate_set(keys_to_enumerate.begin(), keys_to_enumerate.end());
@@ -322,6 +323,9 @@ uint32_t EnumerateKeyExpandToSetOperator<G, intersect_candidates>::expandInner(u
                       ctx->existing_vertices);
           } else {
             removeExceptions(neighbors, &ctx->target_sets[enumerate_key_depth + 1], ctx->existing_vertices);
+          }
+          if (!ctx->target_sets[enumerate_key_depth + 1].empty()) {
+            filterTargets(&ctx->target_sets[enumerate_key_depth + 1], input);
           }
         } else {
           intersect(ctx->target_sets[enumerate_key_depth], neighbors, &ctx->target_sets[enumerate_key_depth + 1],
@@ -462,6 +466,9 @@ bool EnumerateKeyExpandToSetOperator<G, intersect_candidates>::expandInner(
   }
   target_set = ctx->getIntersectionCache(i - 1);
   removeExceptions(&target_set, ctx->existing_vertices);
+  if (!target_set.empty()) {
+    filterTargets(&target_set, input);
+  }
 #else
   if (existing_key_parent_indices_.size() == 1) {
     uint32_t key_vid = input.getKeyVal(existing_key_parent_indices_[0]);
@@ -469,8 +476,8 @@ bool EnumerateKeyExpandToSetOperator<G, intersect_candidates>::expandInner(
     if (intersect_candidates) {
       if
         constexpr(isProfileCandidateSIEffect(profile)) {
-          intersectCandidateSetWithProfile(*ctx->getCandidateSet(), neighbors, &target_set, ctx->existing_vertices,
-                                           ctx);
+          intersectCandidateSetWithProfile(*ctx->getCandidateSet(), neighbors, &target_set, ctx->existing_vertices, ctx,
+                                           input, target_filter_.get());
           return target_set.empty();
         }
       intersect(*ctx->getCandidateSet(), neighbors, &target_set, ctx->existing_vertices);
@@ -481,6 +488,9 @@ bool EnumerateKeyExpandToSetOperator<G, intersect_candidates>::expandInner(
         }
     } else {
       removeExceptions(neighbors, &target_set, ctx->existing_vertices);
+    }
+    if (!target_set.empty()) {
+      filterTargets(&target_set, input);
     }
   } else {
     expandFromParents<G, profile, intersect_candidates>(

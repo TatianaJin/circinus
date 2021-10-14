@@ -41,6 +41,9 @@ class Planner {
   std::vector<std::unique_ptr<NaivePlanner>> planners_;
   std::unique_ptr<BacktrackingPlan> backtracking_plan_ = nullptr;
 
+  // u: vertices smaller than u, vertices larger than u
+  unordered_map<QueryVertexID, std::pair<std::vector<QueryVertexID>, std::vector<QueryVertexID>>> qv_partial_order_;
+
  public:
   explicit Planner(QueryContext& query_context) : query_context_(&query_context) {}
 
@@ -168,6 +171,8 @@ class Planner {
   virtual void newInputOperators(ExecutionPlan* plan, const std::vector<QueryVertexID>* partitioning_qvs = nullptr);
 
   /* end of interface for specifying parallelization strategy */
+
+  void breakSymmetry();
 };
 
 }  // namespace circinus

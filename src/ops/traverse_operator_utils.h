@@ -25,6 +25,7 @@
 #include "graph/graph_view.h"
 #include "graph/partitioned_graph.h"
 #include "graph/types.h"
+#include "ops/filters/target_filter.h"
 #include "ops/traverse_operator.h"
 
 namespace circinus {
@@ -101,8 +102,14 @@ inline void removeExceptions(std::vector<VertexID>* set, const unordered_set<Ver
 template <typename NeighborSet>
 inline void intersectCandidateSetWithProfile(const CandidateSetView& candidates, const NeighborSet& neighbors,
                                              std::vector<VertexID>* targets, const unordered_set<VertexID>& exceptions,
-                                             TraverseContext* ctx) {
+                                             TraverseContext* ctx, const CompressedSubgraphs& input,
+                                             TargetFilter* tfilter) {
   removeExceptions(neighbors, targets, exceptions);
+  {  // enforce partial order
+    if (targets->empty()) return;
+    tfilter->filter(targets, input);
+    if (targets->empty()) return;
+  }
   auto target_size = targets->size();
   intersectInplace(*targets, candidates, targets);
   ctx->candidate_si_diff += target_size - targets->size();

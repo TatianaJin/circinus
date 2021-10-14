@@ -26,12 +26,21 @@ namespace circinus {
 class SubgraphFilter {
  public:
   /** Returns a pointer to SubgraphFilter, which requires manual delete. The instance does no filtering. */
-  static SubgraphFilter* newDummyFilter() { return new SubgraphFilter(); }
+  static std::unique_ptr<SubgraphFilter> newDummyFilter() { return std::make_unique<SubgraphFilter>(); }
 
   /** Returns a pointer to SubgraphFilter, which requires manual delete. The instance filters {@link
    * CompressedSubgraphs} by each group of pruning sets when n sets have a union of less than n elements */
-  static SubgraphFilter* newSetPrunningSubgraphFilter(std::vector<std::vector<uint32_t>>&& pruning_set_indices);
-  static SubgraphFilter* newSetPrunningSubgraphFilter(const std::vector<uint32_t>& pruning_set_indices);
+  static std::unique_ptr<SubgraphFilter> newSetPrunningSubgraphFilter(
+      std::vector<std::vector<uint32_t>>&& pruning_set_indices);
+  static std::unique_ptr<SubgraphFilter> newSetPrunningSubgraphFilter(const std::vector<uint32_t>& pruning_set_indices);
+
+  /** Creates an instance of PartialOrderSubgraphFilter.
+   * @param conditions A vector of inequality conditions, represented as {set index, is_less_than} pairs.
+   * @param target A pair {is_key, index}.
+   */
+  static std::unique_ptr<SubgraphFilter> newPartialOrderSubgraphFilter(std::vector<uint32_t>&& lt_conditions,
+                                                                       std::vector<uint32_t>&& gt_conditions,
+                                                                       const std::pair<bool, uint32_t>& target);
 
   virtual ~SubgraphFilter() {}
 
@@ -39,6 +48,12 @@ class SubgraphFilter {
   virtual uint64_t getSetPruningThreshold(uint32_t idx) const { return 0; }
 
   virtual const std::vector<uint32_t>* getPruningSets(uint32_t idx) const { return nullptr; }
+
+  virtual std::unique_ptr<SubgraphFilter> addPartialOrderSubgraphFilter(std::vector<uint32_t>&& lt_conditions,
+                                                                        std::vector<uint32_t>&& gt_conditions,
+                                                                        const std::pair<bool, uint32_t>& target) {
+    return newPartialOrderSubgraphFilter(std::move(lt_conditions), std::move(gt_conditions), target);
+  }
 
   /**
    * @param subgraphs The compressed groups of subgraphs to filter.

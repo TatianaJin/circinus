@@ -21,6 +21,7 @@
 #include <utility>
 #include <vector>
 
+#include "algorithms/automorphism_check.h"
 #include "algorithms/centrality.h"
 #include "ops/logical/compressed_input.h"
 #include "plan/backtracking_plan.h"
@@ -489,6 +490,27 @@ BacktrackingPlan* Planner::generateExecutionPlan(std::pair<QueryVertexID, Vertex
   return backtracking_plan_.get();
 }
 
+void Planner::breakSymmetry() {
+  LOG(INFO) << "Symmetry breaking enabled? " << FLAGS_break_symmetry;
+  if (FLAGS_break_symmetry) {
+    AutomorphismCheck ac(query_context_->query_graph);
+    auto conds = ac.getPartialOrder();
+    for (auto& pair : conds) {
+      qv_partial_order_[pair.first].second.push_back(pair.second);
+      qv_partial_order_[pair.second].first.push_back(pair.first);
+    }
+    if (shortPlannerLog()) {
+      std::stringstream ss;
+      for (auto& pair : conds) {
+        ss << ' ' << pair.first << '<' << pair.second;
+      }
+      LOG(INFO) << "Partial orders:" << ss.str();
+    }
+    // TODO(tatiana): populate the conditions by transtivity for probably earlier pruning?
+    backtracking_plan_->setQueryPartialOrder(qv_partial_order_);
+  }
+}
+
 // TODO(engineering): classes in plan should not know classes in exec
 BacktrackingPlan* Planner::generateExecutionPlan(const CandidateResult* result, bool multithread) {
   backtracking_plan_ = std::make_unique<BacktrackingPlan>();
@@ -496,6 +518,7 @@ BacktrackingPlan* Planner::generateExecutionPlan(const CandidateResult* result, 
     auto candidate_views = result->getCandidates();
     auto cardinality = getCardinality(candidate_views);
     backtracking_plan_->addPlan(generateLogicalExecutionPlan(cardinality, DUMMY_QUERY_VERTEX, &candidate_views));
+    breakSymmetry();
     return backtracking_plan_.get();
   }
 
@@ -559,6 +582,8 @@ BacktrackingPlan* Planner::generateExecutionPlan(const CandidateResult* result, 
   }
 
   backtracking_plan_->addPartitionedPlans(std::move(partition_plans));
+
+  breakSymmetry();
   return backtracking_plan_.get();
 }
 

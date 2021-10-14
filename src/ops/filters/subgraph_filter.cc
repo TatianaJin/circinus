@@ -21,17 +21,29 @@
 #include <vector>
 
 #include "glog/logging.h"
+
+#include "algorithms/search.h"
 #include "graph/compressed_subgraphs.h"
 
 namespace circinus {
 
 class SetPrunningSubgraphFilter : public SubgraphFilter {
-  const std::vector<std::vector<uint32_t>> pruning_set_indices_;
+ protected:
+  std::vector<std::vector<uint32_t>> pruning_set_indices_;
   std::vector<uint64_t> set_pruning_thresholds_;
 
  public:
+  SetPrunningSubgraphFilter() {}
+
   explicit SetPrunningSubgraphFilter(std::vector<std::vector<uint32_t>>&& pruning_set_indices)
       : pruning_set_indices_(std::move(pruning_set_indices)) {}
+
+  SetPrunningSubgraphFilter(std::vector<std::vector<uint32_t>>&& pruning_set_indices,
+                            std::vector<uint64_t>&& pruning_set_thresholds)
+      : pruning_set_indices_(std::move(pruning_set_indices)),
+        set_pruning_thresholds_(std::move(pruning_set_thresholds)) {
+    CHECK_EQ(set_pruning_thresholds_.size(), pruning_set_indices_.size());
+  }
 
   void setPruningSetThresholds(std::vector<uint64_t>&& pruning_set_thresholds) override {
     set_pruning_thresholds_ = std::move(pruning_set_thresholds);
@@ -47,6 +59,10 @@ class SetPrunningSubgraphFilter : public SubgraphFilter {
     DCHECK_LT(idx, set_pruning_thresholds_.size());
     return set_pruning_thresholds_[idx];
   }
+
+  std::unique_ptr<SubgraphFilter> addPartialOrderSubgraphFilter(std::vector<uint32_t>&& lt_conditions,
+                                                                std::vector<uint32_t>&& gt_conditions,
+                                                                const std::pair<bool, uint32_t>& target) override;
 
   uint32_t filter(std::vector<CompressedSubgraphs>& subgraphs, uint32_t start, uint32_t end) override {
     auto end_iter = subgraphs.begin() + end;
@@ -120,19 +136,119 @@ class SetPrunningSubgraphFilter : public SubgraphFilter {
     }
     return true;
   }
-};
+};  // class SetPrunningSubgraphFilter
 
-SubgraphFilter* SubgraphFilter::newSetPrunningSubgraphFilter(std::vector<std::vector<uint32_t>>&& pruning_set_indices) {
-  return new SetPrunningSubgraphFilter(std::move(pruning_set_indices));
+/** Prune sets according to less/greater than conditions with the newly matched target */
+class PartialOrderSubgraphFilter : public SetPrunningSubgraphFilter {
+  // set indices
+  std::vector<uint32_t> less_than_indices_;
+  std::vector<uint32_t> greater_than_indices_;
+  std::pair<bool, uint32_t> target_index_;
+
+ public:
+  /**
+   * @param conditions A vector of inequality conditions, represented as {set index, is_less_than} pairs.
+   * @param target A pair {is_key, index}.
+   */
+  PartialOrderSubgraphFilter(std::vector<uint32_t>&& lt_conditions, std::vector<uint32_t>&& gt_conditions,
+                             const std::pair<bool, uint32_t>& target)
+      : less_than_indices_(std::move(lt_conditions)),
+        greater_than_indices_(std::move(gt_conditions)),
+        target_index_(target) {}
+
+  PartialOrderSubgraphFilter(std::vector<std::vector<uint32_t>>&& pruning_set_indices,
+                             std::vector<uint64_t>&& pruning_set_thresholds, std::vector<uint32_t>&& lt_conditions,
+                             std::vector<uint32_t>&& gt_conditions, const std::pair<bool, uint32_t>& target)
+      : SetPrunningSubgraphFilter(std::move(pruning_set_indices), std::move(pruning_set_thresholds)),
+        less_than_indices_(std::move(lt_conditions)),
+        greater_than_indices_(std::move(gt_conditions)),
+        target_index_(target) {}
+
+  /** @returns True if pruned. */
+  bool filter(const CompressedSubgraphs& subgraphs) override {
+    // apply set pruning first to avoid copy due to partial pruning by partial order
+    if (SetPrunningSubgraphFilter::filter(subgraphs)) return true;
+    std::vector<uint32_t> pruned_set_indices;
+    if (target_index_.first) {  // target is key
+      if (pruneByTarget(subgraphs, subgraphs.getKeyVal(target_index_.second), &pruned_set_indices)) {
+        return true;
+      }
+    } else {  // target is set, prune if set has only one element
+      auto target_set = subgraphs.getSet(target_index_.second).get();
+      if (target_set->size() == 1 && pruneByTarget(subgraphs, target_set->front(), &pruned_set_indices)) {
+        return true;
+      }
+    }
+    if (pruned_set_indices.empty()) return false;
+    return SetPrunningSubgraphFilter::filter(subgraphs);
+  }
+
+ private:
+  /**
+   * @param pruned_set_indices Outputs which are the indices of sets whose elements are pruned (partially).
+   * @returns True if input should be pruned.
+   */
+  bool pruneByTarget(const CompressedSubgraphs& subgraphs, VertexID target, std::vector<uint32_t>* pruned_set_indices) {
+    for (auto index : less_than_indices_) {  // target should be less (smaller) than the valid set elements
+      auto set = subgraphs.getSet(index).get();
+      auto lb = circinus::lowerBound(set->begin(), set->end(), target);
+      if (lb == set->end()) {  // all elements are no larger than target
+        return true;
+      }
+      if (target == *lb) {
+        ++lb;
+      } else if (lb == set->begin()) {  // no element is to be pruned
+        continue;
+      }
+      // keep only lb and afterwards
+      set->erase(set->begin(), lb);
+      pruned_set_indices->push_back(index);
+    }
+    for (auto index : greater_than_indices_) {  // target should be greater than the valid set elements
+      auto set = subgraphs.getSet(index).get();
+      auto lb = circinus::lowerBound(set->begin(), set->end(), target);
+      if (lb == set->begin()) {  // target is no greater than any of the elements
+        return true;
+      }
+      if (lb == set->end()) {  // no element is to be pruned
+        continue;
+      }
+      // keep only elements before lb
+      set->erase(lb, set->end());
+      pruned_set_indices->push_back(index);
+    }
+    return false;
+  }
+
+};  // class PartialOrderSubgraphFilter
+
+std::unique_ptr<SubgraphFilter> SetPrunningSubgraphFilter::addPartialOrderSubgraphFilter(
+    std::vector<uint32_t>&& lt_conditions, std::vector<uint32_t>&& gt_conditions,
+    const std::pair<bool, uint32_t>& target) {
+  return std::make_unique<PartialOrderSubgraphFilter>(std::move(pruning_set_indices_),
+                                                      std::move(set_pruning_thresholds_), std::move(lt_conditions),
+                                                      std::move(gt_conditions), target);
 }
 
-SubgraphFilter* SubgraphFilter::newSetPrunningSubgraphFilter(const std::vector<uint32_t>& pruning_set_indices) {
+std::unique_ptr<SubgraphFilter> SubgraphFilter::newSetPrunningSubgraphFilter(
+    std::vector<std::vector<uint32_t>>&& pruning_set_indices) {
+  return std::make_unique<SetPrunningSubgraphFilter>(std::move(pruning_set_indices));
+}
+
+std::unique_ptr<SubgraphFilter> SubgraphFilter::newSetPrunningSubgraphFilter(
+    const std::vector<uint32_t>& pruning_set_indices) {
   if (pruning_set_indices.size() < 2) {
-    return new SubgraphFilter();
+    return std::make_unique<SubgraphFilter>();
   }
   std::vector<std::vector<uint32_t>> pruning_sets(1);
   pruning_sets.back() = pruning_set_indices;
-  return new SetPrunningSubgraphFilter(std::move(pruning_sets));
+  return std::make_unique<SetPrunningSubgraphFilter>(std::move(pruning_sets));
+}
+
+std::unique_ptr<SubgraphFilter> SubgraphFilter::newPartialOrderSubgraphFilter(std::vector<uint32_t>&& lt_conditions,
+                                                                              std::vector<uint32_t>&& gt_conditions,
+                                                                              const std::pair<bool, uint32_t>& target) {
+  return std::make_unique<PartialOrderSubgraphFilter>(std::move(lt_conditions), std::move(gt_conditions), target);
 }
 
 }  // namespace circinus

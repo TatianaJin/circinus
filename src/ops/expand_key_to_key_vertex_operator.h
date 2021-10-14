@@ -48,9 +48,9 @@ class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
                                const unordered_map<QueryVertexID, uint32_t>& query_vertex_indices,
                                const std::vector<uint32_t>& same_label_key_indices,
                                const std::vector<uint32_t>& same_label_set_indices, uint64_t set_pruning_threshold,
-                               SubgraphFilter* filter = nullptr)
+                               std::unique_ptr<SubgraphFilter>&& sfilter = nullptr)
       : ExpandVertexOperator(parents, target_vertex, query_vertex_indices, same_label_key_indices,
-                             same_label_set_indices, set_pruning_threshold, filter) {
+                             same_label_set_indices, set_pruning_threshold, std::move(sfilter)) {
     CHECK_GT(parents.size(), 1);
   }
 
@@ -186,6 +186,9 @@ class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
       if (i == parents_.size()) {
         new_keys = ctx->getIntersectionCache(i - 1);
         removeExceptions(&new_keys, exceptions);
+        if (!new_keys.empty()) {  // enforce partial order
+          filterTargets(&new_keys, input);
+        }
       }
     handle_output:
 #else
