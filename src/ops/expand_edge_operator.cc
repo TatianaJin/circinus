@@ -29,6 +29,7 @@
 #include "graph/graph.h"
 #include "graph/graph_view.h"
 #include "graph/types.h"
+#include "graph/vertex_set.h"
 #include "ops/filters/subgraph_filter.h"
 #include "ops/traverse_operator.h"
 #include "ops/traverse_operator_utils.h"
@@ -36,9 +37,6 @@
 #include "utils/hashmap.h"
 
 namespace circinus {
-
-#define makeVertexSet(vertex) std::make_shared<std::vector<VertexID>>(std::vector<VertexID>({vertex}))
-#define makeShared(set) std::make_shared<std::vector<VertexID>>(std::move(set))
 
 #define CONSTRUCT(name)                                                                                                \
   ExpandEdge##name##Operator(uint32_t parent_index, uint32_t target_index, QueryVertexID parent, QueryVertexID target, \
@@ -343,7 +341,7 @@ class CurrentResultsByCandidate : public CurrentResults {
       if (parents.empty()) {
         continue;
       }
-      auto output = ctx_->newOutput(*input_, parent_index_, makeShared(parents), candidate,
+      auto output = ctx_->newOutput(*input_, parent_index_, newVertexSet(parents), candidate,
                                     owner_->getSameLabelSetIndices(), owner_->getSetPruningThreshold(), true);
       if (output == nullptr) continue;
 #ifdef USE_FILTER
@@ -402,7 +400,7 @@ class CurrentResultsByParent : public CurrentResults {
         auto pos = group_index.find(target);
         if (pos == group_index.end()) {
           group_index[target] = ctx_->getOutputSize();
-          auto output = ctx_->newOutput(*input_, parent_index_, makeVertexSet(parent_match), target,
+          auto output = ctx_->newOutput(*input_, parent_index_, singleVertexSet(parent_match), target,
                                         owner_->getSameLabelSetIndices(), owner_->getSetPruningThreshold(), false);
           if (output == nullptr) {
             group_index[target] = -1;
@@ -453,9 +451,8 @@ class CurrentResultsByExtension : public CurrentResults {
             ctx_->updateIntersectInfo(parent_set.size() + neighbors.size(), parents.size());
           }
 
-        auto output =
-            ctx_->newOutput(*input_, parent_index_, std::make_shared<std::vector<VertexID>>(std::move(parents)),
-                            candidate, owner_->getSameLabelSetIndices(), owner_->getSetPruningThreshold(), true);
+        auto output = ctx_->newOutput(*input_, parent_index_, newVertexSet(parents), candidate,
+                                      owner_->getSameLabelSetIndices(), owner_->getSetPruningThreshold(), true);
         if (output == nullptr) {
           continue;
         }

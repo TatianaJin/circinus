@@ -26,6 +26,7 @@
 
 #include "glog/logging.h"
 #include "graph/types.h"
+#include "graph/vertex_set.h"
 #include "utils/hashmap.h"
 
 namespace circinus {
@@ -123,7 +124,7 @@ class CompressedSubgraphs {
       }
     }
     keys_ = subgraphs.keys_;
-    sets_.back() = std::make_shared<std::vector<VertexID>>(std::move(new_set));
+    sets_.back() = newVertexSet(new_set);
     return this;
   }
 
@@ -192,7 +193,7 @@ class CompressedSubgraphs {
   inline CompressedSubgraphs* reset(const CompressedSubgraphs& subgraphs, std::vector<VertexID>&& new_set) {
     keys_ = subgraphs.keys_;
     std::copy(subgraphs.sets_.begin(), subgraphs.sets_.end(), sets_.begin());
-    sets_.back() = std::make_shared<std::vector<VertexID>>(std::move(new_set));
+    sets_.back() = newVertexSet(new_set);
     return this;
   }
 
@@ -229,13 +230,21 @@ class CompressedSubgraphs {
 
   uint64_t getNumIsomorphicSubgraphs(const PruningIndexGroups& pruning_indices, uint64_t limit = ~0u) const;
 
+  // uint64_t getNumIsomorphicSubgraphsWithConstraints(const PruningIndexGroups& pruning_indices,
+  //                                                   const std::vector<std::pair<uint32_t, uint32_t>>& constraints,
+  //                                                   uint64_t limit = ~0u) const;
+  uint64_t getNumIsomorphicSubgraphsWithConstraints(
+      const PruningIndexGroups& pruning_indices,
+      const std::vector<std::vector<std::vector<uint32_t>>>& constraints_adjs,
+      const std::vector<std::vector<uint32_t>>& enumerate_orders, uint64_t limit = ~0u) const;
+
   inline uint64_t getNumIsomorphicSubgraphs(uint64_t limit = ~0u) const {
     if (sets_.empty()) {
       return !keys_.empty();
     }
-    std::vector<std::vector<VertexID>*> set_ptrs(sets_.size());
+    std::vector<const SingleRangeVertexSetView*> set_ptrs(sets_.size());
     for (uint32_t i = 0; i < sets_.size(); ++i) {
-      set_ptrs[i] = sets_[i].get();
+      set_ptrs[i] = &(*sets_[i]);
     }
     unordered_set<VertexID> existing_vertices;
     existing_vertices.reserve(getNumVertices() - 1);
@@ -247,7 +256,12 @@ class CompressedSubgraphs {
    * Count isomorphic subgraphs projected on the given sets
    */
   static uint64_t getNumIsomorphicSubgraphs(unordered_set<VertexID>& existing_vertices,
-                                            std::vector<std::vector<VertexID>*>& set_ptrs, uint64_t limit = ~0u);
+                                            std::vector<const SingleRangeVertexSetView*>& set_ptrs,
+                                            uint64_t limit = ~0u);
+
+  static uint64_t getNumIsomorphicSubgraphsWithConstraintsImpl(
+      unordered_set<VertexID>& existing_vertices, std::vector<const SingleRangeVertexSetView*>& set_ptrs,
+      const std::vector<std::vector<uint32_t>>& constraints_adj, uint64_t limit = ~0u);
 
   std::string toString() const {
     std::string s = "{";
@@ -257,8 +271,8 @@ class CompressedSubgraphs {
     }
     for (auto& set : sets_) {
       s += "[";
-      for (auto vid : *set) {
-        s += std::to_string(vid) + ",";
+      for (auto it = set->begin(); it != set->end(); ++it) {
+        s += std::to_string(*it) + ",";
       }
       s += "],";
     }
@@ -289,7 +303,7 @@ class CompressedSubgraphs {
     }
 
     for (auto idx : exception_set_indices) {
-      DCHECK(sets_[idx] != nullptr) << idx << " " << keys_.size() << " + " << sets_.size();
+      DCHECK(sets_[idx].get() != nullptr) << idx << " " << keys_.size() << " + " << sets_.size();
       auto& set = *sets_[idx];
       if (set.size() == 1) {
         exception.insert(set.front());
@@ -316,7 +330,7 @@ class CompressedSubgraphs {
   /** Update the key vertex at key_idx to val. */
   void UpdateKey(uint32_t key_idx, VertexID val) { keys_[key_idx] = val; }
   /** Add a vertex val to the vertex set at set_idx. */
-  void UpdateSet(uint32_t set_idx, VertexID val) { sets_[set_idx]->push_back(val); }
+  void UpdateSet(uint32_t set_idx, VertexID val) { sets_[set_idx].push_back(val); }
 
   bool empty() const { return keys_.empty(); }
 

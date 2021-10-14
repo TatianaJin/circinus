@@ -372,7 +372,7 @@ uint32_t EnumerateKeyExpandToSetOperator<G, intersect_candidates>::expandInner(u
           }
 #ifdef USE_FILTER
           // set the target set
-          output.UpdateSets(output.getNumSets() - 1, std::make_shared<std::vector<VertexID>>(std::move(target_set)));
+          output.UpdateSets(output.getNumSets() - 1, newVertexSet(target_set));
           if (filter(output)) {
             ctx->popOutput();
             ctx->nextKeyToEnumerate(enumerate_key_depth);
@@ -388,7 +388,7 @@ uint32_t EnumerateKeyExpandToSetOperator<G, intersect_candidates>::expandInner(u
               continue;
             }
           }
-          output.UpdateSets(output.getNumSets() - 1, std::make_shared<std::vector<VertexID>>(std::move(target_set)));
+          output.UpdateSets(output.getNumSets() - 1, newVertexSet(target_set));
 #endif
 
           ctx->nextKeyToEnumerate(enumerate_key_depth);

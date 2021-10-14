@@ -24,6 +24,8 @@
 
 #include "algorithms/search.h"
 #include "graph/compressed_subgraphs.h"
+#include "graph/types.h"
+#include "utils/utils.h"
 
 namespace circinus {
 
@@ -42,7 +44,7 @@ class SetPrunningSubgraphFilter : public SubgraphFilter {
                             std::vector<uint64_t>&& pruning_set_thresholds)
       : pruning_set_indices_(std::move(pruning_set_indices)),
         set_pruning_thresholds_(std::move(pruning_set_thresholds)) {
-    CHECK_EQ(set_pruning_thresholds_.size(), pruning_set_indices_.size());
+    if (!set_pruning_thresholds_.empty()) CHECK_EQ(set_pruning_thresholds_.size(), pruning_set_indices_.size());
   }
 
   void setPruningSetThresholds(std::vector<uint64_t>&& pruning_set_thresholds) override {
@@ -80,7 +82,7 @@ class SetPrunningSubgraphFilter : public SubgraphFilter {
   }
 
   /** @returns True if pruned. */
-  bool filter(const CompressedSubgraphs& subgraphs) override {
+  bool filter(CompressedSubgraphs& subgraphs) const override {
     for (auto& pruning_sets : pruning_set_indices_) {
       // get pruning set pointers sorted by size in ascending order
       std::vector<std::vector<VertexID>*> pruning_sets_sorted_by_size;
@@ -154,7 +156,10 @@ class PartialOrderSubgraphFilter : public SetPrunningSubgraphFilter {
                              const std::pair<bool, uint32_t>& target)
       : less_than_indices_(std::move(lt_conditions)),
         greater_than_indices_(std::move(gt_conditions)),
-        target_index_(target) {}
+        target_index_(target) {
+    // LOG(INFO) << "target index = " << target_index_.second << ", is key = " << target_index_.first << " less than "
+    //           << toString(less_than_indices_) << " greater than " << toString(greater_than_indices_);
+  }
 
   PartialOrderSubgraphFilter(std::vector<std::vector<uint32_t>>&& pruning_set_indices,
                              std::vector<uint64_t>&& pruning_set_thresholds, std::vector<uint32_t>&& lt_conditions,
@@ -162,10 +167,13 @@ class PartialOrderSubgraphFilter : public SetPrunningSubgraphFilter {
       : SetPrunningSubgraphFilter(std::move(pruning_set_indices), std::move(pruning_set_thresholds)),
         less_than_indices_(std::move(lt_conditions)),
         greater_than_indices_(std::move(gt_conditions)),
-        target_index_(target) {}
+        target_index_(target) {
+    // LOG(INFO) << "target index = " << target_index_.second << ", is key = " << target_index_.first << " less than "
+    //           << toString(less_than_indices_) << " greater than " << toString(greater_than_indices_);
+  }
 
   /** @returns True if pruned. */
-  bool filter(const CompressedSubgraphs& subgraphs) override {
+  bool filter(CompressedSubgraphs& subgraphs) const override {
     // apply set pruning first to avoid copy due to partial pruning by partial order
     if (SetPrunningSubgraphFilter::filter(subgraphs)) return true;
     std::vector<uint32_t> pruned_set_indices;
@@ -188,9 +196,9 @@ class PartialOrderSubgraphFilter : public SetPrunningSubgraphFilter {
    * @param pruned_set_indices Outputs which are the indices of sets whose elements are pruned (partially).
    * @returns True if input should be pruned.
    */
-  bool pruneByTarget(const CompressedSubgraphs& subgraphs, VertexID target, std::vector<uint32_t>* pruned_set_indices) {
+  bool pruneByTarget(CompressedSubgraphs& subgraphs, VertexID target, std::vector<uint32_t>* pruned_set_indices) const {
     for (auto index : less_than_indices_) {  // target should be less (smaller) than the valid set elements
-      auto set = subgraphs.getSet(index).get();
+      const auto& set = subgraphs.getSet(index);
       auto lb = circinus::lowerBound(set->begin(), set->end(), target);
       if (lb == set->end()) {  // all elements are no larger than target
         return true;
@@ -200,12 +208,12 @@ class PartialOrderSubgraphFilter : public SetPrunningSubgraphFilter {
       } else if (lb == set->begin()) {  // no element is to be pruned
         continue;
       }
-      // keep only lb and afterwards
-      set->erase(set->begin(), lb);
+      // create a new set containing only lb and afterwards, zero copy
+      subgraphs.UpdateSets(index, VertexSet(set, lb - set->begin(), set->end() - lb));
       pruned_set_indices->push_back(index);
     }
     for (auto index : greater_than_indices_) {  // target should be greater than the valid set elements
-      auto set = subgraphs.getSet(index).get();
+      const auto& set = subgraphs.getSet(index);
       auto lb = circinus::lowerBound(set->begin(), set->end(), target);
       if (lb == set->begin()) {  // target is no greater than any of the elements
         return true;
@@ -213,8 +221,8 @@ class PartialOrderSubgraphFilter : public SetPrunningSubgraphFilter {
       if (lb == set->end()) {  // no element is to be pruned
         continue;
       }
-      // keep only elements before lb
-      set->erase(lb, set->end());
+      // create a new set containing only elements before lb, zero copy
+      subgraphs.UpdateSets(index, VertexSet(set, 0, lb - set->begin()));
       pruned_set_indices->push_back(index);
     }
     return false;

@@ -262,7 +262,7 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
         return false;
       }
 #ifdef USE_FILTER
-      new_output->UpdateSets(id, std::make_shared<std::vector<VertexID>>(std::move(new_set)));
+      new_output->UpdateSets(id, newVertexSet(new_set));
       if (filter(*new_output)) {
         ctx->popOutput();
         return false;
@@ -276,7 +276,7 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
           return false;
         }
       }
-      new_output->UpdateSets(id, std::make_shared<std::vector<VertexID>>(std::move(new_set)));
+      new_output->UpdateSets(id, newVertexSet(new_set));
 #endif
       ++parent_idx;
     }

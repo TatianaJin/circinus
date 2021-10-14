@@ -69,6 +69,14 @@ class OutputOperator : public Operator {
   Outputs* outputs_ = nullptr;
   SameLabelIndices same_label_indices_;
 
+  std::vector<std::pair<uint32_t, uint32_t>> set_less_than_constraints_;  // index first < index second
+
+  /* for each same label group */
+  // enumerate order of set indices when enforcing partial order
+  std::vector<std::vector<uint32_t>> enumerate_orders_;
+  // j: {i: the orders of smaller set indices wrt. enumerate_orders_[j][i]}
+  std::vector<std::vector<std::vector<uint32_t>>> constraints_adjs_;
+
  public:
   explicit OutputOperator(SameLabelIndices&& same_label_indices) : same_label_indices_(std::move(same_label_indices)) {}
   virtual ~OutputOperator() {}
@@ -79,13 +87,15 @@ class OutputOperator : public Operator {
   static OutputOperator* newOutputOperator(
       OutputType type, std::vector<std::pair<std::vector<uint32_t>, std::vector<uint32_t>>>&& same_label_indices);
 
-  void setOutput(Outputs* outputs) { outputs_ = outputs; }
-  Outputs* getOutput() const { return outputs_; }
+  inline void setOutput(Outputs* outputs) { outputs_ = outputs; }
+  inline Outputs* getOutput() const { return outputs_; }
 
   inline bool validateAndOutput(const std::vector<CompressedSubgraphs>& input, uint32_t output_index) const {
     uint32_t start = 0;
     return validateAndOutput(input, start, input.size(), output_index);
   }
+
+  void setPartialOrder(std::vector<std::pair<uint32_t, uint32_t>>&& constraints);
 
   virtual bool validateAndOutput(const std::vector<CompressedSubgraphs>& input, uint32_t& input_start,
                                  uint32_t input_end, uint32_t output_index) const = 0;

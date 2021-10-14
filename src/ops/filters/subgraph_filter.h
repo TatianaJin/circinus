@@ -70,7 +70,7 @@ class SubgraphFilter {
   virtual uint32_t filter(std::vector<CompressedSubgraphs>& subgraphs, uint32_t start, uint32_t end) { return 0; }
 
   /** @returns True if pruned. */
-  virtual bool filter(const CompressedSubgraphs& subgraphs) { return false; /* dummy filter: do nothing */ }
+  virtual bool filter(CompressedSubgraphs& subgraphs) const { return false; /* dummy filter: do nothing */ }
 };
 
 }  // namespace circinus

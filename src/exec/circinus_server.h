@@ -142,7 +142,7 @@ class CircinusServer {
   /** Invokes Phase 1 planning and execution of a query.
    * @param query_index The index of the query to run.
    */
-  void prepareQuery(uint32_t query_index) {
+  void prepareQuery(uint32_t query_index) {  // TODO(tatiana): move def to .cc
     auto& query_state = active_queries_[query_index];
     query_state.planner = new Planner(query_state.query_context);
     if (query_state.query_context.query_config.mode == QueryMode::Explain) {  // dry run
@@ -175,9 +175,14 @@ class CircinusServer {
       } else {
         query_state.filter_start_time = std::chrono::high_resolution_clock::now();
 
-        CandidatePruningPlan* plan = nullptr;
         // phase 1: preprocessing
-        plan = query_state.planner->generateCandidatePruningPlan();
+        CandidatePruningPlan* plan = query_state.planner->generateCandidatePruningPlan();
+        if (plan->isFinished()) {  // no candidate generation
+          auto plan = query_state.planner->generateExecutionPlan((CandidateResult*)nullptr, FLAGS_num_cores > 1);
+          executor_manager_.run(query_index, &query_state.query_context,
+                                std::make_unique<ExecutionPlanDriver>(plan, &zmq_ctx_));
+          return;
+        }
         // asynchronous execution, a CandidatePhase event will be generated when preprocessing finish
         executor_manager_.run(query_index, &query_state.query_context,
                               std::make_unique<CandidatePruningPlanDriver>(plan));

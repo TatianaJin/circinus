@@ -196,9 +196,7 @@ class ExpandIntoOperator : public TraverseOperator {
           constexpr(sensitive_to_hint<G>) {
             key_neighbors = graph->getInNeighborsWithHint(key_vertex_id, parent_labels_[parent_idx], parent_idx);
           }
-        if (input.getSet(id) == nullptr) {
-          LOG(FATAL) << "input set is nullptr.";
-        }
+        DCHECK(input.getSet(id).get() != nullptr);
         intersect(*(input.getSet(id)), key_neighbors, &new_set);
         if
           constexpr(isProfileMode(profile)) {
@@ -210,7 +208,7 @@ class ExpandIntoOperator : public TraverseOperator {
         }
 #ifdef USE_FILTER
         // TODO(tatiana): include same-label keys for checking when sets are updated (ExpandInto and ExpandSettoKey)
-        input.UpdateSets(id, std::make_shared<std::vector<VertexID>>(std::move(new_set)));
+        input.UpdateSets(id, newVertexSet(new_set));
         if (filter(input)) {
           add = false;
           break;
@@ -224,7 +222,7 @@ class ExpandIntoOperator : public TraverseOperator {
             break;
           }
         }
-        input.UpdateSets(id, std::make_shared<std::vector<VertexID>>(std::move(new_set)));
+        input.UpdateSets(id, newVertexSet(new_set));
 #endif
         ++parent_idx;
       }

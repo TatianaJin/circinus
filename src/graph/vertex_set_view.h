@@ -157,6 +157,17 @@ class SingleRangeVertexSetView : public VertexSetView {
     addRange(start, start + size);
   }
 
+  inline VertexID operator[](uint32_t index) const {
+    DCHECK(!ranges_.empty());
+    DCHECK_LT(index, ranges_.front().second);
+    return *(begin() + index);
+  }
+
+  inline VertexID front() const {
+    DCHECK(!ranges_.empty());
+    return *ranges_.front().first;
+  }
+
   inline ConstIterator begin() const { return ranges_.empty() ? nullptr : ranges_.front().first; }
   inline ConstIterator end() const {
     return ranges_.empty() ? nullptr : (ranges_.front().first + ranges_.front().second);

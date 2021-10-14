@@ -26,8 +26,8 @@ std::vector<CompressedSubgraphs> InputOperator::getInputs(const void* g,
   if (inputs_are_keys_) {
     return std::vector<CompressedSubgraphs>(candidates[starting_vertex_].begin(), candidates[starting_vertex_].end());
   }
-  return std::vector<CompressedSubgraphs>({CompressedSubgraphs(std::make_shared<std::vector<VertexID>>(
-      std::vector<VertexID>(candidates[starting_vertex_].begin(), candidates[starting_vertex_].end())))});
+  return std::vector<CompressedSubgraphs>({CompressedSubgraphs(
+      newVertexSet(std::vector<VertexID>(candidates[starting_vertex_].begin(), candidates[starting_vertex_].end())))});
 }
 
 std::vector<CompressedSubgraphs> PartitionedInputOperator::getInputs(
@@ -68,8 +68,7 @@ std::vector<CompressedSubgraphs> PartitionedInputOperator::getInputs(
     if (inputs_are_keys_) {
       return std::vector<CompressedSubgraphs>(candidate[cur_idx].begin(), candidate[cur_idx].end());
     } else {
-      return std::vector<CompressedSubgraphs>(
-          {CompressedSubgraphs(std::make_shared<std::vector<VertexID>>(std::move(candidate[cur_idx])))});
+      return std::vector<CompressedSubgraphs>({CompressedSubgraphs(newVertexSet(candidate[cur_idx]))});
     }
   }
   return InputOperator::getInputs(data_graph, candidates);

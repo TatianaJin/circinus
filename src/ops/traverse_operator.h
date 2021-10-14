@@ -124,7 +124,7 @@ class TraverseOperator : public Operator {
   inline auto getTargetLabel() const { return target_label_; }
   TargetFilter* getTargetFilter() const { return target_filter_.get(); }
 
-  inline bool filter(const CompressedSubgraphs& subgraphs) const {
+  inline bool filter(CompressedSubgraphs& subgraphs) const {
     DCHECK(subgraph_filter_ != nullptr);
     return subgraph_filter_->filter(subgraphs);
   }

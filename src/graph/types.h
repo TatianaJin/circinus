@@ -27,8 +27,6 @@ using LabelID = uint32_t;
 using QueryVertexID = uint32_t;
 using VertexID = uint64_t;
 
-using VertexSet = std::shared_ptr<std::vector<VertexID>>;
-
 constexpr LabelID ALL_LABEL = ~0u;
 constexpr QueryVertexID DUMMY_QUERY_VERTEX = UINT32_MAX;
 
