@@ -707,9 +707,9 @@ const std::vector<QueryVertexID>& NaivePlanner::generateOrder(const GraphBase* d
   return matching_order_;
 }
 
-const std::vector<QueryVertexID>& NaivePlanner::generateOrder(QueryVertexID seed_qv) {
+const std::vector<QueryVertexID>& NaivePlanner::generateOrder(QueryVertexID seed_qv, OrderStrategy os) {
   auto order_generator = OrderGenerator(query_graph_);
-  matching_order_ = order_generator.getOrder(OrderStrategy::Online, seed_qv);
+  matching_order_ = order_generator.getOrder(os, seed_qv);
   return matching_order_;
 }
 

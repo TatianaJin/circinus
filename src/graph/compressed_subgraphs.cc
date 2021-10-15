@@ -233,7 +233,7 @@ uint64_t CompressedSubgraphs::getNumIsomorphicSubgraphsWithConstraints(
     for (auto key_i : pruning_indices[idx].first) {
       existing_vertices.insert(getKeyVal(key_i));
     }
-    // FIXME(tatiana): add partial order set constraints
+    // FIXME(tatiana): use getNumIsomorphicSubgraphs if there is no constraint in this group
     auto group_cnt = getNumIsomorphicSubgraphsWithConstraintsImpl(existing_vertices, pruning_set_ptrs[idx],
                                                                   constraints_adjs[idx], (limit + count - 1) / count);
     if (group_cnt == 0) return 0;

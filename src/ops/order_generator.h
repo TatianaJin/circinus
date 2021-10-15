@@ -76,6 +76,7 @@ class OrderGenerator {
   std::vector<QueryVertexID> getOrder(OrderStrategy order_strategy, QueryVertexID seed_qv) {
     switch (order_strategy) {
     case OrderStrategy::None:
+      return getBFSOrder(seed_qv);
     case OrderStrategy::CFL:
       return getCFLOrder(seed_qv);
     case OrderStrategy::DAF:
@@ -371,9 +372,41 @@ class OrderGenerator {
     }
   }
 
-  std::vector<QueryVertexID> getOnlineOrder(QueryVertexID seed_qv) {
+  inline std::vector<QueryVertexID> getBFSOrder(QueryVertexID seed_qv) {
     auto logical_filter = LogicalCFLFilter(query_graph_, seed_qv);
     return logical_filter.getBfsOrder();
+  }
+
+  std::vector<QueryVertexID> getOnlineOrder(QueryVertexID seed_qv) {
+    if (seed_qv == DUMMY_QUERY_VERTEX) {  // select start vertex
+      seed_qv = 0;
+      for (QueryVertexID v = 1; v < query_graph_->getNumVertices(); ++v) {
+        if (query_graph_->getVertexOutDegree(v) > query_graph_->getVertexOutDegree(seed_qv)) seed_qv = v;
+      }
+    }
+    // degree sorting
+    auto comp = [q = query_graph_](QueryVertexID a, QueryVertexID b) {
+      return q->getVertexOutDegree(a) < q->getVertexOutDegree(b);
+    };
+    std::vector<QueryVertexID> matching_order;
+    std::priority_queue<QueryVertexID, std::vector<QueryVertexID>, decltype(comp)> queue(comp);
+    std::vector<bool> visited(query_graph_->getNumVertices(), 0);
+    matching_order.reserve(query_graph_->getNumVertices());
+    queue.push(seed_qv);
+    visited[seed_qv] = true;
+    while (!queue.empty()) {
+      auto v = queue.top();
+      queue.pop();
+      matching_order.push_back(v);
+      auto nbrs = query_graph_->getOutNeighbors(v);
+      for (uint32_t i = 0; i < nbrs.second; ++i) {
+        if (visited[nbrs.first[i]]) continue;
+        queue.push(nbrs.first[i]);
+        visited[nbrs.first[i]] = true;
+      }
+    }
+    CHECK_EQ(matching_order.size(), query_graph_->getNumVertices());
+    return matching_order;
   }
 
   std::vector<QueryVertexID> getCFLOrder(QueryVertexID seed_qv) {

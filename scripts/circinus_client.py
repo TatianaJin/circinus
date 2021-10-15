@@ -8,6 +8,7 @@ import sys
 import os.path as osp
 import glob as gb
 from argparse import ArgumentParser
+from time import time
 
 import zmq
 
@@ -111,12 +112,14 @@ class CircinusCommandCompleter:
       self.send_sock.send_multipart([pack(x, mode='str') for x in cmds])
       return True
     cmds.append(self.client_addr)  # print(cmds)
+    query_start = time()
     # send query to server
     self.send_sock.send_multipart([pack(x, mode='str') for x in cmds])
     cmds[0] = original_cmd
 
     # recv result
     msgs = self.recv_sock.recv_multipart()
+    query_finish = time()
     flag = unpack(msgs[0], 'bool')
     if flag:
       if cmds[0] == "load":
@@ -138,6 +141,7 @@ class CircinusCommandCompleter:
         print(unpack(msgs[1], 'str'))
     else:
       print(unpack(msgs[1]))
+    print("Query answered in {0:.2f} seconds".format(query_finish - query_start))
 
     return False
 

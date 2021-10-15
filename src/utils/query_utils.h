@@ -119,7 +119,7 @@ class QueryConfig {
       {"gql", OrderStrategy::GQL},   {"tso", OrderStrategy::TSO}, {"online", OrderStrategy::Online}};
 
   std::string matching_order;  // FIXME(tatiana): support custom order or deprecate this
-  CandidatePruningStrategy candidate_pruning_strategy = CandidatePruningStrategy::CFL;
+  CandidatePruningStrategy candidate_pruning_strategy = CandidatePruningStrategy::Adaptive;
   OrderStrategy order_strategy = OrderStrategy::CFL;
   CompressionStrategy compression_strategy = CompressionStrategy::Dynamic;
   PQVStrategy pqv_strategy = PQVStrategy::None;

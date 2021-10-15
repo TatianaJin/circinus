@@ -41,15 +41,18 @@ void QueryGraph::readVertices(std::ifstream& infile) {
   QueryVertexID id;
   LabelID label;
   QueryVertexID degree;
+  uint32_t unlabeled_count = 0;
   for (uint32_t i = 0; i < n_vertices_; ++i) {
     CHECK(infile >> line_type >> id >> label >> degree);
     DCHECK_EQ(line_type, 'v');
     DCHECK_EQ(id, i);
     labels_[id] = label;
+    unlabeled_count += (label == ALL_LABEL);
     vlist_[id + 1] = vlist_[id] + degree;
     max_degree_ = std::max(max_degree_, degree);
     vertex_cardinality_by_label_[label] += 1;
   }
+  labelling_ = (unlabeled_count == 0) ? Labeled : ((unlabeled_count == n_vertices_) ? Unlabeled : Mix);
 }
 
 template <bool directed>

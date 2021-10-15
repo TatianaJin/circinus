@@ -50,6 +50,7 @@ class QueryGraph {
   QueryVertexID n_vertices_ = 0;
   EdgeID n_edges_ = 0;
   QueryVertexID max_degree_ = 0;  // out degree
+  enum Labelling : uint8_t { Labeled, Unlabeled, Mix } labelling_ = Labeled;
 
   std::vector<EdgeID> vlist_;         // size n_vertices_ + 1, { i: the id of the first edge of vertex i }
   std::vector<QueryVertexID> elist_;  // size n_edges_ * 2, { i : the destination vertex id of edge i}
@@ -80,6 +81,7 @@ class QueryGraph {
   inline QueryVertexID getVertexOutDegree(QueryVertexID id) const { return vlist_[id + 1] - vlist_[id]; }
   inline LabelID getVertexLabel(QueryVertexID id) const { return labels_[id]; }
   inline const auto& getLabelArray() const { return labels_; }
+  inline bool isUnlabeled() const { return labelling_ == Unlabeled; }
 
   /** * @returns a pair { starting neighbor pointer, out degree } */
   inline std::pair<const QueryVertexID*, uint32_t> getOutNeighbors(QueryVertexID id) const {

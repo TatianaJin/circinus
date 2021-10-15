@@ -37,6 +37,9 @@ LogicalCFLFilter::LogicalCFLFilter(const GraphMetadata& metadata, const QueryGra
 // TODO(tatiana): no need for 2core solver given the start vertex
 LogicalCFLFilter::LogicalCFLFilter(const QueryGraph* query_graph, QueryVertexID seed_qv)
     : LogicalNeighborhoodFilter(query_graph), start_vertex_(seed_qv), two_core_solver_(query_graph) {
+  if (start_vertex_ == DUMMY_QUERY_VERTEX) {
+    start_vertex_ = two_core_solver_.get2CoreVertices().front();
+  }
   generateBFSTree(query_graph);
 }
 

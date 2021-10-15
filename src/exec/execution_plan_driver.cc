@@ -130,12 +130,6 @@ void ExecutionPlanDriverBase::taskTimeOut(std::unique_ptr<TaskBase>& task, Threa
 template <typename TaskType>
 void ExecutionPlanDriverBase::handleSupendedTask(std::unique_ptr<TaskBase>& task, ThreadsafeTaskQueue* task_queue) {
   auto traverse_task = dynamic_cast<TaskType*>(task.get());
-  if (n_pending_tasks_ > max_parallelism_) {
-    suspend_interval_ =
-        std::max(min_suspend_interval_, running_average_enumerate_time_ * (n_pending_tasks_ / max_parallelism_));
-  } else {
-    suspend_interval_ = min_suspend_interval_;
-  }
   auto splits = traverse_task->getSplits();
   CHECK(!splits.empty());
   n_pending_tasks_ += splits.size();
@@ -162,25 +156,58 @@ void ExecutionPlanDriverBase::handleSupendedTask(std::unique_ptr<TaskBase>& task
     }
   }
   if (traverse_task->getTaskStatus() == TaskStatus::Suspended) {
-    traverse_task->setSuspendInterval(suspend_interval_);
     // put into the queue for continuing execution
     addTaskToQueue(task_queue, task);
   } else {
     --n_pending_tasks_;
     --task_counters_[task->getTaskId()];
   }
+  updateSuspendInterval();
 }
 
 void OnlineQueryExecutionPlanDriver::init(QueryId qid, QueryContext* query_ctx, ExecutionContext& ctx,
                                           ThreadsafeTaskQueue& task_queue) {
   ExecutionPlanDriverBase::init(qid, query_ctx, ctx, task_queue);
-  VertexID seed_data_vertex = query_ctx->query_config.seed.second;
-  task_counters_.resize(1, 1);
-  n_pending_tasks_ += 1;
-  dynamic_cast<OutputOperator*>(plan_->getOutputOperator(0))->setOutput(&result_->getOutputs());
-  const std::vector<Operator*>& ops = plan_->getOperators(0);
-  addTaskToQueue<TraverseChainTask>(&task_queue, qid, 0, query_ctx->stop_time, batch_size_, &ops, query_ctx->data_graph,
-                                    query_type_, seed_data_vertex);
+  if (query_ctx->query_config.seed.first != DUMMY_QUERY_VERTEX) {
+    VertexID seed_data_vertex = query_ctx->query_config.seed.second;
+    task_counters_.resize(1, 1);
+    n_pending_tasks_ += 1;
+    dynamic_cast<OutputOperator*>(plan_->getOutputOperator(0))->setOutput(&result_->getOutputs());
+    const std::vector<Operator*>& ops = plan_->getOperators(0);
+    addTaskToQueue<TraverseChainTask>(&task_queue, qid, 0, query_ctx->stop_time, batch_size_, &ops,
+                                      query_ctx->data_graph, query_type_, seed_data_vertex);
+  } else {
+    auto n_plans = plan_->getNumPartitionedPlans();
+    task_counters_.resize(plan_->getPlans().size(), 0);
+    candidates_.resize(n_plans);
+    for (uint32_t i = 0; i < n_plans; ++i) {
+      ++task_counters_[plan_->getPartitionedPlan(i).first];
+    }
+    n_pending_tasks_ += n_plans;
+
+    for (uint32_t i = 0; i < n_plans; ++i) {
+      auto plan_idx = plan_->getPartitionedPlan(i).first;
+      // all plans share the same output
+      dynamic_cast<OutputOperator*>(plan_->getOutputOperator(plan_idx))->setOutput(&result_->getOutputs());
+      std::unique_ptr<InputOperator> input_operator = std::move(plan_->getInputOperator(plan_idx));
+      auto& scopes = plan_->getPartitionedPlan(i).second;
+      CHECK_EQ(scopes.size(), 1) << "Expecting scope only for input (start) query vertex";
+      const std::vector<Operator*>& ops = plan_->getOperators(plan_idx);
+      auto partitioned_result = dynamic_cast<PartitionedCandidateResult*>(candidate_result_.get());
+      DCHECK(partitioned_result != nullptr);
+      candidates_[i] = partitioned_result->getCandidatesByScopes(scopes);
+
+      if (max_parallelism_ > 1 && plan_->toSegment(i)) {
+        suspend_interval_ptr_ = &suspend_interval_;
+      } else {
+        suspend_interval_ptr_ = nullptr;
+      }
+
+      addTaskToQueue<TraverseChainTask>(&task_queue, qid, plan_idx, query_ctx->stop_time, batch_size_, &ops,
+                                        std::move(input_operator), query_ctx->data_graph, &candidates_[i], query_type_,
+                                        ops.size() - 1, nullptr);
+    }
+  }
 }
 
 void OnlineQueryExecutionPlanDriver::taskFinish(std::unique_ptr<TaskBase>& task, ThreadsafeTaskQueue* task_queue,
@@ -191,6 +218,7 @@ void OnlineQueryExecutionPlanDriver::taskFinish(std::unique_ptr<TaskBase>& task,
   } else {
     --n_pending_tasks_;
     collectTaskInfo(task);
+    updateSuspendInterval();
     if (--task_counters_[task->getTaskId()] == 0 && ++n_finished_tasks_ == task_counters_.size()) {
       DCHECK_EQ(n_pending_tasks_, 0);
       finishPlan(reply_queue);
@@ -219,7 +247,10 @@ void ExecutionPlanDriver::init(QueryId qid, QueryContext* query_ctx, ExecutionCo
 
   // >>>>> hard code now to share hashmaps of candidate sets
   candidate_hashmaps_.resize(n_plans);
+  // FIXME(tatiana): problematic if using LDF/NLF cps as candidates are not merged
   auto candidate_views = candidate_result_->getCandidates();
+  CHECK_EQ(candidate_views.size(), query_ctx->query_graph.getNumVertices())
+      << "Now assuming generating candidates for all qvs";
   std::vector<std::shared_ptr<unordered_set<VertexID>>> full_candidate_hashmaps;
   full_candidate_hashmaps.reserve(candidate_views.size());
   for (auto& view : candidate_views) {
@@ -238,6 +269,7 @@ void ExecutionPlanDriver::init(QueryId qid, QueryContext* query_ctx, ExecutionCo
     const std::vector<Operator*>& ops = plan_->getOperators(plan_idx);
 
     auto partitioned_result = dynamic_cast<PartitionedCandidateResult*>(candidate_result_.get());
+    DCHECK(partitioned_result != nullptr);
     candidates_[i] = partitioned_result->getCandidatesByScopes(scopes);
 
     // >>>>> hard code now to share hashmaps of candidate sets
@@ -253,10 +285,11 @@ void ExecutionPlanDriver::init(QueryId qid, QueryContext* query_ctx, ExecutionCo
     // <<<<< hard code now to share hashmaps of candidate sets
 
     if (max_parallelism_ > 1 && plan_->toSegment(i)) {
-      suspend_interval_ = DEFAULT_SUSPEND_INTERVAL;
+      suspend_interval_ptr_ = &suspend_interval_;
     } else {
-      suspend_interval_ = 0;
+      suspend_interval_ptr_ = nullptr;
     }
+
     uint32_t end_level = ops.size() - 1;
     addTaskToQueue<TraverseTask>(&task_queue, qid, plan_idx, query_ctx->stop_time, ctx.first.getBatchSize(), &ops,
                                  std::move(input_operator), scopes, query_ctx->data_graph, &candidates_[i], query_type_,
@@ -273,6 +306,7 @@ void ExecutionPlanDriver::taskFinish(std::unique_ptr<TaskBase>& task, Threadsafe
   } else {
     --n_pending_tasks_;
     collectTaskInfo(task);
+    updateSuspendInterval();
     if (--task_counters_[task->getTaskId()] == 0 && ++n_finished_tasks_ == task_counters_.size()) {
       if (cost_learner_client_ != nullptr) {
         auto profiled = dynamic_cast<ProfiledExecutionResult*>(result_);

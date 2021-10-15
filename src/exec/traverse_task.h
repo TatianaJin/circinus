@@ -67,7 +67,7 @@ class TraverseChainTask : public TaskBase {
 
   // dynamic segment
   uint32_t suspended_level_ = 0;
-  double suspend_interval_ = 0;
+  double* suspend_interval_ = nullptr;
   uint32_t split_level_ = 0;
   uint32_t split_size_ = 1;
   std::vector<std::pair<uint32_t, std::vector<CompressedSubgraphs>>> splits_;
@@ -141,7 +141,7 @@ class TraverseChainTask : public TaskBase {
   inline const auto& getProfileInfo() const { return profile_info_; }
   inline const TaskStatus& getTaskStatus() const { return task_status_; }
 
-  inline void setSuspendInterval(double interval) { suspend_interval_ = interval; }
+  inline void setSuspendIntervalPtr(double* interval) { suspend_interval_ = interval; }
   inline void setSplitSize(uint32_t size) { split_size_ = size; }
 
   inline std::vector<std::pair<uint32_t, std::vector<CompressedSubgraphs>>> getSplits() { return std::move(splits_); }

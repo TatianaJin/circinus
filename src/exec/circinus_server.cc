@@ -182,10 +182,13 @@ void CircinusServer::handleCandidatePhase(const Event& event) {
     active_queries_[event.query_id].filter_time = toSeconds(active_queries_[event.query_id].filter_start_time, now);
     // backtracking phase
     LOG(INFO) << "Candidate generation finished. Start backtracking.";
-    auto plan = planner->generateExecutionPlan(result);
+    auto plan = planner->generateExecutionPlan(result, FLAGS_num_cores > 1);
     if (active_queries_[event.query_id].query_context.graph_metadata->numPartitions() == 1 ||
         !active_queries_[event.query_id].query_context.query_config.use_partitioned_graph) {
       plan_driver = std::make_unique<MatchingParallelExecutionPlanDriver>(plan);
+    } else if (active_queries_[event.query_id].query_context.query_config.candidate_pruning_strategy ==
+               CandidatePruningStrategy::Online) {
+      plan_driver = std::make_unique<OnlineQueryExecutionPlanDriver>(plan);
     } else {
       plan_driver = std::make_unique<ExecutionPlanDriver>(plan, &zmq_ctx_);
     }
@@ -310,6 +313,82 @@ void CircinusServer::finishQuery(uint32_t query_index, void* result, const std::
   }
   // make sure the pointer result is not needed before clearQuery
   executor_manager_.clearQuery(query_index, error);
+}
+
+void CircinusServer::consolidateConfigs(QueryContext& qctx) {
+  auto& conf = qctx.query_config;
+
+  // use online for seed-given labeled queries and unlabeled queries, use cfl otherwise
+  if (conf.candidate_pruning_strategy == CandidatePruningStrategy::Adaptive) {
+    if (conf.seed.first != DUMMY_QUERY_VERTEX || qctx.query_graph.isUnlabeled()) {
+      conf.candidate_pruning_strategy = CandidatePruningStrategy::Online;
+    } else {
+      conf.candidate_pruning_strategy = CandidatePruningStrategy::CFL;
+    }
+  }
+
+  if (conf.isProfileMode()) {
+    conf.output = "profile_count";
+  }
+
+  // CandidatePruningStrategy::Online: only get candidates for start query vertex if seed is not given
+  if (conf.candidate_pruning_strategy == CandidatePruningStrategy::Online) {
+    // consolidate expand config
+    FLAGS_candidate_set_intersection = 3;
+    LOG(INFO) << "set FLAGS_candidate_set_intersection = 3 for online cps";
+    // consolidate order strategy
+    if (conf.order_strategy != OrderStrategy::Online && conf.order_strategy != OrderStrategy::None) {
+      LOG(INFO) << "set order_strategy = OrderStrategy::Online for online cps";
+      conf.order_strategy = OrderStrategy::Online;  // Degree sorting
+    }
+  }
+}
+
+void CircinusServer::prepareQuery(uint32_t query_index) {
+  auto& query_state = active_queries_[query_index];
+  query_state.planner = new Planner(query_state.query_context);
+  consolidateConfigs(query_state.query_context);
+  if (query_state.query_context.query_config.mode == QueryMode::Explain) {  // dry run
+    auto cardinality = query_state.planner->estimateCardinality();
+    // FIXME(by)
+    // auto plan = query_state.planner->generateExecutionPlan(&cardinality);
+    // auto str = plan->toString();
+    // query_state.query_context.query_config.output = "plan";
+    // finishQuery(query_index, &str, "");
+  } else {  // enter actual execution phases
+    // TODO(tatiana): refactor to merge both branches
+    if (query_state.query_context.query_config.seed.first != DUMMY_QUERY_VERTEX &&
+        query_state.query_context.query_config.order_strategy == OrderStrategy::Online) {
+      LOG(INFO) << "Skipped candidate generation. Start backtracking.";
+
+      auto now = std::chrono::high_resolution_clock::now();
+      auto plan = query_state.planner->generateExecutionPlan(query_state.query_context.query_config.seed);
+      query_state.plan_time = toSeconds(now, std::chrono::high_resolution_clock::now());
+      LOG(INFO) << "Generated backtracking plan in " << query_state.plan_time << " seconds";
+
+      if (plan == nullptr) {
+        finishQuery(query_index, nullptr, "");
+        return;
+      }
+
+      std::unique_ptr<PlanDriver> plan_driver = std::make_unique<OnlineQueryExecutionPlanDriver>(plan);
+      executor_manager_.run(query_index, &query_state.query_context, std::move(plan_driver));
+    } else {
+      query_state.filter_start_time = std::chrono::high_resolution_clock::now();
+
+      // phase 1: preprocessing
+      CandidatePruningPlan* plan = query_state.planner->generateCandidatePruningPlan();
+      if (plan->isFinished()) {  // no candidate generation TODO(tatiana): in case of seed data vertex
+        auto plan = query_state.planner->generateExecutionPlan((CandidateResult*)nullptr, FLAGS_num_cores > 1);
+        executor_manager_.run(query_index, &query_state.query_context,
+                              std::make_unique<ExecutionPlanDriver>(plan, &zmq_ctx_));
+        return;
+      }
+      // asynchronous execution, a CandidatePhase event will be generated when preprocessing finish
+      executor_manager_.run(query_index, &query_state.query_context,
+                            std::make_unique<CandidatePruningPlanDriver>(plan));
+    }
+  }
 }
 
 }  // namespace circinus

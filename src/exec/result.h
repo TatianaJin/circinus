@@ -64,6 +64,7 @@ class CandidateResult : public Result {
       if (!merged_candidates_[i].empty()) {
         res[i].addRange(merged_candidates_[i].data(), merged_candidates_[i].data() + merged_candidates_[i].size());
       } else {
+        CHECK(false) << "CandidateSetView with multiple ranges unsupported. Need to merge first.";
         std::vector<uint32_t> order(candidates_[i].size());
         std::iota(order.begin(), order.end(), 0);
         sort(order.begin(), order.end(),

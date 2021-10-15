@@ -124,9 +124,9 @@ class NaivePlanner {
 
   /** Generates query vertex matching order for online query.
    *
-   * Starting from the seed vertex, generate the order by the bfs tree.
+   * If seed_qv is a query vertex, generate an order starting from the seed vertex.
    */
-  const std::vector<QueryVertexID>& generateOrder(QueryVertexID seed_qv);
+  const std::vector<QueryVertexID>& generateOrder(QueryVertexID seed_qv, OrderStrategy os);
 
   /** Select a query vertex to parallelize the plan and compute the weights (estimation of the associated backtracking
    * search space) for all its candidates. */

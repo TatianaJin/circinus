@@ -24,6 +24,7 @@
 #include "algorithms/automorphism_check.h"
 #include "algorithms/centrality.h"
 #include "ops/logical/compressed_input.h"
+#include "ops/order_generator.h"
 #include "plan/backtracking_plan.h"
 #include "plan/candidate_pruning_plan.h"
 #include "plan/execution_plan.h"
@@ -35,6 +36,7 @@ namespace circinus {
 
 /**
  * For now, in the case of partitioned graph, all graph partitions share the same candidate pruning plan.
+ * TODO(tatiana): cache order / bfs-tree for execution plan generation
  */
 CandidatePruningPlan* Planner::generateCandidatePruningPlan() {
   auto& q = query_context_->query_graph;
@@ -42,7 +44,15 @@ CandidatePruningPlan* Planner::generateCandidatePruningPlan() {
   switch (strategy) {
   case CandidatePruningStrategy::None:
   case CandidatePruningStrategy::Online: {
-    candidate_pruning_plan_.setFinished();
+    if (query_context_->query_config.seed.first != DUMMY_QUERY_VERTEX) {
+      candidate_pruning_plan_.setFinished();
+    } else {
+      OrderGenerator order(&q);
+      auto start_qv = order.getOrder(query_context_->query_config.order_strategy, DUMMY_QUERY_VERTEX).front();
+      candidate_pruning_plan_.newLDFScan(q, {start_qv});
+      candidate_pruning_plan_.setPartitionResult(false);
+      // candidate_pruning_plan_.setPartitionResult(toPartitionCandidates());
+    }
     return &candidate_pruning_plan_;
   }
   case CandidatePruningStrategy::Adaptive: {
@@ -473,7 +483,7 @@ BacktrackingPlan* Planner::generateExecutionPlan(std::pair<QueryVertexID, Vertex
 
   auto& planner = planners_.back();
 
-  auto& order = planner->generateOrder(seed.first);
+  auto& order = planner->generateOrder(seed.first, query_context_->query_config.order_strategy);
 
   if (order.empty()) {
     return nullptr;
@@ -487,6 +497,7 @@ BacktrackingPlan* Planner::generateExecutionPlan(std::pair<QueryVertexID, Vertex
   plan->setInputAreKeys(plan->isInCover(plan->getRootQueryVertexID()));
 
   backtracking_plan_->addPlan(plan);
+  // FIXME(tatiana): seed qv should be excluded from symmetry analysis breakSymmetry();
   return backtracking_plan_.get();
 }
 
@@ -514,6 +525,72 @@ void Planner::breakSymmetry() {
 // TODO(engineering): classes in plan should not know classes in exec
 BacktrackingPlan* Planner::generateExecutionPlan(const CandidateResult* result, bool multithread) {
   backtracking_plan_ = std::make_unique<BacktrackingPlan>();
+  if (query_context_->query_config.candidate_pruning_strategy ==
+      CandidatePruningStrategy::Online) {  // fast plan: only one plan, no partitioning applied
+    // generate order and compression plan
+    planners_.push_back(std::make_unique<NaivePlanner>(&query_context_->query_graph, getGraphType()));
+    auto& planner = planners_.back();
+    auto& order =
+        planner->generateOrder(query_context_->query_config.seed.first, query_context_->query_config.order_strategy);
+    if (shortPlannerLog()) {
+      LOG(INFO) << "Order:" << toString(order);
+    }
+    auto plan = planner->generatePlan();
+
+    // parallelize plan
+    if (multithread) {
+      VertexID start_size = 0;
+      if (result == nullptr) {
+        start_size = query_context_->graph_metadata->getNumVertices();
+      } else {
+        auto candidates = result->getCandidates();
+        CHECK_EQ(candidates.size(), 1);
+        start_size = candidates.front().size();
+      }
+      const uint32_t n_chunks = 100;
+      std::vector<std::pair<uint32_t, std::vector<CandidateScope>>> partitioned_plans;
+      if (start_size < n_chunks) {
+        partitioned_plans.resize(start_size);
+        for (uint32_t i = 0; i < start_size; ++i) {
+          partitioned_plans[i].first = 0;
+          CandidateScope scope;
+          partitioned_plans[i].second.resize(1);
+          partitioned_plans[i].second.back().addRange(i, i);  // both inclusive
+        }
+      } else {
+        partitioned_plans.resize(n_chunks);
+        uint32_t chunk_size = start_size / n_chunks;
+        auto extra = start_size % n_chunks;
+        for (uint32_t i = 0; i < n_chunks; ++i) {
+          partitioned_plans[i].first = 0;
+          CandidateScope scope;
+          partitioned_plans[i].second.resize(1);
+          if (i < extra) {
+            partitioned_plans[i].second.back().addRange(i * (chunk_size + 1),
+                                                        (i + 1) * (chunk_size + 1) - 1);  // both inclusive
+          } else {
+            partitioned_plans[i].second.back().addRange(i * chunk_size + extra,
+                                                        (i + 1) * chunk_size + extra - 1);  // both inclusive
+          }
+        }
+      }
+      backtracking_plan_->addPartitionedPlans(std::move(partitioned_plans));
+    } else {
+      std::vector<std::pair<uint32_t, std::vector<CandidateScope>>> partitioned_plans(1);
+      partitioned_plans.front().first = 0;
+      partitioned_plans.front().second.resize(1);  // full scope
+      backtracking_plan_->addPartitionedPlans(std::move(partitioned_plans));
+    }
+
+    plan->setInputAreKeys(plan->isInCover(plan->getRootQueryVertexID()));
+    backtracking_plan_->addInputOperator(std::make_unique<LogicalCompressedInputOperator>(0, plan->inputAreKeys()));
+    backtracking_plan_->setPartitionedPlanSegmentMask(
+        std::vector<bool>(backtracking_plan_->getNumPartitionedPlans(), true));
+    backtracking_plan_->addPlan(plan);
+    breakSymmetry();
+    return backtracking_plan_.get();
+  }
+
   if (!toPartitionCandidates()) {  // no partition, generate one logical plan for single-threaded execution
     auto candidate_views = result->getCandidates();
     auto cardinality = getCardinality(candidate_views);
@@ -581,6 +658,7 @@ BacktrackingPlan* Planner::generateExecutionPlan(const CandidateResult* result, 
     }
   }
 
+  CHECK_GT(partition_plans.size(), 0);
   backtracking_plan_->addPartitionedPlans(std::move(partition_plans));
 
   breakSymmetry();

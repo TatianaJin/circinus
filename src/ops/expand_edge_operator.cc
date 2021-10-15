@@ -563,6 +563,7 @@ class ExpandEdgeSetToKeyOperator : public ExpandEdgeOperator {
    */
   inline ExecutionMode getExecutionMode(const std::vector<VertexID>* parent_set, uint32_t cap,
                                         ExpandEdgeSetToKeyTraverseContext* ctx) const {
+    if (ctx->getCandidateSet() == nullptr) return ByExtension;
     DCHECK_NE(ctx->getCandidateNeighborSize(), 0) << ctx->getCandidateSet()->size();
     uint64_t set_neighbor_size = 0;
     for (auto v : *parent_set) {

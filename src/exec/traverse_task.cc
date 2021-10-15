@@ -81,12 +81,13 @@ void TraverseChainTask::logTask(uint64_t old_count, uint32_t executor_idx) {
     if (task_status_ == TaskStatus::Suspended) {
       LOG(INFO) << "Suspended Task " << task_id_ << " split " << split_level_ << " size " << splits_.size()
                 << " suspend " << suspended_level_ << '/' << (operators_->size() - 1)
-                << " time usage: " << toSeconds(start_time_, end) << "s. suspend interval " << suspend_interval_;
+                << " time usage: " << toSeconds(start_time_, end) << "s. suspend interval "
+                << (suspend_interval_ == nullptr ? 0 : *suspend_interval_);
     } else if (start_level_ == 0) {
       LOG(INFO) << "Task " << task_id_ << " input " << inputs_.size() << '/'
                 << getNumSubgraphs(inputs_, 0, inputs_.size()) << " count " << (new_count - old_count) << " ("
                 << old_count << " to " << new_count << "), time usage: " << toSeconds(start_time_, end)
-                << "s. suspend interval " << suspend_interval_;
+                << "s. suspend interval " << (suspend_interval_ == nullptr ? 0 : *suspend_interval_);
     } else {
       LOG(INFO) << "Inherit Task " << task_id_ << ':' << start_level_ << " input " << inputs_.size() << " count "
                 << (new_count - old_count) << " (" << old_count << " to " << new_count
@@ -167,7 +168,8 @@ bool TraverseChainTask::execute(const std::vector<CompressedSubgraphs>& input, u
   if (task_status_ == TaskStatus::Normal) {
     DCHECK_NOTNULL(ctx->getOutputs());
     ctx->setInput(input, start_index, start_index + input_size);
-    if (suspend_interval_ != 0 && toSeconds(start_time_, std::chrono::steady_clock::now()) >= suspend_interval_) {
+    if (suspend_interval_ != nullptr &&
+        toSeconds(start_time_, std::chrono::steady_clock::now()) >= *suspend_interval_) {
       suspended_level_ = level;
       if (splitInput<mode>()) {  // do not suspend if no splits
         task_status_ = TaskStatus::Suspended;
@@ -214,7 +216,7 @@ bool TraverseChainTask::execute(const std::vector<CompressedSubgraphs>& input, u
 }
 
 bool TraverseChainTask::setupTraverseContexts() {
-  if (candidates_ == nullptr) return setupTraverseContextsWithoutCandidate();
+  if (candidates_ == nullptr || FLAGS_candidate_set_intersection == 3) return setupTraverseContextsWithoutCandidate();
   auto op = (*operators_)[start_level_];
   auto traverse = dynamic_cast<TraverseOperator*>(op);
   traverse_context_.reserve(end_level_ - start_level_);
