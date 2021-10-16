@@ -305,6 +305,7 @@ uint32_t EnumerateKeyExpandToSetOperator<G, intersect_candidates>::expandInner(u
           << ", input.getNumKeys()=" << input.getNumKeys() << '/' << ctx->n_exceptions;
     }
 
+    auto g = ctx->getDataGraph<G>();
     while (true) {
       while (ctx->hasKeyToEnumerate(enumerate_key_depth)) {
         // update target set
@@ -315,14 +316,15 @@ uint32_t EnumerateKeyExpandToSetOperator<G, intersect_candidates>::expandInner(u
         }
         auto pidx = enumerate_key_depth + existing_key_parent_indices_.size();  // parent index
         DCHECK(ctx->target_sets[enumerate_key_depth + 1].empty()) << enumerate_key_depth;
-        auto neighbors = ctx->getDataGraph<G>()->getOutNeighborsWithHint(key_vid, target_label_, pidx);
+        auto neighbors = g->getOutNeighborsWithHint(key_vid, target_label_, pidx);
         if (ctx->target_sets[enumerate_key_depth].empty()) {
           DCHECK_EQ(enumerate_key_depth, 0);
           if (intersect_candidates) {
             intersect(*ctx->getCandidateSet(), neighbors, &ctx->target_sets[enumerate_key_depth + 1],
                       ctx->existing_vertices);
           } else {
-            removeExceptions(neighbors, &ctx->target_sets[enumerate_key_depth + 1], ctx->existing_vertices);
+            degreeFilter(neighbors, target_degree_, g, &ctx->target_sets[enumerate_key_depth + 1],
+                         ctx->existing_vertices);
           }
           if (!ctx->target_sets[enumerate_key_depth + 1].empty()) {
             filterTargets(&ctx->target_sets[enumerate_key_depth + 1], input);
@@ -487,7 +489,7 @@ bool EnumerateKeyExpandToSetOperator<G, intersect_candidates>::expandInner(
                                            key_vid);
         }
     } else {
-      removeExceptions(neighbors, &target_set, ctx->existing_vertices);
+      degreeFilter(neighbors, target_degree_, ctx->getDataGraph<G>(), &target_set, ctx->existing_vertices);
     }
     if (!target_set.empty()) {
       filterTargets(&target_set, input);

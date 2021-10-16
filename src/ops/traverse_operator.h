@@ -42,6 +42,7 @@ class TraverseOperator : public Operator {
  protected:
   const QueryVertexID target_vertex_;
   LabelID target_label_ = ALL_LABEL;
+  uint32_t target_degree_ = 1;
 
   /* for non-repeated-vertex check and/or automorphism elimination */
   uint64_t set_pruning_threshold_ = ~0u;
@@ -71,6 +72,8 @@ class TraverseOperator : public Operator {
     matching_order_indices_ = std::move(matching_order_indices);
   }
   inline void setTargetLabel(LabelID l) { target_label_ = l; }
+  inline void setTargetDegree(uint32_t d) { target_degree_ = d; }
+  inline uint32_t getTargetDegree() const { return target_degree_; }
 
   inline void filterTargets(std::vector<VertexID>* targets, const CompressedSubgraphs& group) const {
     if (target_filter_ == nullptr) return;

@@ -152,14 +152,6 @@ inline std::string toString(ForwardIt begin, ForwardIt end) {
   return ss.str();
 }
 
-// FIXME(tatiana): move to traverse utils
-inline void removeExceptions(const VertexSetView& set, std::vector<VertexID>* res,
-                             const unordered_set<VertexID>& except = {}) {
-  for (auto vid : set) {
-    if (except.count(vid) == 0) res->emplace_back(vid);
-  }
-}
-
 #ifdef __GNUG__
 #include <cxxabi.h>
 #include <cstdlib>

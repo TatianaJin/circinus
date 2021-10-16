@@ -100,8 +100,9 @@ class ExpandEdgeKeyToSetOperator : public ExpandEdgeOperator {
     auto parent_match = input.getKeyVal(parent_index_);
     auto exceptions = input.getExceptions(same_label_key_indices_, same_label_set_indices_);
     if (!intersect_candidates) {
-      auto neighbors = ctx->getDataGraph<G>()->getOutNeighborsWithHint(parent_match, target_label_, 0);
-      removeExceptions(neighbors, &targets, exceptions);
+      auto g = ctx->getDataGraph<G>();
+      auto neighbors = g->getOutNeighborsWithHint(parent_match, target_label_, 0);
+      degreeFilter(neighbors, target_degree_, g, &targets, exceptions);
       if (!targets.empty()) {
         filterTargets(&targets, input);  // enforce partial order
       }
@@ -234,9 +235,10 @@ class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
     auto parent_match = input.getKeyVal(parent_index_);
     auto exceptions = input.getExceptions(same_label_key_indices_, same_label_set_indices_);
     if (!intersect_candidates) {
-      DCHECK(ctx->getDataGraph<G>() != nullptr) << "no graph";
-      auto neighbors = ctx->getDataGraph<G>()->getOutNeighborsWithHint(parent_match, target_label_, 0);
-      removeExceptions(neighbors, &current_targets, exceptions);
+      auto g = ctx->getDataGraph<G>();
+      DCHECK(g != nullptr) << "no graph";
+      auto neighbors = g->getOutNeighborsWithHint(parent_match, target_label_, 0);
+      degreeFilter(neighbors, target_degree_, g, &current_targets, exceptions);
       if (!current_targets.empty()) {
         filterTargets(&current_targets, input);  // enforce partial order
       }
@@ -390,7 +392,7 @@ class CurrentResultsByParent : public CurrentResults {
               ctx_->updateIntersectInfo(candidates.size() + neighbors.size(), targets.size());
             }
         } else {
-          removeExceptions(neighbors, &targets, exceptions_);
+          degreeFilter(neighbors, owner_->getTargetDegree(), graph, &targets, exceptions_);
         }
         if (!targets.empty()) {
           owner_->filterTargets(&targets, *input_);
@@ -481,19 +483,19 @@ class CurrentResultsByExtension : public CurrentResults {
     }
     std::vector<VertexID> current_extensions;
     auto neighbors = g->getOutNeighborsWithHint(parent_match, owner_->getTargetLabel(), 0);
-    auto& candidates = *((ExpandEdgeSetToKeyTraverseContext*)ctx_)->getCandidateSet();
-    if (isProfileCandidateSIEffect(profile)) {
-      intersectCandidateSetWithProfile(candidates, neighbors, &current_extensions, current_exceptions_, ctx_, *input_,
+    auto candidates = ((ExpandEdgeSetToKeyTraverseContext*)ctx_)->getCandidateSet();
+    if (isProfileCandidateSIEffect(profile) && candidates != nullptr) {
+      intersectCandidateSetWithProfile(*candidates, neighbors, &current_extensions, current_exceptions_, ctx_, *input_,
                                        owner_->getTargetFilter());
     } else {
       if (intersect_candidates) {
-        intersect(candidates, neighbors, &current_extensions, current_exceptions_);
+        intersect(*candidates, neighbors, &current_extensions, current_exceptions_);
         if
           constexpr(isProfileMode(profile)) {
-            ctx_->updateIntersectInfo(candidates.size() + neighbors.size(), current_extensions.size());
+            ctx_->updateIntersectInfo(candidates->size() + neighbors.size(), current_extensions.size());
           }
       } else {
-        removeExceptions(neighbors, &current_extensions, current_exceptions_);
+        degreeFilter(neighbors, owner_->getTargetDegree(), g, &current_extensions, current_exceptions_);
       }
       if (!current_extensions.empty()) {
         owner_->filterTargets(&current_extensions, *input_);

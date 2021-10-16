@@ -147,11 +147,15 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
 
  protected:
   template <typename ForwardIter>
-  inline bool isInCandidates(VertexID key, ForwardIter& begin, ForwardIter end) const {
+  inline bool isInCandidates(VertexID key, ForwardIter& begin, ForwardIter end, const G* graph) const {
     if
       constexpr(intersect_candidates) {
         begin = std::lower_bound(begin, end, key);
         return begin != end && *begin == key;
+      }
+    if
+      constexpr(std::is_base_of_v<GraphBase, G>) {
+        return ((const GraphBase*)graph)->getVertexOutDegree(key) >= target_degree_;
       }
     return true;
   }
@@ -324,10 +328,11 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
     auto& parent_match_idx = ctx->getParentMatchIdx();
     auto& parent_matches = *ctx->getParentMatches();
     auto candidate_end = ctx->getCandidateSet()->end();
+    auto graph = ctx->getDataGraph<G>();
     while (parent_match_idx < parent_matches.size()) {
       // find extensions and enumerate
       auto vid = parent_matches[parent_match_idx++];
-      auto out_neighbors = ctx->getDataGraph<G>()->getOutNeighborsWithHint(vid, target_label_, min_parent_idx);
+      auto out_neighbors = graph->getOutNeighborsWithHint(vid, target_label_, min_parent_idx);
       auto begin = ctx->getCandidateSet()->begin();
       if (std::is_same_v<decltype(out_neighbors), VertexSetView>) {
         auto& ranges = out_neighbors.getRanges();
@@ -337,7 +342,7 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
 
             if (ctx->getExceptions().count(key_vertex_id) == 0 && ctx->visitOnce(key_vertex_id) &&
                 !filterTarget(key_vertex_id, input)) {
-              if (!isInCandidates(key_vertex_id, begin, candidate_end)) {
+              if (!isInCandidates(key_vertex_id, begin, candidate_end, graph)) {
                 if
                   constexpr(isProfileCandidateSIEffect(profile)) ctx->candidate_si_diff += 1;
                 continue;
@@ -350,7 +355,7 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
                   auto vid = ranges[range_i].first[idx];
 
                   if (ctx->getExceptions().count(vid) == 0 && ctx->visitOnce(vid) && !filterTarget(vid, input)) {
-                    if (isInCandidates(vid, begin, candidate_end)) {
+                    if (isInCandidates(vid, begin, candidate_end, graph)) {
                       extensions.push(vid);
                     } else {
                       if
@@ -362,7 +367,7 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
                   for (size_t idx = 0; idx < ranges[range_i].second; ++idx) {
                     auto vid = ranges[range_i].first[idx];
                     if (ctx->getExceptions().count(vid) == 0 && ctx->visitOnce(vid) && !filterTarget(vid, input)) {
-                      if (isInCandidates(vid, begin, candidate_end)) {
+                      if (isInCandidates(vid, begin, candidate_end, graph)) {
                         extensions.push(vid);
                       } else {
                         if
@@ -381,7 +386,7 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
           VertexID key_vertex_id = *iter;
           if (ctx->getExceptions().count(key_vertex_id) == 0 && ctx->visitOnce(key_vertex_id) &&
               !filterTarget(key_vertex_id, input)) {
-            if (!isInCandidates(key_vertex_id, begin, candidate_end)) {
+            if (!isInCandidates(key_vertex_id, begin, candidate_end, graph)) {
               if
                 constexpr(isProfileCandidateSIEffect(profile)) ctx->candidate_si_diff += 1;
               continue;
@@ -392,7 +397,7 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
               for (++iter; iter != out_neighbors.end(); ++iter) {
                 auto vid = *iter;
                 if (ctx->getExceptions().count(vid) == 0 && ctx->visitOnce(vid) && !filterTarget(vid, input)) {
-                  if (isInCandidates(vid, begin, candidate_end)) {
+                  if (isInCandidates(vid, begin, candidate_end, graph)) {
                     extensions.push(vid);
                   } else {
                     if

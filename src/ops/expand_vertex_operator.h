@@ -143,6 +143,8 @@ class ExpandVertexOperator : public TraverseOperator {
           ctx->updateIntersectInfo(new_key_size + ctx->getCandidateSet()->size(), targets->size());
           ctx->candidate_si_diff += new_key_size - targets->size();
         }
+    } else if (!intersect_candidates) {
+      degreeFilter(targets, target_degree_, data_graph);
     }
   }
 

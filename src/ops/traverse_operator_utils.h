@@ -25,6 +25,7 @@
 #include "graph/graph_view.h"
 #include "graph/partitioned_graph.h"
 #include "graph/types.h"
+#include "graph/vertex_set_view.h"
 #include "ops/filters/target_filter.h"
 #include "ops/traverse_operator.h"
 
@@ -97,6 +98,66 @@ inline constexpr bool sensitive_to_hint = !std::is_same<G, Graph>::value;
 inline void removeExceptions(std::vector<VertexID>* set, const unordered_set<VertexID>& except = {}) {
   if (except.empty()) return;
   set->erase(std::remove_if(set->begin(), set->end(), [&except](VertexID v) { return except.count(v); }), set->end());
+}
+
+inline void removeExceptions(const SingleRangeVertexSetView& set, std::vector<VertexID>* res,
+                             const unordered_set<VertexID>& except) {
+  for (auto vid : set) {
+    if (except.count(vid) == 0) res->emplace_back(vid);
+  }
+}
+
+inline void removeExceptions(const VertexSetView& set, std::vector<VertexID>* res,
+                             const unordered_set<VertexID>& except = {}) {
+  auto& ranges = set.getRanges();
+  for (auto& range : ranges) {
+    for (uint32_t i = 0; i < range.second; ++i) {
+      auto vid = range.first[i];
+      if (except.count(vid) == 0) res->emplace_back(vid);
+    }
+  }
+}
+
+/* dummy functions >>>>> */
+template <typename G>
+inline void degreeFilter(const VertexSetView& set, uint32_t degree, const GraphView<G>* graph,
+                         std::vector<VertexID>* res, const unordered_set<VertexID>& except) {
+  removeExceptions(set, res, except);
+}
+
+template <typename G>
+inline void degreeFilter(std::vector<VertexID>* res, uint32_t degree, const GraphView<G>* graph) {}
+/* <<<<< dummy functions */
+
+/** Copy vertices with degree no less than the given degree to res. */
+inline void degreeFilter(const SingleRangeVertexSetView& set, uint32_t degree, const GraphBase* graph,
+                         std::vector<VertexID>* res, const unordered_set<VertexID>& except) {
+  for (auto vid : set) {
+    if (graph->getVertexOutDegree(vid) >= degree && except.count(vid) == 0) {
+      res->push_back(vid);
+    }
+  }
+}
+
+/** Copy vertices with degree no less than the given degree to res. */
+inline void degreeFilter(const VertexSetView& set, uint32_t degree, const GraphBase* graph, std::vector<VertexID>* res,
+                         const unordered_set<VertexID>& except) {
+  auto& ranges = set.getRanges();
+  for (auto& range : ranges) {
+    for (uint32_t i = 0; i < range.second; ++i) {
+      auto vid = range.first[i];
+      if (graph->getVertexOutDegree(vid) >= degree && except.count(vid) == 0) {
+        res->push_back(vid);
+      }
+    }
+  }
+}
+
+/** Copy vertices with degree no less than the given degree to res. */
+inline void degreeFilter(std::vector<VertexID>* res, uint32_t degree, const GraphBase* graph) {
+  res->erase(std::remove_if(res->begin(), res->end(),
+                            [degree, graph](VertexID v) { return graph->getVertexOutDegree(v) < degree; }),
+             res->end());
 }
 
 template <typename NeighborSet>

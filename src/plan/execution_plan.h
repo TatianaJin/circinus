@@ -171,6 +171,7 @@ class ExecutionPlan {
     }
     op->setMatchingOrderIndices(std::move(matching_order_indices));
     op->setTargetLabel(FLAGS_label_filter ? query_graph_->getVertexLabel(target_vertex) : ALL_LABEL);
+    op->setTargetDegree(query_graph_->getVertexOutDegree(target_vertex));
   }
 
   inline std::unique_ptr<SubgraphFilter> createFilter(std::vector<std::vector<uint32_t>>&& pruning_set_indices) {

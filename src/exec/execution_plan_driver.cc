@@ -178,6 +178,7 @@ void OnlineQueryExecutionPlanDriver::init(QueryId qid, QueryContext* query_ctx, 
                                       query_ctx->data_graph, query_type_, seed_data_vertex);
   } else {
     auto n_plans = plan_->getNumPartitionedPlans();
+    LOG(INFO) << "Initial # tasks = " << n_plans;
     task_counters_.resize(plan_->getPlans().size(), 0);
     candidates_.resize(n_plans);
     for (uint32_t i = 0; i < n_plans; ++i) {
