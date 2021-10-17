@@ -18,7 +18,11 @@
 #include <iostream>
 #include <memory>
 #include <string>
+#include <unordered_map>
+#include <utility>
 #include <vector>
+
+#include "utils/hashmap.h"
 
 namespace circinus {
 
@@ -31,6 +35,9 @@ constexpr LabelID ALL_LABEL = ~0u;
 constexpr QueryVertexID DUMMY_QUERY_VERTEX = UINT32_MAX;
 
 enum class GraphType : uint32_t { Normal, Partitioned, GraphView, BipartiteGraphView };
+
+using PartialOrderConstraintMap =
+    unordered_map<QueryVertexID, std::pair<std::vector<QueryVertexID>, std::vector<QueryVertexID>>>;
 
 // TODO(tatiana): remove inverse type?
 enum class CandidateScopeType : uint8_t { All = 0, Partition = 1, Range = 2, PartitionRange = 3, Inverse = 4 };

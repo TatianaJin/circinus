@@ -33,6 +33,8 @@ namespace circinus {
 void ExecutionPlanDriverBase::init(QueryId qid, QueryContext* query_ctx, ExecutionContext& ctx,
                                    ThreadsafeTaskQueue& task_queue) {
   start_time_ = std::chrono::high_resolution_clock::now();
+  LOG(INFO) << "query time limit is " << toSeconds(std::chrono::steady_clock::now(), query_ctx->stop_time)
+            << " seconds";
   candidate_result_.reset(dynamic_cast<CandidateResult*>(ctx.second.release()));
   ctx.second = Result::newExecutionResult(query_ctx->query_config.isProfileMode(), plan_->getPlans());
   batch_size_ = ctx.first.getBatchSize();

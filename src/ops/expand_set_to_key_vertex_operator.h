@@ -205,7 +205,7 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
         }
       auto& input = ctx->getCurrentInput();
       input.getExceptions(ctx->resetExceptions(), same_label_key_indices_, same_label_set_indices_);
-      if (min_parent_set_size < ctx->getCandidateSet()->size()) {
+      if (ctx->getCandidateSet() == nullptr || min_parent_set_size < ctx->getCandidateSet()->size()) {
         ctx->initParentSet(input.getSet(query_vertex_indices_.at(min_parent_vertex)).get(), min_parent_idx);
         output_num += fromSetNeighborStrategy<profile>(ctx, input, batch_size - output_num, buffer);
       } else {

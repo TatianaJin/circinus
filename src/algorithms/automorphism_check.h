@@ -35,6 +35,7 @@ class AutomorphismCheck {
 
   /** Each returned pair means a partial order first < second */
 
+  // TODO(tatiana): create an abstraction for partial order
   std::vector<std::pair<QueryVertexID, QueryVertexID>> getPartialOrder();
 
  private:

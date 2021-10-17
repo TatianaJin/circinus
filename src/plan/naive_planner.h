@@ -77,7 +77,7 @@ class NaivePlanner {
   const QueryGraph* const query_graph_;
   QueryGraph ordered_query_graph_;
   bool use_two_hop_traversal_ = false;
-  const std::vector<double> candidate_cardinality_;
+  std::vector<double> candidate_cardinality_;
   ExecutionPlan plan_;
 
   std::vector<std::vector<CoverNode>> covers_;  // covers for each level, the search space for compression
@@ -96,7 +96,7 @@ class NaivePlanner {
   NaivePlanner(QueryGraph* query_graph, GraphType type) : query_graph_(query_graph), plan_(type) {}
 
   /** Generates a plan with a static cover for partial match compression. */
-  ExecutionPlan* generatePlan();
+  ExecutionPlan* generatePlan(const PartialOrderConstraintMap& = {});
 
   /** Generates a plan with no compression. */
   ExecutionPlan* generatePlanWithoutCompression();
@@ -106,7 +106,8 @@ class NaivePlanner {
    * otherwise, do a dfs traversal based on the candidate view to compute a tighter estimation.
    */
   ExecutionPlan* generatePlanWithDynamicCover(const GraphBase* data_graph,
-                                              const std::vector<CandidateSetView>* candidate_views);
+                                              const std::vector<CandidateSetView>* candidate_views,
+                                              const PartialOrderConstraintMap& = {});
 
   ExecutionPlan* generatePlanWithSampleExecution(const std::vector<std::vector<double>>& cardinality,
                                                  const std::vector<double>& level_cost);
@@ -126,7 +127,8 @@ class NaivePlanner {
    *
    * If seed_qv is a query vertex, generate an order starting from the seed vertex.
    */
-  const std::vector<QueryVertexID>& generateOrder(QueryVertexID seed_qv, OrderStrategy os);
+  const std::vector<QueryVertexID>& generateOrder(QueryVertexID seed_qv, OrderStrategy os,
+                                                  const PartialOrderConstraintMap& po);
 
   /** Select a query vertex to parallelize the plan and compute the weights (estimation of the associated backtracking
    * search space) for all its candidates. */
@@ -189,16 +191,21 @@ class NaivePlanner {
                                     const std::vector<CandidateSetView>* candidate_views, const CoverNode& cover_node,
                                     uint32_t level) {
     if (candidate_views == nullptr) {
-      double car = 1;
-      for (uint32_t i = 0; i <= level; ++i) {
-        auto qid = matching_order_[i];
-        if (cover_node.cover_bits >> qid & 1) {
-          car *= cardinality[qid];
-        }
-      }
-      return car;
+      return estimateCardinalityByProduct(cardinality, cover_node.cover_bits, level);
     }
     return estimateCardinality(data_graph, *candidate_views, cover_node.cover_bits, level);
+  }
+
+  inline double estimateCardinalityByProduct(const std::vector<double>& cardinality, uint64_t cover_bits,
+                                             uint32_t level) const {
+    double car = 1;
+    for (uint32_t i = 0; i <= level; ++i) {
+      auto qid = matching_order_[i];
+      if (cover_bits >> qid & 1) {
+        car *= cardinality[qid];
+      }
+    }
+    return car;
   }
 
   double estimateExpandCost(const GraphBase* data_graph, const std::vector<CandidateSetView>* candidate_views,
@@ -215,6 +222,10 @@ class NaivePlanner {
                                                  const std::vector<CandidateSetView>& candidate_views,
                                                  const std::vector<QueryVertexID>& cc, bool with_traversal = false);
 
+  double intersectionCountCoeff(const std::vector<double>& cardinality,
+                                const unordered_set<QueryVertexID>& existing_vertices, uint32_t level, uint32_t idx,
+                                uint32_t parent);
+
   /* End of implementations of compression strategy */
 
   bool hasValidCandidate() const;
@@ -226,6 +237,8 @@ class NaivePlanner {
     }
     return log_cardinality;
   }
+
+  void setVertexWeightByDegreeConstraints(std::vector<double>& weights, const PartialOrderConstraintMap& po) const;
 
   inline bool addCover(CoverNode& new_cover_node, uint32_t level) {
     DLOG(INFO) << level << " " << new_cover_node.getCoverTableString(matching_order_.size()) << " target "

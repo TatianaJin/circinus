@@ -40,6 +40,8 @@ class WeightedBnB {
   double best_cover_weight_;
   double elapsed_time_;
 
+  uint32_t best_buffer_size_ = TOPK;
+
   // for analyzing the algorithm efficiency
   // TODO(tatiana): put for debug mode only?
   std::vector<int> history_cover_size_;
@@ -54,6 +56,7 @@ class WeightedBnB {
       : graph_(g), vertex_weights_(vertex_weights), cutoff_time_(cutoff_time) {
     best_cover_weight_ = 0;
     for (auto w : vertex_weights_) {
+      CHECK_GE(w, 0) << "weights cannot be negative";
       best_cover_weight_ += w;
     }
   }
@@ -77,6 +80,8 @@ class WeightedBnB {
     dfs(assignment, uncovered_edges, 0);
     elapsed_time_ = ((double)(clock() - start_time_)) / CLOCKS_PER_SEC;
   }
+
+  void setBestBufferSize(uint32_t size) { best_buffer_size_ = size; }
 
   // getters
   inline const auto& getBestCovers() const { return best_covers_; }

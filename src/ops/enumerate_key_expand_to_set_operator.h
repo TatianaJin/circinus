@@ -29,13 +29,14 @@
 #include "ops/traverse_operator_utils.h"
 #include "ops/types.h"
 #include "utils/hashmap.h"
+#include "utils/utils.h"
 
 namespace circinus {
 
 class EnumerateTraverseContext : public ExpandVertexTraverseContext {
  private:
-  std::vector<uint32_t> enumerate_key_idx_;                     // size = keys_to_enumerate_.size();
-  std::vector<std::vector<VertexID>*> enumerate_key_pos_sets_;  // size = keys_to_enumerate_.size();
+  std::vector<uint32_t> enumerate_key_idx_;                              // size = keys_to_enumerate_.size();
+  std::vector<const SingleRangeVertexSetView*> enumerate_key_pos_sets_;  // size = keys_to_enumerate_.size();
   CompressedSubgraphs output_;
 
   /* for profiling */
@@ -78,7 +79,7 @@ class EnumerateTraverseContext : public ExpandVertexTraverseContext {
     uint32_t depth = 0;
     for (auto v : keys_to_enumerate) {
       auto pos = enumerate_key_old_indices.at(v);
-      enumerate_key_pos_sets_[depth] = input.getSet(pos).get();
+      enumerate_key_pos_sets_[depth] = &(*input.getSet(pos));
       ++depth;
     }
     // set existing matched vertices in output
@@ -91,6 +92,19 @@ class EnumerateTraverseContext : public ExpandVertexTraverseContext {
 
   inline void nextKeyToEnumerate(uint32_t enumerate_key_depth) { ++enumerate_key_idx_[enumerate_key_depth]; }
   inline void resetKeyToEnumerate(uint32_t enumerate_key_depth) { enumerate_key_idx_[enumerate_key_depth] = 0; }
+
+  inline void resetKeyToEnumerateWithConstraint(uint32_t enumerate_key_depth,
+                                                const std::vector<uint32_t>& smaller_indices) {
+    VertexID least_vid = 0;
+    for (uint32_t idx : smaller_indices) {  // larger than the max of the smaller values
+      least_vid = std::max(least_vid, (*enumerate_key_pos_sets_[idx])[enumerate_key_idx_[idx]]);
+    }
+    ++least_vid;  // +1 as lower bound finds the first element larger than or equal to least_vid
+    enumerate_key_idx_[enumerate_key_depth] =
+        circinus::lowerBound(enumerate_key_pos_sets_[enumerate_key_depth]->begin(),
+                             enumerate_key_pos_sets_[enumerate_key_depth]->end(), least_vid) -
+        enumerate_key_pos_sets_[enumerate_key_depth]->begin();
+  }
 
   auto& getParentTuple() { return parent_tuple_; }
 
@@ -111,8 +125,8 @@ class EnumerateTraverseContext : public ExpandVertexTraverseContext {
 
 template <typename G, bool intersect_candidates>
 class EnumerateKeyExpandToSetOperator : public ExpandVertexOperator {
-  const std::vector<QueryVertexID> keys_to_enumerate_;  // parent query vertices whose matches are enumerated as key
-  std::vector<uint32_t> existing_key_parent_indices_;   // input indices of parent query vertices in key
+  std::vector<QueryVertexID> keys_to_enumerate_;       // parent query vertices whose matches are enumerated as key
+  std::vector<uint32_t> existing_key_parent_indices_;  // input indices of parent query vertices in key
   std::vector<int> cover_table_;
   unordered_map<QueryVertexID, uint32_t> enumerate_key_old_indices_;  // input indices of parent query vertices in set
   std::vector<std::pair<uint32_t, int>> set_old_to_new_pos_;  // input-output indices of other query vertices in set
@@ -121,6 +135,7 @@ class EnumerateKeyExpandToSetOperator : public ExpandVertexOperator {
   unordered_set<uint32_t> set_indices_;
 #endif
   std::vector<int> enumerated_key_pruning_indices_;  // i, the indices of sets to be pruned by the i-th enumerated key
+  std::vector<std::vector<uint32_t>> po_constraint_adj_;  // i: the indices of smaller keys of the i-th key to enumerate
 
  public:
   EnumerateKeyExpandToSetOperator(const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
@@ -175,6 +190,88 @@ class EnumerateKeyExpandToSetOperator : public ExpandVertexOperator {
 
   std::pair<uint32_t, uint32_t> getOutputSize(const std::pair<uint32_t, uint32_t>& input_key_size) const override {
     return {input_key_size.first + keys_to_enumerate_.size(), input_key_size.second + 1};
+  }
+
+  void setPartialOrder(const PartialOrderConstraintMap& conditions,
+                       const unordered_map<QueryVertexID, uint32_t>& seen_vertices) override {
+    // set constraints related to targets
+    TraverseOperator::setPartialOrder(conditions, seen_vertices);
+    // set constraints related to keys to enumerate
+    auto n_keys = keys_to_enumerate_.size();
+    if (n_keys > 1 && !conditions.empty()) {
+      // TODO(tatiana): move the following deduplication and ordering logic to AutomorphismCheck
+      unordered_map<QueryVertexID,
+                    std::pair<uint32_t, std::pair<unordered_set<QueryVertexID>, unordered_set<QueryVertexID>>>>
+          smaller_larger_keys;  // key: {old index, {smaller keys, larger keys}}
+      std::vector<uint32_t> keys_old_to_new_index(n_keys, UINT32_MAX);
+      uint32_t ordered_count = 0;
+      /* find keys to enumerate with constraints */
+      for (uint32_t i = 0; i < n_keys; ++i) {
+        QueryVertexID qv = keys_to_enumerate_[i];
+        auto pos = conditions.find(qv);
+        if (pos != conditions.end()) {
+          smaller_larger_keys[qv].first = i;
+          for (auto smaller : pos->second.first) {
+            if (enumerate_key_old_indices_.count(smaller)) {  // the other end of constraint is also key to enumerate
+              smaller_larger_keys[qv].second.first.insert(smaller);
+              smaller_larger_keys[smaller].second.second.insert(qv);
+            }
+          }
+        }
+      }
+      if (ordered_count == n_keys) {
+        return;  // no partial order constraint among keys to enumerate
+      }
+      po_constraint_adj_.resize(n_keys);
+      /* order keys from smaller to larger by partial order */
+      std::queue<QueryVertexID> queue;
+      unordered_map<QueryVertexID, uint32_t> checked_smaller_count;
+      for (auto& p : smaller_larger_keys) {  // find keys without constraint of smaller keys
+        if (p.second.second.first.empty()) {
+          queue.push(p.first);
+        }
+      }
+      while (!queue.empty()) {
+        auto key = queue.front();
+        queue.pop();
+        auto& entry = smaller_larger_keys.at(key);
+        auto old_index = entry.first;
+        unordered_set<QueryVertexID> covered_smaller_keys;
+        // find all smaller than smaller keys and deduplicate constraints
+        for (auto smaller : entry.second.first) {
+          auto& smaller_than_smaller = smaller_larger_keys.at(smaller).second.first;
+          covered_smaller_keys.insert(smaller_than_smaller.begin(), smaller_than_smaller.end());
+        }
+        for (auto smaller : entry.second.first) {
+          if (covered_smaller_keys.insert(smaller).second) {  // not covered by any other smaller key
+            auto smaller_index = keys_old_to_new_index[smaller_larger_keys.at(smaller).first];
+            DCHECK_NE(smaller_index, UINT32_MAX) << "smaller keys should have been set in order";
+            po_constraint_adj_[ordered_count].push_back(smaller_index);
+          }
+        }
+        entry.second.first.swap(covered_smaller_keys);
+        keys_old_to_new_index[old_index] = ordered_count++;
+        // check all larger keys and update queue
+        for (auto next_key : entry.second.second) {
+          if (++checked_smaller_count[next_key] == smaller_larger_keys.at(next_key).second.first.size()) {
+            queue.push(next_key);
+          }
+        }
+      }
+      DCHECK_EQ(ordered_count, smaller_larger_keys.size());
+      std::vector<uint32_t> keys_to_enumerate_order(n_keys);
+      std::vector<int> enumerated_key_pruning_indices_by_order(n_keys);
+      for (uint32_t old_index = 0; old_index < n_keys; ++old_index) {
+        auto new_index = keys_old_to_new_index[old_index];
+        if (new_index == UINT32_MAX) {
+          new_index = ordered_count++;
+        }
+        keys_to_enumerate_order[new_index] = keys_to_enumerate_[old_index];
+        enumerated_key_pruning_indices_by_order[new_index] = enumerated_key_pruning_indices_[old_index];
+      }
+      keys_to_enumerate_.swap(keys_to_enumerate_order);
+      enumerated_key_pruning_indices_.swap(enumerated_key_pruning_indices_by_order);
+    }
   }
 
  private:
@@ -334,7 +431,7 @@ uint32_t EnumerateKeyExpandToSetOperator<G, intersect_candidates>::expandInner(u
                     ctx->existing_vertices);
         }
         ctx->updateIntersection<profile>(
-            (ctx->target_sets[enumerate_key_depth].empty() ? ctx->getCandidateSet()->size() * intersect_candidates
+            (ctx->target_sets[enumerate_key_depth].empty() ? (intersect_candidates ? ctx->getCandidateSet()->size() : 0)
                                                            : ctx->target_sets[enumerate_key_depth].size()) +
                 neighbors.size(),
             ctx->target_sets[enumerate_key_depth + 1].size(), pidx, key_vid);
@@ -400,7 +497,13 @@ uint32_t EnumerateKeyExpandToSetOperator<G, intersect_candidates>::expandInner(u
         } else {  // dfs next key depth
           ctx->existing_vertices.insert(key_vid);
           ++enumerate_key_depth;
-          ctx->resetKeyToEnumerate(enumerate_key_depth);  // start from the first match in the next depth
+
+          if (!po_constraint_adj_.empty() &&
+              !po_constraint_adj_[enumerate_key_depth].empty()) {  // start from the first qualified match
+            ctx->resetKeyToEnumerateWithConstraint(enumerate_key_depth, po_constraint_adj_[enumerate_key_depth]);
+          } else {
+            ctx->resetKeyToEnumerate(enumerate_key_depth);  // start from the first match in the next depth
+          }
         }
       }
       ctx->target_sets[enumerate_key_depth].clear();
@@ -428,7 +531,7 @@ bool EnumerateKeyExpandToSetOperator<G, intersect_candidates>::expandInner(
   input.getExceptions(ctx->existing_vertices, {}, same_label_set_indices_);
   ctx->n_exceptions = ctx->existing_vertices.size();
   if (existing_key_parent_indices_.empty()) {
-    return ctx->getCandidateSet()->empty();
+    return intersect_candidates && ctx->getCandidateSet()->empty();
   }
 
 #ifdef INTERSECTION_CACHE

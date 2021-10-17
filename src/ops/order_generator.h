@@ -73,7 +73,8 @@ class OrderGenerator {
     return &(bg->second);
   }
 
-  std::vector<QueryVertexID> getOrder(OrderStrategy order_strategy, QueryVertexID seed_qv) {
+  std::vector<QueryVertexID> getOrder(OrderStrategy order_strategy, QueryVertexID seed_qv,
+                                      const PartialOrderConstraintMap& po = {}) {
     switch (order_strategy) {
     case OrderStrategy::None:
       return getBFSOrder(seed_qv);
@@ -86,7 +87,7 @@ class OrderGenerator {
     case OrderStrategy::GQL:
       return getGQLOrder();
     case OrderStrategy::Online:
-      return getOnlineOrder(seed_qv);
+      return getOnlineOrder(seed_qv, po);
     }
     return getCFLOrder(seed_qv);  // default
   }
@@ -377,21 +378,33 @@ class OrderGenerator {
     return logical_filter.getBfsOrder();
   }
 
-  std::vector<QueryVertexID> getOnlineOrder(QueryVertexID seed_qv) {
+  std::vector<QueryVertexID> getOnlineOrder(QueryVertexID seed_qv, const PartialOrderConstraintMap& po) {
+    /* degree sorting to choose vertices with larger degree first */
+    /* if degrees are equal, choose vertices with more constraints first */
+    auto n_qvs = query_graph_->getNumVertices();
+    std::vector<uint32_t> constraint_count(n_qvs, 0);
+    for (auto& p : po) {
+      constraint_count[p.first] = p.second.first.size() + p.second.second.size();
+    }
     if (seed_qv == DUMMY_QUERY_VERTEX) {  // select start vertex
       seed_qv = 0;
-      for (QueryVertexID v = 1; v < query_graph_->getNumVertices(); ++v) {
-        if (query_graph_->getVertexOutDegree(v) > query_graph_->getVertexOutDegree(seed_qv)) seed_qv = v;
+      for (QueryVertexID v = 1; v < n_qvs; ++v) {
+        if (query_graph_->getVertexOutDegree(v) > query_graph_->getVertexOutDegree(seed_qv) ||
+            (query_graph_->getVertexOutDegree(v) == query_graph_->getVertexOutDegree(seed_qv) &&
+             constraint_count[v] > constraint_count[seed_qv])) {
+          seed_qv = v;
+        }
       }
     }
-    // degree sorting
-    auto comp = [q = query_graph_](QueryVertexID a, QueryVertexID b) {
-      return q->getVertexOutDegree(a) < q->getVertexOutDegree(b);
+    // degree and constraint sorting
+    auto comp = [&constraint_count, q = query_graph_ ](QueryVertexID a, QueryVertexID b) {
+      return q->getVertexOutDegree(a) < q->getVertexOutDegree(b) ||
+             (q->getVertexOutDegree(a) == q->getVertexOutDegree(b) && constraint_count[a] < constraint_count[b]);
     };
     std::vector<QueryVertexID> matching_order;
     std::priority_queue<QueryVertexID, std::vector<QueryVertexID>, decltype(comp)> queue(comp);
-    std::vector<bool> visited(query_graph_->getNumVertices(), 0);
-    matching_order.reserve(query_graph_->getNumVertices());
+    std::vector<bool> visited(n_qvs, 0);
+    matching_order.reserve(n_qvs);
     queue.push(seed_qv);
     visited[seed_qv] = true;
     while (!queue.empty()) {

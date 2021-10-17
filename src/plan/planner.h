@@ -42,7 +42,7 @@ class Planner {
   std::unique_ptr<BacktrackingPlan> backtracking_plan_ = nullptr;
 
   // u: vertices smaller than u, vertices larger than u
-  unordered_map<QueryVertexID, std::pair<std::vector<QueryVertexID>, std::vector<QueryVertexID>>> qv_partial_order_;
+  PartialOrderConstraintMap qv_partial_order_;
 
  public:
   explicit Planner(QueryContext& query_context) : query_context_(&query_context) {}

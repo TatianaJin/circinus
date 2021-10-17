@@ -87,8 +87,8 @@ class TraverseOperator : public Operator {
   }
 
   // TODO(tatiana): add degree filter for non-candidate-intersection cases
-  void addFilters(const std::vector<std::pair<bool, uint32_t>>& lt_constraints,
-                  const std::vector<std::pair<bool, uint32_t>>& gt_constraints) {
+  inline void addFilters(const std::vector<std::pair<bool, uint32_t>>& lt_constraints,
+                         const std::vector<std::pair<bool, uint32_t>>& gt_constraints) {
     std::vector<uint32_t> expand_lt_conditions, expand_gt_conditions;      // key indices
     std::vector<uint32_t> subgraph_lt_conditions, subgraph_gt_conditions;  // set indices
     for (auto& p : lt_constraints) {
@@ -159,6 +159,30 @@ class TraverseOperator : public Operator {
   virtual uint32_t expand(uint32_t cap, TraverseContext* ctx) const = 0;
 
   virtual bool extend_vertex() const = 0;
+
+  virtual void setPartialOrder(const PartialOrderConstraintMap& conditions,
+                               const unordered_map<QueryVertexID, uint32_t>& seen_vertices) {
+    auto& indices = getMatchingOrderIndices();
+    auto cond_pos = conditions.find(target_vertex_);
+    std::vector<std::pair<bool, uint32_t>> lt_constraints;
+    std::vector<std::pair<bool, uint32_t>> gt_constraints;
+    if (cond_pos != conditions.end()) {
+      auto & [ smaller_vs, larger_vs ] = cond_pos->second;
+      for (auto smaller : smaller_vs) {
+        auto seen_pos = seen_vertices.find(smaller);
+        if (seen_pos != seen_vertices.end()) {
+          gt_constraints.push_back(indices[seen_pos->second]);
+        }
+      }
+      for (auto larger : larger_vs) {
+        auto seen_pos = seen_vertices.find(larger);
+        if (seen_pos != seen_vertices.end()) {
+          lt_constraints.push_back(indices[seen_pos->second]);
+        }
+      }
+      addFilters(lt_constraints, gt_constraints);
+    }
+  }
 
   uint32_t expandAndProfile(uint32_t cap, TraverseContext* ctx) const {
     auto start = std::chrono::high_resolution_clock::now();

@@ -479,11 +479,12 @@ BacktrackingPlan* Planner::generateExecutionPlan(std::pair<QueryVertexID, Vertex
     return nullptr;
   }
 
+  // FIXME(tatiana): seed qv should be excluded from symmetry analysis breakSymmetry();
   planners_.push_back(std::make_unique<NaivePlanner>(&query_context_->query_graph, getGraphType()));
 
   auto& planner = planners_.back();
 
-  auto& order = planner->generateOrder(seed.first, query_context_->query_config.order_strategy);
+  auto& order = planner->generateOrder(seed.first, query_context_->query_config.order_strategy, qv_partial_order_);
 
   if (order.empty()) {
     return nullptr;
@@ -493,15 +494,15 @@ BacktrackingPlan* Planner::generateExecutionPlan(std::pair<QueryVertexID, Vertex
     LOG(INFO) << "Order:" << toString(order);
   }
 
-  ExecutionPlan* plan = planner->generatePlan();
+  ExecutionPlan* plan = planner->generatePlanWithDynamicCover(query_context_->data_graph, nullptr, qv_partial_order_);
   plan->setInputAreKeys(plan->isInCover(plan->getRootQueryVertexID()));
 
   backtracking_plan_->addPlan(plan);
-  // FIXME(tatiana): seed qv should be excluded from symmetry analysis breakSymmetry();
   return backtracking_plan_.get();
 }
 
 void Planner::breakSymmetry() {
+  DCHECK(backtracking_plan_ != nullptr);
   LOG(INFO) << "Symmetry breaking enabled? " << FLAGS_break_symmetry;
   if (FLAGS_break_symmetry) {
     AutomorphismCheck ac(query_context_->query_graph);
@@ -525,17 +526,36 @@ void Planner::breakSymmetry() {
 // TODO(engineering): classes in plan should not know classes in exec
 BacktrackingPlan* Planner::generateExecutionPlan(const CandidateResult* result, bool multithread) {
   backtracking_plan_ = std::make_unique<BacktrackingPlan>();
+  breakSymmetry();
   if (query_context_->query_config.candidate_pruning_strategy ==
       CandidatePruningStrategy::Online) {  // fast plan: only one plan, no partitioning applied
     // generate order and compression plan
     planners_.push_back(std::make_unique<NaivePlanner>(&query_context_->query_graph, getGraphType()));
     auto& planner = planners_.back();
-    auto& order =
-        planner->generateOrder(query_context_->query_config.seed.first, query_context_->query_config.order_strategy);
+    auto& order = planner->generateOrder(query_context_->query_config.seed.first,
+                                         query_context_->query_config.order_strategy, qv_partial_order_);
+
     if (shortPlannerLog()) {
       LOG(INFO) << "Order:" << toString(order);
     }
-    auto plan = planner->generatePlan();
+    ExecutionPlan* plan = nullptr;
+    switch (query_context_->query_config.compression_strategy) {
+    case CompressionStrategy::Static: {
+      plan = planner->generatePlan(qv_partial_order_);
+      plan->setInputAreKeys(plan->isInCover(plan->getRootQueryVertexID()));
+      break;
+    }
+    case CompressionStrategy::Dynamic: {
+      plan = planner->generatePlanWithDynamicCover(query_context_->data_graph, nullptr, qv_partial_order_);
+      plan->setInputAreKeys(plan->isInCover(plan->getRootQueryVertexID()) &&
+                            (plan->getToKeyLevel(plan->getRootQueryVertexID()) == 0));
+      break;
+    }
+    case CompressionStrategy::None: {
+      plan = planner->generatePlanWithoutCompression();
+      plan->setInputAreKeys(true);
+    }
+    }
 
     // parallelize plan
     if (multithread) {
@@ -582,12 +602,10 @@ BacktrackingPlan* Planner::generateExecutionPlan(const CandidateResult* result, 
       backtracking_plan_->addPartitionedPlans(std::move(partitioned_plans));
     }
 
-    plan->setInputAreKeys(plan->isInCover(plan->getRootQueryVertexID()));
     backtracking_plan_->addInputOperator(std::make_unique<LogicalCompressedInputOperator>(0, plan->inputAreKeys()));
     backtracking_plan_->setPartitionedPlanSegmentMask(
         std::vector<bool>(backtracking_plan_->getNumPartitionedPlans(), true));
     backtracking_plan_->addPlan(plan);
-    breakSymmetry();
     return backtracking_plan_.get();
   }
 
@@ -595,7 +613,6 @@ BacktrackingPlan* Planner::generateExecutionPlan(const CandidateResult* result, 
     auto candidate_views = result->getCandidates();
     auto cardinality = getCardinality(candidate_views);
     backtracking_plan_->addPlan(generateLogicalExecutionPlan(cardinality, DUMMY_QUERY_VERTEX, &candidate_views));
-    breakSymmetry();
     return backtracking_plan_.get();
   }
 
@@ -661,7 +678,6 @@ BacktrackingPlan* Planner::generateExecutionPlan(const CandidateResult* result, 
   CHECK_GT(partition_plans.size(), 0);
   backtracking_plan_->addPartitionedPlans(std::move(partition_plans));
 
-  breakSymmetry();
   return backtracking_plan_.get();
 }
 

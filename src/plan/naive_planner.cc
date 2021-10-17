@@ -48,7 +48,7 @@ bool NaivePlanner::hasValidCandidate() const {
   return true;
 }
 
-ExecutionPlan* NaivePlanner::generatePlan() {
+ExecutionPlan* NaivePlanner::generatePlan(const PartialOrderConstraintMap& po) {
   if (matching_order_.empty()) {
     return nullptr;
   }
@@ -56,10 +56,10 @@ ExecutionPlan* NaivePlanner::generatePlan() {
   // get a smallest minimum weight vertex cover of the query graph
   auto log_cardinality = logCardinality();
   if (log_cardinality.empty()) {
-    log_cardinality.resize(query_graph_->getNumVertices(), 1);
-    log_cardinality.front() = 0;
+    setVertexWeightByDegreeConstraints(log_cardinality, po);
   }
   WeightedBnB vertex_cover_solver(query_graph_, log_cardinality);
+  vertex_cover_solver.setBestBufferSize(1);
   vertex_cover_solver.computeVertexCover();
   auto& covers = vertex_cover_solver.getBestCovers();
   CHECK_GT(covers.size(), 0);  // at least one cover should be obtained
@@ -368,12 +368,63 @@ std::vector<double> NaivePlanner::getParallelizingQueryVertexWeights(
   return std::move(weights);
 }
 
+double NaivePlanner::intersectionCountCoeff(const std::vector<double>& cardinality,
+                                            const unordered_set<QueryVertexID>& existing_vertices, uint32_t level,
+                                            uint32_t idx, uint32_t parent) {
+  auto cover_bits = covers_[level][idx].cover_bits;
+  auto parent_cover_bits = covers_[level - 1][parent].cover_bits;
+  auto target_vertex = matching_order_[level];
+  bool target_in_cover = cover_bits >> target_vertex & 1;
+  uint32_t key_parent_cnt = 0, set_parent_cnt = 0;
+
+  auto[nbrs, cnt] = query_graph_->getOutNeighbors(target_vertex);
+  QueryVertexID set_parent = DUMMY_QUERY_VERTEX;
+  for (uint32_t k = 0; k < cnt; ++k) {
+    if (existing_vertices.count(nbrs[k]) != 0) {
+      if ((parent_cover_bits >> nbrs[k] & 1) == 0) {
+        if (set_parent == DUMMY_QUERY_VERTEX || candidate_cardinality_[nbrs[k]] < candidate_cardinality_[set_parent]) {
+          set_parent = nbrs[k];
+        }
+        ++set_parent_cnt;
+      } else {
+        ++key_parent_cnt;
+      }
+    }
+  }
+
+  // compute the cost by intersection count
+  // expand from key
+  // if (key_parent_cnt == 0) key_parent_cnt = 1;
+  double cost =
+      key_parent_cnt * estimateCardinalityByProduct(cardinality, covers_[level - 1][parent].cover_bits, level - 1);
+  if (target_in_cover) {
+    if (set_parent_cnt == 0) {  // key to key only
+      return cost;
+    }
+    // computation cost for expand-into / expand-from-set
+    if (key_parent_cnt == 0) {  // set to key
+      auto key_bits = parent_cover_bits | (1 << set_parent);
+      cost = estimateCardinalityByProduct(cardinality, key_bits, level - 1);
+    }
+    auto key_bits = parent_cover_bits | (1 << target_vertex);  // including target
+    return cost + set_parent_cnt * estimateCardinalityByProduct(cardinality, key_bits, level);
+  }
+  if (set_parent_cnt > 0) {  // enumerate key expand to set
+    // computation cost to expand from enumerated parents
+    return cost + set_parent_cnt * estimateCardinalityByProduct(cardinality, cover_bits, level - 1);
+  }
+  return cost;  // key to set
+}
+
 double NaivePlanner::estimateExpandCost(const GraphBase* data_graph,
                                         const std::vector<CandidateSetView>* candidate_views,
                                         std::vector<unordered_map<uint64_t, double>>& car,
                                         const unordered_set<QueryVertexID>& existing_vertices, uint32_t level,
                                         uint32_t idx, uint32_t parent) {
   if (candidate_views == nullptr) {  // update the estimation of computation for set to key / expand into
+    if (FLAGS_intersection_count_coefficient) {
+      return intersectionCountCoeff(candidate_cardinality_, existing_vertices, level, idx, parent);
+    }
     return estimateCardinality(candidate_cardinality_, data_graph, candidate_views, covers_[level - 1][parent],
                                level - 1);
   }
@@ -434,7 +485,8 @@ double NaivePlanner::estimateExpandCost(const GraphBase* data_graph,
 }
 
 ExecutionPlan* NaivePlanner::generatePlanWithDynamicCover(const GraphBase* data_graph,
-                                                          const std::vector<CandidateSetView>* candidate_views) {
+                                                          const std::vector<CandidateSetView>* candidate_views,
+                                                          const PartialOrderConstraintMap& po) {
   if (verbosePlannerLog()) {
     if (candidate_views != nullptr) {
       std::stringstream ss;
@@ -447,6 +499,9 @@ ExecutionPlan* NaivePlanner::generatePlanWithDynamicCover(const GraphBase* data_
   }
 
   /* generate pruned dynamic cover search space */
+  if (candidate_cardinality_.empty()) {
+    setVertexWeightByDegreeConstraints(candidate_cardinality_, po);
+  }
   std::vector<std::vector<double>> cardinality_per_level(candidate_cardinality_.size(), candidate_cardinality_);
   generateCoverNode(cardinality_per_level);
 
@@ -707,9 +762,10 @@ const std::vector<QueryVertexID>& NaivePlanner::generateOrder(const GraphBase* d
   return matching_order_;
 }
 
-const std::vector<QueryVertexID>& NaivePlanner::generateOrder(QueryVertexID seed_qv, OrderStrategy os) {
+const std::vector<QueryVertexID>& NaivePlanner::generateOrder(QueryVertexID seed_qv, OrderStrategy os,
+                                                              const PartialOrderConstraintMap& po) {
   auto order_generator = OrderGenerator(query_graph_);
-  matching_order_ = order_generator.getOrder(os, seed_qv);
+  matching_order_ = order_generator.getOrder(os, seed_qv, po);
   return matching_order_;
 }
 
@@ -718,6 +774,9 @@ std::vector<std::vector<int>> NaivePlanner::generateAnchorCovers(const std::vect
   auto subquery = query_graph_->getInducedSubgraph(subquery_vertices);
   WeightedBnB vc_solver(&subquery, cardinality);
   vc_solver.computeVertexCover();
+  if (vc_solver.getBestCovers().empty()) {
+    LOG(INFO) << toString(subquery_vertices) << " cardinality " << toString(cardinality);
+  }
   return std::move(vc_solver.getBestCovers());
 }
 
@@ -982,4 +1041,21 @@ void NaivePlanner::logCoverSpace() {
     LOG(INFO) << ss.str();
   }
 }
+
+void NaivePlanner::setVertexWeightByDegreeConstraints(std::vector<double>& weights,
+                                                      const PartialOrderConstraintMap& po) const {
+  LOG(INFO) << "no cardinality, use degree and constraints";
+  auto n_qvs = query_graph_->getNumVertices();
+  weights.resize(n_qvs);
+  double max = 0;
+  for (auto& p : po) {
+    weights[p.first] = p.second.first.size() + p.second.second.size();
+    max = std::max(max, weights[p.first]);
+  }
+  max += query_graph_->getGraphMaxDegree();
+  for (uint32_t i = 0; i < n_qvs; ++i) {
+    weights[i] = max / (query_graph_->getVertexOutDegree(i) + weights[i]);
+  }
+}
+
 }  // namespace circinus
