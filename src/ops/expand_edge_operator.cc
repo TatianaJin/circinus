@@ -102,9 +102,11 @@ class ExpandEdgeKeyToSetOperator : public ExpandEdgeOperator {
     if (!intersect_candidates) {
       auto g = ctx->getDataGraph<G>();
       auto neighbors = g->getOutNeighborsWithHint(parent_match, target_label_, 0);
-      degreeFilter(neighbors, target_degree_, g, &targets, exceptions);
-      if (!targets.empty()) {
-        filterTargets(&targets, input);  // enforce partial order
+      {  // enforce partial order
+        filterTargets(neighbors, input);
+        if (neighbors.size() != 0) {
+          degreeFilter(neighbors, target_degree_, g, &targets, exceptions);
+        }
       }
     } else {
       expandFromParent<G, profile>(ctx, parent_match, exceptions, &targets, input);
@@ -238,9 +240,9 @@ class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
       auto g = ctx->getDataGraph<G>();
       DCHECK(g != nullptr) << "no graph";
       auto neighbors = g->getOutNeighborsWithHint(parent_match, target_label_, 0);
-      degreeFilter(neighbors, target_degree_, g, &current_targets, exceptions);
-      if (!current_targets.empty()) {
-        filterTargets(&current_targets, input);  // enforce partial order
+      {  // enforce partial order
+        filterTargets(neighbors, input);
+        if (neighbors.size() != 0) degreeFilter(neighbors, target_degree_, g, &current_targets, exceptions);
       }
     } else {
       expandFromParent<G, profile>(ctx, parent_match, exceptions, &current_targets, input);

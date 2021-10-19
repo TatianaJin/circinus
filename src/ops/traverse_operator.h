@@ -80,6 +80,16 @@ class TraverseOperator : public Operator {
     target_filter_->filter(targets, group);
   }
 
+  inline void filterTargets(SingleRangeVertexSetView& targets, const CompressedSubgraphs& group) const {
+    if (target_filter_ == nullptr) return;
+    target_filter_->filterView(targets, group);
+  }
+
+  inline void filterTargets(VertexSetView& targets, const CompressedSubgraphs& group) const {
+    if (target_filter_ == nullptr) return;
+    target_filter_->filterView(targets, group);
+  }
+
   /** @returns True if target is to be pruned. */
   inline bool filterTarget(VertexID target, const CompressedSubgraphs& group) const {
     if (target_filter_ == nullptr) return false;

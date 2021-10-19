@@ -155,4 +155,22 @@ inline void intersectInplace(std::vector<VertexID>* set1, const unordered_set<Ve
   set1->resize(size);
 }
 
+template <typename Set1, typename Set2>
+inline uint64_t intersectionCount(const Set1& set1, const Set2& set2) {
+  if (set1.size() > set2.size()) {
+    return intersectionCount(set2, set1);
+  }
+  auto lb = set2.begin();
+  auto end = set2.end();
+  uint64_t count = 0;
+  for (auto vid : set1) {
+    lb = lowerBound(lb, end, vid);
+    if (lb == end) break;
+    if (*lb == vid) {
+      ++count;
+    }
+  }
+  return count;
+}
+
 }  // namespace circinus

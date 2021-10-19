@@ -42,7 +42,29 @@ class TargetFilter {
 
   bool filter(VertexID target, const CompressedSubgraphs& group) const;
 
-  // TODO(tatiana): filter CandidateSetView and return new range?
+  template <typename View>
+  void filterView(View& targets, const CompressedSubgraphs& group) const {
+    auto start = targets.begin();
+    auto end = targets.end();
+    if (!less_than_indices_.empty()) {
+      VertexID less_than = std::numeric_limits<VertexID>::max();  // min of all constraints
+      for (auto index : less_than_indices_) {
+        auto val = group.getKeyVal(index);
+        less_than = std::min(less_than, val);
+      }
+      end = lowerBound(start, end, less_than);
+    }
+    if (!greater_than_indices_.empty()) {
+      VertexID greater_than = 0;  // max of all constraints
+      for (auto index : greater_than_indices_) {
+        auto val = group.getKeyVal(index);
+        greater_than = std::max(greater_than, val);
+      }
+      ++greater_than;  // greater to greater or equal
+      start = lowerBound(start, end, greater_than);
+    }
+    targets = View(start, end);
+  }
 
 };  // class TargetFilter
 

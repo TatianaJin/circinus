@@ -100,9 +100,12 @@ class ExpandVertexOperator : public TraverseOperator {
       neighbor_sets.push_back(data_graph->getOutNeighborsWithHint(key_vid, target_label_, i));
     }
     std::sort(neighbor_sets.begin(), neighbor_sets.end(),
-              [](const NeighborSet& a, const NeighborSet& b) { return a.size() <= b.size(); });
+              [](const NeighborSet& a, const NeighborSet& b) { return a.size() < b.size(); });
     if (neighbor_sets.front().size() == 0) return;
-
+    {  // enforce partial order
+      filterTargets(neighbor_sets.front(), input);
+      if (neighbor_sets.front().size() == 0) return;
+    }
     bool intersect_candidates_first = intersect_candidates && (!isProfileCandidateSIEffect(profile)) &&
                                       ctx->getCandidateSet()->size() <= neighbor_sets.front().size();
     uint32_t loop_idx = 2;
@@ -119,10 +122,6 @@ class ExpandVertexOperator : public TraverseOperator {
       constexpr(isProfileMode(profile)) { ctx->updateIntersectInfo(si_input_size, targets->size()); }
     if (targets->empty()) {
       return;
-    }
-    {  // enforce partial order
-      filterTargets(targets, input);
-      if (targets->empty()) return;
     }
     for (uint32_t i = loop_idx; i < parent_indices.size(); ++i) {
       auto si_input_size = targets->size() + neighbor_sets[i].size();

@@ -564,7 +564,9 @@ ExecutionPlan* NaivePlanner::generatePlanWithDynamicCover(const GraphBase* data_
 
   plan_.setStepCosts(std::move(step_costs));
   plan_.setQueryCoverBits(select_cover_node.cover_bits);
-  plan_.populatePhysicalPlan(query_graph_, matching_order_, select_cover, level_become_key);
+  // FIXME(debug)
+  // plan_.populatePhysicalPlan(query_graph_, matching_order_, select_cover, level_become_key);
+  plan_.populatePhysicalPlan(query_graph_, matching_order_, select_cover);
   return &plan_;
 }
 

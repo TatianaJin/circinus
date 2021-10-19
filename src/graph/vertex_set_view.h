@@ -46,6 +46,8 @@ class VertexSetView {
     using pointer = const value_type*;
     using reference = const value_type&;
 
+    friend class VertexSetView;
+
     explicit ConstIterator(const std::vector<std::pair<const VertexID*, RangeSize>>& ranges, bool end = false)
         : ranges_(&ranges), range_idx_(ranges.size() * end) {}
 
@@ -109,6 +111,30 @@ class VertexSetView {
   VertexSetView() = default;
   VertexSetView(const VertexID* start, const VertexID* end) { addRange(start, end); }
   explicit VertexSetView(const std::vector<VertexID>& vec) { addRange(vec.data(), vec.data() + vec.size()); }
+  VertexSetView(ConstIterator& start, ConstIterator& end) {
+    // no data
+    if (start == end) return;
+    auto& ranges = (*start.ranges_);
+    // only one range
+    auto range_begin = ranges[start.range_idx_].first;
+    if (start.range_idx_ == end.range_idx_) {
+      addOffsetSize(range_begin + start.idx_in_range_, end.idx_in_range_ - start.idx_in_range_);
+      return;
+    }
+    // maybe multiple ranges
+    addOffsetSize(range_begin + start.idx_in_range_, ranges[start.range_idx_].second - start.idx_in_range_);
+    for (uint32_t range_idx = start.range_idx_ + 1; range_idx < end.range_idx_; ++range_idx) {
+      addOffsetSize(ranges[range_idx].first, ranges[range_idx].second);
+    }
+    if (end.range_idx_ < ranges.size()) {  // not the end of old range
+      addOffsetSize(ranges[end.range_idx_].first, end.idx_in_range_);
+    }
+  }
+
+  inline void addOffsetSize(const VertexID* start, RangeSize size) {
+    size_ += size;
+    ranges_.emplace_back(start, size);
+  }
 
   inline void addRange(const VertexID* start, const VertexID* end) {
     DCHECK(start != nullptr);
@@ -154,7 +180,11 @@ class SingleRangeVertexSetView : public VertexSetView {
   SingleRangeVertexSetView() {}
   SingleRangeVertexSetView(const VertexID* start, size_t size) {
     if (start == nullptr) return;
-    addRange(start, start + size);
+    addOffsetSize(start, size);
+  }
+
+  SingleRangeVertexSetView(const VertexID* start, const VertexID* end) {
+    addOffsetSize(start, std::distance(start, end));
   }
 
   inline VertexID operator[](uint32_t index) const {
