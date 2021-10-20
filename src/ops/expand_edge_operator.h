@@ -17,6 +17,7 @@
 #include <memory>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include "algorithms/intersect.h"
@@ -146,10 +147,26 @@ class ExpandEdgeOperator : public TraverseOperator {
     return ret;
   }
 
-  template <typename G, QueryType profile>
+  template <typename G, QueryType profile, bool intersect_candidates>
   inline void expandFromParent(TraverseContext* ctx, VertexID parent_match, const unordered_set<VertexID>& exceptions,
                                std::vector<VertexID>* targets, const CompressedSubgraphs& input) const {
     auto g = ctx->getDataGraph<G>();
+    if
+      constexpr(!intersect_candidates) {
+        auto neighbors = g->getOutNeighborsWithHint(parent_match, target_label_, 0);
+        {  // enforce partial order
+          filterTargets(neighbors, input);
+          if (neighbors.size() != 0) {
+            if (target_degree_ == 1) {
+              removeExceptions(neighbors, targets, exceptions);
+            } else {
+              degreeFilter(neighbors, target_degree_, g, targets, exceptions);
+            }
+          }
+        }
+        return;
+      }
+
     auto dctx = dynamic_cast<ExpandEdgeTraverseContext*>(ctx);
 #ifdef INTERSECTION_CACHE
     if (dctx->getIntersectionCache(parent_match, targets)) {

@@ -181,16 +181,34 @@ class TargetBuffer {
  private:
   std::vector<VertexID> current_targets_;  // calculated from current_inputs_[input_index_]
   uint32_t current_target_index_ = 0;
+  SingleRangeVertexSetView targets_view_;
 
  public:
   // for key to key
-  inline bool hasTarget() const { return current_target_index_ < current_targets_.size(); }
-  inline VertexID currentTarget() const { return current_targets_[current_target_index_]; }
+  inline bool hasTarget() const {
+    DCHECK(current_targets_.empty() || current_targets_.size() == targets_view_.size())
+        << "forgot to call resetTargetView()?";
+    return current_target_index_ < targets_view_.size();
+  }
+
+  inline VertexID currentTarget() const { return targets_view_[current_target_index_]; }
   inline void nextTarget() { ++current_target_index_; }
 
-  inline auto& resetTargets() {
+  inline void setTargetView(const SingleRangeVertexSetView& view) {
+    targets_view_ = view;
+    resetTargets();
+  }
+
+  inline void resetTargetView() {
+    if (current_targets_.empty()) return;
+    targets_view_ = SingleRangeVertexSetView(current_targets_.data(), current_targets_.size());
+  }
+
+  /** Should be used in combination with resetTargetView() */
+  inline std::vector<VertexID>& resetTargets() {
     current_target_index_ = 0;
     current_targets_.clear();
+    targets_view_.clear();
     return current_targets_;
   }
 };

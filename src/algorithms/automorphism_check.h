@@ -18,6 +18,7 @@
 
 #include "bliss/graph.hh"
 
+#include "algorithms/partial_order.h"
 #include "graph/query_graph.h"
 #include "graph/types.h"
 
@@ -35,8 +36,7 @@ class AutomorphismCheck {
 
   /** Each returned pair means a partial order first < second */
 
-  // TODO(tatiana): create an abstraction for partial order
-  std::vector<std::pair<QueryVertexID, QueryVertexID>> getPartialOrder();
+  PartialOrder getPartialOrder();
 
  private:
   static inline bool compareNeighbors(const std::pair<const QueryVertexID*, uint32_t>& nbrs1,
@@ -49,6 +49,8 @@ class AutomorphismCheck {
     }
     return true;
   }
+
+  PartialOrder orderVertices(const std::vector<std::pair<QueryVertexID, QueryVertexID>>& sorted_conds);
 
   /** @returns Permutations of vertices */
   inline std::vector<std::vector<uint32_t>> getAutomorphisms() {

@@ -14,7 +14,9 @@
 #include <algorithm>
 #include <map>
 #include <numeric>
+#include <queue>
 #include <set>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -52,7 +54,7 @@ AutomorphismCheck::AutomorphismCheck(QueryGraph& q)
   }
 }
 
-std::vector<std::pair<QueryVertexID, QueryVertexID>> AutomorphismCheck::getPartialOrder() {
+PartialOrder AutomorphismCheck::getPartialOrder() {
   std::vector<std::pair<QueryVertexID, QueryVertexID>> result;
   auto automorphisms = getAutomorphisms();
   if (verbosePlannerLog()) {
@@ -78,7 +80,7 @@ std::vector<std::pair<QueryVertexID, QueryVertexID>> AutomorphismCheck::getParti
         ss << std::endl << s.first << ": ";
         for (QueryVertexID v : s.second) ss << v << " ";
       }
-      LOG(INFO) << "equivalence classes:" << ss.str();
+      DLOG(INFO) << "equivalence classes:" << ss.str();
     }
 
     QueryVertexID n0 = *eclass.cbegin();
@@ -87,7 +89,7 @@ std::vector<std::pair<QueryVertexID, QueryVertexID>> AutomorphismCheck::getParti
                                             [&f](QueryVertexID n, QueryVertexID m) { return f[n] < f[m]; });
       conds.emplace_back(n0, min);
       if (verbosePlannerLog()) {
-        LOG(INFO) << "add partial order condition " << n0 << '<' << min;
+        DLOG(INFO) << "add partial order condition " << n0 << '<' << min;
       }
     }
 
@@ -100,7 +102,7 @@ std::vector<std::pair<QueryVertexID, QueryVertexID>> AutomorphismCheck::getParti
         ss << std::endl;
         for (auto v : permutation) ss << " " << v;
       }
-      LOG(INFO) << "automorphisms:" << ss.str();
+      DLOG(INFO) << "automorphisms:" << ss.str();
     }
 
     eclasses = getAEquivalenceClasses(automorphisms);
@@ -110,12 +112,75 @@ std::vector<std::pair<QueryVertexID, QueryVertexID>> AutomorphismCheck::getParti
   std::sort(conds.begin(), conds.end());
   conds.erase(std::unique(conds.begin(), conds.end()), conds.end());
 
-  for (const auto& cond : conds) {
+  return orderVertices(conds);
+}
+
+PartialOrder AutomorphismCheck::orderVertices(
+    const std::vector<std::pair<QueryVertexID, QueryVertexID>>& sorted_conds) {
+  auto n_qvs = q_->getNumVertices();
+  PartialOrder po(n_qvs);
+
+  if (sorted_conds.empty()) return po;
+
+  auto& smaller_larger_qvs = po.constraints;  // qv: {smaller qvs, larger qvs}
+  std::queue<QueryVertexID> queue;
+  std::vector<uint32_t> checked_smaller_count(n_qvs, 0);  // i: # smaller qvs already checked regarding query vertices i
+  unordered_set<QueryVertexID> covered_smaller_qvs;       // tmp
+  uint32_t ordered_count = 0;
+
+  /* find qvs with constraints */
+  for (const auto& cond : sorted_conds) {
     QueryVertexID u = sorted_v_[cond.first];
     QueryVertexID v = sorted_v_[cond.second];
-    result.emplace_back(u, v);
+    smaller_larger_qvs[u].second.insert(v);
+    smaller_larger_qvs[v].first.insert(u);
   }
-  return result;
+
+  /* order qvs from smaller to larger by partial order */
+  for (auto& p : smaller_larger_qvs) {  // find qvs without constraint of smaller qvs
+    if (p.second.first.empty()) {
+      // a query vertex is put in queue when all smaller qvs are poped and ordered
+      queue.push(p.first);
+    }
+  }
+  while (!queue.empty()) {
+    auto current_qv = queue.front();
+    queue.pop();
+    auto& entry = smaller_larger_qvs.at(current_qv);
+    covered_smaller_qvs.clear();
+    // find all smaller qvs than `smaller` and deduplicate constraints
+    for (auto smaller : entry.first) {
+      // here `smaller_than_smaller` is an exhaustive set of smaller qvs regarding `smaller`
+      auto& smaller_than_smaller = smaller_larger_qvs.at(smaller).first;
+      covered_smaller_qvs.insert(smaller_than_smaller.begin(), smaller_than_smaller.end());
+    }
+    for (auto smaller : entry.first) {
+      if (covered_smaller_qvs.insert(smaller).second) {  // not covered by any other smaller qv
+        po.po_constraint_adj[current_qv].push_back(smaller);
+      }
+    }
+    // update smaller qvs to an exhaustive set
+    entry.first.swap(covered_smaller_qvs);
+    po.order_index[current_qv] = ordered_count++;
+    // check all larger qvs and update queue
+    for (auto next_qv : entry.second) {
+      if (++checked_smaller_count[next_qv] == smaller_larger_qvs.at(next_qv).first.size()) {
+        queue.push(next_qv);
+      }
+    }
+  }
+  DCHECK_EQ(ordered_count, smaller_larger_qvs.size());
+
+  // make exhaustive set of larger qvs
+  for (auto& p : smaller_larger_qvs) {
+    for (auto smaller : p.second.first) {
+      smaller_larger_qvs.at(smaller).second.insert(p.first);
+    }
+  }
+  for (auto& p : smaller_larger_qvs) {
+    po.n_all_related_constraints[p.first] += p.second.first.size() + p.second.second.size();
+  }
+  return po;
 }
 
 std::map<QueryVertexID, std::set<QueryVertexID>> AutomorphismCheck::getAEquivalenceClasses(

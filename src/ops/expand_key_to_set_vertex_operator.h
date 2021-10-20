@@ -15,6 +15,7 @@
 #pragma once
 
 #include <algorithm>
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -71,40 +72,46 @@ class ExpandKeyToSetVertexOperator : public ExpandVertexOperator {
     uint32_t output_num = 0;
     for (; output_num < batch_size && ctx->hasNextInput(); ctx->nextInput()) {
       const auto& input = ctx->getCurrentInput();
-      auto exceptions = input.getExceptions(same_label_key_indices_, same_label_set_indices_);
-      std::vector<VertexID> new_set;
-      expandFromParents<G, profile, intersect_candidates>(input, ctx->getDataGraph<G>(), ctx, parent_indices_,
-                                                          exceptions, &new_set);
-      if
-        constexpr(isProfileMode(profile)) {
-          ctx->total_num_input_subgraphs += ctx->getCurrentInput().getNumSubgraphs();
-          // consider reuse of partial intersection results at each parent
-          if (isProfileWithMiniIntersectionMode(profile)) {
-            std::vector<VertexID> parent_tuple(parents_.size());
-            for (uint32_t j = 0; j < parent_indices_.size(); ++j) {
-              uint32_t key_vid = input.getKeyVal(parent_indices_[j]);
-              parent_tuple[j] = key_vid;
-              if (j != 0 || intersect_candidates) {
-                ctx->updateDistinctSICount(j, parent_tuple, j);
+      VertexSet target_set;
+      if (canReuseSet()) {
+        target_set = input.getSet(reusable_set_index_);
+        if (target_set->size() == 1) continue;
+      } else {
+        auto exceptions = input.getExceptions(same_label_key_indices_, same_label_set_indices_);
+        std::vector<VertexID> new_set;
+        expandFromParents<G, profile, intersect_candidates>(input, ctx->getDataGraph<G>(), ctx, parent_indices_,
+                                                            exceptions, &new_set);
+        if
+          constexpr(isProfileMode(profile)) {
+            ctx->total_num_input_subgraphs += ctx->getCurrentInput().getNumSubgraphs();
+            // consider reuse of partial intersection results at each parent
+            if (isProfileWithMiniIntersectionMode(profile)) {
+              std::vector<VertexID> parent_tuple(parents_.size());
+              for (uint32_t j = 0; j < parent_indices_.size(); ++j) {
+                uint32_t key_vid = input.getKeyVal(parent_indices_[j]);
+                parent_tuple[j] = key_vid;
+                if (j != 0 || intersect_candidates) {
+                  ctx->updateDistinctSICount(j, parent_tuple, j);
+                }
               }
             }
           }
-        }
-      if (!new_set.empty()) {
-#ifdef USE_FILTER
-        auto output = ctx->newOutput(input, std::move(new_set));
-        if (filter(*output)) {
-          ctx->popOutput();
-          continue;
-        }
-#else
-        auto output = ctx->newOutput(input, std::move(new_set), same_label_set_indices_, set_pruning_threshold_);
-        if (output == nullptr) {
-          continue;
-        }
-#endif
-        ++output_num;
+        if (new_set.empty()) continue;
+        target_set = newVertexSet(std::move(new_set));
       }
+#ifdef USE_FILTER
+      auto output = ctx->newOutput(input, std::move(target_set));
+      if (filter(*output)) {
+        ctx->popOutput();
+        continue;
+      }
+#else
+      auto output = ctx->newOutput(input, std::move(target_set), same_label_set_indices_, set_pruning_threshold_);
+      if (output == nullptr) {
+        continue;
+      }
+#endif
+      ++output_num;
     }
     return output_num;
   }

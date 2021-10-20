@@ -24,6 +24,7 @@
 
 #include "graph/compressed_subgraphs.h"
 #include "ops/operator.h"
+#include "plan/vertex_relationship.h"
 #include "utils/query_utils.h"
 #include "utils/utils.h"
 
@@ -76,6 +77,7 @@ class OutputOperator : public Operator {
   std::vector<std::vector<uint32_t>> enumerate_orders_;
   // j: {i: the orders of smaller set indices wrt. enumerate_orders_[j][i]}
   std::vector<std::vector<std::vector<uint32_t>>> constraints_adjs_;
+  const VertexRelationship* qv_relationship_ = nullptr;
 
  public:
   explicit OutputOperator(SameLabelIndices&& same_label_indices) : same_label_indices_(std::move(same_label_indices)) {}
@@ -90,12 +92,16 @@ class OutputOperator : public Operator {
   inline void setOutput(Outputs* outputs) { outputs_ = outputs; }
   inline Outputs* getOutput() const { return outputs_; }
 
+  inline const auto& getSameLabelIndices() const { return same_label_indices_; }
+
   inline bool validateAndOutput(const std::vector<CompressedSubgraphs>& input, uint32_t output_index) const {
     uint32_t start = 0;
     return validateAndOutput(input, start, input.size(), output_index);
   }
 
   void setPartialOrder(std::vector<std::pair<uint32_t, uint32_t>>&& constraints);
+
+  inline void setEquivalentClasses(const VertexRelationship& vr) { qv_relationship_ = &vr; }
 
   virtual bool validateAndOutput(const std::vector<CompressedSubgraphs>& input, uint32_t& input_start,
                                  uint32_t input_end, uint32_t output_index) const = 0;

@@ -16,9 +16,11 @@ include_directories(${PROJECT_SOURCE_DIR}/src ${EXTERNAL_INCLUDES})
 
 set(circinus_algo_sources
   ${PROJECT_SOURCE_DIR}/src/algorithms/automorphism_check.cc
-  ${PROJECT_SOURCE_DIR}/src/algorithms/vertex_cover.cc
-  ${PROJECT_SOURCE_DIR}/src/algorithms/minimum_weight_vertex_cover.cc
   ${PROJECT_SOURCE_DIR}/src/algorithms/k_core.cc
+  ${PROJECT_SOURCE_DIR}/src/algorithms/minimum_weight_vertex_cover.cc
+  ${PROJECT_SOURCE_DIR}/src/algorithms/partial_order.cc
+  ${PROJECT_SOURCE_DIR}/src/algorithms/vertex_cover.cc
+  ${PROJECT_SOURCE_DIR}/src/algorithms/vertex_equivalence.cc
 )
 set(circinus_exec_sources
   ${PROJECT_SOURCE_DIR}/src/exec/candidate_pruning_plan_driver.cc
@@ -59,6 +61,7 @@ set(circinus_plan_sources
   ${PROJECT_SOURCE_DIR}/src/plan/execution_plan.cc
   ${PROJECT_SOURCE_DIR}/src/plan/naive_planner.cc
   ${PROJECT_SOURCE_DIR}/src/plan/planner.cc
+  ${PROJECT_SOURCE_DIR}/src/plan/vertex_relationship.cc
 )
 set(circinus_utils_sources
   ${PROJECT_SOURCE_DIR}/src/utils/flags.cc

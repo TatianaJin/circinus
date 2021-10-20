@@ -173,4 +173,24 @@ inline uint64_t intersectionCount(const Set1& set1, const Set2& set2) {
   return count;
 }
 
+template <typename Set1, typename Set2>
+inline uint64_t intersectionCount(const Set1& set1, const Set2& set2, const unordered_set<VertexID> exception) {
+  if (exception.empty()) return intersectionCount(set1, set2);
+  if (set1.size() > set2.size()) {
+    return intersectionCount(set2, set1, exception);
+  }
+  auto lb = set2.begin();
+  auto end = set2.end();
+  uint64_t count = 0;
+  for (auto vid : set1) {
+    if (exception.count(vid) == 1) continue;
+    lb = lowerBound(lb, end, vid);
+    if (lb == end) break;
+    if (*lb == vid) {
+      ++count;
+    }
+  }
+  return count;
+}
+
 }  // namespace circinus

@@ -48,7 +48,7 @@ bool NaivePlanner::hasValidCandidate() const {
   return true;
 }
 
-ExecutionPlan* NaivePlanner::generatePlan(const PartialOrderConstraintMap& po) {
+ExecutionPlan* NaivePlanner::generatePlan(const PartialOrder* po) {
   if (matching_order_.empty()) {
     return nullptr;
   }
@@ -486,7 +486,7 @@ double NaivePlanner::estimateExpandCost(const GraphBase* data_graph,
 
 ExecutionPlan* NaivePlanner::generatePlanWithDynamicCover(const GraphBase* data_graph,
                                                           const std::vector<CandidateSetView>* candidate_views,
-                                                          const PartialOrderConstraintMap& po) {
+                                                          const PartialOrder* po) {
   if (verbosePlannerLog()) {
     if (candidate_views != nullptr) {
       std::stringstream ss;
@@ -765,7 +765,7 @@ const std::vector<QueryVertexID>& NaivePlanner::generateOrder(const GraphBase* d
 }
 
 const std::vector<QueryVertexID>& NaivePlanner::generateOrder(QueryVertexID seed_qv, OrderStrategy os,
-                                                              const PartialOrderConstraintMap& po) {
+                                                              const PartialOrder* po) {
   auto order_generator = OrderGenerator(query_graph_);
   matching_order_ = order_generator.getOrder(os, seed_qv, po);
   return matching_order_;
@@ -1044,15 +1044,16 @@ void NaivePlanner::logCoverSpace() {
   }
 }
 
-void NaivePlanner::setVertexWeightByDegreeConstraints(std::vector<double>& weights,
-                                                      const PartialOrderConstraintMap& po) const {
+void NaivePlanner::setVertexWeightByDegreeConstraints(std::vector<double>& weights, const PartialOrder* po) const {
   LOG(INFO) << "no cardinality, use degree and constraints";
   auto n_qvs = query_graph_->getNumVertices();
   weights.resize(n_qvs);
   double max = 0;
-  for (auto& p : po) {
-    weights[p.first] = p.second.first.size() + p.second.second.size();
-    max = std::max(max, weights[p.first]);
+  if (po != nullptr) {
+    for (uint32_t v = 0; v < n_qvs; ++v) {
+      weights[v] = po->n_all_related_constraints[v];
+      max = std::max(max, weights[v]);
+    }
   }
   max += query_graph_->getGraphMaxDegree();
   for (uint32_t i = 0; i < n_qvs; ++i) {

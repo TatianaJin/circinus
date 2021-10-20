@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <memory>
 #include <unordered_set>
 #include <utility>

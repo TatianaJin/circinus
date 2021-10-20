@@ -11,6 +11,9 @@
 
 #include "ops/filters/target_filter.h"
 
+#include <algorithm>
+#include <limits>
+
 namespace circinus {
 
 void TargetFilter::filter(std::vector<VertexID>* targets, const CompressedSubgraphs& group) const {

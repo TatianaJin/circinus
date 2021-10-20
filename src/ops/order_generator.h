@@ -14,12 +14,14 @@
 
 #include <algorithm>
 #include <limits>
+#include <queue>
 #include <unordered_map>
 #include <utility>
 #include <vector>
 
 #include "glog/logging.h"
 
+#include "algorithms/partial_order.h"
 #include "graph/bipartite_graph.h"
 #include "graph/graph.h"
 #include "graph/partitioned_graph.h"
@@ -32,6 +34,7 @@
 #include "utils/utils.h"
 
 namespace circinus {
+
 class OrderGenerator {
  private:
   struct hash_pair {
@@ -74,7 +77,7 @@ class OrderGenerator {
   }
 
   std::vector<QueryVertexID> getOrder(OrderStrategy order_strategy, QueryVertexID seed_qv,
-                                      const PartialOrderConstraintMap& po = {}) {
+                                      const PartialOrder* po = nullptr) {
     switch (order_strategy) {
     case OrderStrategy::None:
       return getBFSOrder(seed_qv);
@@ -378,13 +381,15 @@ class OrderGenerator {
     return logical_filter.getBfsOrder();
   }
 
-  std::vector<QueryVertexID> getOnlineOrder(QueryVertexID seed_qv, const PartialOrderConstraintMap& po) {
+  std::vector<QueryVertexID> getOnlineOrder(QueryVertexID seed_qv, const PartialOrder* po) {
     /* degree sorting to choose vertices with larger degree first */
     /* if degrees are equal, choose vertices with more constraints first */
     auto n_qvs = query_graph_->getNumVertices();
-    std::vector<uint32_t> constraint_count(n_qvs, 0);
-    for (auto& p : po) {
-      constraint_count[p.first] = p.second.first.size() + p.second.second.size();
+    std::vector<uint32_t> constraint_count;
+    if (po != nullptr) {
+      constraint_count = po->n_all_related_constraints;
+    } else {
+      constraint_count.resize(n_qvs, 0);
     }
     if (seed_qv == DUMMY_QUERY_VERTEX) {  // select start vertex
       seed_qv = 0;

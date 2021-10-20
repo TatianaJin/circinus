@@ -12,6 +12,7 @@
 #pragma once
 
 #include <memory>
+#include <utility>
 #include <vector>
 
 #include "graph/types.h"
@@ -36,6 +37,8 @@ class VertexSet {
   explicit VertexSet(std::shared_ptr<std::vector<VertexID>>&& data) : data_(std::move(data)) {
     view_.addRange(data_->data(), data_->data() + data_->size());
   }
+
+  explicit VertexSet(const SingleRangeVertexSetView& view) : view_(view) {}
 
   // update range
   VertexSet(const VertexSet& base, uint32_t offset, uint32_t size)

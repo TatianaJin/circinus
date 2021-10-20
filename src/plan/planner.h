@@ -20,6 +20,8 @@
 #include <utility>
 #include <vector>
 
+#include "algorithms/partial_order.h"
+#include "algorithms/vertex_equivalence.h"
 #include "exec/result.h"
 #include "graph/types.h"
 #include "plan/backtracking_plan.h"
@@ -42,7 +44,8 @@ class Planner {
   std::unique_ptr<BacktrackingPlan> backtracking_plan_ = nullptr;
 
   // u: vertices smaller than u, vertices larger than u
-  PartialOrderConstraintMap qv_partial_order_;
+  std::unique_ptr<PartialOrder> qv_partial_order_ = nullptr;
+  std::unique_ptr<VertexEquivalence> qv_equivalent_classes_ = nullptr;
 
  public:
   explicit Planner(QueryContext& query_context) : query_context_(&query_context) {}
@@ -172,7 +175,11 @@ class Planner {
 
   /* end of interface for specifying parallelization strategy */
 
+  /* handles query vertex relationships */
   void breakSymmetry();
+
+  // consider pairs only
+  void findEquivalentVertices();
 };
 
 }  // namespace circinus

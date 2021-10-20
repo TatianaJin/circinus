@@ -18,10 +18,12 @@
 #include <fstream>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
 
+#include "algorithms/partial_order.h"
 #include "graph/bipartite_graph.h"
 #include "graph/candidate_set_view.h"
 #include "graph/compressed_subgraphs.h"
@@ -52,6 +54,8 @@ class TraverseOperator : public Operator {
   std::unique_ptr<TargetFilter> target_filter_ = nullptr;
 
   std::vector<std::pair<bool, uint32_t>> matching_order_indices_;
+
+  uint32_t reusable_set_index_ = UINT32_MAX;
 
  public:
   TraverseOperator(QueryVertexID target_vertex, std::unique_ptr<SubgraphFilter>&& filter)
@@ -170,25 +174,17 @@ class TraverseOperator : public Operator {
 
   virtual bool extend_vertex() const = 0;
 
-  virtual void setPartialOrder(const PartialOrderConstraintMap& conditions,
-                               const unordered_map<QueryVertexID, uint32_t>& seen_vertices) {
+  virtual void setPartialOrder(const PartialOrder& po, const unordered_map<QueryVertexID, uint32_t>& seen_vertices) {
     auto& indices = getMatchingOrderIndices();
-    auto cond_pos = conditions.find(target_vertex_);
+    auto constraints = po.getConstraintsForVertex(target_vertex_, seen_vertices);
+    DLOG(INFO) << toString() << ' ' << constraints.size() << " constraints " << circinus::toString(constraints);
     std::vector<std::pair<bool, uint32_t>> lt_constraints;
     std::vector<std::pair<bool, uint32_t>> gt_constraints;
-    if (cond_pos != conditions.end()) {
-      auto & [ smaller_vs, larger_vs ] = cond_pos->second;
-      for (auto smaller : smaller_vs) {
-        auto seen_pos = seen_vertices.find(smaller);
-        if (seen_pos != seen_vertices.end()) {
-          gt_constraints.push_back(indices[seen_pos->second]);
-        }
-      }
-      for (auto larger : larger_vs) {
-        auto seen_pos = seen_vertices.find(larger);
-        if (seen_pos != seen_vertices.end()) {
-          lt_constraints.push_back(indices[seen_pos->second]);
-        }
+    for (auto& cond : constraints) {
+      if (cond.first) {  // target less than this
+        lt_constraints.push_back(indices[cond.second]);
+      } else {  // target greater than this
+        gt_constraints.push_back(indices[cond.second]);
       }
       addFilters(lt_constraints, gt_constraints);
     }
@@ -238,6 +234,13 @@ class TraverseOperator : public Operator {
 #endif
     return ss.str();
   }
+
+  virtual void reuseSetForTarget(uint32_t set_index, const std::vector<QueryVertexID>& uncovered_parents) {
+    CHECK(uncovered_parents.empty()) << "override reuseSetForTarget to handle cases with uncovered_parents";
+    reusable_set_index_ = set_index;
+  }
+
+  inline bool canReuseSet() const { return reusable_set_index_ != UINT32_MAX; }
 
  protected:
   virtual uint32_t expandAndProfileInner(uint32_t cap, TraverseContext* ctx) const = 0;

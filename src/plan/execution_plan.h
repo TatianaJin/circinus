@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <memory>
 #include <string>
 #include <tuple>
 #include <unordered_map>
@@ -21,12 +22,14 @@
 #include <utility>
 #include <vector>
 
+#include "algorithms/vertex_equivalence.h"
 #include "graph/graph.h"
 #include "graph/query_graph.h"
 #include "ops/filters/subgraph_filter.h"
 #include "ops/operator.h"
 #include "ops/output_operator.h"
 #include "ops/traverse_operator.h"
+#include "plan/vertex_relationship.h"
 #include "utils/flags.h"
 #include "utils/hashmap.h"
 
@@ -53,6 +56,8 @@ class ExecutionPlan {
    * For key vertices, the index is n_keys-th key following the matching order
    * For non-key vertices, the index n_sets-th key following the matching order */
   unordered_map<QueryVertexID, uint32_t> query_vertex_indices_;
+
+  VertexRelationship* qv_relationship_ = nullptr;  // owned by NaivePlanner
 
   std::vector<double> step_costs_;
 
@@ -114,6 +119,8 @@ class ExecutionPlan {
 
   inline void setStepCosts(std::vector<double>&& step_costs) { step_costs_ = std::move(step_costs); }
   inline const auto& getStepCosts() const { return step_costs_; }
+
+  inline void setVertexRelationship(VertexRelationship* vr) { qv_relationship_ = vr; }
 
   const auto& getOpInputSubqueryCover() const { return op_input_subquery_cover_; }
 

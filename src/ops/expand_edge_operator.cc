@@ -96,33 +96,29 @@ class ExpandEdgeKeyToSetOperator : public ExpandEdgeOperator {
   /** @returns True if one CompressedSubgraphs is generated, else false. */
   template <QueryType profile>
   inline bool expandInner(const CompressedSubgraphs& input, TraverseContext* ctx) const {
-    std::vector<VertexID> targets;
-    auto parent_match = input.getKeyVal(parent_index_);
-    auto exceptions = input.getExceptions(same_label_key_indices_, same_label_set_indices_);
-    if (!intersect_candidates) {
-      auto g = ctx->getDataGraph<G>();
-      auto neighbors = g->getOutNeighborsWithHint(parent_match, target_label_, 0);
-      {  // enforce partial order
-        filterTargets(neighbors, input);
-        if (neighbors.size() != 0) {
-          degreeFilter(neighbors, target_degree_, g, &targets, exceptions);
-        }
-      }
+    VertexSet target_set;
+    if (canReuseSet()) {
+      target_set = input.getSet(reusable_set_index_);
+      if (target_set->size() == 1) return false;
     } else {
-      expandFromParent<G, profile>(ctx, parent_match, exceptions, &targets, input);
-    }
+      std::vector<VertexID> targets;
+      auto parent_match = input.getKeyVal(parent_index_);
+      auto exceptions = input.getExceptions(same_label_key_indices_, same_label_set_indices_);
+      expandFromParent<G, profile, intersect_candidates>(ctx, parent_match, exceptions, &targets, input);
 
-    if (targets.empty()) {
-      return false;
+      if (targets.empty()) {
+        return false;
+      }
+      target_set = newVertexSet(targets);
     }
 #ifdef USE_FILTER
-    auto output = ctx->newOutput(input, std::move(targets));
+    auto output = ctx->newOutput(input, std::move(target_set));
     if (filter(*output)) {  // actively prune existing sets
       ctx->popOutput();
       return false;
     }
 #else
-    auto output = ctx->newOutput(input, std::move(targets), same_label_set_indices_, set_pruning_threshold_);
+    auto output = ctx->newOutput(input, std::move(target_set), same_label_set_indices_, set_pruning_threshold_);
     if (output == nullptr) {  // actively prune existing sets
       return false;
     }
@@ -233,19 +229,14 @@ class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
 
   template <QueryType profile>
   inline void expandInner(const CompressedSubgraphs& input, ExpandEdgeKeyToKeyTraverseContext* ctx) const {
-    auto& current_targets = ctx->resetTargets();
-    auto parent_match = input.getKeyVal(parent_index_);
-    auto exceptions = input.getExceptions(same_label_key_indices_, same_label_set_indices_);
-    if (!intersect_candidates) {
-      auto g = ctx->getDataGraph<G>();
-      DCHECK(g != nullptr) << "no graph";
-      auto neighbors = g->getOutNeighborsWithHint(parent_match, target_label_, 0);
-      {  // enforce partial order
-        filterTargets(neighbors, input);
-        if (neighbors.size() != 0) degreeFilter(neighbors, target_degree_, g, &current_targets, exceptions);
-      }
+    if (canReuseSet()) {
+      ctx->setTargetView(*input.getSet(reusable_set_index_));
     } else {
-      expandFromParent<G, profile>(ctx, parent_match, exceptions, &current_targets, input);
+      auto& current_targets = ctx->resetTargets();
+      auto parent_match = input.getKeyVal(parent_index_);
+      auto exceptions = input.getExceptions(same_label_key_indices_, same_label_set_indices_);
+      expandFromParent<G, profile, intersect_candidates>(ctx, parent_match, exceptions, &current_targets, input);
+      ctx->resetTargetView();
     }
   }
 };  // class ExpandEdgeKeyToKeyOperator
@@ -628,6 +619,7 @@ class ExpandEdgeSetToKeyOperator : public ExpandEdgeOperator {
 
   template <QueryType profile>
   void expandInner(const CompressedSubgraphs& input, uint32_t cap, ExpandEdgeSetToKeyTraverseContext* ctx) const {
+    // TODO(tatiana): consider reusable set in case of containment
     auto& parent_set = input.getSet(parent_index_);
     ExecutionMode mode = getExecutionMode(parent_set.get(), cap, ctx);
     switch (mode) {

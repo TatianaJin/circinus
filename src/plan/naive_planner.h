@@ -23,6 +23,7 @@
 #include <utility>
 #include <vector>
 
+#include "algorithms/partial_order.h"
 #include "graph/query_graph.h"
 #include "graph/types.h"
 #include "plan/execution_plan.h"
@@ -83,6 +84,8 @@ class NaivePlanner {
   std::vector<std::vector<CoverNode>> covers_;  // covers for each level, the search space for compression
   std::vector<QueryVertexID> matching_order_;
 
+  std::unique_ptr<VertexRelationship> vertex_relationship_ = nullptr;
+
  public:
   NaivePlanner(QueryGraph* query_graph, bool use_two_hop_traversal, std::vector<double>&& candidate_cardinality,
                GraphType type)
@@ -95,8 +98,13 @@ class NaivePlanner {
 
   NaivePlanner(QueryGraph* query_graph, GraphType type) : query_graph_(query_graph), plan_(type) {}
 
+  inline void setVertexEquivalence(const VertexEquivalence& ve) {
+    vertex_relationship_ = std::make_unique<VertexRelationship>(ve);
+    plan_.setVertexRelationship(vertex_relationship_.get());
+  }
+
   /** Generates a plan with a static cover for partial match compression. */
-  ExecutionPlan* generatePlan(const PartialOrderConstraintMap& = {});
+  ExecutionPlan* generatePlan(const PartialOrder* = nullptr);
 
   /** Generates a plan with no compression. */
   ExecutionPlan* generatePlanWithoutCompression();
@@ -107,7 +115,7 @@ class NaivePlanner {
    */
   ExecutionPlan* generatePlanWithDynamicCover(const GraphBase* data_graph,
                                               const std::vector<CandidateSetView>* candidate_views,
-                                              const PartialOrderConstraintMap& = {});
+                                              const PartialOrder* = nullptr);
 
   ExecutionPlan* generatePlanWithSampleExecution(const std::vector<std::vector<double>>& cardinality,
                                                  const std::vector<double>& level_cost);
@@ -127,8 +135,7 @@ class NaivePlanner {
    *
    * If seed_qv is a query vertex, generate an order starting from the seed vertex.
    */
-  const std::vector<QueryVertexID>& generateOrder(QueryVertexID seed_qv, OrderStrategy os,
-                                                  const PartialOrderConstraintMap& po);
+  const std::vector<QueryVertexID>& generateOrder(QueryVertexID seed_qv, OrderStrategy os, const PartialOrder* po);
 
   /** Select a query vertex to parallelize the plan and compute the weights (estimation of the associated backtracking
    * search space) for all its candidates. */
@@ -238,7 +245,7 @@ class NaivePlanner {
     return log_cardinality;
   }
 
-  void setVertexWeightByDegreeConstraints(std::vector<double>& weights, const PartialOrderConstraintMap& po) const;
+  void setVertexWeightByDegreeConstraints(std::vector<double>& weights, const PartialOrder* po) const;
 
   inline bool addCover(CoverNode& new_cover_node, uint32_t level) {
     DLOG(INFO) << level << " " << new_cover_node.getCoverTableString(matching_order_.size()) << " target "

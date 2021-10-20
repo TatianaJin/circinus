@@ -483,8 +483,10 @@ BacktrackingPlan* Planner::generateExecutionPlan(std::pair<QueryVertexID, Vertex
   planners_.push_back(std::make_unique<NaivePlanner>(&query_context_->query_graph, getGraphType()));
 
   auto& planner = planners_.back();
+  planner->setVertexEquivalence(*qv_equivalent_classes_);
 
-  auto& order = planner->generateOrder(seed.first, query_context_->query_config.order_strategy, qv_partial_order_);
+  auto& order =
+      planner->generateOrder(seed.first, query_context_->query_config.order_strategy, qv_partial_order_.get());
 
   if (order.empty()) {
     return nullptr;
@@ -494,7 +496,8 @@ BacktrackingPlan* Planner::generateExecutionPlan(std::pair<QueryVertexID, Vertex
     LOG(INFO) << "Order:" << toString(order);
   }
 
-  ExecutionPlan* plan = planner->generatePlanWithDynamicCover(query_context_->data_graph, nullptr, qv_partial_order_);
+  ExecutionPlan* plan =
+      planner->generatePlanWithDynamicCover(query_context_->data_graph, nullptr, qv_partial_order_.get());
   plan->setInputAreKeys(plan->isInCover(plan->getRootQueryVertexID()));
 
   backtracking_plan_->addPlan(plan);
@@ -506,20 +509,14 @@ void Planner::breakSymmetry() {
   LOG(INFO) << "Symmetry breaking enabled? " << FLAGS_break_symmetry;
   if (FLAGS_break_symmetry) {
     AutomorphismCheck ac(query_context_->query_graph);
-    auto conds = ac.getPartialOrder();
-    for (auto& pair : conds) {
-      qv_partial_order_[pair.first].second.push_back(pair.second);
-      qv_partial_order_[pair.second].first.push_back(pair.first);
-    }
+    qv_partial_order_ = std::make_unique<PartialOrder>(ac.getPartialOrder());
+
     if (shortPlannerLog()) {
       std::stringstream ss;
-      for (auto& pair : conds) {
-        ss << ' ' << pair.first << '<' << pair.second;
-      }
+      qv_partial_order_->printMinimum(ss);
       LOG(INFO) << "Partial orders:" << ss.str();
     }
-    // TODO(tatiana): populate the conditions by transtivity for probably earlier pruning?
-    backtracking_plan_->setQueryPartialOrder(qv_partial_order_);
+    backtracking_plan_->setQueryPartialOrder(qv_partial_order_.get());
   }
 }
 
@@ -527,13 +524,15 @@ void Planner::breakSymmetry() {
 BacktrackingPlan* Planner::generateExecutionPlan(const CandidateResult* result, bool multithread) {
   backtracking_plan_ = std::make_unique<BacktrackingPlan>();
   breakSymmetry();
+  findEquivalentVertices();
   if (query_context_->query_config.candidate_pruning_strategy ==
       CandidatePruningStrategy::Online) {  // fast plan: only one plan, no partitioning applied
     // generate order and compression plan
     planners_.push_back(std::make_unique<NaivePlanner>(&query_context_->query_graph, getGraphType()));
     auto& planner = planners_.back();
+    planner->setVertexEquivalence(*qv_equivalent_classes_);
     auto& order = planner->generateOrder(query_context_->query_config.seed.first,
-                                         query_context_->query_config.order_strategy, qv_partial_order_);
+                                         query_context_->query_config.order_strategy, qv_partial_order_.get());
 
     if (shortPlannerLog()) {
       LOG(INFO) << "Order:" << toString(order);
@@ -541,14 +540,16 @@ BacktrackingPlan* Planner::generateExecutionPlan(const CandidateResult* result, 
     ExecutionPlan* plan = nullptr;
     switch (query_context_->query_config.compression_strategy) {
     case CompressionStrategy::Static: {
-      plan = planner->generatePlan(qv_partial_order_);
+      plan = planner->generatePlan(qv_partial_order_.get());
       plan->setInputAreKeys(plan->isInCover(plan->getRootQueryVertexID()));
       break;
     }
     case CompressionStrategy::Dynamic: {
-      plan = planner->generatePlanWithDynamicCover(query_context_->data_graph, nullptr, qv_partial_order_);
-      plan->setInputAreKeys(plan->isInCover(plan->getRootQueryVertexID()) &&
-                            (plan->getToKeyLevel(plan->getRootQueryVertexID()) == 0));
+      plan = planner->generatePlanWithDynamicCover(query_context_->data_graph, nullptr, qv_partial_order_.get());
+      // FIXME(tatiana)
+      // plan->setInputAreKeys(plan->isInCover(plan->getRootQueryVertexID()) &&
+      //                       (plan->getToKeyLevel(plan->getRootQueryVertexID()) == 0));
+      plan->setInputAreKeys(plan->isInCover(plan->getRootQueryVertexID()));
       break;
     }
     case CompressionStrategy::None: {
@@ -724,6 +725,7 @@ ExecutionPlan* Planner::generateLogicalExecutionPlan(const std::vector<VertexID>
                                                      query_context_->query_config.use_two_hop_traversal,
                                                      std::move(cardinality), graph_type));
   auto& planner = planners_.back();
+  planner->setVertexEquivalence(*qv_equivalent_classes_);
 
   auto& order = planner->generateOrder(query_context_->data_graph, *query_context_->graph_metadata, candidate_views,
                                        candidate_cardinality, query_context_->query_config.order_strategy,
@@ -760,6 +762,13 @@ ExecutionPlan* Planner::generateLogicalExecutionPlan(const std::vector<VertexID>
   // one logical input operator for each logical plan
   newInputOperators(plan, partitioning_qvs);
   return plan;
+}
+
+void Planner::findEquivalentVertices() {
+  qv_equivalent_classes_ = std::make_unique<VertexEquivalence>(query_context_->query_graph, qv_partial_order_.get());
+  if (!qv_equivalent_classes_->empty()) {
+    backtracking_plan_->setEquivalentClasses(*qv_equivalent_classes_);
+  }
 }
 
 }  // namespace circinus

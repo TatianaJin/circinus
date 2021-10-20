@@ -125,8 +125,13 @@ class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
       }
 
       // consume the next input
-      auto& new_keys = ctx->resetTargets();
       const auto& input = ctx->getCurrentInput();
+      if (canReuseSet()) {
+        ctx->setTargetView(*input.getSet(reusable_set_index_));
+        ctx->nextInput();
+        continue;
+      }
+      auto& new_keys = ctx->resetTargets();
       auto exceptions = input.getExceptions(same_label_key_indices_, same_label_set_indices_);
 
 #ifdef INTERSECTION_CACHE
@@ -212,6 +217,7 @@ class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
               }
             }
         }
+      ctx->resetTargetView();
       ctx->nextInput();
     }
     return output_num;

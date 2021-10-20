@@ -19,6 +19,7 @@
 #include <queue>
 #include <string>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include "graph/compressed_subgraphs.h"
@@ -141,6 +142,11 @@ inline std::string toString(const std::vector<V>& vec) {
     ss << ' ' << v;
   }
   return ss.str();
+}
+
+template <typename T1, typename T2>
+inline std::ostream& operator<<(std::ostream& ss, const std::pair<T1, T2>& p) {
+  return ss << p.first << '-' << p.second;
 }
 
 template <typename ForwardIt>

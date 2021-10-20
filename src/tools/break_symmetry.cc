@@ -33,10 +33,10 @@ int main(int argc, char** argv) {
   QueryGraph q(query_path);
 
   AutomorphismCheck ac(q);
-  auto conditions = ac.getPartialOrder();
-  std::cout << "Partial orders:" << std::endl;
-  for (auto& p : conditions) {
-    std::cout << p.first << ' ' << p.second << std::endl;
-  }
+  auto po = ac.getPartialOrder();
+  std::cout << "Partial orders:";
+  po.printMinimum(std::cout) << std::endl;
+  std::cout << "Full constraints:";
+  po.printFull(std::cout) << std::endl;
   return 0;
 }

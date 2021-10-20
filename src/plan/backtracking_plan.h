@@ -16,9 +16,12 @@
 
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
+#include "algorithms/partial_order.h"
+#include "algorithms/vertex_equivalence.h"
 #include "exec/execution_config.h"
 #include "graph/graph_metadata.h"
 #include "graph/types.h"
@@ -35,8 +38,8 @@ class BacktrackingPlan {
   // partitioned and parallel
   std::vector<std::pair<uint32_t, std::vector<CandidateScope>>> partitioned_plans_;
   std::vector<bool> segment_mask_;
-  const unordered_map<QueryVertexID, std::pair<std::vector<QueryVertexID>, std::vector<QueryVertexID>>>*
-      qv_constraints_ = nullptr;  // qv: smaller,larger
+  const PartialOrder* partial_order_ = nullptr;
+  const VertexEquivalence* qv_equivalent_classes_ = nullptr;
 
  public:
   std::vector<Operator*>& getOperators(uint32_t plan_idx = 0) { return plans_[plan_idx]->getOperators(); }
@@ -59,15 +62,20 @@ class BacktrackingPlan {
     return segment_mask_[idx];
   }
 
-  inline void setQueryPartialOrder(const PartialOrderConstraintMap& conditions) {
-    qv_constraints_ = &conditions;
+  inline void setQueryPartialOrder(const PartialOrder* po) {
+    DCHECK(po != nullptr);
+    partial_order_ = po;
     for (auto plan : plans_) setPartialOrderForPlan(plan);
+  }
+
+  inline void setEquivalentClasses(const VertexEquivalence& equivalent_classes) {
+    qv_equivalent_classes_ = &equivalent_classes;
   }
 
   // TODO(engineering): merge plans with the same compression and order for better log/profile readabiliity?
   inline uint32_t addPlan(ExecutionPlan* plan) {
     plans_.push_back(plan);
-    if (qv_constraints_ != nullptr) {
+    if (partial_order_ != nullptr) {
       setPartialOrderForPlan(plan);
     }
     return plans_.size() - 1;
@@ -115,7 +123,7 @@ class BacktrackingPlan {
 
  private:
   void setPartialOrderForPlan(ExecutionPlan* plan) const {
-    auto& conditions = *qv_constraints_;
+    auto& po = *partial_order_;
     unordered_map<QueryVertexID, uint32_t> seen_vertices;
     seen_vertices.insert({plan->getMatchingOrder().front(), 0});
     auto op_size = plan->getOperators().size() - 1;
@@ -123,21 +131,23 @@ class BacktrackingPlan {
     for (uint32_t i = 0; i < op_size; ++i) {
       auto traverse_op = dynamic_cast<TraverseOperator*>(plan->getOperators()[i]);
       if (traverse_op->extend_vertex()) {
-        traverse_op->setPartialOrder(conditions, seen_vertices);
+        traverse_op->setPartialOrder(po, seen_vertices);
         seen_vertices.insert({traverse_op->getTargetQueryVertex(), seen_vertices.size()});
       }
     }
     // set output operator, key-to-key/key-to-set constraints should be already applied during expansion
     // output operator only needs to take care of set-to-set constraints
     auto output_op = dynamic_cast<OutputOperator*>(plan->getOperators().back());
+
+    /* FIXME(tatiana): reuse the logic in PartialOrder directly for computing the necessary constraints for set
+     * enumeration */
     std::vector<std::pair<uint32_t, uint32_t>> set_constraints;
-    for (auto& v_cond : conditions) {
-      if (plan->isInCover(v_cond.first)) continue;
-      auto& less_than_vertices = v_cond.second.second;
-      for (auto constraint : less_than_vertices) {
-        if (!plan->isInCover(constraint)) {
-          set_constraints.emplace_back(plan->getQueryVertexOutputIndex(v_cond.first),
-                                       plan->getQueryVertexOutputIndex(constraint));
+    for (QueryVertexID u = 0; u < po.po_constraint_adj.size(); ++u) {
+      if (plan->isInCover(u)) continue;
+      auto& smaller_qvs = po.po_constraint_adj[u];
+      for (auto smaller : smaller_qvs) {
+        if (!plan->isInCover(smaller)) {
+          set_constraints.emplace_back(plan->getQueryVertexOutputIndex(smaller), plan->getQueryVertexOutputIndex(u));
         }
       }
     }

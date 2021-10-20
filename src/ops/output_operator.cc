@@ -15,7 +15,9 @@
 #include "ops/output_operator.h"
 
 #include <fstream>
+#include <queue>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "glog/logging.h"
@@ -35,8 +37,9 @@ class CountOutputOperator : public OutputOperator {
     if (!set_less_than_constraints_.empty()) {
       while (input_start < input_end) {
         auto& group = input[input_start];
-        auto update = group.getNumIsomorphicSubgraphsWithConstraints(
-            same_label_indices_, constraints_adjs_, enumerate_orders_, outputs_->getLimitPerThread() - count_acc);
+        auto update =
+            group.getNumIsomorphicSubgraphsWithConstraints(same_label_indices_, constraints_adjs_, enumerate_orders_,
+                                                           outputs_->getLimitPerThread() - count_acc, qv_relationship_);
         count_acc = outputs_->updateCount(update, output_index);
         ++input_start;
         if (count_acc >= outputs_->getLimitPerThread()) {
@@ -47,7 +50,8 @@ class CountOutputOperator : public OutputOperator {
     }
     while (input_start < input_end) {
       auto& group = input[input_start];
-      auto update = group.getNumIsomorphicSubgraphs(same_label_indices_, outputs_->getLimitPerThread() - count_acc);
+      auto update = group.getNumIsomorphicSubgraphs(same_label_indices_, outputs_->getLimitPerThread() - count_acc,
+                                                    qv_relationship_);
       count_acc = outputs_->updateCount(update, output_index);
       ++input_start;
       if (count_acc >= outputs_->getLimitPerThread()) {
@@ -63,8 +67,8 @@ class CountOutputOperator : public OutputOperator {
 };
 
 void OutputOperator::setPartialOrder(std::vector<std::pair<uint32_t, uint32_t>>&& constraints) {
+  LOG(INFO) << "start set partial order " << circinus::toString(constraints);
   if (constraints.empty()) return;
-  LOG(INFO) << "start set partial order";
   auto set_group_size = same_label_indices_.size();
   enumerate_orders_.resize(set_group_size);
   constraints_adjs_.resize(set_group_size);
@@ -122,7 +126,6 @@ void OutputOperator::setPartialOrder(std::vector<std::pair<uint32_t, uint32_t>>&
   }
   set_less_than_constraints_ = std::move(constraints);
   LOG(INFO) << "set less than constraints, " << set_less_than_constraints_.size();
-  LOG(INFO) << "end set partial order";
 }
 
 Outputs& Outputs::init(uint32_t n_threads, const std::string& path_prefix) {

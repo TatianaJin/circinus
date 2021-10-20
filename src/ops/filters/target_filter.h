@@ -11,6 +11,8 @@
 
 #pragma once
 
+#include <algorithm>
+#include <limits>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -65,7 +67,6 @@ class TargetFilter {
     }
     targets = View(start, end);
   }
-
 };  // class TargetFilter
 
 }  // namespace circinus

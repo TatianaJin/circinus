@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <array>
+#include <memory>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -47,16 +48,14 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
   query_graph_ = g;
   cover_table_ = cover_table;
   operators_.reserve(g->getNumVertices());
-  if (matching_order.size() == 1) {
-    // TODO(tatiana): handle no traversal
-    return;
-  }
+  CHECK_GT(matching_order.size(), 1);
 
   /* for traversal, we expand to one vertex at a time according to matching_order */
   uint32_t n_keys = 0, n_sets = 0;
   Operator *current, *prev = nullptr;
   // existing vertices in current query subgraph
   unordered_set<QueryVertexID> existing_vertices;
+  std::vector<QueryVertexID> set_vertices;
   // label: {set index}, {key index}
   unordered_map<LabelID, std::array<std::vector<uint32_t>, 2>> label_existing_vertices_indices;
   std::array<std::vector<QueryVertexID>, 2> parents;
@@ -72,12 +71,24 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
   n_sets += (cover_table[parent] != 1);
   existing_vertices.insert(parent);
   label_existing_vertices_indices[query_graph_->getVertexLabel(parent)][cover_table[parent] == 1].push_back(0);
+  if (!isInCover(parent)) set_vertices.push_back(parent);
 
   // handle following traversals
   for (uint32_t i = 1; i < matching_order.size(); ++i) {
     auto target_vertex = matching_order[i];
     auto target_label = query_graph_->getVertexLabel(target_vertex);
     const auto& same_label_v_indices = label_existing_vertices_indices[target_label];
+
+    // reuse matches of equivalent set vertex for target
+    uint32_t reusable_set_index = UINT32_MAX;
+    bool reusable_to_be_set = false;
+    auto[reuse_qv, uncovered_parents] =
+        qv_relationship_->findReusableSet(target_vertex, set_vertices, existing_vertices);
+    if (reuse_qv != DUMMY_QUERY_VERTEX) {
+      reusable_set_index = query_vertex_indices_.at(reuse_qv);
+      reusable_to_be_set = true;
+    }
+
     // record query vertex index
     if (cover_table[target_vertex] == 1) {
       query_vertex_indices_[target_vertex] = n_keys;
@@ -85,6 +96,7 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
     } else {
       query_vertex_indices_[target_vertex] = n_sets;
       ++n_sets;
+      set_vertices.push_back(target_vertex);
     }
 
     if (i == 1) {  // the first edge: target has one and only one parent
@@ -122,6 +134,10 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
             } else {
               current = newExpandKeyKeyVertexOperator(key_parents, target_vertex, same_label_v_indices);
             }
+            if (reusable_to_be_set) {
+              ((TraverseOperator*)current)->reuseSetForTarget(reusable_set_index, uncovered_parents);
+              reusable_to_be_set = false;
+            }
             prev->setNext(current);
             prev = current;
             current = newExpandIntoOperator(set_parents, target_vertex, key_parents, label_existing_vertices_indices);
@@ -140,6 +156,9 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
       key_parents.clear();
       set_parents.clear();
     }
+    if (reusable_to_be_set) {
+      ((TraverseOperator*)prev)->reuseSetForTarget(reusable_set_index, uncovered_parents);
+    }
 
     existing_vertices.insert(target_vertex);
     label_existing_vertices_indices[target_label][cover_table[target_vertex] == 1].push_back(
@@ -157,6 +176,16 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
     }
   }
   auto output_op = newOutputOperator(std::move(same_label_indices));
+  {
+    unordered_map<QueryVertexID, uint32_t> set_qv_index;
+    for (QueryVertexID u = 0; u < query_graph_->getNumVertices(); ++u) {
+      if (!isInCover(u)) {
+        set_qv_index.insert({u, query_vertex_indices_.at(u)});
+      }
+    }
+    qv_relationship_->initSetQueryVertexIndices(set_qv_index);
+    dynamic_cast<OutputOperator*>(output_op)->setEquivalentClasses(*qv_relationship_);
+  }
   prev->setNext(output_op);
 
   DCHECK_EQ(existing_vertices.size(), g->getNumVertices());
@@ -165,15 +194,13 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
 void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<QueryVertexID>& matching_order,
                                          const std::vector<int>& cover_table,
                                          const unordered_map<QueryVertexID, uint32_t>& level_become_key) {
+  DCHECK(qv_relationship_ != nullptr);
   matching_order_ = matching_order;
   query_graph_ = g;
   cover_table_ = cover_table;
   operators_.reserve(g->getNumVertices());
   dynamic_cover_key_level_ = level_become_key;
-  if (matching_order.size() == 1) {
-    // TODO(tatiana): handle no traversal
-    return;
-  }
+  CHECK_GT(matching_order.size(), 1);
 
   uint32_t n_keys = 0, n_sets = 0;
   std::vector<QueryVertexID> set_vertices;
@@ -224,6 +251,16 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
     for (auto v : same_label_vertices) {
       // note that here cover_table_ reflects the compression key of the input instead of the output
       same_label_indices[cover_table_[v] == 1].push_back(query_vertex_indices_[v]);
+    }
+
+    // reuse matches of equivalent set vertex for target
+    uint32_t reusable_set_index = UINT32_MAX;
+    bool reusable_to_be_set = false;
+    auto[reuse_qv, uncovered_parents] =
+        qv_relationship_->findReusableSet(target_vertex, set_vertices, existing_vertices);
+    if (reuse_qv != DUMMY_QUERY_VERTEX) {
+      reusable_set_index = query_vertex_indices_.at(reuse_qv);
+      reusable_to_be_set = true;
     }
 
     // record query vertex index
@@ -297,6 +334,10 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
           } else {
             current = newExpandKeyKeyVertexOperator(key_parents, target_vertex, same_label_indices);
           }
+          if (reusable_to_be_set) {
+            ((TraverseOperator*)current)->reuseSetForTarget(reusable_set_index, uncovered_parents);
+            reusable_to_be_set = false;
+          }
           prev->setNext(current);
           prev = current;
           last_op_ = (i == matching_order_.size() - 1);
@@ -328,6 +369,9 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
       prev->setNext(current);
       prev = current;
     }
+    if (reusable_to_be_set) {
+      ((TraverseOperator*)prev)->reuseSetForTarget(reusable_set_index, uncovered_parents);
+    }
     key_parents.clear();
     set_parents.clear();
     existing_vertices.insert(target_vertex);
@@ -351,6 +395,16 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
     }
   }
   auto output_op = newOutputOperator(std::move(same_label_indices));
+  {
+    unordered_map<QueryVertexID, uint32_t> set_qv_index;
+    for (QueryVertexID u = 0; u < query_graph_->getNumVertices(); ++u) {
+      if (!isInCover(u)) {
+        set_qv_index.insert({u, query_vertex_indices_.at(u)});
+      }
+    }
+    qv_relationship_->initSetQueryVertexIndices(set_qv_index);
+    dynamic_cast<OutputOperator*>(output_op)->setEquivalentClasses(*qv_relationship_);
+  }
   prev->setNext(output_op);
 
   DCHECK_EQ(existing_vertices.size(), g->getNumVertices());

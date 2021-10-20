@@ -20,13 +20,16 @@
 #include <numeric>
 #include <sstream>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
 
 #include "glog/logging.h"
+
 #include "graph/types.h"
 #include "graph/vertex_set.h"
+#include "plan/vertex_relationship.h"
 #include "utils/hashmap.h"
 
 namespace circinus {
@@ -191,9 +194,13 @@ class CompressedSubgraphs {
   }
 
   inline CompressedSubgraphs* reset(const CompressedSubgraphs& subgraphs, std::vector<VertexID>&& new_set) {
+    return reset(subgraphs, newVertexSet(new_set));
+  }
+
+  inline CompressedSubgraphs* reset(const CompressedSubgraphs& subgraphs, VertexSet&& new_set) {
     keys_ = subgraphs.keys_;
     std::copy(subgraphs.sets_.begin(), subgraphs.sets_.end(), sets_.begin());
-    sets_.back() = newVertexSet(new_set);
+    sets_.back() = new_set;
     return this;
   }
 
@@ -228,15 +235,14 @@ class CompressedSubgraphs {
     return n_subgraphs;
   }
 
-  uint64_t getNumIsomorphicSubgraphs(const PruningIndexGroups& pruning_indices, uint64_t limit = ~0u) const;
+  uint64_t getNumIsomorphicSubgraphs(const PruningIndexGroups& pruning_indices, uint64_t limit = ~0u,
+                                     const VertexRelationship* eq = nullptr) const;
 
-  // uint64_t getNumIsomorphicSubgraphsWithConstraints(const PruningIndexGroups& pruning_indices,
-  //                                                   const std::vector<std::pair<uint32_t, uint32_t>>& constraints,
-  //                                                   uint64_t limit = ~0u) const;
   uint64_t getNumIsomorphicSubgraphsWithConstraints(
       const PruningIndexGroups& pruning_indices,
       const std::vector<std::vector<std::vector<uint32_t>>>& constraints_adjs,
-      const std::vector<std::vector<uint32_t>>& enumerate_orders, uint64_t limit = ~0u) const;
+      const std::vector<std::vector<uint32_t>>& enumerate_orders, uint64_t limit = ~0u,
+      const VertexRelationship* eq = nullptr) const;
 
   inline uint64_t getNumIsomorphicSubgraphs(uint64_t limit = ~0u) const {
     if (sets_.empty()) {
@@ -249,19 +255,33 @@ class CompressedSubgraphs {
     unordered_set<VertexID> existing_vertices;
     existing_vertices.reserve(getNumVertices() - 1);
     existing_vertices.insert(keys_.begin(), keys_.end());
-    return getNumIsomorphicSubgraphs(existing_vertices, set_ptrs, limit);
+    return getNumIsomorphicSubgraphsImpl(existing_vertices, set_ptrs, limit);
   }
 
   /**
    * Count isomorphic subgraphs projected on the given sets
    */
-  static uint64_t getNumIsomorphicSubgraphs(unordered_set<VertexID>& existing_vertices,
-                                            std::vector<const SingleRangeVertexSetView*>& set_ptrs,
-                                            uint64_t limit = ~0u);
+  static uint64_t getNumIsomorphicSubgraphsImpl(unordered_set<VertexID>& existing_vertices,
+                                                std::vector<const SingleRangeVertexSetView*>& set_ptrs,
+                                                uint64_t limit = ~0u);
 
   static uint64_t getNumIsomorphicSubgraphsWithConstraintsImpl(
       unordered_set<VertexID>& existing_vertices, std::vector<const SingleRangeVertexSetView*>& set_ptrs,
       const std::vector<std::vector<uint32_t>>& constraints_adj, uint64_t limit = ~0u);
+
+  static uint64_t countExcept(const SingleRangeVertexSetView& set, const unordered_set<VertexID>& except,
+                              VertexID max_except);
+
+  /** @param partial_order No order if 0, v1 < v2 if -1, v1 > v2 if 1.
+   *  @param qv_equivalent_classes Mapping query vertex to its class.
+   */
+  uint64_t getIntersectionSize(uint32_t set_idx1, uint32_t set_idx2, const VertexRelationship* eq,
+                               unordered_map<std::string, std::vector<VertexID>>* cache,
+                               const unordered_set<VertexID>& except) const;
+
+  uint64_t getEnumerationCount(const std::vector<uint32_t>& set_indices, const VertexRelationship* eq,
+                               unordered_map<std::string, std::vector<VertexID>>& cache,
+                               const unordered_set<VertexID>& except, VertexID max_except) const;
 
   std::string toString() const {
     std::string s = "{";
