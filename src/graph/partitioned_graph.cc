@@ -51,6 +51,19 @@ ReorderedPartitionedGraph::ReorderedPartitionedGraph(const std::string& path, ui
   reconstructByOrder();
 }
 
+ReorderedPartitionedGraph::ReorderedPartitionedGraph(const std::string& path, const std::string& part_path,
+                                                     uint32_t n_partitions, bool sort_by_degree)
+    : n_partitions_(n_partitions), partition_offsets_(n_partitions + 1, 0), label_offsets_per_part_(n_partitions) {
+  auto labels = loadUndirectedGraph(path);
+  vertex_ids_.resize(getNumVertices());
+  std::iota(vertex_ids_.begin(), vertex_ids_.end(), 0);
+  // read partition and reorder
+  auto parts = getFennelParts(part_path);
+  reorder(sort_by_degree, labels, parts, this);
+  computeLabelOffsets(labels);
+  reconstructByOrder();
+}
+
 ReorderedPartitionedGraph::ReorderedPartitionedGraph(const Graph& graph, uint32_t n_partitions, bool sort_by_degree)
     : n_partitions_(n_partitions),
       vertex_ids_(graph.getNumVertices()),

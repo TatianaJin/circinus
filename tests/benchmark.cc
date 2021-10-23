@@ -166,7 +166,7 @@ class Benchmark {
 
   static inline std::string getPartitionGraphPath(const std::string& dataset, const uint32_t partition) {
     return circinus::Path::join(FLAGS_data_dir, dataset, "data_graph",
-                                dataset + ".graph.p" + std::to_string(partition) + ".bin");
+                                dataset + ".circinus.bin.p" + std::to_string(partition));
   }
 
   void loadDataset(const std::string& dataset, double& load_time, const uint32_t partition = 1) {
