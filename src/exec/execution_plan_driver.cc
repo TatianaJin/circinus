@@ -130,7 +130,7 @@ void ExecutionPlanDriverBase::taskTimeOut(std::unique_ptr<TaskBase>& task, Threa
 }
 
 template <typename TaskType>
-void ExecutionPlanDriverBase::handleSupendedTask(std::unique_ptr<TaskBase>& task, ThreadsafeTaskQueue* task_queue) {
+void ExecutionPlanDriverBase::handleSuspendedTask(std::unique_ptr<TaskBase>& task, ThreadsafeTaskQueue* task_queue) {
   auto traverse_task = dynamic_cast<TaskType*>(task.get());
   auto splits = traverse_task->getSplits();
   CHECK(!splits.empty());
@@ -217,7 +217,7 @@ void OnlineQueryExecutionPlanDriver::taskFinish(std::unique_ptr<TaskBase>& task,
                                                 ThreadsafeQueue<ServerEvent>* reply_queue) {
   auto traverse_task = dynamic_cast<TraverseChainTask*>(task.get());
   if (traverse_task->getTaskStatus() != TaskStatus::Normal) {
-    handleSupendedTask<TraverseChainTask>(task, task_queue);
+    handleSuspendedTask<TraverseChainTask>(task, task_queue);
   } else {
     --n_pending_tasks_;
     collectTaskInfo(task);
@@ -305,7 +305,7 @@ void ExecutionPlanDriver::taskFinish(std::unique_ptr<TaskBase>& task, Threadsafe
   DCHECK_LT(task->getTaskId(), task_counters_.size());
   auto traverse_task = dynamic_cast<TraverseTask*>(task.get());
   if (traverse_task->getTaskStatus() != TaskStatus::Normal) {
-    handleSupendedTask<TraverseTask>(task, task_queue);
+    handleSuspendedTask<TraverseTask>(task, task_queue);
   } else {
     --n_pending_tasks_;
     collectTaskInfo(task);

@@ -96,10 +96,10 @@ class TraverseChainTask : public TaskBase {
       : TaskBase(qid, tid, stop_time),
         graph_(graph),
         batch_size_(batch_size),
-        operators_(ops),
+        operators_(&ops),
         query_type_(query_type),
         start_level_(0),
-        end_level_(operators_.size() - 1),
+        end_level_(operators_->size() - 1),
         task_status_(TaskStatus::Normal),
         seed_data_vertex_(seed_data_vertex) {}
 

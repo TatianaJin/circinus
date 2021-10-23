@@ -15,7 +15,9 @@
 #include "ops/output_operator.h"
 
 #include <fstream>
+#include <queue>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "glog/logging.h"

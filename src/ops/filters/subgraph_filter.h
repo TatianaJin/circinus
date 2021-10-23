@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <memory>
+#include <utility>
 #include <vector>
 
 #include "graph/compressed_subgraphs.h"

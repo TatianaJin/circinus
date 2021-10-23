@@ -33,7 +33,7 @@
 namespace circinus {
 
 template <typename G>
-class ExpandIntoOperator : public TraverseOperator {
+class ExpandIntoSetOperator : public TraverseOperator {
   std::vector<QueryVertexID> parents_;
   unordered_map<QueryVertexID, uint32_t> query_vertex_indices_;
   // for profiling
@@ -41,11 +41,11 @@ class ExpandIntoOperator : public TraverseOperator {
   std::vector<LabelID> parent_labels_;
 
  public:
-  ExpandIntoOperator(const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
-                     const unordered_map<QueryVertexID, uint32_t>& query_vertex_indices,
-                     const std::vector<QueryVertexID>& prev_key_parents,
-                     std::unique_ptr<SubgraphFilter>&& subgraph_filter = nullptr,
-                     std::vector<LabelID>&& parent_labels = {})
+  ExpandIntoSetOperator(const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
+                        const unordered_map<QueryVertexID, uint32_t>& query_vertex_indices,
+                        const std::vector<QueryVertexID>& prev_key_parents,
+                        std::unique_ptr<SubgraphFilter>&& subgraph_filter = nullptr,
+                        std::vector<LabelID>&& parent_labels = {})
       : TraverseOperator(target_vertex, std::move(subgraph_filter)),
         parents_(parents),
         query_vertex_indices_(query_vertex_indices),
@@ -101,7 +101,7 @@ class ExpandIntoOperator : public TraverseOperator {
 
   std::string toString() const override {
     std::stringstream ss;
-    ss << "ExpandIntoOperator";
+    ss << "ExpandIntoSetOperator";
     uint32_t idx = 0;
     for (auto parent : parents_) {
       DCHECK_EQ(query_vertex_indices_.count(parent), 1);
@@ -133,52 +133,7 @@ class ExpandIntoOperator : public TraverseOperator {
       auto key_vertex_id = input.getKeyVal(query_vertex_indices_.at(target_vertex_));
       auto key_neighbors = graph->getInNeighborsWithHint(key_vertex_id, ALL_LABEL, 0);
       bool add = true;
-      if
-        constexpr(isProfileMode(profile)) {
-          ctx->total_num_input_subgraphs += ctx->getCurrentInput().getNumSubgraphs();
-          if
-            constexpr(isProfileWithMiniIntersectionMode(profile)) {
-              unordered_set<VertexID> prefix_set;
-              for (uint32_t i = 0; i < key_parents_.size(); ++i) {
-                parent_tuple[i] = input.getKeyVal(query_vertex_indices_.at(key_parents_[i]));
-                prefix_set.insert(parent_tuple[i]);
-              }
-              std::vector<std::vector<VertexID>*> parent_set_ptrs;
-              parent_set_ptrs.reserve(parents_.size());
-              for (auto parent : parents_) {
-                parent_set_ptrs.push_back(input.getSet(query_vertex_indices_.at(parent)).get());
-              }
-              uint32_t depth = 0, last_depth = parents_.size() - 1;
-              std::vector<uint32_t> set_index(parents_.size(), 0);
-              while (true) {
-                while (set_index[depth] < parent_set_ptrs[depth]->size()) {
-                  auto parent_vid = (*parent_set_ptrs[depth])[set_index[depth]];
-                  if (prefix_set.count(parent_vid)) {
-                    ++set_index[depth];
-                    continue;
-                  }
-                  auto pidx = depth + key_parents_.size();
-                  parent_tuple[pidx] = parent_vid;
 
-                  ((ExpandVertexTraverseContext*)ctx)->updateDistinctSICount(depth, parent_tuple, pidx);
-
-                  if (depth == last_depth) {
-                    ++set_index[depth];
-                  } else {
-                    prefix_set.insert(parent_vid);
-                    ++depth;
-                    set_index[depth] = 0;
-                  }
-                }
-                if (depth == 0) {
-                  break;
-                }
-                --depth;
-                prefix_set.erase((*parent_set_ptrs[depth])[set_index[depth]]);
-                ++set_index[depth];
-              }
-            }
-        }
 #ifndef USE_FILTER
       // TODO(tatiana): `ExpandInto` requires different groups of same-label indices for the parent sets
       // for active pruning, should use same-label set indices >>>
@@ -196,7 +151,7 @@ class ExpandIntoOperator : public TraverseOperator {
           constexpr(sensitive_to_hint<G>) {
             key_neighbors = graph->getInNeighborsWithHint(key_vertex_id, parent_labels_[parent_idx], parent_idx);
           }
-        DCHECK(input.getSet(id).get() != nullptr) << vid << " " << id;
+        DCHECK(input.getSet(id).get() != nullptr);
         intersect(*(input.getSet(id)), key_neighbors, &new_set);
         if
           constexpr(isProfileMode(profile)) {

@@ -15,6 +15,7 @@
 #include "ops/filters/subgraph_filter.h"
 
 #include <algorithm>
+#include <memory>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -227,7 +228,6 @@ class PartialOrderSubgraphFilter : public SetPrunningSubgraphFilter {
     }
     return false;
   }
-
 };  // class PartialOrderSubgraphFilter
 
 std::unique_ptr<SubgraphFilter> SetPrunningSubgraphFilter::addPartialOrderSubgraphFilter(
