@@ -96,7 +96,7 @@ class ExecutionPlanDriverBase : public PlanDriver {
   }
 
   template <typename TaskType>
-  void handleSupendedTask(std::unique_ptr<TaskBase>&, ThreadsafeTaskQueue*);
+  void handleSuspendedTask(std::unique_ptr<TaskBase>&, ThreadsafeTaskQueue*);
 
   inline void updateSuspendInterval() {
     if (n_pending_tasks_ > max_parallelism_) {
@@ -114,18 +114,6 @@ class OnlineQueryExecutionPlanDriver : public ExecutionPlanDriverBase {
  protected:
  public:
   explicit OnlineQueryExecutionPlanDriver(BacktrackingPlan* plan) : ExecutionPlanDriverBase(plan) {}
-
-  void init(QueryId qid, QueryContext* query_ctx, ExecutionContext& ctx, ThreadsafeTaskQueue& task_queue) override;
-
-  void taskFinish(std::unique_ptr<TaskBase>& task, ThreadsafeTaskQueue* task_queue,
-                  ThreadsafeQueue<ServerEvent>* reply_queue) override;
-};
-
-/** Execution plan driver of online query with seed vertex
- */
-class OnlineQueryExecutionPlanDriver : public ExecutionPlanDriverBase {
- public:
-  OnlineQueryExecutionPlanDriver(BacktrackingPlan* plan) : ExecutionPlanDriverBase(plan) {}
 
   void init(QueryId qid, QueryContext* query_ctx, ExecutionContext& ctx, ThreadsafeTaskQueue& task_queue) override;
 

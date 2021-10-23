@@ -129,7 +129,7 @@ class QueryConfig {
   bool intra_partition_plan = true;
   std::string output = "count";
   uint64_t limit = ~0ull;
-  std::chrono::seconds time_limit = std::chrono::seconds(3600);
+  std::chrono::seconds time_limit = std::chrono::seconds(600);
   QueryMode mode = QueryMode::Execute;
 
   // seed node

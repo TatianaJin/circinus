@@ -71,6 +71,19 @@ class ExecutionPlan {
   // for profile, subquery size, cover bits, remove parent edge flag
   std::vector<std::tuple<uint32_t, uint64_t, bool>> op_input_subquery_cover_;
 
+  void transformSameLabelIndices(std::array<std::vector<uint32_t>, 2>& same_label_indices,
+                                 unordered_set<QueryVertexID> keys_to_enumerate_set, uint32_t from) {
+    auto it = same_label_indices[from].begin();
+    while (it != same_label_indices[from].end()) {
+      if (keys_to_enumerate_set.count(*it)) {
+        same_label_indices[from ^ 1].push_back(*it);
+        it = same_label_indices[from].erase(it);
+      } else {
+        ++it;
+      }
+    }
+  }
+
   void addKeys(const std::vector<QueryVertexID>& keys_to_add, std::vector<QueryVertexID>& set_vertices,
                uint32_t& n_keys) {
     for (auto v : keys_to_add) {
@@ -293,7 +306,8 @@ class ExecutionPlan {
       const std::array<std::vector<uint32_t>, 2>& same_label_indices);
   virtual TraverseOperator* newExpandEdgeKeyToSetOperator(
       QueryVertexID parent_vertex, QueryVertexID target_vertex,
-      const std::array<std::vector<uint32_t>, 2>& same_label_indices);
+      const std::array<std::vector<uint32_t>, 2>& same_label_indices,
+      unordered_map<QueryVertexID, uint32_t>& query_vertex_indices);
   virtual TraverseOperator* newExpandEdgeSetToKeyOperator(
       QueryVertexID parent_vertex, QueryVertexID target_vertex,
       const std::array<std::vector<uint32_t>, 2>& target_same_label_indices,
@@ -302,7 +316,9 @@ class ExecutionPlan {
       std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
       const std::array<std::vector<uint32_t>, 2>& same_label_indices);
   virtual TraverseOperator* newExpandSetVertexOperator(std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
-                                                       const std::array<std::vector<uint32_t>, 2>& same_label_indices);
+                                                       const std::array<std::vector<uint32_t>, 2>& same_label_indices,
+                                                       unordered_map<QueryVertexID, uint32_t>& query_vertex_indices,
+                                                       bool have_existing_target_set = false);
   virtual TraverseOperator* newExpandSetToKeyVertexOperator(
       const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
       const std::array<std::vector<uint32_t>, 2>& same_label_indices,
@@ -316,6 +332,13 @@ class ExecutionPlan {
       const std::vector<QueryVertexID>& keys_to_enumerate,
       unordered_map<QueryVertexID, uint32_t> input_query_vertex_indices,
       const std::array<std::vector<uint32_t>, 2>& same_label_indices,
+      const unordered_map<LabelID, std::vector<uint32_t>>& label_existing_vertices_map);
+
+  virtual std::vector<TraverseOperator*> newExpandKeyToSetEnumerateKeyExpandToSetOperator(
+      const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
+      const std::vector<QueryVertexID>& keys_to_enumerate,
+      unordered_map<QueryVertexID, uint32_t>& input_query_vertex_indices,
+      std::array<std::vector<uint32_t>, 2>& same_label_indices,
       const unordered_map<LabelID, std::vector<uint32_t>>& label_existing_vertices_map);
   Operator* newOutputOperator(std::vector<std::pair<std::vector<uint32_t>, std::vector<uint32_t>>>&&);
 

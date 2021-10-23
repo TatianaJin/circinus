@@ -704,20 +704,28 @@ std::pair<unordered_map<QueryVertexID, uint32_t>, std::vector<double>> NaivePlan
     best_idx = pre[last--][best_idx];
     best_path.emplace_back(best_idx);
   }
+  last = covers_.size() - 1;
 
   std::reverse(best_path.begin(), best_path.end());
+  bool no_enumerate_key_ops = false;
   for (uint32_t i = 0; i < matching_order_.size(); ++i) {
-    for (uint32_t j = 0; j <= i; ++j) {
-      auto vid = matching_order_[j];
-      if (covers_[i][best_path[i]].cover_bits >> vid & 1) {
-        if (vid != matching_order_[i] && !(covers_[i - 1][best_path[i - 1]].cover_bits >> vid & 1)) {
-          // if the first vertex becomes key in the next subquery, make it as key initially
-          level_become_key.insert({vid, (i == 1) ? 0 : i});
-          DLOG(INFO) << "add " << vid << " to key at " << i;
-        }
-        if (vid == matching_order_[i]) {
-          level_become_key.insert({vid, i});
-          DLOG(INFO) << "add " << vid << " to key at " << i;
+    if (no_enumerate_key_ops) {
+      if (covers_[last][best_path[last]].cover_bits >> matching_order_[i] & 1) {
+        level_become_key.insert({matching_order_[i], i});
+      }
+    } else {
+      for (uint32_t j = 0; j <= i; ++j) {
+        auto vid = matching_order_[j];
+        if (covers_[i][best_path[i]].cover_bits >> vid & 1) {
+          if (vid != matching_order_[i] && !(covers_[i - 1][best_path[i - 1]].cover_bits >> vid & 1)) {
+            // if the first vertex becomes key in the next subquery, make it as key initially
+            level_become_key.insert({vid, (i == 1) ? 0 : i});
+            DLOG(INFO) << "add " << vid << " to key at " << i;
+          }
+          if (vid == matching_order_[i]) {
+            level_become_key.insert({vid, i});
+            DLOG(INFO) << "add " << vid << " to key at " << i;
+          }
         }
       }
     }

@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <array>
 #include <memory>
+#include <queue>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>

@@ -32,14 +32,19 @@ namespace circinus {
 
 template <typename G, bool intersect_candidates>
 class ExpandKeyToSetVertexOperator : public ExpandVertexOperator {
+ private:
+  bool have_existing_target_set_ = false;
+
  public:
   ExpandKeyToSetVertexOperator(const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
                                const unordered_map<QueryVertexID, uint32_t>& query_vertex_indices,
                                const std::vector<uint32_t>& same_label_key_indices,
                                const std::vector<uint32_t>& same_label_set_indices, uint64_t set_pruning_threshold,
-                               std::unique_ptr<SubgraphFilter>&& sfilter = nullptr)
+                               std::unique_ptr<SubgraphFilter>&& sfilter = nullptr,
+                               bool have_existing_target_set = false)
       : ExpandVertexOperator(parents, target_vertex, query_vertex_indices, same_label_key_indices,
-                             same_label_set_indices, set_pruning_threshold, std::move(sfilter)) {}
+                             same_label_set_indices, set_pruning_threshold, std::move(sfilter)),
+        have_existing_target_set_(have_existing_target_set) {}
 
   uint32_t expand(uint32_t batch_size, TraverseContext* ctx) const override {
     return expandInner<QueryType::Execute>(batch_size, ctx);
@@ -54,15 +59,19 @@ class ExpandKeyToSetVertexOperator : public ExpandVertexOperator {
     return expandInner<QueryType::ProfileWithMiniIntersection>(batch_size, ctx);
   }
 
+  inline void setHaveExistingTargetSet() { have_existing_target_set_ = true; }
+
+  bool extend_vertex() const override { return have_existing_target_set_ == false; }
+
   std::string toString() const override {
     std::stringstream ss;
-    ss << "ExpandKeyToSetVertexOperator";
+    ss << "ExpandKeyToSetVertexOperator " << (have_existing_target_set_ ? "with existing target set " : "");
     toStringInner(ss);
     return ss.str();
   }
 
   std::pair<uint32_t, uint32_t> getOutputSize(const std::pair<uint32_t, uint32_t>& input_key_size) const override {
-    return {input_key_size.first, input_key_size.second + 1};
+    return {input_key_size.first, input_key_size.second + (have_existing_target_set_ == false)};
   }
 
  protected:
@@ -70,8 +79,80 @@ class ExpandKeyToSetVertexOperator : public ExpandVertexOperator {
   inline uint32_t expandInner(uint32_t batch_size, TraverseContext* base_ctx) const {
     auto ctx = (ExpandVertexTraverseContext*)base_ctx;
     uint32_t output_num = 0;
+    // TODO(tatiana): tidy up
+    if (have_existing_target_set_) {
+      uint32_t target_vertex_index = query_vertex_indices_.at(target_vertex_);
+      for (; output_num < batch_size && ctx->hasNextInput(); ctx->nextInput()) {
+        const auto& input = ctx->getCurrentInput();
+        std::vector<VertexID> target_set;
+
+        using NeighborSet = typename G::NeighborSet;
+        std::vector<NeighborSet> neighbor_sets;
+        neighbor_sets.reserve(parent_indices_.size());
+
+        auto g = ctx->getDataGraph<G>();
+        for (uint32_t i = 0; i < parent_indices_.size(); ++i) {
+          DCHECK_LT(parent_indices_[i], input.getNumKeys());
+          uint32_t key_vid = input.getKeyVal(parent_indices_[i]);
+          neighbor_sets.push_back(g->getOutNeighborsWithHint(key_vid, target_label_, i));
+        }
+        std::sort(neighbor_sets.begin(), neighbor_sets.end(),
+                  [](const NeighborSet& a, const NeighborSet& b) { return a.size() < b.size(); });
+        if (neighbor_sets.front().size() == 0) continue;
+
+        intersect(*(input.getSet(target_vertex_index)), neighbor_sets.front(), &target_set);
+
+        uint32_t si_input_size = input.getSet(target_vertex_index)->size() + neighbor_sets[0].size();
+        (void)si_input_size;
+        if
+          constexpr(isProfileMode(profile)) { ctx->updateIntersectInfo(si_input_size, target_set.size()); }
+
+        {  // enforce partial order
+          filterTargets(&target_set, input);
+          if (target_set.empty()) {
+            continue;
+          }
+        }
+
+        for (uint32_t i = 1; i < parent_indices_.size(); ++i) {
+          auto si_input_size = target_set.size() + neighbor_sets[i].size();
+          (void)si_input_size;
+          intersectInplace(target_set, neighbor_sets[i], &target_set);
+          if
+            constexpr(isProfileMode(profile)) { ctx->updateIntersectInfo(si_input_size, target_set.size()); }
+
+          if (target_set.empty()) {
+            break;
+          }
+        }
+
+        if (!target_set.empty()) {
+          CompressedSubgraphs& output = ctx->copyOutput(input);
+#ifdef USE_FILTER
+          output.UpdateSets(target_vertex_index, newVertexSet(target_set));
+          if (filter(output)) {
+            ctx->popOutput();
+            continue;
+          }
+#else
+          if (target_set.size() == 1) {
+            unordered_set<uint32_t> pruning_set_indices(same_label_set_indices_.begin(), same_label_set_indices_.end());
+            if (output.pruneExistingSets(target_set.front(), pruning_set_indices, set_pruning_threshold_)) {
+              ctx->popOutput();
+              continue;
+            }
+          }
+          output.UpdateSets(target_vertex_index, newVertexSet(target_set));
+#endif
+          ++output_num;
+        }
+      }
+      return output_num;
+    }
+
     for (; output_num < batch_size && ctx->hasNextInput(); ctx->nextInput()) {
       const auto& input = ctx->getCurrentInput();
+
       VertexSet target_set;
       if (canReuseSet()) {
         target_set = input.getSet(reusable_set_index_);

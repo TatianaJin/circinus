@@ -30,7 +30,6 @@ namespace circinus {
 std::vector<LabelID> GraphBase::loadUndirectedGraphFromEdgeList(const std::string& path) {
   auto infile = openFile(path);
 
-  char line_type;
   // process line: t n_vertices n_edges
   std::string line;
   for (uint32_t i = 0; i < 4; ++i) {

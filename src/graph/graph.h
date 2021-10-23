@@ -19,12 +19,12 @@
 #include <utility>
 #include <vector>
 
+#include "./metis.h"
 #include "glog/logging.h"
 
 #include "graph/graph_base.h"
 #include "graph/types.h"
 #include "graph/vertex_set_view.h"
-#include "metis.h"
 #include "utils/hashmap.h"
 
 namespace circinus {
