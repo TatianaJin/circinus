@@ -17,7 +17,6 @@
 #include <algorithm>
 #include <array>
 #include <memory>
-#include <queue>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -276,6 +275,7 @@ EnumerateKeyExpandToSetOperator<G, intersect_candidates>::EnumerateKeyExpandToSe
   // get index mapping of enumerated key vertex indices and set vertex indices
   uint32_t n_input_keys = 0;
   for (auto& pair : input_query_vertex_indices) {
+    if (pair.first == target_vertex_) continue;
     if (cover_table_[pair.first] != 1) {
       auto new_pos = query_vertex_indices_.at(pair.first);
       set_old_to_new_pos_.emplace_back(pair.second, new_pos);

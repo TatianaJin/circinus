@@ -116,6 +116,9 @@ class ExpandIntoOperator : public TraverseOperator {
     return input_key_size;
   }
 
+  // nothing to be done for partial order
+  void setPartialOrder(const PartialOrder& po, const unordered_map<QueryVertexID, uint32_t>& seen_vertices) override {}
+
  protected:
   template <QueryType profile>
   inline uint32_t expandInner(uint32_t batch_size, TraverseContext* ctx) const {

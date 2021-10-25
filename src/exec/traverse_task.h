@@ -70,10 +70,7 @@ class TraverseChainTask : public TaskBase {
   double* suspend_interval_ = nullptr;
   uint32_t split_level_ = 0;
   uint32_t split_size_ = 1;
-  uint32_t split_batch_size_ = 32;
   std::vector<std::pair<uint32_t, std::vector<CompressedSubgraphs>>> splits_;
-
-  VertexID seed_data_vertex_ = INVALID_VERTEX_ID;
 
  public:
   // for online task with seed data vertex
@@ -88,20 +85,6 @@ class TraverseChainTask : public TaskBase {
         end_level_(operators_->size() - 1),
         inputs_(std::vector<CompressedSubgraphs>{CompressedSubgraphs(seed_data_vertex)}),
         input_size_(1) {}
-
-  // for online task with seed data vertex
-  TraverseChainTask(QueryId qid, TaskId tid, std::chrono::time_point<std::chrono::steady_clock> stop_time,
-                    uint32_t batch_size, const std::vector<Operator*>& ops, const GraphBase* graph,
-                    QueryType query_type, VertexID seed_data_vertex)
-      : TaskBase(qid, tid, stop_time),
-        graph_(graph),
-        batch_size_(batch_size),
-        operators_(&ops),
-        query_type_(query_type),
-        start_level_(0),
-        end_level_(operators_->size() - 1),
-        task_status_(TaskStatus::Normal),
-        seed_data_vertex_(seed_data_vertex) {}
 
   // for head task
   TraverseChainTask(QueryId qid, TaskId tid, std::chrono::time_point<std::chrono::steady_clock> stop_time,

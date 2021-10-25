@@ -241,6 +241,7 @@ uint64_t CompressedSubgraphs::getEnumerationCount(const std::vector<uint32_t>& s
     set_sizes.reserve(n_sets);
     for (auto index : set_indices) {
       set_sizes.push_back(countExcept(*getSet(index), except, max_except));
+      if (set_sizes.back() == 0) return 0;
       product *= set_sizes.back();
     }
     cnt = product;
@@ -249,7 +250,7 @@ uint64_t CompressedSubgraphs::getEnumerationCount(const std::vector<uint32_t>& s
         bool to_cache = (j + 1) < n_sets;
         auto size = getIntersectionSize(set_indices[i], set_indices[j], qv_equivalent_classes,
                                         to_cache ? &cache : nullptr, except);
-        size *= product / set_sizes[set_indices[i]] / set_sizes[set_indices[j]];
+        size *= product / set_sizes[i] / set_sizes[j];
         cnt -= size;
       }
     }

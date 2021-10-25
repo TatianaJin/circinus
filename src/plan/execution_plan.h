@@ -43,6 +43,7 @@ class ExecutionPlan {
   const GraphType graph_type_;
   const QueryGraph* query_graph_;
 
+  bool seperate_enumerate_ = FLAGS_seperate_enumeration;
   std::vector<Operator*> operators_;  // TODO(tatiana): use unique_ptr?
 
   /* matching order related */

@@ -51,7 +51,7 @@ class ExecutionPlanDriverBase : public PlanDriver {
   constexpr static float running_average_decay_ = 0.5;
   double running_average_enumerate_time_ = DEFAULT_SUSPEND_INTERVAL;
   double min_suspend_interval_ = DEFAULT_SUSPEND_INTERVAL;
-  double suspend_interval_ = DEFAULT_SUSPEND_INTERVAL;  // determined by average task enumerate time and min interval
+  double suspend_interval_ = 0;  // determined by average task enumerate time and min interval
   double* suspend_interval_ptr_ = nullptr;
   uint32_t max_parallelism_ = 1;
   uint32_t n_finished_task_instances_ = 0;

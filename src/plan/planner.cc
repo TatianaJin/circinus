@@ -546,10 +546,8 @@ BacktrackingPlan* Planner::generateExecutionPlan(const CandidateResult* result, 
     }
     case CompressionStrategy::Dynamic: {
       plan = planner->generatePlanWithDynamicCover(query_context_->data_graph, nullptr, qv_partial_order_.get());
-      // FIXME(tatiana)
-      // plan->setInputAreKeys(plan->isInCover(plan->getRootQueryVertexID()) &&
-      //                       (plan->getToKeyLevel(plan->getRootQueryVertexID()) == 0));
-      plan->setInputAreKeys(plan->isInCover(plan->getRootQueryVertexID()));
+      plan->setInputAreKeys(plan->isInCover(plan->getRootQueryVertexID()) &&
+                            (plan->getToKeyLevel(plan->getRootQueryVertexID()) == 0));
       break;
     }
     case CompressionStrategy::None: {

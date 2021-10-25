@@ -39,8 +39,8 @@ void TraverseChainTask::run(uint32_t executor_idx) {
   }
   // TODO(engineering): support match limit
   execute<QueryType::Execute>(inputs_, start_index_, input_size_, start_level_, executor_idx);
-  logTask(old_count, executor_idx);
   checkSplits();
+  logTask(old_count, executor_idx);
 }
 
 void TraverseChainTask::profile(uint32_t executor_idx) {
@@ -60,7 +60,6 @@ void TraverseChainTask::profile(uint32_t executor_idx) {
   }
   // TODO(engineering): support match limit
   execute<QueryType::Profile>(inputs_, start_index_, input_size_, start_level_, executor_idx);
-  logTask(old_count, executor_idx);
   if (task_status_ == TaskStatus::Normal) {
     DCHECK_LT(start_level_, operators_->size());
     DCHECK_LT(end_level_, operators_->size());
@@ -69,6 +68,7 @@ void TraverseChainTask::profile(uint32_t executor_idx) {
     }
     checkSplits();
   }
+  logTask(old_count, executor_idx);
 }
 
 void TraverseChainTask::logTask(uint64_t old_count, uint32_t executor_idx) {
@@ -78,20 +78,22 @@ void TraverseChainTask::logTask(uint64_t old_count, uint32_t executor_idx) {
       new_count = dynamic_cast<OutputOperator*>(operators_->back())->getOutput()->getCount(executor_idx);
     }
     auto end = std::chrono::steady_clock::now();
-    if (task_status_ == TaskStatus::Suspended) {
+    if (task_status_ == TaskStatus::Suspended || task_status_ == TaskStatus::Split) {
       LOG(INFO) << "Suspended Task " << task_id_ << " split " << split_level_ << " size " << splits_.size()
                 << " suspend " << suspended_level_ << '/' << (operators_->size() - 1)
                 << " time usage: " << toSeconds(start_time_, end) << "s. suspend interval "
                 << (suspend_interval_ == nullptr ? 0 : *suspend_interval_);
-    } else if (start_level_ == 0) {
-      LOG(INFO) << "Task " << task_id_ << " input " << inputs_.size() << '/'
-                << getNumSubgraphs(inputs_, 0, inputs_.size()) << " count " << (new_count - old_count) << " ("
-                << old_count << " to " << new_count << "), time usage: " << toSeconds(start_time_, end)
-                << "s. suspend interval " << (suspend_interval_ == nullptr ? 0 : *suspend_interval_);
-    } else {
-      LOG(INFO) << "Inherit Task " << task_id_ << ':' << start_level_ << " input " << inputs_.size() << " count "
-                << (new_count - old_count) << " (" << old_count << " to " << new_count
-                << "), time usage: " << toSeconds(start_time_, end) << "s.";
+    } else if (toSeconds(start_time_, end) > 1) {
+      if (start_level_ == 0) {
+        LOG(INFO) << "Task " << task_id_ << " input " << inputs_.size() << '/'
+                  << getNumSubgraphs(inputs_, 0, inputs_.size()) << " count " << (new_count - old_count) << " ("
+                  << old_count << " to " << new_count << "), time usage: " << toSeconds(start_time_, end)
+                  << "s. suspend interval " << (suspend_interval_ == nullptr ? 0 : *suspend_interval_);
+      } else {
+        LOG(INFO) << "Inherit Task " << task_id_ << ':' << start_level_ << " input " << inputs_.size() << " count "
+                  << (new_count - old_count) << " (" << old_count << " to " << new_count
+                  << "), time usage: " << toSeconds(start_time_, end) << "s.";
+      }
     }
   }
 }
@@ -102,6 +104,11 @@ bool TraverseChainTask::splitInput() {
     if (traverse_context_[0]->canSplitInput()) {
       auto[ptr, size] = traverse_context_[0]->splitInput();
       // LOG(INFO) << "Split start " << start_level_ << " size " << size << " interval " << suspend_interval_;
+      while (size > batch_size_) {
+        splits_.emplace_back(start_level_, std::vector<CompressedSubgraphs>(ptr, ptr + batch_size_));
+        ptr += batch_size_;
+        size -= batch_size_;
+      }
       splits_.emplace_back(start_level_, std::vector<CompressedSubgraphs>(ptr, ptr + size));
       if (splits_.size() == split_size_) {
         return true;
@@ -109,7 +116,7 @@ bool TraverseChainTask::splitInput() {
     }
     split_level_ = start_level_ + 1;
   }
-  auto split_max_level = std::min(suspended_level_, (uint32_t)operators_->size() - 2);
+  auto split_max_level = std::min(suspended_level_, (uint32_t)operators_->size() - 1);
   if (split_level_ == split_max_level) return !splits_.empty() && split_level_ >= operators_->size() - 2;
 
   if (traverse_context_[split_level_ - start_level_]->canSplitInput()) {
@@ -126,14 +133,17 @@ bool TraverseChainTask::splitInput() {
     auto ctx = traverse_context_[split_level_ - start_level_ - 1].get();
     auto original_buffer = ctx->getOutputs();
     std::vector<CompressedSubgraphs> temp_output_buffer = *original_buffer;
+    for (uint32_t i = 0; i < split_level_; ++i) {
+      temp_output_buffer.insert(temp_output_buffer.end(), original_buffer->begin(), original_buffer->end());
+    }
     auto original_size = ctx->getOutputSize();
     ctx->setOutputBuffer(temp_output_buffer, 0);
     auto traverse_op = dynamic_cast<TraverseOperator*>((*operators_)[split_level_ - 1]);
     uint32_t size = 0;
     if
-      constexpr(isProfileMode(mode)) size = traverse_op->expandAndProfile(batch_size_, ctx);
+      constexpr(isProfileMode(mode)) size = traverse_op->expandAndProfile(batch_size_ * (split_level_ + 1), ctx);
     else
-      size = traverse_op->expand(batch_size_, ctx);
+      size = traverse_op->expand(batch_size_ * (split_level_ + 1), ctx);
     ctx->setOutputBuffer(*original_buffer, original_size);
     if (size == 0) {
       ++split_level_;

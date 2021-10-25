@@ -315,14 +315,20 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
     op_input_subquery_cover_.emplace_back(i, input_cover_bits, false);
     if (i == 1) {  // the first edge: target has one and only one parent
       if (cover_table_[target_vertex] != 1 && !add_keys_at_level[i].empty()) {
-        auto op_pair = newExpandKeyToSetEnumerateKeyExpandToSetOperator(
-            key_parents, target_vertex, add_keys_at_level[i], input_query_vertex_indices, same_label_indices,
-            label_existing_vertices_map);
-        op_pair[0]->setNext(op_pair[1]);
-        prev = op_pair[1];
-        if (op_pair.size() == 3) {
-          op_pair[1]->setNext(op_pair[2]);
-          prev = op_pair[2];
+        if (seperate_enumerate_) {
+          auto op_pair = newExpandKeyToSetEnumerateKeyExpandToSetOperator(
+              key_parents, target_vertex, add_keys_at_level[i], input_query_vertex_indices, same_label_indices,
+              label_existing_vertices_map);
+          op_pair[0]->setNext(op_pair[1]);
+          prev = op_pair[1];
+          if (op_pair.size() == 3) {
+            op_pair[1]->setNext(op_pair[2]);
+            prev = op_pair[2];
+          }
+        } else {
+          prev = newEnumerateKeyExpandToSetOperator(key_parents, target_vertex, add_keys_at_level[i],
+                                                    input_query_vertex_indices, same_label_indices,
+                                                    label_existing_vertices_map);
         }
         add_keys_at_level[i].clear();
       } else if (cover_table_[target_vertex] != 1) {
@@ -365,16 +371,22 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
         }
       } else {  // target is in set, then  all parents should be in key, and key enumeration may be needed
         if (!add_keys_at_level[i].empty()) {  // key enumeration is needed
-          auto op_pair = newExpandKeyToSetEnumerateKeyExpandToSetOperator(
-              key_parents, target_vertex, add_keys_at_level[i], input_query_vertex_indices, same_label_indices,
-              label_existing_vertices_map);
-          prev->setNext(op_pair[0]);
-          prev = op_pair[0];
-          current = op_pair[1];
-          if (op_pair.size() == 3) {
-            prev->setNext(current);
-            prev = current;
-            current = op_pair[2];
+          if (seperate_enumerate_) {
+            auto op_pair = newExpandKeyToSetEnumerateKeyExpandToSetOperator(
+                key_parents, target_vertex, add_keys_at_level[i], input_query_vertex_indices, same_label_indices,
+                label_existing_vertices_map);
+            prev->setNext(op_pair[0]);
+            prev = op_pair[0];
+            current = op_pair[1];
+            if (op_pair.size() == 3) {
+              prev->setNext(current);
+              prev = current;
+              current = op_pair[2];
+            }
+          } else {
+            current = newEnumerateKeyExpandToSetOperator(key_parents, target_vertex, add_keys_at_level[i],
+                                                         input_query_vertex_indices, same_label_indices,
+                                                         label_existing_vertices_map);
           }
           add_keys_at_level[i].clear();
         } else if (key_parents.size() == 1) {

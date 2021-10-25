@@ -114,8 +114,8 @@ class GraphBase {
   }
 
   /** Use Fennel to compute graph partitions. Directly read partitions file.
-   * @param partitions_file_path.
-   * @returns The number of edge cuts among partitions.
+   * @param Partitions file path.
+   * @returns A vector storing the partition of each vertex.
    */
   std::vector<idx_t> getFennelParts(const std::string& path) {
     auto part_file = openFile(path);
@@ -127,7 +127,7 @@ class GraphBase {
       part_file >> v_part;
       parts[id] = v_part;
     }
-    return std::move(parts);
+    return parts;
   }
 
   virtual void clear() {

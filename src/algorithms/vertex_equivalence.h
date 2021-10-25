@@ -37,11 +37,13 @@ class VertexEquivalence {
 #endif
 
   const QueryGraph* q_ = nullptr;
+  PartialOrder* po_ = nullptr;
 
  public:
   VertexEquivalence(const QueryGraph& q, PartialOrder* po);
 
   inline const QueryGraph* getQueryGraph() const { return q_; }
+  inline const PartialOrder* getPartialOrder() const { return po_; }
 
   inline bool empty() const { return equivalent_pairs_.empty(); }
 

@@ -11,6 +11,7 @@
 
 #include "plan/vertex_relationship.h"
 
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -28,6 +29,7 @@ std::pair<QueryVertexID, std::vector<QueryVertexID>> VertexRelationship::findReu
   res.first = DUMMY_QUERY_VERTEX;
   std::vector<QueryVertexID>& uncovered_parent_vertices = res.second;
   auto q = qv_equivalence_->getQueryGraph();
+  auto po = qv_equivalence_->getPartialOrder();
 
   auto target_nbrs = q->getOutNeighbors(target);
   for (uint32_t i = 0; i < target_nbrs.second; ++i) {
@@ -35,13 +37,21 @@ std::pair<QueryVertexID, std::vector<QueryVertexID>> VertexRelationship::findReu
       uncovered_parent_vertices.push_back(target_nbrs.first[i]);
     }
   }
+  std::vector<QueryVertexID> enforced_target_constraints;
+  auto& target_constraints = po->po_constraint_adj[target];
+  for (uint32_t i = 0; i < target_constraints.size(); ++i) {
+    if (existing_vertices.count(target_constraints[i])) {
+      enforced_target_constraints.push_back(target_constraints[i]);
+    }
+  }
 
   // For now consider only equivalence but not containment
   for (QueryVertexID set_vertex : set_vertices) {
     if (q->getVertexLabel(set_vertex) != q->getVertexLabel(target)) continue;
+    bool is_equivalent = true;
+    // neighborhood equivalence
     auto set_nbrs = q->getOutNeighbors(set_vertex);
     uint32_t target_parent_index = 0;
-    bool is_equivalent = true;
     for (uint32_t i = 0; i < set_nbrs.second; ++i) {
       if (existing_vertices.count(set_nbrs.first[i])) {
         if (target_parent_index < uncovered_parent_vertices.size() &&
@@ -50,6 +60,22 @@ std::pair<QueryVertexID, std::vector<QueryVertexID>> VertexRelationship::findReu
         } else {
           is_equivalent = false;
           break;
+        }
+      }
+    }
+    // partial order constraint equivalence
+    if (is_equivalent) {
+      auto& set_constraints = po->po_constraint_adj[set_vertex];
+      uint32_t target_constraint_index = 0;
+      for (uint32_t i = 0; i < set_constraints.size(); ++i) {
+        if (existing_vertices.count(set_constraints[i])) {
+          if (target_constraint_index < enforced_target_constraints.size() &&
+              enforced_target_constraints[target_constraint_index] == set_constraints[i]) {
+            ++target_constraint_index;
+          } else {
+            is_equivalent = false;
+            break;
+          }
         }
       }
     }

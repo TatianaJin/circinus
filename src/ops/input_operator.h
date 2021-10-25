@@ -51,6 +51,7 @@ class InputOperator : public Operator {
     *output = getInputs(g, candidates);
     auto end = std::chrono::high_resolution_clock::now();
     info->total_time_in_milliseconds += toMilliseconds(start, end);
+    info->total_output_size += output->size();
   }
 
   std::string toString() const override {
@@ -61,7 +62,7 @@ class InputOperator : public Operator {
 
   std::string toProfileString(const ProfileInfo& info) const override {
     std::stringstream ss;
-    ss << toString() << ',' << info.total_time_in_milliseconds;
+    ss << toString() << ',' << info.total_time_in_milliseconds << ",," << info.total_output_size;
     return ss.str();
   }
 };

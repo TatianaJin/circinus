@@ -24,6 +24,8 @@ DECLARE_uint64(set_pruning_threshold);
 DECLARE_bool(label_filter);
 DECLARE_int32(candidate_set_intersection);
 
+DECLARE_bool(seperate_enumeration);
+
 // query optimization
 DECLARE_bool(intersection_count_coefficient);
 DECLARE_string(cost_learner);

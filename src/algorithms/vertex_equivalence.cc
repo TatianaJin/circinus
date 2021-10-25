@@ -22,7 +22,7 @@
 
 namespace circinus {
 
-VertexEquivalence::VertexEquivalence(const QueryGraph& q, PartialOrder* po) : q_(&q) {
+VertexEquivalence::VertexEquivalence(const QueryGraph& q, PartialOrder* po) : q_(&q), po_(po) {
   auto n_qvs = q.getNumVertices();
   for (QueryVertexID u1 = 0; u1 < n_qvs; ++u1) {  // find all equivalent to u1
     auto u1_nbrs = q.getOutNeighbors(u1);

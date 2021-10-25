@@ -130,8 +130,8 @@ class BacktrackingPlan {
     // set traverse operators
     for (uint32_t i = 0; i < op_size; ++i) {
       auto traverse_op = dynamic_cast<TraverseOperator*>(plan->getOperators()[i]);
+      traverse_op->setPartialOrder(po, seen_vertices);
       if (traverse_op->extend_vertex()) {
-        traverse_op->setPartialOrder(po, seen_vertices);
         seen_vertices.insert({traverse_op->getTargetQueryVertex(), seen_vertices.size()});
       }
     }
