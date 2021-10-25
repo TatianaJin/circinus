@@ -43,7 +43,6 @@ class TargetFilter {
   bool filter(VertexID target, const CompressedSubgraphs& group) const;
 
   // TODO(tatiana): filter CandidateSetView and return new range?
-
 };  // class TargetFilter
 
 }  // namespace circinus

@@ -19,6 +19,7 @@
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include "algorithms/intersect.h"
@@ -100,7 +101,7 @@ class ExpandVertexOperator : public TraverseOperator {
       neighbor_sets.push_back(data_graph->getOutNeighborsWithHint(key_vid, target_label_, i));
     }
     std::sort(neighbor_sets.begin(), neighbor_sets.end(),
-              [](const NeighborSet& a, const NeighborSet& b) { return a.size() <= b.size(); });
+              [](const NeighborSet& a, const NeighborSet& b) { return a.size() < b.size(); });
     if (neighbor_sets.front().size() == 0) return;
 
     bool intersect_candidates_first = intersect_candidates && (!isProfileCandidateSIEffect(profile)) &&

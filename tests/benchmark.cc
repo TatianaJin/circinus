@@ -18,6 +18,7 @@
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <sys/stat.h>
 #include <unordered_set>
 #include <vector>
 
@@ -283,6 +284,8 @@ int main(int argc, char** argv) {
   std::ostream* out;
   std::ofstream fstream;
   if (!FLAGS_output_file.empty()) {
+    FLAGS_profile_prefix = FLAGS_output_file + "_profile";
+    mkdir(FLAGS_profile_prefix.c_str(), 0777);
     fstream.open(FLAGS_output_file, std::ios::app);
     CHECK(fstream.is_open());
     out = &fstream;
