@@ -54,6 +54,14 @@ struct PartialOrder {
    * @returns A vector of constraints represented as {less_than flag, vertex index}. */
   std::vector<std::pair<bool, uint32_t>> getConstraintsForVertex(
       QueryVertexID v, const unordered_map<QueryVertexID, uint32_t>& seen_vertices) const;
+
+  std::vector<std::pair<bool, QueryVertexID>> getConstraintVerticesForVertex(
+      QueryVertexID v, const unordered_map<QueryVertexID, uint32_t>& seen_vertices) const;
+
+ private:
+  template <bool return_qv>
+  std::vector<std::pair<bool, std::conditional_t<return_qv, QueryVertexID, uint32_t>>> getConstraintsForVertexImpl(
+      QueryVertexID v, const unordered_map<QueryVertexID, uint32_t>& seen_vertices) const;
 };
 
 }  // namespace circinus

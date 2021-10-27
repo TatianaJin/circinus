@@ -698,6 +698,9 @@ std::vector<TraverseOperator*> ExecutionPlan::newExpandKeyToSetEnumerateKeyExpan
   // expand key to set
   TraverseOperator* key_to_set = nullptr;
   if (!existing_key_parent.empty()) {
+    for (auto v : keys_to_enumerate_set) {
+      cover_table_[v] = 0;
+    }
     // transformSameLabelIndices(same_label_indices, keys_to_enumerate_set, 1);
     if (existing_key_parent.size() == 1) {
       key_to_set = newExpandEdgeKeyToSetOperator(existing_key_parent.front(), target_vertex, same_label_indices,
@@ -707,6 +710,9 @@ std::vector<TraverseOperator*> ExecutionPlan::newExpandKeyToSetEnumerateKeyExpan
                                               input_query_vertex_indices);
     }
     ret.push_back(key_to_set);
+    for (auto v : keys_to_enumerate_set) {
+      cover_table_[v] = 1;
+    }
   } else {
     input_query_vertex_indices.erase(target_vertex);
     query_vertex_indices_.erase(target_vertex);

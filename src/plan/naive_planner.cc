@@ -421,6 +421,21 @@ double NaivePlanner::estimateExpandCost(const GraphBase* data_graph,
                                         std::vector<unordered_map<uint64_t, double>>& car,
                                         const unordered_set<QueryVertexID>& existing_vertices, uint32_t level,
                                         uint32_t idx, uint32_t parent) {
+  auto parent_cover_bits = covers_[level - 1][parent].cover_bits;
+  auto target_vertex = matching_order_[level];
+
+  // consider case of reusable sets
+  std::vector<QueryVertexID> set_vertices;
+  for (uint32_t i = 0; i < level; ++i) {
+    if ((parent_cover_bits >> matching_order_[i] & 1) == 0) {
+      set_vertices.push_back(matching_order_[i]);
+    }
+  }
+  if (vertex_relationship_->findReusableSet(target_vertex, set_vertices, existing_vertices).first !=
+      DUMMY_QUERY_VERTEX) {
+    return 0;
+  }
+
   if (candidate_views == nullptr) {  // update the estimation of computation for set to key / expand into
     if (FLAGS_intersection_count_coefficient) {
       return intersectionCountCoeff(candidate_cardinality_, existing_vertices, level, idx, parent);
@@ -430,8 +445,6 @@ double NaivePlanner::estimateExpandCost(const GraphBase* data_graph,
   }
 
   auto cover_bits = covers_[level][idx].cover_bits;
-  auto parent_cover_bits = covers_[level - 1][parent].cover_bits;
-  auto target_vertex = matching_order_[level];
   bool target_in_cover = cover_bits >> target_vertex & 1;
   uint32_t key_parent_cnt = 0, set_parent_cnt = 0;
 
@@ -705,7 +718,7 @@ std::pair<unordered_map<QueryVertexID, uint32_t>, std::vector<double>> NaivePlan
   last = covers_.size() - 1;
 
   std::reverse(best_path.begin(), best_path.end());
-  bool no_enumerate_key_ops = false;
+  constexpr bool no_enumerate_key_ops = false;  // for debug
   for (uint32_t i = 0; i < matching_order_.size(); ++i) {
     if (no_enumerate_key_ops) {
       if (covers_[last][best_path[last]].cover_bits >> matching_order_[i] & 1) {
@@ -760,8 +773,6 @@ const std::vector<QueryVertexID>& NaivePlanner::generateOrder(const GraphBase* d
       matching_order_ = *use_order;
     }
   }
-  // matching_order_ = {0, 1, 3, 4, 2, 7, 5, 6};
-  // matching_order_ = {2, 7, 5, 6, 0, 3, 1, 4};
 
   if (!matching_order_.empty()) {
     ordered_query_graph_ = *query_graph_;

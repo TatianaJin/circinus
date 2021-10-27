@@ -20,6 +20,7 @@
 #include "glog/logging.h"
 
 #include "algorithms/intersect.h"
+#include "utils/utils.h"
 
 namespace circinus {
 
@@ -241,7 +242,11 @@ uint64_t CompressedSubgraphs::getEnumerationCount(const std::vector<uint32_t>& s
     set_sizes.reserve(n_sets);
     for (auto index : set_indices) {
       set_sizes.push_back(countExcept(*getSet(index), except, max_except));
-      if (set_sizes.back() == 0) return 0;
+      if (set_sizes.back() == 0) {
+        LOG(WARNING) << "set index " << index << " size " << getSet(index)->size() << " n_exceptions " << except.size()
+                     << " front " << getSet(index)->front() << circinus::toString(keys_);
+        return 0;
+      }
       product *= set_sizes.back();
     }
     cnt = product;

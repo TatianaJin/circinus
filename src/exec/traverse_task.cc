@@ -132,8 +132,10 @@ bool TraverseChainTask::splitInput() {
   while (split_level_ < split_max_level && splits_.size() < split_size_) {
     auto ctx = traverse_context_[split_level_ - start_level_ - 1].get();
     auto original_buffer = ctx->getOutputs();
-    std::vector<CompressedSubgraphs> temp_output_buffer = *original_buffer;
-    for (uint32_t i = 0; i < split_level_; ++i) {
+    std::vector<CompressedSubgraphs> temp_output_buffer;
+    auto split_batch_size = (1u << split_level_) * batch_size_;
+    temp_output_buffer.reserve(split_batch_size);
+    for (uint32_t i = 0; i < (1u << split_level_); ++i) {
       temp_output_buffer.insert(temp_output_buffer.end(), original_buffer->begin(), original_buffer->end());
     }
     auto original_size = ctx->getOutputSize();
@@ -141,9 +143,9 @@ bool TraverseChainTask::splitInput() {
     auto traverse_op = dynamic_cast<TraverseOperator*>((*operators_)[split_level_ - 1]);
     uint32_t size = 0;
     if
-      constexpr(isProfileMode(mode)) size = traverse_op->expandAndProfile(batch_size_ * (split_level_ + 1), ctx);
+      constexpr(isProfileMode(mode)) size = traverse_op->expandAndProfile(split_batch_size, ctx);
     else
-      size = traverse_op->expand(batch_size_ * (split_level_ + 1), ctx);
+      size = traverse_op->expand(split_batch_size, ctx);
     ctx->setOutputBuffer(*original_buffer, original_size);
     if (size == 0) {
       ++split_level_;

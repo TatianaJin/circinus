@@ -308,11 +308,11 @@ class CompressedSubgraphs {
     return keys_[key_idx];
   }
 
-  const std::vector<VertexID>& getKeys() const { return keys_; }
+  inline const std::vector<VertexID>& getKeys() const { return keys_; }
 
-  std::vector<VertexID>& getKeys() { return keys_; }
+  inline std::vector<VertexID>& getKeys() { return keys_; }
 
-  unordered_set<VertexID> getKeyMap() const { return unordered_set<VertexID>(keys_.begin(), keys_.end()); }
+  inline unordered_set<VertexID> getKeyMap() const { return unordered_set<VertexID>(keys_.begin(), keys_.end()); }
 
   // exceptions include keys and single-element sets with the same label
   inline void getExceptions(unordered_set<VertexID>& exception, const std::vector<uint32_t>& exception_key_indices,

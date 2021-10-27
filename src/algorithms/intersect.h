@@ -117,6 +117,12 @@ template <typename Set, typename V = VertexID>
 inline void intersect(const unordered_set<V>& set1, const Set& set2, std::vector<V>* intersection,
                       const unordered_set<V>& except = {}) {
   intersection->reserve(std::min((size_t)set2.size(), set1.size()));
+  if (except.empty()) {
+    for (auto vid : set2) {
+      if (set1.count(vid)) intersection->emplace_back(vid);
+    }
+    return;
+  }
   for (auto vid : set2) {
     if (set1.count(vid) && except.count(vid) == 0) intersection->emplace_back(vid);
   }

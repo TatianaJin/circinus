@@ -133,10 +133,22 @@ bool PartialOrder::checkEnforcePlan(const EnforcePlan& plan) const {
 
 std::vector<std::pair<bool, uint32_t>> PartialOrder::getConstraintsForVertex(
     QueryVertexID v, const unordered_map<QueryVertexID, uint32_t>& seen_vertices) const {
+  return getConstraintsForVertexImpl<false>(v, seen_vertices);
+}
+
+std::vector<std::pair<bool, QueryVertexID>> PartialOrder::getConstraintVerticesForVertex(
+    QueryVertexID v, const unordered_map<QueryVertexID, uint32_t>& seen_vertices) const {
+  return getConstraintsForVertexImpl<true>(v, seen_vertices);
+}
+
+template <bool return_qv>
+std::vector<std::pair<bool, std::conditional_t<return_qv, QueryVertexID, uint32_t>>>
+PartialOrder::getConstraintsForVertexImpl(QueryVertexID v,
+                                          const unordered_map<QueryVertexID, uint32_t>& seen_vertices) const {
   auto pos = constraints.find(v);
   if (pos == constraints.end()) return {};
 
-  std::vector<std::pair<bool, uint32_t>> res;
+  std::vector<std::pair<bool, std::conditional_t<return_qv, QueryVertexID, uint32_t>>> res;
   auto & [ smaller_vs, larger_vs ] = pos->second;
   // handle vertices smaller than v
   std::vector<QueryVertexID> relevant_vs;
@@ -158,6 +170,11 @@ std::vector<std::pair<bool, uint32_t>> PartialOrder::getConstraintsForVertex(
         }
       }
       if (uncovered) {
+        if
+          constexpr(return_qv) {
+            res.emplace_back(false, relevant_vs[i]);
+            continue;
+          }
         res.emplace_back(false, seen_vertices.at(relevant_vs[i]));
       }
     }
@@ -183,6 +200,11 @@ std::vector<std::pair<bool, uint32_t>> PartialOrder::getConstraintsForVertex(
         }
       }
       if (uncovered) {
+        if
+          constexpr(return_qv) {
+            res.emplace_back(true, relevant_vs[i]);
+            continue;
+          }
         res.emplace_back(true, seen_vertices.at(relevant_vs[i]));
       }
     }

@@ -192,6 +192,7 @@ class ExpandIntoOperator : public TraverseOperator {
 #endif
       // TODO(tatiana): consider sorting of parents in ascending order of set size, for better pruning?
       uint32_t parent_idx = 0;
+      auto exceptions = input.getKeyMap();
       for (QueryVertexID vid : parents_) {
         std::vector<VertexID> new_set;
         uint32_t id = query_vertex_indices_.at(vid);
@@ -200,7 +201,7 @@ class ExpandIntoOperator : public TraverseOperator {
             key_neighbors = graph->getInNeighborsWithHint(key_vertex_id, parent_labels_[parent_idx], parent_idx);
           }
         DCHECK(input.getSet(id).get() != nullptr) << vid << " " << id;
-        intersect(*(input.getSet(id)), key_neighbors, &new_set);
+        intersect(*(input.getSet(id)), key_neighbors, &new_set, exceptions);
         if
           constexpr(isProfileMode(profile)) {
             ctx->updateIntersectInfo(input.getSet(id)->size() + key_neighbors.size(), new_set.size());

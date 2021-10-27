@@ -63,14 +63,16 @@ std::pair<QueryVertexID, std::vector<QueryVertexID>> VertexRelationship::findReu
         }
       }
     }
+    DLOG(INFO) << "neighborhood share prefix " << target << " and " << set_vertex << " by " << target_parent_index;
     // partial order constraint equivalence
+    uint32_t target_constraint_index = 0;
     if (is_equivalent) {
       auto& set_constraints = po->po_constraint_adj[set_vertex];
-      uint32_t target_constraint_index = 0;
       for (uint32_t i = 0; i < set_constraints.size(); ++i) {
         if (existing_vertices.count(set_constraints[i])) {
           if (target_constraint_index < enforced_target_constraints.size() &&
-              enforced_target_constraints[target_constraint_index] == set_constraints[i]) {
+              (enforced_target_constraints[target_constraint_index] == set_constraints[i] ||
+               enforced_target_constraints[target_constraint_index] == set_vertex)) {
             ++target_constraint_index;
           } else {
             is_equivalent = false;
@@ -81,7 +83,8 @@ std::pair<QueryVertexID, std::vector<QueryVertexID>> VertexRelationship::findReu
     }
     // if not check target_parent_index == uncovered_parent_vertices.size(),
     // target neighbors can be a superset of reusable set neighbors
-    if (is_equivalent && target_parent_index == uncovered_parent_vertices.size()) {
+    if (is_equivalent && target_parent_index == uncovered_parent_vertices.size() &&
+        target_constraint_index == enforced_target_constraints.size()) {
       res.first = set_vertex;
       uncovered_parent_vertices.clear();
       if (verbosePlannerLog()) {

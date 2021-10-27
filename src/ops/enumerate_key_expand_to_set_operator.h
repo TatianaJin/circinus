@@ -195,6 +195,7 @@ class EnumerateKeyExpandToSetOperator : public ExpandVertexOperator {
   void setPartialOrder(const PartialOrder& po, const unordered_map<QueryVertexID, uint32_t>& seen_vertices) override {
     // set constraints related to targets
     TraverseOperator::setPartialOrder(po, seen_vertices);
+    // TODO(tatiana): filter target according partial order as soon as applicable
     // set constraints related to keys to enumerate
     auto n_keys = keys_to_enumerate_.size();
     if (n_keys > 1) {
@@ -374,9 +375,9 @@ uint32_t EnumerateKeyExpandToSetOperator<G, intersect_candidates>::expandInner(u
             degreeFilter(neighbors, target_degree_, g, &ctx->target_sets[enumerate_key_depth + 1],
                          ctx->existing_vertices);
           }
-          if (!ctx->target_sets[enumerate_key_depth + 1].empty()) {
-            filterTargets(&ctx->target_sets[enumerate_key_depth + 1], input);
-          }
+          // if (!ctx->target_sets[enumerate_key_depth + 1].empty()) {
+          //  filterTargets(&ctx->target_sets[enumerate_key_depth + 1], input);
+          //}
         } else {
           intersect(ctx->target_sets[enumerate_key_depth], neighbors, &ctx->target_sets[enumerate_key_depth + 1],
                     ctx->existing_vertices);
@@ -416,6 +417,12 @@ uint32_t EnumerateKeyExpandToSetOperator<G, intersect_candidates>::expandInner(u
           }
           if (skip) {
             target_set.clear();
+            ctx->popOutput();
+            ctx->nextKeyToEnumerate(enumerate_key_depth);
+            continue;
+          }
+          filterTargets(&target_set, output);
+          if (target_set.empty()) {
             ctx->popOutput();
             ctx->nextKeyToEnumerate(enumerate_key_depth);
             continue;
@@ -522,9 +529,9 @@ bool EnumerateKeyExpandToSetOperator<G, intersect_candidates>::expandInner(
   }
   target_set = ctx->getIntersectionCache(i - 1);
   removeExceptions(&target_set, ctx->existing_vertices);
-  if (!target_set.empty()) {
-    filterTargets(&target_set, input);
-  }
+// if (!target_set.empty()) {
+//  filterTargets(&target_set, input);
+//}
 #else
   if (existing_key_parent_indices_.size() == 1) {
     uint32_t key_vid = input.getKeyVal(existing_key_parent_indices_[0]);
@@ -545,9 +552,9 @@ bool EnumerateKeyExpandToSetOperator<G, intersect_candidates>::expandInner(
     } else {
       degreeFilter(neighbors, target_degree_, ctx->getDataGraph<G>(), &target_set, ctx->existing_vertices);
     }
-    if (!target_set.empty()) {
-      filterTargets(&target_set, input);
-    }
+    // if (!target_set.empty()) {
+    //  filterTargets(&target_set, input);
+    //}
   } else {
     expandFromParents<G, profile, intersect_candidates>(
         input, ctx->getDataGraph<G>(), ctx, existing_key_parent_indices_, ctx->existing_vertices, &target_set);
