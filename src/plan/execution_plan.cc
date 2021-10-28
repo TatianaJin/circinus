@@ -136,6 +136,10 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
               current = newExpandKeyKeyVertexOperator(key_parents, target_vertex, same_label_v_indices);
             }
             if (reusable_to_be_set) {
+              // remove set parents
+              uncovered_parents.erase(std::remove_if(uncovered_parents.begin(), uncovered_parents.end(),
+                                                     [this](QueryVertexID v) { return !isInCover(v); }),
+                                      uncovered_parents.end());
               ((TraverseOperator*)current)->reuseSetForTarget(reusable_set_index, uncovered_parents);
               reusable_to_be_set = false;
             }
@@ -350,6 +354,10 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
             current = newExpandKeyKeyVertexOperator(key_parents, target_vertex, same_label_indices);
           }
           if (reusable_to_be_set) {
+            // remove set parents
+            uncovered_parents.erase(std::remove_if(uncovered_parents.begin(), uncovered_parents.end(),
+                                                   [this](QueryVertexID v) { return !isInCover(v); }),
+                                    uncovered_parents.end());
             ((TraverseOperator*)current)->reuseSetForTarget(reusable_set_index, uncovered_parents);
             reusable_to_be_set = false;
           }

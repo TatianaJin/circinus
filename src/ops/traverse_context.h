@@ -44,7 +44,10 @@ class TraverseContext : public ProfileInfo {
 
   virtual std::unique_ptr<TraverseContext> clone() const = 0;
 
-  inline const CompressedSubgraphs& getCurrentInput() const { return (*current_inputs_)[input_index_]; }
+  inline const CompressedSubgraphs& getCurrentInput() const {
+    DCHECK_LT(input_index_, current_inputs_->size());
+    return (*current_inputs_)[input_index_];
+  }
   inline const CompressedSubgraphs& getPreviousInput() const { return (*current_inputs_)[input_index_ - 1]; }
   inline bool hasNextInput() const { return input_index_ < input_end_index_; }
   inline uint32_t getInputIndex() const { return input_index_; }

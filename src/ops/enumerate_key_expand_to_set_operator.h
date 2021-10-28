@@ -137,6 +137,8 @@ class EnumerateKeyExpandToSetOperator : public ExpandVertexOperator {
   std::vector<int> enumerated_key_pruning_indices_;  // i, the indices of sets to be pruned by the i-th enumerated key
   std::vector<std::vector<uint32_t>> po_constraint_adj_;  // i: the indices of smaller keys of the i-th key to enumerate
 
+  std::vector<std::pair<uint32_t, uint32_t>> uncovered_parent_indices_;  // parent key index, parent index
+
  public:
   EnumerateKeyExpandToSetOperator(const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
                                   const unordered_map<QueryVertexID, uint32_t>& input_query_vertex_indices,
@@ -223,6 +225,24 @@ class EnumerateKeyExpandToSetOperator : public ExpandVertexOperator {
         LOG(INFO) << "enumerated key constraints " << ss.str();
       }
     }
+  }
+
+  void reuseSetForTarget(uint32_t set_index, const std::vector<QueryVertexID>& uncovered_parents) override {
+    unordered_set<QueryVertexID> keys_to_enumerate_set(keys_to_enumerate_.begin(), keys_to_enumerate_.end());
+    uncovered_parent_indices_.reserve(uncovered_parents.size());
+    unordered_map<QueryVertexID, uint32_t> parent_index;
+    for (auto parent : existing_key_parent_indices_) {
+      parent_index.emplace(parent, parent_index.size());
+    }
+    for (auto parent : uncovered_parents) {
+      if (keys_to_enumerate_set.count(parent)) continue;
+      auto parent_key_index = query_vertex_indices_.at(parent);
+      uncovered_parent_indices_.emplace_back(parent_key_index, parent_index.at(parent_key_index));
+    }
+    if (!uncovered_parent_indices_.empty()) {
+      LOG(FATAL) << "unhandled case";
+    }
+    reusable_set_index_ = set_index;
   }
 
  private:
@@ -492,6 +512,13 @@ bool EnumerateKeyExpandToSetOperator<G, intersect_candidates>::expandInner(
     return intersect_candidates && ctx->getCandidateSet()->empty();
   }
 
+  if (canReuseSet()) {
+    CHECK(uncovered_parent_indices_.empty()) << "uncovered_parent_indices_ " << uncovered_parent_indices_.size();
+    auto& set = input.getSet(reusable_set_index_);
+    target_set.insert(target_set.end(), set->begin(), set->end());
+    return target_set.empty();
+  }
+
 #ifdef INTERSECTION_CACHE
   uint32_t i = 0;
   // lookup cache
@@ -556,7 +583,7 @@ bool EnumerateKeyExpandToSetOperator<G, intersect_candidates>::expandInner(
     //  filterTargets(&target_set, input);
     //}
   } else {
-    expandFromParents<G, profile, intersect_candidates>(
+    expandFromParents<G, profile, intersect_candidates, false>(
         input, ctx->getDataGraph<G>(), ctx, existing_key_parent_indices_, ctx->existing_vertices, &target_set);
     if
       constexpr(isProfileWithMiniIntersectionMode(profile)) {

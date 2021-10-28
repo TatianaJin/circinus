@@ -236,7 +236,8 @@ class TraverseOperator : public Operator {
   }
 
   virtual void reuseSetForTarget(uint32_t set_index, const std::vector<QueryVertexID>& uncovered_parents) {
-    CHECK(uncovered_parents.empty()) << "override reuseSetForTarget to handle cases with uncovered_parents";
+    CHECK(uncovered_parents.empty()) << "override reuseSetForTarget to handle cases with uncovered_parents "
+                                     << toString();
     reusable_set_index_ = set_index;
   }
 

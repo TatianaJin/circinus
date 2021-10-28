@@ -27,68 +27,77 @@ std::pair<QueryVertexID, std::vector<QueryVertexID>> VertexRelationship::findReu
   DLOG(INFO) << "findReusableSet for " << target << " among [" << toString(set_vertices) << " ]";
   std::pair<QueryVertexID, std::vector<QueryVertexID>> res;
   res.first = DUMMY_QUERY_VERTEX;
-  std::vector<QueryVertexID>& uncovered_parent_vertices = res.second;
   auto q = qv_equivalence_->getQueryGraph();
   auto po = qv_equivalence_->getPartialOrder();
 
+  unordered_set<QueryVertexID> uncovered_parent_vertices;
   auto target_nbrs = q->getOutNeighbors(target);
   for (uint32_t i = 0; i < target_nbrs.second; ++i) {
     if (existing_vertices.count(target_nbrs.first[i])) {
-      uncovered_parent_vertices.push_back(target_nbrs.first[i]);
+      uncovered_parent_vertices.insert(target_nbrs.first[i]);
     }
   }
-  std::vector<QueryVertexID> enforced_target_constraints;
+  unordered_set<QueryVertexID> enforced_target_constraints;
   auto& target_constraints = po->po_constraint_adj[target];
   for (uint32_t i = 0; i < target_constraints.size(); ++i) {
     if (existing_vertices.count(target_constraints[i])) {
-      enforced_target_constraints.push_back(target_constraints[i]);
+      enforced_target_constraints.insert(target_constraints[i]);
     }
   }
+  auto larger_than_target = po->constraints.find(target);
 
-  // For now consider only equivalence but not containment
   for (QueryVertexID set_vertex : set_vertices) {
     if (q->getVertexLabel(set_vertex) != q->getVertexLabel(target)) continue;
-    bool is_equivalent = true;
+    bool is_reusable = true;
+    DLOG(INFO) << "check neighbor of " << target << " and " << set_vertex;
     // neighborhood equivalence
     auto set_nbrs = q->getOutNeighbors(set_vertex);
-    uint32_t target_parent_index = 0;
+    if (set_nbrs.second > target_nbrs.second) continue;  // the degree filter of set_vertex will make it unusable
+    auto uncovered = uncovered_parent_vertices;
     for (uint32_t i = 0; i < set_nbrs.second; ++i) {
       if (existing_vertices.count(set_nbrs.first[i])) {
-        if (target_parent_index < uncovered_parent_vertices.size() &&
-            uncovered_parent_vertices[target_parent_index] == set_nbrs.first[i]) {
-          ++target_parent_index;
+        auto pos = uncovered.find(set_nbrs.first[i]);
+        if (pos != uncovered.end()) {
+          uncovered.erase(pos);
         } else {
-          is_equivalent = false;
+          is_reusable = false;
           break;
         }
       }
     }
-    DLOG(INFO) << "neighborhood share prefix " << target << " and " << set_vertex << " by " << target_parent_index;
+    if (uncovered.size() == uncovered_parent_vertices.size()) continue;
+    if (!is_reusable) continue;
+
+    DLOG(INFO) << "check po gt of " << target << " and " << set_vertex;
     // partial order constraint equivalence
-    uint32_t target_constraint_index = 0;
-    if (is_equivalent) {
-      auto& set_constraints = po->po_constraint_adj[set_vertex];
-      for (uint32_t i = 0; i < set_constraints.size(); ++i) {
-        if (existing_vertices.count(set_constraints[i])) {
-          if (target_constraint_index < enforced_target_constraints.size() &&
-              (enforced_target_constraints[target_constraint_index] == set_constraints[i] ||
-               enforced_target_constraints[target_constraint_index] == set_vertex)) {
-            ++target_constraint_index;
-          } else {
-            is_equivalent = false;
-            break;
-          }
+    auto& set_constraints = po->po_constraint_adj[set_vertex];
+    for (uint32_t i = 0; i < set_constraints.size(); ++i) {
+      if (existing_vertices.count(set_constraints[i]) && enforced_target_constraints.count(set_constraints[i]) == 0) {
+        is_reusable = false;
+        break;
+      }
+    }
+    if (!is_reusable) continue;
+    DLOG(INFO) << "check po lt of " << target << " and " << set_vertex;
+    auto larger_than_set = po->constraints.find(set_vertex);
+    if (larger_than_set != po->constraints.end()) {
+      for (auto cond : larger_than_set->second.second) {
+        if (existing_vertices.count(cond) == 0) continue;
+        if (larger_than_target == po->constraints.end() || larger_than_target->second.second.count(cond) == 0) {
+          is_reusable = false;
+          break;
         }
       }
     }
+
     // if not check target_parent_index == uncovered_parent_vertices.size(),
     // target neighbors can be a superset of reusable set neighbors
-    if (is_equivalent && target_parent_index == uncovered_parent_vertices.size() &&
-        target_constraint_index == enforced_target_constraints.size()) {
+    if (is_reusable) {
       res.first = set_vertex;
-      uncovered_parent_vertices.clear();
+      res.second.insert(res.second.end(), uncovered.begin(), uncovered.end());
       if (verbosePlannerLog()) {
-        LOG(INFO) << "target " << target << " reusable set vertex " << set_vertex;
+        LOG(INFO) << "target " << target << " reusable set vertex " << set_vertex << " uncovered parents "
+                  << toString(res.second);
       }
       return res;
     }

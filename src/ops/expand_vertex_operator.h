@@ -88,25 +88,19 @@ class ExpandVertexOperator : public TraverseOperator {
     return ret;
   }
 
-  template <typename G, QueryType profile, bool intersect_candidates>
-  void expandFromParents(const CompressedSubgraphs& input, const G* data_graph, ExpandVertexTraverseContext* ctx,
-                         const std::vector<uint32_t>& parent_indices, const unordered_set<VertexID>& exceptions,
-                         std::vector<VertexID>* targets) const {
+  template <typename G, QueryType profile, bool intersect_candidates, bool po = true>
+  void expandBySets(const CompressedSubgraphs& input, const G* data_graph, ExpandVertexTraverseContext* ctx,
+                    std::vector<typename G::NeighborSet>& neighbor_sets, const unordered_set<VertexID>& exceptions,
+                    std::vector<VertexID>* targets) const {
     using NeighborSet = typename G::NeighborSet;
-    std::vector<NeighborSet> neighbor_sets;
-    neighbor_sets.reserve(parent_indices.size());
-    for (uint32_t i = 0; i < parent_indices.size(); ++i) {
-      DCHECK_LT(parent_indices[i], input.getNumKeys());
-      uint32_t key_vid = input.getKeyVal(parent_indices[i]);
-      neighbor_sets.push_back(data_graph->getOutNeighborsWithHint(key_vid, target_label_, i));
-    }
     std::sort(neighbor_sets.begin(), neighbor_sets.end(),
               [](const NeighborSet& a, const NeighborSet& b) { return a.size() < b.size(); });
     if (neighbor_sets.front().size() == 0) return;
-    {  // enforce partial order
-      filterTargets(neighbor_sets.front(), input);
-      if (neighbor_sets.front().size() == 0) return;
-    }
+    if
+      constexpr(po) {  // enforce partial order
+        filterTargets(neighbor_sets.front(), input);
+        if (neighbor_sets.front().size() == 0) return;
+      }
     bool intersect_candidates_first = intersect_candidates && (!isProfileCandidateSIEffect(profile)) &&
                                       ctx->getCandidateSet()->size() <= neighbor_sets.front().size();
     uint32_t loop_idx = 2;
@@ -124,7 +118,7 @@ class ExpandVertexOperator : public TraverseOperator {
     if (targets->empty()) {
       return;
     }
-    for (uint32_t i = loop_idx; i < parent_indices.size(); ++i) {
+    for (uint32_t i = loop_idx; i < neighbor_sets.size(); ++i) {
       auto si_input_size = targets->size() + neighbor_sets[i].size();
       (void)si_input_size;
       intersectInplace(*targets, neighbor_sets[i], targets);
@@ -146,6 +140,22 @@ class ExpandVertexOperator : public TraverseOperator {
     } else if (!intersect_candidates) {
       degreeFilter(targets, target_degree_, data_graph);
     }
+  }
+
+  template <typename G, QueryType profile, bool intersect_candidates, bool po = true>
+  void expandFromParents(const CompressedSubgraphs& input, const G* data_graph, ExpandVertexTraverseContext* ctx,
+                         const std::vector<uint32_t>& parent_indices, const unordered_set<VertexID>& exceptions,
+                         std::vector<VertexID>* targets) const {
+    using NeighborSet = typename G::NeighborSet;
+    std::vector<NeighborSet> neighbor_sets;
+    neighbor_sets.reserve(parent_indices.size());
+    for (uint32_t i = 0; i < parent_indices.size(); ++i) {
+      DCHECK_LT(parent_indices[i], input.getNumKeys());
+      uint32_t key_vid = input.getKeyVal(parent_indices[i]);
+      neighbor_sets.push_back(data_graph->getOutNeighborsWithHint(key_vid, target_label_, i));
+    }
+    return expandBySets<G, profile, intersect_candidates, po>(input, data_graph, ctx, neighbor_sets, exceptions,
+                                                              targets);
   }
 
  protected:

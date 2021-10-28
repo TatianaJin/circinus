@@ -195,8 +195,8 @@ class TargetBuffer {
   inline void nextTarget() { ++current_target_index_; }
 
   inline void setTargetView(const SingleRangeVertexSetView& view) {
-    targets_view_ = view;
     resetTargets();
+    targets_view_ = view;
   }
 
   inline void resetTargetView() {

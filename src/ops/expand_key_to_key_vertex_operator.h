@@ -43,6 +43,8 @@ class ExpandKeyToKeyVertexTraverseContext : public ExpandVertexTraverseContext, 
 
 template <typename G, bool intersect_candidates>
 class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
+  std::vector<std::pair<uint32_t, uint32_t>> uncovered_parent_indices_;  // parent key index, parent index
+
  public:
   ExpandKeyToKeyVertexOperator(const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
                                const unordered_map<QueryVertexID, uint32_t>& query_vertex_indices,
@@ -92,6 +94,19 @@ class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
     return ret;
   }
 
+  void reuseSetForTarget(uint32_t set_index, const std::vector<QueryVertexID>& uncovered_parents) override {
+    uncovered_parent_indices_.reserve(uncovered_parents.size());
+    unordered_map<QueryVertexID, uint32_t> parent_index;
+    for (auto parent : parents_) {
+      parent_index.emplace(parent, parent_index.size());
+    }
+    for (auto parent : uncovered_parents) {
+      DCHECK(parent_index.count(parent)) << parent << " not in " << circinus::toString(parents_);
+      uncovered_parent_indices_.emplace_back(query_vertex_indices_.at(parent), parent_index.at(parent));
+    }
+    reusable_set_index_ = set_index;
+  }
+
  protected:
   template <QueryType profile>
   inline uint32_t expandInner(uint32_t batch_size, ExpandKeyToKeyVertexTraverseContext* ctx) const {
@@ -127,7 +142,30 @@ class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
       // consume the next input
       const auto& input = ctx->getCurrentInput();
       if (canReuseSet()) {
-        ctx->setTargetView(*input.getSet(reusable_set_index_));
+        if (uncovered_parent_indices_.empty()) {
+          ctx->setTargetView(*input.getSet(reusable_set_index_));
+          if (input.getSet(reusable_set_index_)->size() == 1) {
+            ctx->resetTargets();
+          }
+        } else {
+          std::vector<typename G::NeighborSet> sets_to_intersect;
+          sets_to_intersect.reserve(uncovered_parent_indices_.size() + 1);
+          for (auto& pair : uncovered_parent_indices_) {
+            uint32_t key_vid = input.getKeyVal(pair.first);
+            sets_to_intersect.push_back(data_graph->getOutNeighborsWithHint(key_vid, target_label_, pair.second));
+          }
+          auto& new_keys = ctx->resetTargets();
+          auto exceptions = input.getExceptions(same_label_key_indices_, same_label_set_indices_);
+          expandBySets<G, profile, intersect_candidates>(input, data_graph, ctx, sets_to_intersect, exceptions,
+                                                         &new_keys);
+          ctx->resetTargetView();
+        }
+
+        if
+          constexpr(isProfileMode(profile)) {
+            ctx->total_num_input_subgraphs += ctx->getCurrentInput().getNumSubgraphs();
+            // TODO(tatiana): min si count
+          }
         ctx->nextInput();
         continue;
       }

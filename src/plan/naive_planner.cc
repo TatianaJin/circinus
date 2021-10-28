@@ -431,8 +431,9 @@ double NaivePlanner::estimateExpandCost(const GraphBase* data_graph,
       set_vertices.push_back(matching_order_[i]);
     }
   }
-  if (vertex_relationship_->findReusableSet(target_vertex, set_vertices, existing_vertices).first !=
-      DUMMY_QUERY_VERTEX) {
+  auto reusable = vertex_relationship_->findReusableSet(target_vertex, set_vertices, existing_vertices);
+  // TODO(tatiana): handle when reusable.second is not empty
+  if (reusable.first != DUMMY_QUERY_VERTEX && reusable.second.empty()) {
     return 0;
   }
 
