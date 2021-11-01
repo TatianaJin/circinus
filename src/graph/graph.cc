@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <fstream>
+#include <numeric>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -92,6 +93,60 @@ std::pair<double, double> Graph::getMemoryUsage() const {
     ret.second += pair.second.size() * sizeof(VertexID);
   }
   return ret;
+}
+
+void Graph::reorderByDegree(bool ascending_degree) {
+  std::vector<VertexID> vertex_ids(getNumVertices());
+  std::iota(vertex_ids.begin(), vertex_ids.end(), 0);
+  if (ascending_degree) {
+    std::sort(vertex_ids.begin(), vertex_ids.end(), [this](VertexID v1, VertexID v2) {
+      return getVertexOutDegree(v1) < getVertexOutDegree(v2) ||
+             (getVertexOutDegree(v1) == getVertexOutDegree(v2) && v1 < v2);
+    });
+  } else {
+    std::sort(vertex_ids.begin(), vertex_ids.end(), [this](VertexID v1, VertexID v2) {
+      return getVertexOutDegree(v1) > getVertexOutDegree(v2) ||
+             (getVertexOutDegree(v1) == getVertexOutDegree(v2) && v1 < v2);
+    });
+  }
+
+  std::vector<VertexID> vertex_order(vertex_ids.size());  // original vertex id to new id
+  for (VertexID i = 0; i < vertex_ids.size(); ++i) {
+    vertex_order[vertex_ids[i]] = i;
+  }
+
+  std::vector<VertexID> new_elist(elist_.size());
+  std::vector<EdgeID> new_vlist(vlist_.size());
+  VertexID new_vertex_id = 0;
+  new_vlist[new_vertex_id] = 0;
+  for (auto v : vertex_ids) {
+    new_vlist[new_vertex_id + 1] = new_vlist[new_vertex_id];
+    auto nbrs = getOutNeighbors(v);
+    for (uint32_t i = 0; i < nbrs.second; ++i) {
+      new_elist[new_vlist[new_vertex_id + 1]] = vertex_order[nbrs.first[i]];
+      ++new_vlist[new_vertex_id + 1];
+    }
+    ++new_vertex_id;
+  }
+  vlist_.swap(new_vlist);
+  elist_.swap(new_elist);
+  // sort neighbors by id for each vertex
+  for (VertexID i = 0; i < n_vertices_; ++i) {
+    std::sort(elist_.begin() + vlist_[i], elist_.begin() + vlist_[i + 1]);
+  }
+
+  // handle labels
+  if (vertex_cardinality_by_label_.size() > 1) {  // more than one label
+    std::vector<LabelID> new_label(n_vertices_);
+    for (VertexID v = 0; v < n_vertices_; ++v) {
+      new_label[vertex_order[v]] = labels_[v];
+    }
+    labels_.swap(new_label);
+  }
+  if (!vertex_ids_by_label_.empty()) {
+    vertex_ids_by_label_.clear();
+    buildLabelIndex();
+  }
 }
 
 }  // namespace circinus

@@ -51,6 +51,8 @@ class Graph : public GraphBase {
 
   void buildLabelIndex();
 
+  void reorderByDegree(bool ascending_degree = true);
+
   /* start of vertex-level accessers */
 
   /**

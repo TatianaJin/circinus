@@ -162,7 +162,8 @@ class ReorderedPartitionedGraph : public GraphBase {
   /** Get the neighbors that satisfy the hints.
    * @param partition The desired partition of neighbors.
    */
-  NeighborSet getOutNeighborsInPartitionWithHint(VertexID id, LabelID nbr_label, uint32_t partition = 0) const {
+  SingleRangeVertexSetView getOutNeighborsInPartitionWithHint(VertexID id, LabelID nbr_label,
+                                                              uint32_t partition = 0) const {
     auto nbrs = getOutNeighbors(id);
     VertexID range_l, range_r;
     // get the range of vertex ids that satisfy the hint
@@ -177,7 +178,7 @@ class ReorderedPartitionedGraph : public GraphBase {
 
     auto[start, end] = getVertexRange(nbrs.first, nbrs.first + nbrs.second, range_l, range_r);
 
-    return NeighborSet(start, end);
+    return SingleRangeVertexSetView(start, end);
   }
 
   inline NeighborSet getInNeighborsInPartitionWithHint(VertexID id, LabelID nbr_label, uint32_t partition = 0) const {

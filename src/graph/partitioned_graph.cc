@@ -89,7 +89,7 @@ void ReorderedPartitionedGraph::sortVertices(const std::vector<idx_t>& parts, co
   std::sort(vertex_ids_.begin(), vertex_ids_.end(), [src_graph, &labels, &parts](VertexID v1, VertexID v2) {
     if (!by_partition || parts[v1] == parts[v2]) {
       if (labels[v1] == labels[v2]) {
-        return !by_degree || src_graph->getVertexOutDegree(v1) > src_graph->getVertexOutDegree(v2);
+        return (!by_degree && v1 < v2) || src_graph->getVertexOutDegree(v1) < src_graph->getVertexOutDegree(v2);
       }
       return labels[v1] < labels[v2];
     }

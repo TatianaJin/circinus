@@ -60,6 +60,8 @@ int main(int argc, char** argv) {
     output = argv[2];
   } else if (FLAGS_partition == 0) {
     output = input + ".bin";
+  } else if (FLAGS_partition == 1 && FLAGS_sort_by_degree) {
+    output = input + ".sorted.bin";
   } else {
     output = input.substr(0, input.size() - 9) + ".circinus.bin.p" + std::to_string(FLAGS_partition);
   }
@@ -92,6 +94,12 @@ int main(int argc, char** argv) {
       ReorderedPartitionedGraph g(input, FLAGS_partition_file, FLAGS_partition, FLAGS_sort_by_degree);
       LOG(INFO) << "Loaded graph, now saving as a binary file";
       g.saveAsBinary(output);
+      LOG(INFO) << "Saved to " << output;
+    } else if (FLAGS_partition == 1 && FLAGS_sort_by_degree) {
+      LOG(INFO) << "Transform graph " << input << " to binary, with output path " << output;
+      Graph graph(input);
+      graph.reorderByDegree();
+      graph.saveAsBinary(output);
       LOG(INFO) << "Saved to " << output;
     } else {
       LOG(INFO) << "Transform graph " << input << " as ReorderedPartitionedGraph to binary, with output path "
