@@ -100,6 +100,8 @@ class ExpandEdgeKeyToSetOperator : public ExpandEdgeOperator {
     if (canReuseSet()) {
       target_set = input.getSet(reusable_set_index_);
       if (target_set->size() == 1) return false;
+      filterTargets(*target_set, input);
+      if (target_set->empty()) return false;
     } else {
       std::vector<VertexID> targets;
       auto parent_match = input.getKeyVal(parent_index_);
@@ -230,7 +232,13 @@ class ExpandEdgeKeyToKeyOperator : public ExpandEdgeOperator {
   template <QueryType profile>
   inline void expandInner(const CompressedSubgraphs& input, ExpandEdgeKeyToKeyTraverseContext* ctx) const {
     if (canReuseSet()) {
-      ctx->setTargetView(*input.getSet(reusable_set_index_));
+      auto target_view = *input.getSet(reusable_set_index_);
+      if (target_view.size() == 1) {
+        ctx->resetTargets();
+      } else {
+        filterTargets(target_view, input);
+        ctx->setTargetView(target_view);
+      }
     } else {
       auto& current_targets = ctx->resetTargets();
       auto parent_match = input.getKeyVal(parent_index_);

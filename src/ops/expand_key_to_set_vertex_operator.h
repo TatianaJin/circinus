@@ -172,6 +172,8 @@ class ExpandKeyToSetVertexOperator : public ExpandVertexOperator {
         if (uncovered_parent_indices_.empty()) {
           target_set = input.getSet(reusable_set_index_);
           if (target_set->size() == 1) continue;
+          filterTargets(*target_set, input);
+          if (target_set->empty()) continue;
         } else {
           std::vector<typename G::NeighborSet> sets_to_intersect;
           sets_to_intersect.reserve(uncovered_parent_indices_.size() + 1);

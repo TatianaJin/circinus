@@ -143,9 +143,12 @@ class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
       const auto& input = ctx->getCurrentInput();
       if (canReuseSet()) {
         if (uncovered_parent_indices_.empty()) {
-          ctx->setTargetView(*input.getSet(reusable_set_index_));
-          if (input.getSet(reusable_set_index_)->size() == 1) {
+          auto target_view = *input.getSet(reusable_set_index_);
+          if (target_view.size() == 1) {
             ctx->resetTargets();
+          } else {
+            filterTargets(target_view, input);
+            ctx->setTargetView(target_view);
           }
         } else {
           std::vector<typename G::NeighborSet> sets_to_intersect;

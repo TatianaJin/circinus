@@ -49,6 +49,7 @@ class VertexSet {
   // std::vector<VertexID>* operator->() { return data_.get(); }
   const SingleRangeVertexSetView* operator->() const { return &view_; }
   const SingleRangeVertexSetView& operator*() const { return view_; }
+  SingleRangeVertexSetView& operator*() { return view_; }
 
   std::vector<VertexID>* get() const { return data_.get(); }
 
