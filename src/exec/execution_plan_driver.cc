@@ -197,8 +197,13 @@ void OnlineQueryExecutionPlanDriver::init(QueryId qid, QueryContext* query_ctx, 
       CHECK_EQ(scopes.size(), 1) << "Expecting scope only for input (start) query vertex";
       const std::vector<Operator*>& ops = plan_->getOperators(plan_idx);
       auto partitioned_result = dynamic_cast<PartitionedCandidateResult*>(candidate_result_.get());
-      DCHECK(partitioned_result != nullptr);
-      candidates_[i] = partitioned_result->getCandidatesByScopes(scopes);
+      if (partitioned_result != nullptr) {
+        // DCHECK(partitioned_result != nullptr);
+        candidates_[i] = partitioned_result->getCandidatesByScopes(scopes);
+      } else {
+        candidates_[i].emplace_back(&candidate_result_->getMergedCandidates(0), scopes[0],
+                                    std::vector<VertexID>{0, candidate_result_->getMergedCandidates(0).size()});
+      }
 
       if (max_parallelism_ > 1 && plan_->toSegment(i)) {
         suspend_interval_ptr_ = &suspend_interval_;

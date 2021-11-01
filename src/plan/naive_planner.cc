@@ -569,7 +569,6 @@ ExecutionPlan* NaivePlanner::generatePlanWithDynamicCover(const GraphBase* data_
     }
     LOG(INFO) << "best last level cover idx " << best_idx << " cost " << costs_car[last][best_idx];
   }
-  // best_idx = 5 < covers_[last].size() - 1 ? 5 : covers_.size() - 1;
 
   auto& select_cover_node = covers_[last][best_idx];
   auto select_cover = select_cover_node.getCoverTable(matching_order_.size());
