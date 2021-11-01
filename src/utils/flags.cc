@@ -26,7 +26,9 @@ DEFINE_bool(label_filter, true,
 DEFINE_int32(candidate_set_intersection, 0,
              "0: infer by graph type, 1: except for last traverse op, 2: except for expand to set");
 
-DEFINE_bool(seperate_enumeration, true, "Whether to seperate enumeration of sets into key in an operator");
+DEFINE_int32(seperate_enumeration, 0,
+             "1 to split set before enumeration, 2 to seperate enumeration of sets into key in an operator. Default 0, "
+             "disabled");
 
 DEFINE_bool(standalone, false,
             "In standalone mode, a Circinus server is launched together with a simple command line driver.");

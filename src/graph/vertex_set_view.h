@@ -48,6 +48,10 @@ class VertexSetView {
 
     friend class VertexSetView;
 
+    friend std::ostream& operator<<(std::ostream& ss, const ConstIterator& iter) {
+      return ss << iter.ranges_->size() << ", " << iter.range_idx_ << ", " << iter.idx_in_range_;
+    }
+
     explicit ConstIterator(const std::vector<std::pair<const VertexID*, RangeSize>>& ranges, bool end = false)
         : ranges_(&ranges), range_idx_(ranges.size() * end) {}
 
@@ -132,6 +136,7 @@ class VertexSetView {
   }
 
   inline void addOffsetSize(const VertexID* start, RangeSize size) {
+    DCHECK_NE(size, 0);
     size_ += size;
     ranges_.emplace_back(start, size);
   }
@@ -172,6 +177,16 @@ class VertexSetView {
     }
     return ConstIterator(ranges_, range_idx, idx_in_range);
   }
+
+  inline VertexID front() const {
+    DCHECK(ranges_.size() > 0);
+    return *ranges_.front().first;
+  }
+
+  inline VertexID back() const {
+    DCHECK(ranges_.size() > 0);
+    return ranges_.back().first[ranges_.back().second - 1];
+  }
 };
 
 class SingleRangeVertexSetView : public VertexSetView {
@@ -180,10 +195,12 @@ class SingleRangeVertexSetView : public VertexSetView {
   SingleRangeVertexSetView() {}
   SingleRangeVertexSetView(const VertexID* start, size_t size) {
     if (start == nullptr) return;
+    if (size == 0) return;
     addOffsetSize(start, size);
   }
 
   SingleRangeVertexSetView(const VertexID* start, const VertexID* end) {
+    DCHECK_LT(start, end);
     addOffsetSize(start, std::distance(start, end));
   }
 
@@ -191,11 +208,6 @@ class SingleRangeVertexSetView : public VertexSetView {
     DCHECK(!ranges_.empty());
     DCHECK_LT(index, ranges_.front().second);
     return *(begin() + index);
-  }
-
-  inline VertexID front() const {
-    DCHECK(!ranges_.empty());
-    return *ranges_.front().first;
   }
 
   inline ConstIterator begin() const { return ranges_.empty() ? nullptr : ranges_.front().first; }

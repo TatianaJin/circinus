@@ -23,3 +23,4 @@
 #include "ops/expand_set_to_key_vertex_operator.h"
 #include "ops/expand_vertex_operator.h"
 #include "ops/output_operator.h"
+#include "ops/split_set_operator.h"

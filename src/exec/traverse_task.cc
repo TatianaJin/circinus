@@ -99,7 +99,7 @@ void TraverseChainTask::logTask(uint64_t old_count, uint32_t executor_idx) {
 }
 
 template <QueryType mode>
-bool TraverseChainTask::splitInput() {
+bool TraverseChainTask::splitInput(bool split_on_suspended_level) {
   if (split_level_ <= start_level_) {  // if split from start level, directly get from input
     if (traverse_context_[0]->canSplitInput()) {
       auto[ptr, size] = traverse_context_[0]->splitInput();
@@ -116,7 +116,7 @@ bool TraverseChainTask::splitInput() {
     }
     split_level_ = start_level_ + 1;
   }
-  auto split_max_level = std::min(suspended_level_, (uint32_t)operators_->size() - 1);
+  auto split_max_level = std::min(suspended_level_ + split_on_suspended_level, (uint32_t)operators_->size() - 1);
   if (split_level_ == split_max_level) return !splits_.empty() && split_level_ >= operators_->size() - 2;
 
   if (traverse_context_[split_level_ - start_level_]->canSplitInput()) {
@@ -180,10 +180,10 @@ bool TraverseChainTask::execute(const std::vector<CompressedSubgraphs>& input, u
   if (task_status_ == TaskStatus::Normal) {
     DCHECK_NOTNULL(ctx->getOutputs());
     ctx->setInput(input, start_index, start_index + input_size);
-    if (suspend_interval_ != nullptr &&
+    if (suspend_interval_ != nullptr && *suspend_interval_ > 0 &&
         toSeconds(start_time_, std::chrono::steady_clock::now()) >= *suspend_interval_) {
       suspended_level_ = level;
-      if (splitInput<mode>()) {  // do not suspend if no splits
+      if (splitInput<mode>(traverse_op->enumeratesSet())) {  // do not suspend if no splits
         task_status_ = TaskStatus::Suspended;
         return true;
       }

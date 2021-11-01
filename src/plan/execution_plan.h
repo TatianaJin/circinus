@@ -43,7 +43,7 @@ class ExecutionPlan {
   const GraphType graph_type_;
   const QueryGraph* query_graph_;
 
-  bool seperate_enumerate_ = FLAGS_seperate_enumeration;
+  int seperate_enumerate_ = FLAGS_num_cores > 1 ? FLAGS_seperate_enumeration : 0;
   std::vector<Operator*> operators_;  // TODO(tatiana): use unique_ptr?
 
   /* matching order related */
@@ -328,6 +328,7 @@ class ExecutionPlan {
                                                   QueryVertexID target_vertex,
                                                   const std::vector<QueryVertexID>& prev_key_parents,
                                                   std::vector<std::vector<uint32_t>>&& pruning_set_indices);
+
   virtual TraverseOperator* newEnumerateKeyExpandToSetOperator(
       const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
       const std::vector<QueryVertexID>& keys_to_enumerate,
@@ -341,6 +342,14 @@ class ExecutionPlan {
       unordered_map<QueryVertexID, uint32_t>& input_query_vertex_indices,
       std::array<std::vector<uint32_t>, 2>& same_label_indices,
       const unordered_map<LabelID, std::vector<uint32_t>>& label_existing_vertices_map);
+
+  virtual std::vector<Operator*> newSplitSetEnumerateKeyExpandToSetOperator(
+      const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
+      const std::vector<QueryVertexID>& keys_to_enumerate,
+      unordered_map<QueryVertexID, uint32_t> input_query_vertex_indices,
+      const std::array<std::vector<uint32_t>, 2>& same_label_indices,
+      const unordered_map<LabelID, std::vector<uint32_t>>& label_existing_vertices_map);
+
   Operator* newOutputOperator(std::vector<std::pair<std::vector<uint32_t>, std::vector<uint32_t>>>&&);
 
   inline TraverseOperator* newExpandEdgeSetToKeyOperator(

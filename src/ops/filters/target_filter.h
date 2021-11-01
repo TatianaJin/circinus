@@ -46,6 +46,7 @@ class TargetFilter {
 
   template <typename View>
   void filterView(View& targets, const CompressedSubgraphs& group) const {
+    if (less_than_indices_.empty() && greater_than_indices_.empty()) return;
     auto start = targets.begin();
     auto end = targets.end();
     if (!less_than_indices_.empty()) {
@@ -56,6 +57,10 @@ class TargetFilter {
       }
       end = lowerBound(start, end, less_than);
     }
+    if (start == end) {
+      targets = View();
+      return;
+    }
     if (!greater_than_indices_.empty()) {
       VertexID greater_than = 0;  // max of all constraints
       for (auto index : greater_than_indices_) {
@@ -65,7 +70,11 @@ class TargetFilter {
       ++greater_than;  // greater to greater or equal
       start = lowerBound(start, end, greater_than);
     }
-    targets = View(start, end);
+    if (start == end) {
+      targets = View();
+    } else {
+      targets = View(start, end);
+    }
   }
 };  // class TargetFilter
 

@@ -155,7 +155,7 @@ class TraverseChainTask : public TaskBase {
 
   /** @returns Whether to suspend task for creating new tasks on splits. */
   template <QueryType profile>
-  bool splitInput();
+  bool splitInput(bool split_on_suspended_level);
 
   /** @returns True if success, otherwise task is pruned. */
   bool setupTraverseContexts();

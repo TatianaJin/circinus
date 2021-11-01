@@ -79,6 +79,13 @@ class TraverseOperator : public Operator {
   inline void setTargetDegree(uint32_t d) { target_degree_ = d; }
   inline uint32_t getTargetDegree() const { return target_degree_; }
 
+  inline void removeSubgraphFilter() {
+    if (subgraph_filter_) {
+      LOG(INFO) << toString() << " removeSubgraphFilter " << getTypename(*subgraph_filter_);
+      subgraph_filter_ = SubgraphFilter::newDummyFilter();
+    }
+  }
+
   inline void filterTargets(std::vector<VertexID>* targets, const CompressedSubgraphs& group) const {
     if (target_filter_ == nullptr) return;
     target_filter_->filter(targets, group);
@@ -157,6 +164,8 @@ class TraverseOperator : public Operator {
     std::vector<CandidateSetView> views(candidate_sets.begin(), candidate_sets.end());
     return computeBipartiteGraphs(g, views);
   }
+
+  virtual bool enumeratesSet() const { return false; }
 
   virtual std::vector<std::unique_ptr<BipartiteGraph>> computeBipartiteGraphs(
       const Graph* g, const std::vector<CandidateSetView>& candidate_sets) = 0;

@@ -170,8 +170,7 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
         query_vertex_indices_[target_vertex]);
   }
 
-  // TODO(tatiana): the last traverse op does not need to use subgraph filter as the outputs are immediately checked in
-  // the consecutive output operator
+  // ((TraverseOperator*)prev)->removeSubgraphFilter();
 
   // output
   std::vector<std::pair<std::vector<uint32_t>, std::vector<uint32_t>>> same_label_indices;  // {{keys},{sets}}
@@ -319,7 +318,7 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
     op_input_subquery_cover_.emplace_back(i, input_cover_bits, false);
     if (i == 1) {  // the first edge: target has one and only one parent
       if (cover_table_[target_vertex] != 1 && !add_keys_at_level[i].empty()) {
-        if (seperate_enumerate_) {
+        if (seperate_enumerate_ == 2) {
           auto op_pair = newExpandKeyToSetEnumerateKeyExpandToSetOperator(
               key_parents, target_vertex, add_keys_at_level[i], input_query_vertex_indices, same_label_indices,
               label_existing_vertices_map);
@@ -329,7 +328,13 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
             op_pair[1]->setNext(op_pair[2]);
             prev = op_pair[2];
           }
+        } else if (seperate_enumerate_ == 1) {
+          auto op_pair = newSplitSetEnumerateKeyExpandToSetOperator(key_parents, target_vertex, add_keys_at_level[i],
+                                                                    input_query_vertex_indices, same_label_indices,
+                                                                    label_existing_vertices_map);
+          prev = op_pair.back();
         } else {
+          input_query_vertex_indices.erase(target_vertex);
           prev = newEnumerateKeyExpandToSetOperator(key_parents, target_vertex, add_keys_at_level[i],
                                                     input_query_vertex_indices, same_label_indices,
                                                     label_existing_vertices_map);
@@ -379,7 +384,7 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
         }
       } else {  // target is in set, then  all parents should be in key, and key enumeration may be needed
         if (!add_keys_at_level[i].empty()) {  // key enumeration is needed
-          if (seperate_enumerate_) {
+          if (seperate_enumerate_ == 2) {
             auto op_pair = newExpandKeyToSetEnumerateKeyExpandToSetOperator(
                 key_parents, target_vertex, add_keys_at_level[i], input_query_vertex_indices, same_label_indices,
                 label_existing_vertices_map);
@@ -391,7 +396,19 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
               prev = current;
               current = op_pair[2];
             }
+          } else if (seperate_enumerate_ == 1) {
+            auto op_pair = newSplitSetEnumerateKeyExpandToSetOperator(key_parents, target_vertex, add_keys_at_level[i],
+                                                                      input_query_vertex_indices, same_label_indices,
+                                                                      label_existing_vertices_map);
+            prev->setNext(op_pair[0]);
+            prev = op_pair[0];
+            current = op_pair[1];
+            if (op_pair.size() == 3) {
+              prev = op_pair[1];
+              current = op_pair[2];
+            }
           } else {
+            input_query_vertex_indices.erase(target_vertex);
             current = newEnumerateKeyExpandToSetOperator(key_parents, target_vertex, add_keys_at_level[i],
                                                          input_query_vertex_indices, same_label_indices,
                                                          label_existing_vertices_map);
@@ -415,6 +432,8 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
     existing_vertices.insert(target_vertex);
     label_existing_vertices_map[target_label].push_back(target_vertex);
   }
+
+  // ((TraverseOperator*)prev)->removeSubgraphFilter();
 
   // output
   std::vector<std::pair<std::vector<uint32_t>, std::vector<uint32_t>>> same_label_indices;  // {{keys},{sets}}
@@ -794,6 +813,65 @@ std::vector<TraverseOperator*> ExecutionPlan::newExpandKeyToSetEnumerateKeyExpan
                                               query_vertex_indices_, key_to_set != nullptr);
   }
   ret.push_back(key_into_set);
+  return ret;
+}
+
+std::vector<Operator*> ExecutionPlan::newSplitSetEnumerateKeyExpandToSetOperator(
+    const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
+    const std::vector<QueryVertexID>& keys_to_enumerate,
+    unordered_map<QueryVertexID, uint32_t> input_query_vertex_indices,
+    const std::array<std::vector<uint32_t>, 2>& same_label_indices,
+    const unordered_map<LabelID, std::vector<uint32_t>>& label_existing_vertices_map) {
+  std::vector<Operator*> ret;
+  unordered_set<QueryVertexID> keys_to_enumerate_set(keys_to_enumerate.begin(), keys_to_enumerate.end());
+  std::vector<QueryVertexID> existing_key_parent;
+
+  Operator* prev = nullptr;
+  // expand key to set
+  if (parents.size() > keys_to_enumerate.size()) {
+    for (auto v : parents) {
+      if (keys_to_enumerate_set.count(v) == 0) {
+        existing_key_parent.push_back(v);
+      }
+    }
+    TraverseOperator* key_to_set = nullptr;
+    for (auto v : keys_to_enumerate_set) {
+      cover_table_[v] = 0;
+    }
+    if (existing_key_parent.size() == 1) {
+      key_to_set = newExpandEdgeKeyToSetOperator(existing_key_parent.front(), target_vertex, same_label_indices,
+                                                 input_query_vertex_indices);
+    } else {
+      key_to_set = newExpandSetVertexOperator(existing_key_parent, target_vertex, same_label_indices,
+                                              input_query_vertex_indices);
+    }
+    for (auto v : keys_to_enumerate_set) {
+      cover_table_[v] = 1;
+    }
+    ret.push_back(key_to_set);
+    prev = key_to_set;
+  } else {
+    // if no existing key, the target is not in the input to EnumerateKeyExpandToSetOperator
+    input_query_vertex_indices.erase(target_vertex);
+  }
+  SplitSetOperator* split_op = nullptr;
+  // split set
+  for (uint32_t i = 0; i < keys_to_enumerate.size(); ++i) {
+    split_op = new SplitSetOperator(input_query_vertex_indices.at(keys_to_enumerate[i]), keys_to_enumerate.size());
+    if (prev != nullptr) {
+      prev->setNext(split_op);
+    } else {
+      ret.push_back(split_op);  // first op
+    }
+    prev = split_op;
+    operators_.push_back(split_op);
+  }
+  if (ret.back() != prev) ret.push_back(prev);  // second last op
+  // enumerate key expand to set
+  ret.push_back(newEnumerateKeyExpandToSetOperator(keys_to_enumerate, target_vertex, keys_to_enumerate,
+                                                   input_query_vertex_indices, same_label_indices,
+                                                   label_existing_vertices_map));
+  prev->setNext(ret.back());
   return ret;
 }
 

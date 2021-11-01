@@ -30,7 +30,7 @@ template <typename Set1, typename Set2, typename V = VertexID>
 inline void intersectIter(const std::enable_if_t<!std::is_same_v<Set1, VertexSetView>, Set1>& set1, const Set2& set2,
                           std::vector<V>* intersection, const unordered_set<V>& except) {
   // LOG(FATAL) << "should not enter this function " << getTypename(set1) << ", " << getTypename(set2);
-  intersection->reserve(set1.size());
+  // intersection->reserve(set1.size());
   if
     constexpr(std::is_same_v<Set2, VertexSetView>) {
       if (set2.getRanges().size() == 1) {
@@ -62,7 +62,7 @@ inline void intersectIter(const std::enable_if_t<!std::is_same_v<Set1, VertexSet
 template <typename Set1, typename Set2, typename V = VertexID>
 inline void intersectIter(const std::enable_if_t<std::is_same_v<Set1, VertexSetView>, Set1>& set1, const Set2& set2,
                           std::vector<V>* intersection, const unordered_set<V>& except) {
-  intersection->reserve(set1.size());
+  // intersection->reserve(set1.size());
   if
     constexpr(std::is_same_v<Set2, VertexSetView>) {
       if (set2.getRanges().size() == 1) {
@@ -104,6 +104,7 @@ inline void intersectIter(const std::enable_if_t<std::is_same_v<Set1, VertexSetV
 template <typename Set1, typename Set2, typename V = VertexID>
 inline void intersect(const Set1& set1, const Set2& set2, std::vector<V>* intersection,
                       const unordered_set<V>& except = {}) {
+  if (set1.empty() || set2.empty() || set1.front() > set2.back() || set2.front() > set1.back()) return;
   if (set1.size() > set2.size()) {
     return intersectIter<Set2, Set1>(set2, set1, intersection, except);
   }
@@ -116,7 +117,7 @@ inline void intersect(const Set1& set1, const Set2& set2, std::vector<V>* inters
 template <typename Set, typename V = VertexID>
 inline void intersect(const unordered_set<V>& set1, const Set& set2, std::vector<V>* intersection,
                       const unordered_set<V>& except = {}) {
-  intersection->reserve(std::min((size_t)set2.size(), set1.size()));
+  // intersection->reserve(std::min((size_t)set2.size(), set1.size()));
   if (except.empty()) {
     for (auto vid : set2) {
       if (set1.count(vid)) intersection->emplace_back(vid);

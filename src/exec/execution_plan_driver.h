@@ -100,8 +100,9 @@ class ExecutionPlanDriverBase : public PlanDriver {
 
   inline void updateSuspendInterval() {
     if (n_pending_tasks_ > max_parallelism_) {
-      suspend_interval_ =
-          std::max(min_suspend_interval_, running_average_enumerate_time_ * (n_pending_tasks_ / max_parallelism_));
+      suspend_interval_ = 0;
+      // suspend_interval_ =
+      //     std::max(min_suspend_interval_, running_average_enumerate_time_ * (n_pending_tasks_ / max_parallelism_));
     } else {
       suspend_interval_ = min_suspend_interval_;
     }

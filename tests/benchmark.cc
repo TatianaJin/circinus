@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <sys/stat.h>
 #include <chrono>
 #include <cmath>
 #include <fstream>
@@ -283,6 +284,8 @@ int main(int argc, char** argv) {
   std::ostream* out;
   std::ofstream fstream;
   if (!FLAGS_output_file.empty()) {
+    FLAGS_profile_prefix = FLAGS_output_file + "_profile";
+    mkdir(FLAGS_profile_prefix.c_str(), 0777);
     fstream.open(FLAGS_output_file, std::ios::app);
     CHECK(fstream.is_open());
     out = &fstream;

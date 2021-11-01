@@ -79,7 +79,9 @@ inline TraverseOperator* newTraverseOp(GraphType g_type, bool intersect_candidat
   } else {
     switch (g_type) {
     case GraphType::Normal:
-      return new OpType<Graph, true>(std::forward<Args>(args)...);  // must intersect to ensure correctness now
+      LOG(WARNING) << "Not intersecting with candidate sets may lead to wrong output when normal graph is used for "
+                      "labeled queries";
+      return new OpType<Graph, false>(std::forward<Args>(args)...);  // must intersect to ensure correctness now
     case GraphType::Partitioned:
       return new OpType<ReorderedPartitionedGraph, false>(std::forward<Args>(args)...);
     case GraphType::GraphView:
@@ -198,6 +200,8 @@ class TargetBuffer {
     resetTargets();
     targets_view_ = view;
   }
+
+  inline auto getTargetSize() const { return targets_view_.size(); }
 
   inline void resetTargetView() {
     if (current_targets_.empty()) return;

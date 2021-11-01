@@ -138,6 +138,8 @@ class EnumerateKeyExpandToSetOperator : public ExpandVertexOperator {
   std::vector<std::vector<uint32_t>> po_constraint_adj_;  // i: the indices of smaller keys of the i-th key to enumerate
 
   std::vector<std::pair<uint32_t, uint32_t>> uncovered_parent_indices_;  // parent key index, parent index
+  bool target_set_exists_ = false;
+  uint32_t target_input_index_ = UINT32_MAX;
 
  public:
   EnumerateKeyExpandToSetOperator(const std::vector<QueryVertexID>& parents, QueryVertexID target_vertex,
@@ -161,6 +163,11 @@ class EnumerateKeyExpandToSetOperator : public ExpandVertexOperator {
                                                                          << (uint32_t)ctx->getQueryType();
     return expandInner<QueryType::ProfileWithMiniIntersection>(batch_size, ctx);
   }
+
+  // TODO(tatiana): name convention
+  bool extend_vertex() const override { return !target_set_exists_; }
+
+  bool enumeratesSet() const override { return true; }
 
   std::unique_ptr<TraverseContext> initTraverseContext(
       const CandidateSetView* candidates, std::vector<CompressedSubgraphs>* outputs, const void* graph,
@@ -187,11 +194,12 @@ class EnumerateKeyExpandToSetOperator : public ExpandVertexOperator {
       ss << ' ' << v;
     }
     ss << ')';
+    if (target_set_exists_) ss << " pruning existing target";
     return ss.str();
   }
 
   std::pair<uint32_t, uint32_t> getOutputSize(const std::pair<uint32_t, uint32_t>& input_key_size) const override {
-    return {input_key_size.first + keys_to_enumerate_.size(), input_key_size.second + 1};
+    return {input_key_size.first + keys_to_enumerate_.size(), input_key_size.second + !target_set_exists_};
   }
 
   void setPartialOrder(const PartialOrder& po, const unordered_map<QueryVertexID, uint32_t>& seen_vertices) override {
@@ -296,7 +304,11 @@ EnumerateKeyExpandToSetOperator<G, intersect_candidates>::EnumerateKeyExpandToSe
   // get index mapping of enumerated key vertex indices and set vertex indices
   uint32_t n_input_keys = 0;
   for (auto& pair : input_query_vertex_indices) {
-    if (pair.first == target_vertex_) continue;
+    if (pair.first == target_vertex_) {
+      target_set_exists_ = true;
+      CHECK(existing_key_parent_indices_.empty());
+      target_input_index_ = pair.second;
+    }
     if (cover_table_[pair.first] != 1) {
       auto new_pos = query_vertex_indices_.at(pair.first);
       set_old_to_new_pos_.emplace_back(pair.second, new_pos);
@@ -362,7 +374,7 @@ uint32_t EnumerateKeyExpandToSetOperator<G, intersect_candidates>::expandInner(u
         constexpr(isProfileMode(profile)) {
           ctx->total_num_input_subgraphs += ctx->getCurrentInput().getNumSubgraphs();
         }
-      DCHECK_EQ(set_old_to_new_pos_.size(), ctx->getOutput().getNumSets() - 1);
+      DCHECK_EQ(set_old_to_new_pos_.size(), ctx->getOutput().getNumSets() - 1 + target_set_exists_);
       ctx->setup(keys_to_enumerate_, enumerate_key_old_indices_, set_old_to_new_pos_);
     }
     const auto& input = ctx->getCurrentInput();
@@ -389,8 +401,18 @@ uint32_t EnumerateKeyExpandToSetOperator<G, intersect_candidates>::expandInner(u
         if (ctx->target_sets[enumerate_key_depth].empty()) {
           DCHECK_EQ(enumerate_key_depth, 0);
           if (intersect_candidates) {
-            intersect(*ctx->getCandidateSet(), neighbors, &ctx->target_sets[enumerate_key_depth + 1],
-                      ctx->existing_vertices);
+            if (target_set_exists_) {
+              intersect(*ctx->getCandidateSet(), *ctx->getCurrentInput().getSet(target_input_index_),
+                        &ctx->target_sets[enumerate_key_depth + 1], ctx->existing_vertices);
+              intersectInplace(ctx->target_sets[enumerate_key_depth + 1], neighbors,
+                               &ctx->target_sets[enumerate_key_depth + 1]);
+            } else {
+              intersect(*ctx->getCandidateSet(), neighbors, &ctx->target_sets[enumerate_key_depth + 1],
+                        ctx->existing_vertices);
+            }
+          } else if (target_set_exists_) {
+            intersect(neighbors, *ctx->getCurrentInput().getSet(target_input_index_),
+                      &ctx->target_sets[enumerate_key_depth + 1], ctx->existing_vertices);
           } else {
             degreeFilter(neighbors, target_degree_, g, &ctx->target_sets[enumerate_key_depth + 1],
                          ctx->existing_vertices);

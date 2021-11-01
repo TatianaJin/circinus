@@ -140,6 +140,8 @@ class EnumerateKeyOperator : public TraverseOperator {
 
   bool extend_vertex() const override { return false; }
 
+  bool enumeratesSet() const override { return true; }
+
   std::unique_ptr<TraverseContext> initTraverseContext(
       const CandidateSetView* candidates, std::vector<CompressedSubgraphs>* outputs, const void* graph,
       QueryType profile, const unordered_set<VertexID>* candidate_hashmap) const override {
