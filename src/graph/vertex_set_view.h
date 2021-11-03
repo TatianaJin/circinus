@@ -122,6 +122,9 @@ class VertexSetView {
     // only one range
     auto range_begin = ranges[start.range_idx_].first;
     if (start.range_idx_ == end.range_idx_) {
+      if (end.idx_in_range_ == start.idx_in_range_) {
+        return;
+      }
       addOffsetSize(range_begin + start.idx_in_range_, end.idx_in_range_ - start.idx_in_range_);
       return;
     }
@@ -130,7 +133,7 @@ class VertexSetView {
     for (uint32_t range_idx = start.range_idx_ + 1; range_idx < end.range_idx_; ++range_idx) {
       addOffsetSize(ranges[range_idx].first, ranges[range_idx].second);
     }
-    if (end.range_idx_ < ranges.size()) {  // not the end of old range
+    if (end.range_idx_ < ranges.size() && end.idx_in_range_ > 0) {  // not the end of old range
       addOffsetSize(ranges[end.range_idx_].first, end.idx_in_range_);
     }
   }
@@ -179,12 +182,12 @@ class VertexSetView {
   }
 
   inline VertexID front() const {
-    DCHECK(ranges_.size() > 0);
+    DCHECK_GT(ranges_.size(), 0);
     return *ranges_.front().first;
   }
 
   inline VertexID back() const {
-    DCHECK(ranges_.size() > 0);
+    DCHECK_GT(ranges_.size(), 0);
     return ranges_.back().first[ranges_.back().second - 1];
   }
 };
@@ -201,6 +204,7 @@ class SingleRangeVertexSetView : public VertexSetView {
 
   SingleRangeVertexSetView(const VertexID* start, const VertexID* end) {
     DCHECK_LT(start, end);
+    if (std::distance(start, end) == 0) return;
     addOffsetSize(start, std::distance(start, end));
   }
 

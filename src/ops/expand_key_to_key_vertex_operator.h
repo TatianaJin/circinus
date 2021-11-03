@@ -141,39 +141,14 @@ class ExpandKeyToKeyVertexOperator : public ExpandVertexOperator {
 
       // consume the next input
       const auto& input = ctx->getCurrentInput();
+      auto& new_keys = ctx->resetTargets();
+      auto exceptions = input.getExceptions(same_label_key_indices_, same_label_set_indices_);
       if (canReuseSet()) {
-        if (uncovered_parent_indices_.empty()) {
-          auto target_view = *input.getSet(reusable_set_index_);
-          if (target_view.size() == 1) {
-            ctx->resetTargets();
-          } else {
-            filterTargets(target_view, input);
-            ctx->setTargetView(target_view);
-          }
-        } else {
-          std::vector<typename G::NeighborSet> sets_to_intersect;
-          sets_to_intersect.reserve(uncovered_parent_indices_.size() + 1);
-          for (auto& pair : uncovered_parent_indices_) {
-            uint32_t key_vid = input.getKeyVal(pair.first);
-            sets_to_intersect.push_back(data_graph->getOutNeighborsWithHint(key_vid, target_label_, pair.second));
-          }
-          auto& new_keys = ctx->resetTargets();
-          auto exceptions = input.getExceptions(same_label_key_indices_, same_label_set_indices_);
-          expandBySets<G, profile, intersect_candidates>(input, data_graph, ctx, sets_to_intersect, exceptions,
-                                                         &new_keys);
-          ctx->resetTargetView();
-        }
-
-        if
-          constexpr(isProfileMode(profile)) {
-            ctx->total_num_input_subgraphs += ctx->getCurrentInput().getNumSubgraphs();
-            // TODO(tatiana): min si count
-          }
+        reuseAndExpand<G, profile, intersect_candidates>(input, data_graph, ctx, uncovered_parent_indices_, exceptions,
+                                                         *ctx);
         ctx->nextInput();
         continue;
       }
-      auto& new_keys = ctx->resetTargets();
-      auto exceptions = input.getExceptions(same_label_key_indices_, same_label_set_indices_);
 
 #ifdef INTERSECTION_CACHE
       uint32_t i = 0;

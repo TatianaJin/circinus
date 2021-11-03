@@ -53,9 +53,28 @@ class VertexSet {
 
   std::vector<VertexID>* get() const { return data_.get(); }
 
+  const auto& getBuffer() const { return data_; }
+
   void push_back(VertexID v) {
     data_->push_back(v);
     view_ = SingleRangeVertexSetView(data_->data(), data_->size());
+  }
+
+  inline void resetTargetView() {
+    if (data_->empty()) return;
+    view_ = SingleRangeVertexSetView(data_->data(), data_->size());
+  }
+
+  inline std::vector<VertexID>& resetTargets() {
+    view_.clear();
+    data_ = newSharedVSet();
+    return *data_;
+  }
+
+  inline void setTargetView(const std::shared_ptr<std::vector<VertexID>>& buffer,
+                            const SingleRangeVertexSetView& view) {
+    data_ = buffer;
+    view_ = view;
   }
 };
 

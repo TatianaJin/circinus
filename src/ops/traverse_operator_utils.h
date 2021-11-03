@@ -15,6 +15,7 @@
 #pragma once
 
 #include <limits>
+#include <memory>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -197,6 +198,13 @@ class TargetBuffer {
   inline void nextTarget() { ++current_target_index_; }
 
   inline void setTargetView(const SingleRangeVertexSetView& view) {
+    resetTargets();
+    targets_view_ = view;
+  }
+
+  // the param buffer is not used as the ptr is supposed to be held during the use of TargetBuffer
+  inline void setTargetView(const std::shared_ptr<std::vector<VertexID>>& buffer,
+                            const SingleRangeVertexSetView& view) {
     resetTargets();
     targets_view_ = view;
   }

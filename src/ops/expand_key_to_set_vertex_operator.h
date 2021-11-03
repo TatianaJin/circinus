@@ -168,28 +168,12 @@ class ExpandKeyToSetVertexOperator : public ExpandVertexOperator {
       const auto& input = ctx->getCurrentInput();
 
       VertexSet target_set;
+      auto exceptions = input.getExceptions(same_label_key_indices_, same_label_set_indices_);
       if (canReuseSet()) {
-        if (uncovered_parent_indices_.empty()) {
-          target_set = input.getSet(reusable_set_index_);
-          if (target_set->size() == 1) continue;
-          filterTargets(*target_set, input);
-          if (target_set->empty()) continue;
-        } else {
-          std::vector<typename G::NeighborSet> sets_to_intersect;
-          sets_to_intersect.reserve(uncovered_parent_indices_.size() + 1);
-          for (auto& pair : uncovered_parent_indices_) {
-            uint32_t key_vid = input.getKeyVal(pair.first);
-            sets_to_intersect.push_back(data_graph->getOutNeighborsWithHint(key_vid, target_label_, pair.second));
-          }
-          std::vector<VertexID> new_set;
-          auto exceptions = input.getExceptions(same_label_key_indices_, same_label_set_indices_);
-          expandBySets<G, profile, intersect_candidates>(input, data_graph, ctx, sets_to_intersect, exceptions,
-                                                         &new_set);
-          if (new_set.empty()) continue;
-          target_set = newVertexSet(new_set);
-        }
+        reuseAndExpand<G, profile, intersect_candidates>(input, data_graph, ctx, uncovered_parent_indices_, exceptions,
+                                                         target_set);
+        if (target_set->empty()) continue;
       } else {
-        auto exceptions = input.getExceptions(same_label_key_indices_, same_label_set_indices_);
         std::vector<VertexID> new_set;
         expandFromParents<G, profile, intersect_candidates>(input, data_graph, ctx, parent_indices_, exceptions,
                                                             &new_set);

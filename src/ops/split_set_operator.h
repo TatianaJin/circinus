@@ -11,9 +11,13 @@
 
 #pragma once
 
+#include <algorithm>
 #include <cmath>
 #include <memory>
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include "graph/types.h"

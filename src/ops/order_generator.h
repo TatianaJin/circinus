@@ -382,48 +382,86 @@ class OrderGenerator {
   }
 
   std::vector<QueryVertexID> getOnlineOrder(QueryVertexID seed_qv, const PartialOrder* po) {
-    /* degree sorting to choose vertices with larger degree first */
-    /* if degrees are equal, choose vertices with more constraints first */
+    std::vector<QueryVertexID> matching_order;
     auto n_qvs = query_graph_->getNumVertices();
-    std::vector<uint32_t> constraint_count;
+    matching_order.reserve(n_qvs);
+    /* degree sorting to choose vertices with larger degree first */
+    /* if degrees are equal, choose vertices that are smaller in partial order first */
+    std::vector<uint32_t> po_weight;
     if (po != nullptr) {
-      constraint_count = po->n_all_related_constraints;
+      po_weight = po->order_index;
     } else {
-      constraint_count.resize(n_qvs, 0);
+      po_weight.resize(n_qvs, 0);
     }
-    if (seed_qv == DUMMY_QUERY_VERTEX) {  // select start vertex
+    // select start vertex
+    if (seed_qv == DUMMY_QUERY_VERTEX) {
       seed_qv = 0;
       for (QueryVertexID v = 1; v < n_qvs; ++v) {
         if (query_graph_->getVertexOutDegree(v) > query_graph_->getVertexOutDegree(seed_qv) ||
             (query_graph_->getVertexOutDegree(v) == query_graph_->getVertexOutDegree(seed_qv) &&
-             constraint_count[v] > constraint_count[seed_qv])) {
+             po_weight[v] < po_weight[seed_qv])) {
           seed_qv = v;
         }
       }
     }
-    // degree and constraint sorting
-    auto comp = [&constraint_count, q = query_graph_ ](QueryVertexID a, QueryVertexID b) {
-      return q->getVertexOutDegree(a) < q->getVertexOutDegree(b) ||
-             (q->getVertexOutDegree(a) == q->getVertexOutDegree(b) && constraint_count[a] < constraint_count[b]);
-    };
-    std::vector<QueryVertexID> matching_order;
-    std::priority_queue<QueryVertexID, std::vector<QueryVertexID>, decltype(comp)> queue(comp);
-    std::vector<bool> visited(n_qvs, 0);
-    matching_order.reserve(n_qvs);
-    queue.push(seed_qv);
-    visited[seed_qv] = true;
-    while (!queue.empty()) {
-      auto v = queue.top();
-      queue.pop();
-      matching_order.push_back(v);
-      auto nbrs = query_graph_->getOutNeighbors(v);
+    matching_order.push_back(seed_qv);
+
+    std::vector<bool> visited(n_qvs, false);
+    std::vector<bool> existing(n_qvs, false);
+    existing[seed_qv] = visited[seed_qv] = true;
+    std::vector<QueryVertexID> next_qvs;
+    while (matching_order.size() < n_qvs) {
+      auto nbrs = query_graph_->getOutNeighbors(seed_qv);
       for (uint32_t i = 0; i < nbrs.second; ++i) {
         if (visited[nbrs.first[i]]) continue;
-        queue.push(nbrs.first[i]);
+        next_qvs.push_back(nbrs.first[i]);
         visited[nbrs.first[i]] = true;
       }
+      seed_qv = next_qvs.front();
+      for (QueryVertexID i = 1; i < next_qvs.size(); ++i) {
+        auto v = next_qvs[i];
+        if (query_graph_->getVertexOutDegree(v) > query_graph_->getVertexOutDegree(seed_qv)) {
+          seed_qv = v;
+        } else if (query_graph_->getVertexOutDegree(v) == query_graph_->getVertexOutDegree(seed_qv)) {
+          uint32_t v_parent_count = 0, seed_parent_count = 0;
+          auto v_nbrs = query_graph_->getOutNeighbors(v);
+          auto seed_nbrs = query_graph_->getOutNeighbors(seed_qv);
+          for (uint32_t j = 0; j < v_nbrs.second; ++j) {
+            v_parent_count += existing[v_nbrs.first[j]];
+          }
+          if (po != nullptr && po->constraints.count(v)) {
+            auto& conds = po->constraints.at(v);
+            for (auto cond : conds.first) {
+              v_parent_count += existing[cond];
+            }
+            for (auto cond : conds.second) {
+              v_parent_count += existing[cond];
+            }
+          }
+          for (uint32_t j = 0; j < seed_nbrs.second; ++j) {
+            seed_parent_count += existing[seed_nbrs.first[j]];
+          }
+          if (po != nullptr && po->constraints.count(seed_qv)) {
+            auto& conds = po->constraints.at(seed_qv);
+            for (auto cond : conds.first) {
+              seed_parent_count += existing[cond];
+            }
+            for (auto cond : conds.second) {
+              seed_parent_count += existing[cond];
+            }
+          }
+          if (v_parent_count > seed_parent_count ||
+              (v_parent_count == seed_parent_count && v_nbrs.second < seed_nbrs.second) ||
+              (v_parent_count == seed_parent_count && v_nbrs.second == seed_nbrs.second &&
+               po_weight[v] < po_weight[seed_qv])) {
+            seed_qv = v;
+          }
+        }
+      }
+      next_qvs.erase(std::find(next_qvs.begin(), next_qvs.end(), seed_qv));
+      matching_order.push_back(seed_qv);
+      existing[seed_qv] = true;
     }
-    CHECK_EQ(matching_order.size(), query_graph_->getNumVertices());
     return matching_order;
   }
 

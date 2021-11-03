@@ -114,6 +114,9 @@ class EnumerateKeyOperator : public TraverseOperator {
   std::vector<std::pair<uint32_t, int>> set_old_to_new_pos_;  // input-output indices of other query vertices in set
   std::vector<int> enumerated_key_pruning_indices_;  // i, the indices of sets to be pruned by the i-th enumerated key
   std::vector<std::vector<uint32_t>> po_constraint_adj_;  // i: the indices of smaller keys of the i-th key to enumerate
+  // i : the indices of existing sets that is constrained by the i-th key to enumerate. flag is true when existing set
+  // is smaller than key
+  std::vector<std::vector<std::pair<bool, uint32_t>>> po_constraint_existing_set_indices_;
 
   unordered_map<QueryVertexID, uint32_t> query_vertex_indices_;
 
@@ -184,7 +187,6 @@ class EnumerateKeyOperator : public TraverseOperator {
   }
 
   void setPartialOrder(const PartialOrder& po, const unordered_map<QueryVertexID, uint32_t>& seen_vertices) override {
-    // TODO(tatiana): partial order with existing set
     // set constraints related to keys to enumerate
     auto n_keys = keys_to_enumerate_.size();
     if (n_keys > 1) {
@@ -210,6 +212,30 @@ class EnumerateKeyOperator : public TraverseOperator {
           }
         }
         LOG(INFO) << "enumerated key constraints " << ss.str();
+      }
+    }
+    po_constraint_existing_set_indices_.resize(n_keys);
+    for (auto v : seen_vertices) {
+      if (cover_table_[v.first] != 1) {  // existing set
+        auto conds = po.constraints.find(v.first);
+        if (conds != po.constraints.end()) {
+          for (uint32_t ki = 0; ki < n_keys; ++ki) {
+            auto k = keys_to_enumerate_[ki];
+            if (conds->second.second.count(k)) {  // smaller than smallest k
+              po_constraint_existing_set_indices_[ki].emplace_back(true, query_vertex_indices_.at(v.first));
+              LOG(INFO) << "enumerate_key " << ki << ':' << k << " is greater than set vertex " << v.first << " index "
+                        << query_vertex_indices_.at(v.first);
+            }
+          }
+          for (uint32_t ki = 0; ki < n_keys; ++ki) {
+            auto k = keys_to_enumerate_[n_keys - ki - 1];
+            if (conds->second.first.count(k)) {  // larger than largest k
+              po_constraint_existing_set_indices_[ki].emplace_back(false, query_vertex_indices_.at(v.first));
+              LOG(INFO) << "enumerate_key " << ki << ':' << k << " is smaller than set vertex " << v.first << " index "
+                        << query_vertex_indices_.at(v.first);
+            }
+          }
+        }
       }
     }
   }
@@ -294,6 +320,24 @@ uint32_t EnumerateKeyOperator<G, intersect_candidates>::expandInner(uint32_t bat
           for (uint32_t key_i = 0; key_i < enumerate_key_size; ++key_i) {
             auto key = ctx->currentKeyToEnumerate(key_i);
             output.UpdateKey(input.getNumKeys() + key_i, key);
+            // partial order
+            if (!po_constraint_existing_set_indices_[key_i].empty()) {
+              for (auto cond : po_constraint_existing_set_indices_[key_i]) {
+                VertexSet set = output.getSet(cond.second);
+                if (cond.first) {  // by partial order set is smaller than key
+                  auto end = lowerBound(set->begin(), set->end(), key);
+                  if (end != set->end()) {
+                    *set = SingleRangeVertexSetView(set->begin(), end);
+                  }
+                } else {
+                  auto start = lowerBound(set->begin(), set->end(), key + 1);
+                  if (start != set->begin()) {
+                    *set = SingleRangeVertexSetView(start, set->end());
+                  }
+                }
+                output.UpdateSets(cond.second, std::move(set));
+              }
+            }
             if (enumerated_key_pruning_indices_[key_i] != -1) {
               const auto& pruning_sets = *subgraph_filter_->getPruningSets(enumerated_key_pruning_indices_[key_i]);
               unordered_set<uint32_t> indices(pruning_sets.begin(), pruning_sets.end());

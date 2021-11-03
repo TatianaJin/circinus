@@ -127,7 +127,7 @@ template <typename G, bool intersect_candidates>
 class EnumerateKeyExpandToSetOperator : public ExpandVertexOperator {
   std::vector<QueryVertexID> keys_to_enumerate_;       // parent query vertices whose matches are enumerated as key
   std::vector<uint32_t> existing_key_parent_indices_;  // input indices of parent query vertices in key
-  std::vector<int> cover_table_;
+  std::vector<int> cover_table_;                       // output cover
   unordered_map<QueryVertexID, uint32_t> enumerate_key_old_indices_;  // input indices of parent query vertices in set
   std::vector<std::pair<uint32_t, int>> set_old_to_new_pos_;  // input-output indices of other query vertices in set
 #ifndef USE_FILTER
@@ -136,6 +136,9 @@ class EnumerateKeyExpandToSetOperator : public ExpandVertexOperator {
 #endif
   std::vector<int> enumerated_key_pruning_indices_;  // i, the indices of sets to be pruned by the i-th enumerated key
   std::vector<std::vector<uint32_t>> po_constraint_adj_;  // i: the indices of smaller keys of the i-th key to enumerate
+  // i : the indices of existing sets that is constrained by the i-th key to enumerate. flag is true when existing set
+  // is smaller than key
+  std::vector<std::vector<std::pair<bool, uint32_t>>> po_constraint_existing_set_indices_;
 
   std::vector<std::pair<uint32_t, uint32_t>> uncovered_parent_indices_;  // parent key index, parent index
   bool target_set_exists_ = false;
@@ -231,6 +234,30 @@ class EnumerateKeyExpandToSetOperator : public ExpandVertexOperator {
           }
         }
         LOG(INFO) << "enumerated key constraints " << ss.str();
+      }
+    }
+    po_constraint_existing_set_indices_.resize(n_keys);
+    for (auto v : seen_vertices) {
+      if (cover_table_[v.first] != 1) {  // existing set
+        auto conds = po.constraints.find(v.first);
+        if (conds != po.constraints.end()) {
+          for (uint32_t ki = 0; ki < n_keys; ++ki) {
+            auto k = keys_to_enumerate_[ki];
+            if (conds->second.second.count(k)) {  // smaller than smallest k
+              po_constraint_existing_set_indices_[ki].emplace_back(true, query_vertex_indices_.at(v.first));
+              LOG(INFO) << "enumerate_key " << ki << ':' << k << " is greater than set vertex " << v.first << " index "
+                        << query_vertex_indices_.at(v.first);
+            }
+          }
+          for (uint32_t ki = 0; ki < n_keys; ++ki) {
+            auto k = keys_to_enumerate_[n_keys - ki - 1];
+            if (conds->second.first.count(k)) {  // larger than largest k
+              po_constraint_existing_set_indices_[ki].emplace_back(false, query_vertex_indices_.at(v.first));
+              LOG(INFO) << "enumerate_key " << ki << ':' << k << " is smaller than set vertex " << v.first << " index "
+                        << query_vertex_indices_.at(v.first);
+            }
+          }
+        }
       }
     }
   }
@@ -441,6 +468,24 @@ uint32_t EnumerateKeyExpandToSetOperator<G, intersect_candidates>::expandInner(u
           for (uint32_t key_i = 0; key_i < enumerate_key_size; ++key_i) {
             auto key = ctx->currentKeyToEnumerate(key_i);
             output.UpdateKey(input.getNumKeys() + key_i, key);
+            // partial order
+            if (!po_constraint_existing_set_indices_[key_i].empty()) {
+              for (auto cond : po_constraint_existing_set_indices_[key_i]) {
+                VertexSet set = output.getSet(cond.second);
+                if (cond.first) {  // by partial order set is smaller than key
+                  auto end = lowerBound(set->begin(), set->end(), key);
+                  if (end != set->end()) {
+                    *set = SingleRangeVertexSetView(set->begin(), end);
+                  }
+                } else {
+                  auto start = lowerBound(set->begin(), set->end(), key + 1);
+                  if (start != set->begin()) {
+                    *set = SingleRangeVertexSetView(start, set->end());
+                  }
+                }
+                output.UpdateSets(cond.second, std::move(set));
+              }
+            }
             if (enumerated_key_pruning_indices_[key_i] != -1) {
               const auto& pruning_sets = *subgraph_filter_->getPruningSets(enumerated_key_pruning_indices_[key_i]);
               unordered_set<uint32_t> indices(pruning_sets.begin(), pruning_sets.end());

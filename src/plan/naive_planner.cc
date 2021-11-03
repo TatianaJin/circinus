@@ -1064,11 +1064,19 @@ void NaivePlanner::logCoverSpace() {
 void NaivePlanner::setVertexWeightByDegreeConstraints(std::vector<double>& weights, const PartialOrder* po) const {
   LOG(INFO) << "no cardinality, use degree and constraints";
   auto n_qvs = query_graph_->getNumVertices();
-  weights.resize(n_qvs);
+  weights.resize(n_qvs, 0);
   double max = 0;
   if (po != nullptr) {
+    // smaller weights for vertices that are neighbor of smaller vertex in partial order
     for (uint32_t v = 0; v < n_qvs; ++v) {
-      weights[v] = po->n_all_related_constraints[v];
+      if (po->order_index[v] == UINT32_MAX) continue;
+      auto nbrs = query_graph_->getOutNeighbors(v);
+      for (uint32_t i = 0; i < nbrs.second; ++i) {
+        weights[nbrs.first[i]] += (n_qvs - po->order_index[v]) / (double)n_qvs;
+      }
+    }
+    for (uint32_t v = 0; v < n_qvs; ++v) {
+      weights[v] += po->n_all_related_constraints[v];
       max = std::max(max, weights[v]);
     }
   }

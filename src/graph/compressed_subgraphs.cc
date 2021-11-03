@@ -366,20 +366,15 @@ uint64_t CompressedSubgraphs::getNumIsomorphicSubgraphsWithConstraints(
       if (!constraints_adjs[idx].back().empty()) {  // partial order between them
         group_cnt /= 2;
       }
-    } else if (pruning_set_ptrs[idx].size() < 4) {  // sets without partial order constraint
-      bool use_inex = true;
+    } else if (pruning_set_ptrs[idx].size() < 4) {
+      group_cnt = getEnumerationCount(enumerate_orders[idx], qv_equivalent_classes, cache, existing_vertices,
+                                      max_existing_vertices);
+      uint32_t n_conds = 1;
       for (auto& conds : constraints_adjs[idx]) {
-        if (!conds.empty()) {
-          use_inex = false;
-          break;
-        }
+        n_conds += conds.size();
       }
-      if (use_inex) {
-        group_cnt = getEnumerationCount(enumerate_orders[idx], qv_equivalent_classes, cache, existing_vertices,
-                                        max_existing_vertices);
-      } else {
-        group_cnt = getNumIsomorphicSubgraphsWithConstraintsImpl(existing_vertices, pruning_set_ptrs[idx],
-                                                                 constraints_adjs[idx], (limit + count - 1) / count);
+      for (uint32_t d = 2; d <= n_conds; ++d) {
+        group_cnt /= d;
       }
     } else {
       // FIXME(tatiana): use getNumIsomorphicSubgraphs if there is no constraint in this group

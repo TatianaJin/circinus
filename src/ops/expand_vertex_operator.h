@@ -158,6 +158,66 @@ class ExpandVertexOperator : public TraverseOperator {
                                                               targets);
   }
 
+  template <typename G, QueryType profile, bool intersect_candidates, typename Targets, bool po = true>
+  void reuseAndExpand(const CompressedSubgraphs& input, const G* data_graph, ExpandVertexTraverseContext* ctx,
+                      const std::vector<std::pair<uint32_t, uint32_t>>& uncovered_parent_indices,
+                      const unordered_set<VertexID>& exceptions, Targets& targets) const {
+    SingleRangeVertexSetView target_view = *input.getSet(reusable_set_index_);
+    if (target_view.size() == 1) {  // at least two elements matching two query vertices
+      return;
+    }
+    if
+      constexpr(po) {  // enforce partial order
+        filterTargets(target_view, input);
+      }
+    if (uncovered_parent_indices.empty()) {
+      if (exceptions.empty()) {  // zero copy
+        targets.setTargetView(input.getSet(reusable_set_index_).getBuffer(), target_view);
+      } else {
+        bool to_copy = false;
+        std::vector<VertexID>* new_buffer = nullptr;
+        for (auto iter = target_view.begin(); iter != target_view.end(); ++iter) {
+          if (exceptions.count(*iter)) {
+            if (!to_copy) {
+              to_copy = true;
+              new_buffer = &targets.resetTargets();
+              if (iter > target_view.begin()) {
+                new_buffer->insert(new_buffer->end(), target_view.begin(), iter);
+              }
+            }
+            continue;
+          }
+          if (to_copy) {
+            new_buffer->push_back(*iter);
+          }
+        }
+        if (to_copy) {  // new set has been copied into new_buffer
+          targets.resetTargetView();
+        } else {
+          targets.setTargetView(input.getSet(reusable_set_index_).getBuffer(), target_view);
+        }
+      }
+    } else {
+      std::vector<typename G::NeighborSet> sets_to_intersect;
+      sets_to_intersect.reserve(uncovered_parent_indices.size() + 1);
+      sets_to_intersect.push_back(target_view);
+      for (auto& pair : uncovered_parent_indices) {
+        uint32_t key_vid = input.getKeyVal(pair.first);
+        sets_to_intersect.push_back(data_graph->getOutNeighborsWithHint(key_vid, target_label_, pair.second));
+      }
+      auto& new_keys = targets.resetTargets();
+      auto exceptions = input.getExceptions(same_label_key_indices_, same_label_set_indices_);
+      expandBySets<G, profile, intersect_candidates>(input, data_graph, ctx, sets_to_intersect, exceptions, &new_keys);
+      targets.resetTargetView();
+    }
+
+    if
+      constexpr(isProfileMode(profile)) {
+        ctx->total_num_input_subgraphs += ctx->getCurrentInput().getNumSubgraphs();
+        // TODO(tatiana): min si count
+      }
+  }
+
  protected:
   inline void toStringInner(std::stringstream& ss) const {
     for (auto parent : parents_) {
