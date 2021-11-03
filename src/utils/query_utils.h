@@ -73,25 +73,6 @@ enum class CompressionStrategy : uint16_t { None = 0, Static, Dynamic };
 enum class PQVStrategy : uint16_t { None = 0, ClosenessCentrality };
 enum class QueryMode : uint16_t { Execute = 0, Profile, Explain, ProfileSI, ProfileCandidateSI };
 
-// TODO(tatiana): this is workaround as we do not implement the order now
-inline std::vector<QueryVertexID> getOrder(const std::string& order_str, uint32_t size) {
-  std::vector<QueryVertexID> order;
-  if (order_str.empty()) return order;
-  order.reserve(size);
-  QueryVertexID v = 0;
-  for (auto c : order_str) {
-    if (c == ' ') {
-      order.push_back(v);
-      v = 0;
-    } else {
-      v = v * 10 + (c - '0');
-    }
-  }
-  order.push_back(v);
-  CHECK_EQ(order.size(), size);
-  return order;
-}
-
 class QueryConfig {
  public:
   static inline const unordered_map<std::string, PQVStrategy> pqv_strategies = {
