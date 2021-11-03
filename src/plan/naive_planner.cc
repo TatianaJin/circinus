@@ -405,6 +405,7 @@ double NaivePlanner::intersectionCountCoeff(const std::vector<double>& cardinali
     if (key_parent_cnt == 0) {  // set to key
       auto key_bits = parent_cover_bits | (1 << set_parent);
       cost = estimateCardinalityByProduct(cardinality, key_bits, level - 1);
+      cost *= 2;  // very expensive to expand from set when there is no candidate set
     }
     auto key_bits = parent_cover_bits | (1 << target_vertex);  // including target
     return cost + set_parent_cnt * estimateCardinalityByProduct(cardinality, key_bits, level);
@@ -767,7 +768,9 @@ const std::vector<QueryVertexID>& NaivePlanner::generateOrder(const GraphBase* d
     if (use_order == nullptr) {
       auto order_generator =
           OrderGenerator(data_graph, metadata, query_graph_, *candidate_views, candidate_cardinality);
-      matching_order_ = order_generator.getOrder(order_strategy, seed_qv);
+      matching_order_ = order_generator.getOrder(order_strategy, seed_qv,
+                                                 vertex_relationship_->getVertexEquivalence().getPartialOrder(),
+                                                 vertex_relationship_.get());
     } else {
       CHECK_EQ(use_order->size(), query_graph_->getNumVertices());
       matching_order_ = *use_order;
@@ -784,7 +787,7 @@ const std::vector<QueryVertexID>& NaivePlanner::generateOrder(const GraphBase* d
 const std::vector<QueryVertexID>& NaivePlanner::generateOrder(QueryVertexID seed_qv, OrderStrategy os,
                                                               const PartialOrder* po) {
   auto order_generator = OrderGenerator(query_graph_);
-  matching_order_ = order_generator.getOrder(os, seed_qv, po);
+  matching_order_ = order_generator.getOrder(os, seed_qv, po, vertex_relationship_.get());
   return matching_order_;
 }
 

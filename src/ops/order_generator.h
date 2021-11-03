@@ -77,7 +77,7 @@ class OrderGenerator {
   }
 
   std::vector<QueryVertexID> getOrder(OrderStrategy order_strategy, QueryVertexID seed_qv,
-                                      const PartialOrder* po = nullptr) {
+                                      const PartialOrder* po = nullptr, const VertexRelationship* vr = nullptr) {
     switch (order_strategy) {
     case OrderStrategy::None:
       return getBFSOrder(seed_qv);
@@ -90,7 +90,7 @@ class OrderGenerator {
     case OrderStrategy::GQL:
       return getGQLOrder();
     case OrderStrategy::Online:
-      return getOnlineOrder(seed_qv, po);
+      return getOnlineOrder(seed_qv, po, vr);
     }
     return getCFLOrder(seed_qv);  // default
   }
@@ -381,7 +381,8 @@ class OrderGenerator {
     return logical_filter.getBfsOrder();
   }
 
-  std::vector<QueryVertexID> getOnlineOrder(QueryVertexID seed_qv, const PartialOrder* po) {
+  std::vector<QueryVertexID> getOnlineOrder(QueryVertexID seed_qv, const PartialOrder* po,
+                                            const VertexRelationship* vr) {
     std::vector<QueryVertexID> matching_order;
     auto n_qvs = query_graph_->getNumVertices();
     matching_order.reserve(n_qvs);
@@ -461,6 +462,34 @@ class OrderGenerator {
       next_qvs.erase(std::find(next_qvs.begin(), next_qvs.end(), seed_qv));
       matching_order.push_back(seed_qv);
       existing[seed_qv] = true;
+    }
+
+    if (vr == nullptr) return matching_order;
+
+    // reorder equivalent pairs to maximize probable reuse of intersection
+    std::vector<uint32_t> order_of_qvs(n_qvs);
+    for (uint32_t i = 0; i < n_qvs; ++i) {
+      order_of_qvs[matching_order[i]] = i;
+    }
+    for (auto& equivalent_pair : vr->getVertexEquivalence()) {
+      auto[qv_to_reorder, qv_to_reuse] = equivalent_pair;
+      if (order_of_qvs[equivalent_pair.first] < order_of_qvs[equivalent_pair.second]) {
+        qv_to_reuse = equivalent_pair.first;
+        qv_to_reorder = equivalent_pair.second;
+      }
+      auto nbrs = query_graph_->getOutNeighbors(qv_to_reuse);
+      auto new_order_index = order_of_qvs[qv_to_reorder];
+      for (uint32_t i = 0; i < nbrs.second; ++i) {
+        new_order_index = std::max(new_order_index, order_of_qvs[nbrs.first[i]]);
+      }
+      if (new_order_index > order_of_qvs[qv_to_reorder]) {
+        for (uint32_t j = order_of_qvs[qv_to_reorder]; j < new_order_index; ++j) {
+          order_of_qvs[matching_order[j + 1]] = j;
+          matching_order[j] = matching_order[j + 1];
+        }
+        order_of_qvs[qv_to_reorder] = new_order_index;
+        matching_order[new_order_index] = qv_to_reorder;
+      }
     }
     return matching_order;
   }

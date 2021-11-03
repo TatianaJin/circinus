@@ -52,6 +52,9 @@ class VertexEquivalence {
     return equivalent_pairs_.count(pair) == 1;
   }
 
+  auto begin() const { return equivalent_pairs_.begin(); }
+  auto end() const { return equivalent_pairs_.end(); }
+
  private:
   static bool setsEqualExcept(const unordered_set<QueryVertexID>& set1, const unordered_set<QueryVertexID>& set2,
                               QueryVertexID u1, QueryVertexID u2);

@@ -34,6 +34,8 @@ class VertexRelationship {
     return qv_equivalence_->isEquivalent(set_qvs_[set_index1], set_qvs_[set_index2]);
   }
 
+  const VertexEquivalence& getVertexEquivalence() const { return *qv_equivalence_; }
+
   inline void initSetQueryVertexIndices(const unordered_map<QueryVertexID, uint32_t>& set_qv_index) {
     set_qvs_.resize(set_qv_index.size());
     for (auto& p : set_qv_index) {
@@ -43,7 +45,7 @@ class VertexRelationship {
 
   std::pair<QueryVertexID, std::vector<QueryVertexID>> findReusableSet(
       QueryVertexID target, std::vector<QueryVertexID>& set_vertices,
-      const unordered_set<QueryVertexID>& existing_vertices);
+      const unordered_set<QueryVertexID>& existing_vertices) const;
 };
 
 }  // namespace circinus

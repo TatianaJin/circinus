@@ -23,7 +23,7 @@ namespace circinus {
 
 std::pair<QueryVertexID, std::vector<QueryVertexID>> VertexRelationship::findReusableSet(
     QueryVertexID target, std::vector<QueryVertexID>& set_vertices,
-    const unordered_set<QueryVertexID>& existing_vertices) {
+    const unordered_set<QueryVertexID>& existing_vertices) const {
   DLOG(INFO) << "findReusableSet for " << target << " among [" << toString(set_vertices) << " ]";
   std::pair<QueryVertexID, std::vector<QueryVertexID>> res;
   res.first = DUMMY_QUERY_VERTEX;
@@ -37,19 +37,12 @@ std::pair<QueryVertexID, std::vector<QueryVertexID>> VertexRelationship::findReu
       uncovered_parent_vertices.insert(target_nbrs.first[i]);
     }
   }
-  unordered_set<QueryVertexID> enforced_target_constraints;
-  auto& target_constraints = po->po_constraint_adj[target];
-  for (uint32_t i = 0; i < target_constraints.size(); ++i) {
-    if (existing_vertices.count(target_constraints[i])) {
-      enforced_target_constraints.insert(target_constraints[i]);
-    }
-  }
-  auto larger_than_target = po->constraints.find(target);
+  auto target_constraints = po->constraints.find(target);
 
   for (QueryVertexID set_vertex : set_vertices) {
     if (q->getVertexLabel(set_vertex) != q->getVertexLabel(target)) continue;
     bool is_reusable = true;
-    DLOG(INFO) << "check neighbor of " << target << " and " << set_vertex;
+    LOG(INFO) << "check neighbor of " << target << " and " << set_vertex;
     // neighborhood equivalence
     auto set_nbrs = q->getOutNeighbors(set_vertex);
     if (set_nbrs.second > target_nbrs.second) continue;  // the degree filter of set_vertex will make it unusable
@@ -68,22 +61,22 @@ std::pair<QueryVertexID, std::vector<QueryVertexID>> VertexRelationship::findReu
     if (uncovered.size() == uncovered_parent_vertices.size()) continue;
     if (!is_reusable) continue;
 
-    DLOG(INFO) << "check po gt of " << target << " and " << set_vertex;
+    LOG(INFO) << "check po gt of " << target << " and " << set_vertex;
     // partial order constraint equivalence
-    auto& set_constraints = po->po_constraint_adj[set_vertex];
-    for (uint32_t i = 0; i < set_constraints.size(); ++i) {
-      if (existing_vertices.count(set_constraints[i]) && enforced_target_constraints.count(set_constraints[i]) == 0) {
-        is_reusable = false;
-        break;
-      }
-    }
-    if (!is_reusable) continue;
-    DLOG(INFO) << "check po lt of " << target << " and " << set_vertex;
-    auto larger_than_set = po->constraints.find(set_vertex);
-    if (larger_than_set != po->constraints.end()) {
-      for (auto cond : larger_than_set->second.second) {
+    auto set_constraints = po->constraints.find(set_vertex);
+    if (set_constraints != po->constraints.end()) {
+      for (auto cond : set_constraints->second.first) {
         if (existing_vertices.count(cond) == 0) continue;
-        if (larger_than_target == po->constraints.end() || larger_than_target->second.second.count(cond) == 0) {
+        if (target_constraints == po->constraints.end() || target_constraints->second.first.count(cond) == 0) {
+          is_reusable = false;
+          break;
+        }
+      }
+      if (!is_reusable) continue;
+      LOG(INFO) << "check po lt of " << target << " and " << set_vertex;
+      for (auto cond : set_constraints->second.second) {
+        if (existing_vertices.count(cond) == 0) continue;
+        if (target_constraints == po->constraints.end() || target_constraints->second.second.count(cond) == 0) {
           is_reusable = false;
           break;
         }
