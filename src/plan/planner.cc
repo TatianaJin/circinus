@@ -576,6 +576,39 @@ BacktrackingPlan* Planner::generateExecutionPlan(const CandidateResult* result, 
           partitioned_plans[i].second.resize(1);
           partitioned_plans[i].second.back().addRange(i, i);  // both inclusive
         }
+      } else if (result != nullptr) {  // use degree for chunking
+        auto g = query_context_->data_graph;
+        auto candidate_sets = result->getCandidates();
+        auto& candidates = candidate_sets.front();
+        partitioned_plans.reserve(n_chunks);
+        double total_degree = 0;
+        for (uint32_t i = 0; i < start_size; ++i) {
+          total_degree += g->getVertexOutDegree(candidates[i]);
+        }
+        auto chunk_degree_limit = total_degree / n_chunks;
+        uint64_t current_chunk_degree = 0;
+        uint32_t current_chunk_offset = 0;
+        for (uint32_t i = 0; i < start_size; ++i) {
+          current_chunk_degree += g->getVertexOutDegree(candidates[i]);
+          if (current_chunk_degree > chunk_degree_limit) {
+            if (i != current_chunk_offset) {  // do not include i in current chunk
+              --i;
+            }
+            partitioned_plans.emplace_back(0, std::vector<CandidateScope>(1));
+            partitioned_plans.back().second.back().addRange(current_chunk_offset, i);
+            current_chunk_offset = i + 1;
+            current_chunk_degree = 0;
+          } else if (i == start_size - 1) {  // the last vertex
+            partitioned_plans.emplace_back(0, std::vector<CandidateScope>(1));
+            partitioned_plans.back().second.back().addRange(current_chunk_offset, i);
+          }
+        }
+        CHECK_EQ(partitioned_plans.front().second.front().getRangeStart(), 0);
+        for (uint32_t i = 1; i < partitioned_plans.size(); ++i) {
+          CHECK_EQ(partitioned_plans[i].second.front().getRangeStart(),
+                   partitioned_plans[i - 1].second.front().getRangeEnd() + 1);
+        }
+        CHECK_EQ(partitioned_plans.back().second.front().getRangeEnd(), start_size - 1);
       } else {
         partitioned_plans.resize(n_chunks);
         uint32_t chunk_size = start_size / n_chunks;
@@ -594,7 +627,7 @@ BacktrackingPlan* Planner::generateExecutionPlan(const CandidateResult* result, 
         }
       }
       backtracking_plan_->addPartitionedPlans(std::move(partitioned_plans));
-    } else {
+    } else {  // for single-threaded execution
       std::vector<std::pair<uint32_t, std::vector<CandidateScope>>> partitioned_plans(1);
       partitioned_plans.front().first = 0;
       partitioned_plans.front().second.resize(1);  // full scope

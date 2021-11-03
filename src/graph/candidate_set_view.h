@@ -38,6 +38,12 @@ class CandidateSetView : public VertexSetView {
 
   CandidateSetView(const std::vector<std::vector<VertexID>>& partitioned_candidates, const CandidateScope& scope);
 
+  inline VertexID operator[](uint32_t index) const {
+    DCHECK(!ranges_.empty());
+    DCHECK_LT(index, ranges_.front().second);
+    return *(ranges_.front().first + index);
+  }
+
   inline ConstIterator begin() const { return ranges_.empty() ? nullptr : ranges_.front().first; }
   inline ConstIterator end() const {
     return ranges_.empty() ? nullptr : (ranges_.front().first + ranges_.front().second);
