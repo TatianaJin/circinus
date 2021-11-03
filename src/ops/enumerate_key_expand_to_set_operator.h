@@ -272,10 +272,8 @@ class EnumerateKeyExpandToSetOperator : public ExpandVertexOperator {
     for (auto parent : uncovered_parents) {
       if (keys_to_enumerate_set.count(parent)) continue;
       auto parent_key_index = query_vertex_indices_.at(parent);
+      LOG(INFO) << "uncovered parents key index " << parent_key_index << " at " << parent_index.at(parent_key_index);
       uncovered_parent_indices_.emplace_back(parent_key_index, parent_index.at(parent_key_index));
-    }
-    if (!uncovered_parent_indices_.empty()) {
-      LOG(FATAL) << "unhandled case";
     }
     reusable_set_index_ = set_index;
   }
@@ -580,9 +578,22 @@ bool EnumerateKeyExpandToSetOperator<G, intersect_candidates>::expandInner(
   }
 
   if (canReuseSet()) {
-    CHECK(uncovered_parent_indices_.empty()) << "uncovered_parent_indices_ " << uncovered_parent_indices_.size();
     auto& set = input.getSet(reusable_set_index_);
-    target_set.insert(target_set.end(), set->begin(), set->end());
+    if (set->size() == 1) return true;
+    if (uncovered_parent_indices_.empty()) {
+      removeExceptions(*set, &target_set, ctx->existing_vertices);
+    } else {
+      std::vector<typename G::NeighborSet> sets_to_intersect;
+      sets_to_intersect.reserve(uncovered_parent_indices_.size() + 1);
+      sets_to_intersect.push_back(*set);
+      auto data_graph = ctx->getDataGraph<G>();
+      for (auto& pair : uncovered_parent_indices_) {
+        uint32_t key_vid = input.getKeyVal(pair.first);
+        sets_to_intersect.push_back(data_graph->getOutNeighborsWithHint(key_vid, target_label_, pair.second));
+      }
+      expandBySets<G, profile, intersect_candidates>(input, data_graph, ctx, sets_to_intersect, ctx->existing_vertices,
+                                                     &target_set);
+    }
     return target_set.empty();
   }
 
