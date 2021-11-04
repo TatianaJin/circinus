@@ -30,7 +30,7 @@ int BnB::countAssignment(const std::vector<int>& assignment) {
   return count;
 }
 
-std::deque<QueryEdge> BnB::getEdgeList(QueryGraph& g) {
+std::deque<QueryEdge> BnB::getEdgeList(const QueryGraph& g) {
   std::deque<QueryEdge> list;
   for (QueryVertexID i = 0; i < g.getNumVertices(); ++i) {
     auto neighbors = g.getOutNeighbors(i);

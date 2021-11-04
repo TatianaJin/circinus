@@ -30,7 +30,7 @@ namespace circinus {
  */
 class BnB {
  private:
-  QueryGraph* graph_;
+  const QueryGraph* graph_;
   clock_t start_time_;
   double cutoff_time_;                         // time limit for the algorithm
   std::vector<std::vector<int>> best_covers_;  // the best vertex covers found so far
@@ -47,7 +47,7 @@ class BnB {
    * @param g The query graph for which we find the minimum vertex cover(s).
    * @param cutoff_time The time limit of the execution. The best cover found within cutoff_time will be returned
    */
-  explicit BnB(QueryGraph* g, double cutoff_time = 5)
+  explicit BnB(const QueryGraph* g, double cutoff_time = 5)
       : graph_(g), cutoff_time_(cutoff_time), best_cover_size_(g->getNumVertices()) {}
 
   /** Compute minimum vertex cover(s) within cutoff_time_ */
@@ -85,7 +85,7 @@ class BnB {
   }
 
  private:
-  static std::deque<QueryEdge> getEdgeList(QueryGraph& g);
+  static std::deque<QueryEdge> getEdgeList(const QueryGraph& g);
   static int countAssignment(const std::vector<int>& assignment);
   /** Use a 2-approximate algorithm to calculate a lower bound for a vertex cover of the uncovered edges. */
   static double matchingLB(std::deque<QueryEdge> uncovered_edges);

@@ -21,7 +21,9 @@
 
 #include "glog/logging.h"
 
+#include "algorithms/minimum_weight_vertex_cover.h"
 #include "algorithms/partial_order.h"
+#include "algorithms/vertex_cover.h"
 #include "graph/bipartite_graph.h"
 #include "graph/graph.h"
 #include "graph/partitioned_graph.h"
@@ -381,11 +383,185 @@ class OrderGenerator {
     return logical_filter.getBfsOrder();
   }
 
+  std::vector<QueryVertexID> getOrderByCover(QueryVertexID seed_qv, const PartialOrder* po,
+                                             const VertexRelationship* vr) {
+    DCHECK(po != nullptr);
+    DCHECK(vr != nullptr);
+    std::vector<QueryVertexID> matching_order;
+    auto n_qvs = query_graph_->getNumVertices();
+    matching_order.reserve(n_qvs);
+
+    BnB vertex_cover_solver(query_graph_);
+    vertex_cover_solver.computeVertexCover();
+    auto& covers = vertex_cover_solver.getBestCovers();
+    CHECK_GT(covers.size(), 0);  // at least one cover should be obtained
+    auto cover_table = covers.front();
+    for (uint32_t i = 1; i < covers.size(); ++i) {
+      for (uint32_t v = 0; v < n_qvs; ++v) {
+        if (covers[i][v] != 1) {
+          cover_table[v] = 0;
+        }
+      }
+    }
+    for (uint32_t v = 0; v < n_qvs; ++v) {
+      if (cover_table[v] != 1) cover_table[v] = 0;
+    }
+    LOG(INFO) << "intersection of covers" << toString(cover_table);
+
+    // select start vertex
+    if (seed_qv == DUMMY_QUERY_VERTEX) {
+      seed_qv = 0;
+      for (QueryVertexID v = 1; v < n_qvs; ++v) {
+        if ((cover_table[v] == 1 && cover_table[seed_qv] != 1) ||
+            (cover_table[v] == cover_table[seed_qv] &&
+             (query_graph_->getVertexOutDegree(v) > query_graph_->getVertexOutDegree(seed_qv) ||
+              (query_graph_->getVertexOutDegree(v) == query_graph_->getVertexOutDegree(seed_qv) &&
+               po->order_index[v] < po->order_index[seed_qv])))) {
+          seed_qv = v;
+        }
+      }
+    }
+    matching_order.push_back(seed_qv);
+
+    std::vector<bool> visited(n_qvs, false);
+    std::vector<bool> existing(n_qvs, false);
+    std::vector<uint32_t> existing_parent_count(n_qvs, 0);
+    existing[seed_qv] = visited[seed_qv] = true;
+    std::vector<QueryVertexID> next_qvs;
+    std::vector<std::pair<QueryVertexID, uint32_t>> reuse_qv(n_qvs, std::make_pair(DUMMY_QUERY_VERTEX, 0));
+
+    auto is_set_with_all_parents = [&existing_parent_count, &cover_table, this](QueryVertexID v) {
+      return existing_parent_count[v] == query_graph_->getVertexOutDegree(v) && cover_table[v] != 1;
+    };
+    auto to_be_reused = [&reuse_qv, &existing, vr](QueryVertexID v1, QueryVertexID v2) {
+      // v2 is not reusing an existing vertex or v2 can save more computation by reusing v1
+      auto res = vr->canBeReusedBy(v1, v2);
+      if (res.first && (reuse_qv[v2].first == DUMMY_QUERY_VERTEX || !existing[reuse_qv[v2].first] ||
+                        res.second < reuse_qv[v2].second)) {
+        return res;
+      }
+      return std::pair<bool, uint32_t>(false, 0);
+    };
+
+    while (matching_order.size() < n_qvs) {
+      auto nbrs = query_graph_->getOutNeighbors(seed_qv);
+      for (uint32_t i = 0; i < nbrs.second; ++i) {
+        ++existing_parent_count[nbrs.first[i]];
+        if (visited[nbrs.first[i]]) continue;
+        next_qvs.push_back(nbrs.first[i]);
+        visited[nbrs.first[i]] = true;
+      }
+      seed_qv = next_qvs.front();
+      // LOG(INFO) << "seed=" << seed_qv << ", existing_parent_count[seed]=" << existing_parent_count[seed_qv]
+      //           << ", deg(seed)=" << query_graph_->getVertexOutDegree(seed_qv)
+      //           << " cover=" << (cover_table[seed_qv] == 1);
+      for (QueryVertexID i = 1; i < next_qvs.size(); ++i) {
+        auto v = next_qvs[i];
+        // LOG(INFO) << "v=" << v << ", existing_parent_count[v]=" << existing_parent_count[v]
+        //           << ", deg(v)=" << query_graph_->getVertexOutDegree(v) << " cover=" << (cover_table[v] == 1);
+        /* ensures the reused qv is before the qv that reuses it below */
+        if (is_set_with_all_parents(v)) {  // a set vertex with all parent matched, increase set reuse
+          if (!is_set_with_all_parents(seed_qv)) {
+            seed_qv = v;
+            continue;  // set with all parents matched is ranked before key
+          }
+          auto reuse_v = to_be_reused(v, seed_qv);
+          if (reuse_v.first) {
+            reuse_qv[seed_qv] = std::make_pair(v, reuse_v.second);
+            seed_qv = v;
+            continue;
+          }
+        } else if (is_set_with_all_parents(seed_qv)) {
+          continue;  // set with all parents matched is ranked before key
+        }
+        if (is_set_with_all_parents(seed_qv)) {
+          auto reuse_seed = to_be_reused(seed_qv, v);
+          if (reuse_seed.first) {
+            reuse_qv[v] = std::make_pair(seed_qv, reuse_seed.second);
+            continue;
+          }
+        }
+        /* ensures the reused qv is before the qv that reuses it above */
+        if (query_graph_->getVertexOutDegree(v) > query_graph_->getVertexOutDegree(seed_qv)) {
+          seed_qv = v;
+        } else if (query_graph_->getVertexOutDegree(v) == query_graph_->getVertexOutDegree(seed_qv)) {
+          uint32_t v_parent_count = existing_parent_count[v], seed_parent_count = existing_parent_count[seed_qv];
+          auto v_nbrs = query_graph_->getOutNeighbors(v);
+          auto seed_nbrs = query_graph_->getOutNeighbors(seed_qv);
+          if (po != nullptr && po->constraints.count(v)) {
+            auto& conds = po->constraints.at(v);
+            for (auto cond : conds.first) {
+              v_parent_count += existing[cond];
+            }
+            for (auto cond : conds.second) {
+              v_parent_count += existing[cond];
+            }
+          }
+          if (po != nullptr && po->constraints.count(seed_qv)) {
+            auto& conds = po->constraints.at(seed_qv);
+            for (auto cond : conds.first) {
+              seed_parent_count += existing[cond];
+            }
+            for (auto cond : conds.second) {
+              seed_parent_count += existing[cond];
+            }
+          }
+          if (v_parent_count > seed_parent_count ||
+              (v_parent_count == seed_parent_count && v_nbrs.second < seed_nbrs.second) ||
+              (v_parent_count == seed_parent_count && v_nbrs.second == seed_nbrs.second &&
+               po->order_index[v] < po->order_index[seed_qv])) {
+            seed_qv = v;
+          }
+        }
+      }
+      next_qvs.erase(std::find(next_qvs.begin(), next_qvs.end(), seed_qv));
+      if (is_set_with_all_parents(seed_qv)) {  // find all that reuses matches of seed_qv
+        for (auto next : next_qvs) {
+          if (reuse_qv[next].first == seed_qv) continue;
+          auto reuse_seed = to_be_reused(seed_qv, next);
+          if (reuse_seed.first) {
+            reuse_qv[next] = std::make_pair(seed_qv, reuse_seed.second);
+          }
+        }
+      }
+      matching_order.push_back(seed_qv);
+      existing[seed_qv] = true;
+    }
+
+    // reorder equivalent pairs to maximize probable reuse of intersection
+    std::vector<uint32_t> order_of_qvs(n_qvs);
+    for (uint32_t i = 0; i < n_qvs; ++i) {
+      order_of_qvs[matching_order[i]] = i;
+    }
+    for (auto& equivalent_pair : vr->getVertexEquivalence()) {
+      auto[qv_to_reorder, qv_to_reuse] = equivalent_pair;
+      if (order_of_qvs[equivalent_pair.first] < order_of_qvs[equivalent_pair.second]) {
+        qv_to_reuse = equivalent_pair.first;
+        qv_to_reorder = equivalent_pair.second;
+      }
+      auto nbrs = query_graph_->getOutNeighbors(qv_to_reuse);
+      auto new_order_index = order_of_qvs[qv_to_reorder];
+      for (uint32_t i = 0; i < nbrs.second; ++i) {
+        new_order_index = std::max(new_order_index, order_of_qvs[nbrs.first[i]]);
+      }
+      if (new_order_index > order_of_qvs[qv_to_reorder]) {
+        for (uint32_t j = order_of_qvs[qv_to_reorder]; j < new_order_index; ++j) {
+          order_of_qvs[matching_order[j + 1]] = j;
+          matching_order[j] = matching_order[j + 1];
+        }
+        order_of_qvs[qv_to_reorder] = new_order_index;
+        matching_order[new_order_index] = qv_to_reorder;
+      }
+    }
+    return matching_order;
+  }
+
   std::vector<QueryVertexID> getOnlineOrder(QueryVertexID seed_qv, const PartialOrder* po,
                                             const VertexRelationship* vr) {
     std::vector<QueryVertexID> matching_order;
     auto n_qvs = query_graph_->getNumVertices();
     matching_order.reserve(n_qvs);
+    if (po != nullptr && vr != nullptr) return getOrderByCover(seed_qv, po, vr);
     /* degree sorting to choose vertices with larger degree first */
     /* if degrees are equal, choose vertices that are smaller in partial order first */
     std::vector<uint32_t> po_weight;
