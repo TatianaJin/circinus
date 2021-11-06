@@ -268,7 +268,16 @@ uint64_t CompressedSubgraphs::getEnumerationCount(const std::vector<uint32_t>& s
                          */
   }
   if (n_sets == 3) {
-    cnt += 2 * intersectionCount(cache.begin()->second, *getSet(set_indices[2]));  // no need to except again
+    if (cache.empty()) {
+      DCHECK(qv_equivalent_classes->isEquivalentByIndices(set_indices[0], set_indices[1]))
+          << "set index " << set_indices[0] << " " << set_indices[1];
+      cnt += 2 * intersectionCount(*getSet(set_indices[0]), *getSet(set_indices[2]));
+    } else if (qv_equivalent_classes->isEquivalentByIndices(set_indices[0], set_indices[2]) ||
+               qv_equivalent_classes->isEquivalentByIndices(set_indices[1], set_indices[2])) {
+      cnt += 2 * cache.begin()->second.size();
+    } else {
+      cnt += 2 * intersectionCount(cache.begin()->second, *getSet(set_indices[2]));  // no need to except again
+    }
   }
   return cnt;
 }

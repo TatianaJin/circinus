@@ -467,7 +467,7 @@ uint32_t EnumerateKeyExpandToSetOperator<G, intersect_candidates>::expandInner(u
             auto key = ctx->currentKeyToEnumerate(key_i);
             output.UpdateKey(input.getNumKeys() + key_i, key);
             // partial order
-            if (!po_constraint_existing_set_indices_[key_i].empty()) {
+            if (!po_constraint_existing_set_indices_.empty() && !po_constraint_existing_set_indices_[key_i].empty()) {
               for (auto cond : po_constraint_existing_set_indices_[key_i]) {
                 VertexSet set = output.getSet(cond.second);
                 if (cond.first) {  // by partial order set is smaller than key
