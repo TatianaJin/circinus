@@ -25,6 +25,7 @@ def parse_args():
   )
   parser.add_argument("--graph_path", help="The path of the graph to use.")
   parser.add_argument("--load_config", default="", help="Load Configuration")
+  parser.add_argument("--profile", action="store_true")
   parser.add_argument("-q", "--query", help="The path to the query. -g must also be specified for query.")
   parser.add_argument("-c", "--query_config", help="The configuration of query, example of query config: cps=cfl,mo=1 2 3 4,cs=dynamic,limit=100000")
   parser.add_argument("-t", "--shutdown", action="store_true")
@@ -37,22 +38,68 @@ def connect_to(hostname, port):
   send_sock = zmq.Socket(context, zmq.PUSH)
   send_url = "tcp://{0}:{1}".format(hostname, port)
 
-  print("Connecting to Circinus Server at {}\n".format(send_url))
+  sys.stderr.write("Connecting to Circinus Server at {}\n".format(send_url))
   send_sock.connect(send_url)
   return send_sock
 
 
-def send_query(args, send_sock):
+def run_command(send_sock, recv_sock, client_addr, cmds):
+  original_cmd = cmds[0]
+  # complete the command
+  if cmds[0] == "load":
+    if len(cmds) == 2:
+      cmds = [cmds[0], osp.join(cmds[1], "data_graph", "{0}.graph.bin".format(cmds[1])), cmds[1], '']
+    elif len(cmds) == 3:
+      cmds.append('')  # empty config
+  elif cmds[0] in ["profile", "explain", "profile_si", "profile_candidate"]:
+    cmds[3] = "{0},mode={1}".format(cmds[3], cmds[0]) if len(cmds[3]) > 0 else "mode={0}".format(cmds[0])
+    cmds[0] = "query"
+  elif cmds[0] == "exit":
+    send_sock.send_multipart([pack(x, mode='str') for x in cmds])
+    return
+
+  cmds.append(client_addr)
+  query_start = time()
+  # send query to server
+  send_sock.send_multipart([pack(x, mode='str') for x in cmds])
+  cmds[0] = original_cmd
+
+  # recv result
+  msgs = recv_sock.recv_multipart()
+  query_finish = time()
+  flag = unpack(msgs[0], 'bool')
+  if flag:
+    if cmds[0] == "load":
+      sys.stderr.write("Loaded graph in {0} seconds\n".format(unpack(msgs[1], 'double')))
+    elif cmds[0] in ["query", "profile", "profile_si", "profile_candidate"]:
+      idx = 1
+      if cmds[0] != "query":
+        for i in range(1, len(msgs) - 1):
+          print(unpack(msgs[i], 'str'))
+        idx = len(msgs) - 1
+      title = ["elapsed_execution_time", "filter_time", "plan_time", "enumerate_time", "embedding_count", "matching_order", "max_task_time"]
+      print(','.join(title))
+      print(unpack(msgs[idx], 'str'))
+    elif cmds[0] == "explain":
+      print(unpack(msgs[1], 'str'))
+  else:
+    print(unpack(msgs[1]))
+  sys.stderr.write("Query answered in {0:.2f} seconds\n".format(query_finish - query_start))
+
+
+def send_query(args, send_sock, recv_sock, client_addr):
   """   msg: graph name, query path, query config
         example of query config: cps=cfl,mo=1 2 3 4,cs=dynamic,limit=100000
     """
-  cmds = [pack(args.graph, mode='str'), pack(args.query, mode='str'), pack(args.query_config, mode='str')]
-  send_sock.send_multipart(cmds)
+  if args.graph is None:
+    sys.stderr.write("graph cannot be empty\n")
+    return
+  cmds = ["profile" if args.profile else "query", args.graph, args.query, args.query_config if args.query_config is not None else ""]
+  run_command(send_sock, recv_sock, client_addr, cmds)
 
 
-def load_graph(args, send_sock):
-  cmds = [pack(args.graph_path, mode='str'), pack(args.graph, mode='str'), pack(args.load_config, mode='str')]
-  send_sock.send_multipart(cmds)
+def load_graph(args, send_sock, recv_sock, client_addr):
+  run_command(send_sock, recv_sock, client_addr, ["load", args.graph_path, args.graph, args.load_config])
 
 
 def shutdown_server(args, send_sock):
@@ -198,8 +245,16 @@ class CircinusCommandCompleter:
 if __name__ == '__main__':
   args = parse_args()
   conn = connect_to(args.server_host, args.server_port)
-  if args.query is not None:
-    send_query(args, conn)
+  recv_sock = None
+  if args.graph_path is not None:
+    recv_sock = zmq.Socket(context, zmq.PULL)
+    client_addr = "tcp://{0}:{1}".format(socket.gethostname(), recv_sock.bind_to_random_port("tcp://*"))
+    load_graph(args, conn, recv_sock, client_addr)
+  elif args.query is not None:
+    if recv_sock is None:
+      recv_sock = zmq.Socket(context, zmq.PULL)
+      client_addr = "tcp://{0}:{1}".format(socket.gethostname(), recv_sock.bind_to_random_port("tcp://*"))
+    send_query(args, conn, recv_sock, client_addr)
   elif args.shutdown:
     shutdown_server(args, conn)
   else:  # interactive command line
