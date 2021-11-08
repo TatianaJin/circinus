@@ -75,7 +75,7 @@ std::pair<QueryVertexID, std::vector<QueryVertexID>> VertexRelationship::findReu
   for (QueryVertexID set_vertex : set_vertices) {
     if (q->getVertexLabel(set_vertex) != q->getVertexLabel(target)) continue;
     bool is_reusable = true;
-    LOG(INFO) << "check neighbor of " << target << " and " << set_vertex;
+    DLOG(INFO) << "check neighbor of " << target << " and " << set_vertex;
     // neighborhood equivalence
     auto set_nbrs = q->getOutNeighbors(set_vertex);
     if (set_nbrs.second > target_nbrs.second) continue;  // the degree filter of set_vertex will make it unusable
@@ -96,7 +96,7 @@ std::pair<QueryVertexID, std::vector<QueryVertexID>> VertexRelationship::findReu
 
     if (po != nullptr) {
       auto target_constraints = po->constraints.find(target);
-      LOG(INFO) << "check po gt of " << target << " and " << set_vertex;
+      DLOG(INFO) << "check po gt of " << target << " and " << set_vertex;
       // partial order constraint equivalence
       auto set_constraints = po->constraints.find(set_vertex);
       if (set_constraints != po->constraints.end()) {
@@ -108,7 +108,7 @@ std::pair<QueryVertexID, std::vector<QueryVertexID>> VertexRelationship::findReu
           }
         }
         if (!is_reusable) continue;
-        LOG(INFO) << "check po lt of " << target << " and " << set_vertex;
+        DLOG(INFO) << "check po lt of " << target << " and " << set_vertex;
         for (auto cond : set_constraints->second.second) {
           if (existing_vertices.count(cond) == 0) continue;
           if (target_constraints == po->constraints.end() || target_constraints->second.second.count(cond) == 0) {
@@ -120,17 +120,18 @@ std::pair<QueryVertexID, std::vector<QueryVertexID>> VertexRelationship::findReu
       if (!is_reusable) continue;
     }
 
-    // if not check target_parent_index == uncovered_parent_vertices.size(),
-    // target neighbors can be a superset of reusable set neighbors
-    res.first = set_vertex;
-    res.second.insert(res.second.end(), uncovered.begin(), uncovered.end());
-    if (verbosePlannerLog()) {
-      LOG(INFO) << "target " << target << " reusable set vertex " << set_vertex << " uncovered parents "
-                << toString(res.second);
+    if (res.first == DUMMY_QUERY_VERTEX || res.second.size() > uncovered.size()) {
+      // if not check target_parent_index == uncovered_parent_vertices.size(),
+      // target neighbors can be a superset of reusable set neighbors
+      res.first = set_vertex;
+      res.second.clear();
+      res.second.insert(res.second.end(), uncovered.begin(), uncovered.end());
     }
-    return res;
   }
-  uncovered_parent_vertices.clear();
+  if (res.first != DUMMY_QUERY_VERTEX && verbosePlannerLog()) {
+    LOG(INFO) << "target " << target << " reusable set vertex " << res.first << " uncovered parents "
+              << toString(res.second);
+  }
   return res;
 }
 
