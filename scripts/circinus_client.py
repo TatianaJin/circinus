@@ -24,8 +24,9 @@ def parse_args():
     "The name of the graph to use. If the graph is not yet loaded, the server will load the graph if it is preinstalled in the data_dir. Otherwise an error will occur."
   )
   parser.add_argument("--graph_path", help="The path of the graph to use.")
-  parser.add_argument("--load_config", default="", help="Load Configuration")
-  parser.add_argument("--profile", action="store_true")
+  parser.add_argument("--load_config", default="", help="Load Configuration.")
+  parser.add_argument("--profile", action="store_true", help="Flag to use profile mode.")
+  parser.add_argument("--profile_si", action="store_true", help="Flag to profile min set intersection.")
   parser.add_argument("-q", "--query", help="The path to the query. -g must also be specified for query.")
   parser.add_argument("-c", "--query_config", help="The configuration of query, example of query config: cps=cfl,mo=1 2 3 4,cs=dynamic,limit=100000")
   parser.add_argument("-t", "--shutdown", action="store_true")
@@ -94,7 +95,7 @@ def send_query(args, send_sock, recv_sock, client_addr):
   if args.graph is None:
     sys.stderr.write("graph cannot be empty\n")
     return
-  cmds = ["profile" if args.profile else "query", args.graph, args.query, args.query_config if args.query_config is not None else ""]
+  cmds = ["profile" if args.profile else "profile_si" if args.profile_si else "query", args.graph, args.query, args.query_config if args.query_config is not None else ""]
   run_command(send_sock, recv_sock, client_addr, cmds)
 
 
@@ -138,6 +139,7 @@ class CircinusCommandCompleter:
       "load": ["load <pre_installed_graph_name>", "load <graph_path> <graph_name> [<load_config>]"],
       "query": ["query <graph_name> <query_path> <query_config_kvs>"],
       "profile": ["query <graph_name> <query_path> <query_config_kvs>"],
+      "profile_si": ["query <graph_name> <query_path> <query_config_kvs>"],
       "explain": ["query <graph_name> <query_path> <query_config_kvs>"],
       "shutdown": ["shutdown"]
     }
