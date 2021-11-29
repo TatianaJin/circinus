@@ -133,9 +133,12 @@ bool TraverseChainTask::splitInput(bool split_on_suspended_level) {
     auto ctx = traverse_context_[split_level_ - start_level_ - 1].get();
     auto original_buffer = ctx->getOutputs();
     std::vector<CompressedSubgraphs> temp_output_buffer;
-    auto split_batch_size = (1u << split_level_) * batch_size_;
+    // auto split_batch = (1u << split_level_);
+    // auto split_batch_size = split_batch * batch_size_;
+    auto split_batch = split_level_;
+    auto split_batch_size = split_level_ * batch_size_;
     temp_output_buffer.reserve(split_batch_size);
-    for (uint32_t i = 0; i < (1u << split_level_); ++i) {
+    for (uint32_t i = 0; i < split_batch; ++i) {
       temp_output_buffer.insert(temp_output_buffer.end(), original_buffer->begin(), original_buffer->end());
     }
     auto original_size = ctx->getOutputSize();

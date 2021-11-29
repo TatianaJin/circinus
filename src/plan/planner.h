@@ -48,7 +48,11 @@ class Planner {
   std::unique_ptr<VertexEquivalence> qv_equivalent_classes_ = nullptr;
 
  public:
-  explicit Planner(QueryContext& query_context) : query_context_(&query_context) {}
+  explicit Planner(QueryContext& query_context)
+      : query_context_(&query_context), backtracking_plan_(std::make_unique<BacktrackingPlan>()) {
+    breakSymmetry();
+    findEquivalentVertices();
+  }
 
   virtual ~Planner() {}
 

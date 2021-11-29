@@ -48,8 +48,10 @@ CandidatePruningPlan* Planner::generateCandidatePruningPlan() {
       candidate_pruning_plan_.setFinished();
     } else {
       OrderGenerator order(&q);
-      auto start_qv = order.getOrder(query_context_->query_config.order_strategy, DUMMY_QUERY_VERTEX).front();
-      candidate_pruning_plan_.newLDFScan(q, {start_qv});
+      VertexRelationship vr(*qv_equivalent_classes_);
+      auto mo =
+          order.getOrder(query_context_->query_config.order_strategy, DUMMY_QUERY_VERTEX, qv_partial_order_.get(), &vr);
+      candidate_pruning_plan_.newLDFScan(q, {mo.front()});
       candidate_pruning_plan_.setPartitionResult(false);
       // candidate_pruning_plan_.setPartitionResult(toPartitionCandidates());
     }
@@ -471,7 +473,6 @@ std::vector<std::pair<uint32_t, std::vector<QueryVertexID>>> Planner::generatePa
 }
 
 BacktrackingPlan* Planner::generateExecutionPlan(std::pair<QueryVertexID, VertexID> seed, bool multithread) {
-  backtracking_plan_ = std::make_unique<BacktrackingPlan>();
   const QueryGraph& query_graph = query_context_->query_graph;
   const ReorderedPartitionedGraph* data_graph = dynamic_cast<ReorderedPartitionedGraph*>(query_context_->data_graph);
   if (query_graph.getVertexLabel(seed.first) != ALL_LABEL &&
@@ -479,7 +480,6 @@ BacktrackingPlan* Planner::generateExecutionPlan(std::pair<QueryVertexID, Vertex
     return nullptr;
   }
 
-  // FIXME(tatiana): seed qv should be excluded from symmetry analysis breakSymmetry();
   planners_.push_back(std::make_unique<NaivePlanner>(&query_context_->query_graph, getGraphType()));
 
   auto& planner = planners_.back();
@@ -505,6 +505,7 @@ BacktrackingPlan* Planner::generateExecutionPlan(std::pair<QueryVertexID, Vertex
 }
 
 void Planner::breakSymmetry() {
+  // FIXME(tatiana): seed qv should be excluded from symmetry analysis
   DCHECK(backtracking_plan_ != nullptr);
   LOG(INFO) << "Symmetry breaking enabled? " << FLAGS_break_symmetry;
   if (FLAGS_break_symmetry) {
@@ -522,9 +523,6 @@ void Planner::breakSymmetry() {
 
 // TODO(engineering): classes in plan should not know classes in exec
 BacktrackingPlan* Planner::generateExecutionPlan(const CandidateResult* result, bool multithread) {
-  backtracking_plan_ = std::make_unique<BacktrackingPlan>();
-  breakSymmetry();
-  findEquivalentVertices();
   if (query_context_->query_config.candidate_pruning_strategy ==
       CandidatePruningStrategy::Online) {  // fast plan: only one plan, no partitioning applied
     // generate order and compression plan

@@ -135,9 +135,9 @@ void CandidatePruningPlanDriver::taskFinish(std::unique_ptr<TaskBase>& task, Thr
   // TODO(BYLI) package merge operation and remove_invalid operation into tasks, determine the parallelism
   if (--task_counters_[task->getTaskId()] == 0) {
     if (plan_->getPhase() == 1) {
-      if (!plan_->toPartitionResult()) {
-        result_->merge(task);
-      }
+      // if (!plan_->toPartitionResult()) {
+      result_->merge(task);
+      // }
     }
 
     if (++n_finished_tasks_ == task_counters_.size()) {
