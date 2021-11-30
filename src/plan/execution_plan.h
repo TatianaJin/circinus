@@ -138,7 +138,7 @@ class ExecutionPlan {
   inline void setVertexRelationship(VertexRelationship* vr) { qv_relationship_ = vr; }
 
   inline void setPartitioningQueryVertices(const std::vector<QueryVertexID>* pqvs) {
-    if (pqvs != nullptr) {
+    if (pqvs != nullptr && !pqvs->empty()) {
       CHECK_EQ(pqvs->size(), 1) << "Now support only one pqv";
       pqv_ = pqvs->front();
     }
