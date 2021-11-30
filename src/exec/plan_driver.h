@@ -31,7 +31,7 @@ namespace circinus {
 class PlanDriver {
  protected:
   /* for each query phase */
-  std::vector<TaskId> task_counters_;
+  std::vector<uint32_t> task_counters_;
   std::vector<std::unique_ptr<Operator>> operators_;
   TaskId n_finished_tasks_ = 0;
   std::unique_ptr<ServerEvent> finish_event_ = nullptr;

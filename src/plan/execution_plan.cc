@@ -82,8 +82,11 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
     // reuse matches of equivalent set vertex for target
     uint32_t reusable_set_index = UINT32_MAX;
     bool reusable_to_be_set = false;
+
     auto[reuse_qv, uncovered_parents] =
-        qv_relationship_->findReusableSet(target_vertex, set_vertices, existing_vertices);
+        (target_vertex == pqv_)
+            ? std::pair<QueryVertexID, std::vector<QueryVertexID>>(DUMMY_QUERY_VERTEX, {})
+            : qv_relationship_->findReusableSet(target_vertex, set_vertices, existing_vertices, 1ULL << pqv_);
     if (reuse_qv != DUMMY_QUERY_VERTEX) {
       reusable_set_index = query_vertex_indices_.at(reuse_qv);
       reusable_to_be_set = true;
@@ -261,7 +264,9 @@ void ExecutionPlan::populatePhysicalPlan(const QueryGraph* g, const std::vector<
     uint32_t reusable_set_index = UINT32_MAX;
     bool reusable_to_be_set = false;
     auto[reuse_qv, uncovered_parents] =
-        qv_relationship_->findReusableSet(target_vertex, set_vertices, existing_vertices);
+        (target_vertex == pqv_)
+            ? std::pair<QueryVertexID, std::vector<QueryVertexID>>(DUMMY_QUERY_VERTEX, {})
+            : qv_relationship_->findReusableSet(target_vertex, set_vertices, existing_vertices, 1ULL << pqv_);
     if (reuse_qv != DUMMY_QUERY_VERTEX) {
       reusable_set_index = query_vertex_indices_.at(reuse_qv);
       reusable_to_be_set = true;
@@ -561,6 +566,7 @@ TraverseOperator* ExecutionPlan::newExpandIntoOperator(const std::vector<QueryVe
   TraverseOperator* ret =
       newTraverseOp<ExpandIntoOperator>(graph_type_, parents, target_vertex, query_vertex_indices_, prev_key_parents,
                                         std::move(filter), getParentLabels(*query_graph_, parents));
+  setMatchingOrderIndices(target_vertex, ret);
   operators_.push_back(ret);
   return ret;
 }

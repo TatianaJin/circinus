@@ -57,7 +57,7 @@ std::pair<bool, uint32_t> VertexRelationship::canBeReusedBy(QueryVertexID u1, Qu
 
 std::pair<QueryVertexID, std::vector<QueryVertexID>> VertexRelationship::findReusableSet(
     QueryVertexID target, std::vector<QueryVertexID>& set_vertices,
-    const unordered_set<QueryVertexID>& existing_vertices) const {
+    const unordered_set<QueryVertexID>& existing_vertices, uint64_t exclude_mask) const {
   DLOG(INFO) << "findReusableSet for " << target << " among [" << toString(set_vertices) << " ]";
   std::pair<QueryVertexID, std::vector<QueryVertexID>> res;
   res.first = DUMMY_QUERY_VERTEX;
@@ -73,6 +73,7 @@ std::pair<QueryVertexID, std::vector<QueryVertexID>> VertexRelationship::findReu
   }
 
   for (QueryVertexID set_vertex : set_vertices) {
+    if (exclude_mask >> set_vertex & 1) continue;
     if (q->getVertexLabel(set_vertex) != q->getVertexLabel(target)) continue;
     bool is_reusable = true;
     DLOG(INFO) << "check neighbor of " << target << " and " << set_vertex;

@@ -396,7 +396,7 @@ void Planner::parallelizePartitionedPlans(
 
     auto weights = planners_[partition.first]->getParallelizingQueryVertexWeights(
         parallel_qv, query_context_->data_graph, candidate_views, plan->getQueryCoverBits());
-    auto sum_weight = std::accumulate(weights.begin(), weights.end(), 0);
+    auto sum_weight = std::accumulate(weights.begin(), weights.end(), 0.);
 
     // bucket_weight_limit = sum_weight * parallelization_threshold / sum_costs;
     auto partition_bucket_weight_limit = std::max(bucket_weight_limit, sum_weight / 100.);
@@ -759,6 +759,8 @@ ExecutionPlan* Planner::generateLogicalExecutionPlan(const std::vector<VertexID>
   auto& order = planner->generateOrder(query_context_->data_graph, *query_context_->graph_metadata, candidate_views,
                                        candidate_cardinality, query_context_->query_config.order_strategy,
                                        query_context_->query_config.seed.first, use_order);
+
+  planner->setPartitioningQueryVertices(partitioning_qvs);
 
   if (order.empty()) {
     return nullptr;

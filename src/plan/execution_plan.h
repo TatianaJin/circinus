@@ -59,6 +59,7 @@ class ExecutionPlan {
   unordered_map<QueryVertexID, uint32_t> query_vertex_indices_;
 
   VertexRelationship* qv_relationship_ = nullptr;  // owned by NaivePlanner
+  QueryVertexID pqv_ = DUMMY_QUERY_VERTEX;         // needed to decide reusable set
 
   std::vector<double> step_costs_;
 
@@ -135,6 +136,13 @@ class ExecutionPlan {
   inline const auto& getStepCosts() const { return step_costs_; }
 
   inline void setVertexRelationship(VertexRelationship* vr) { qv_relationship_ = vr; }
+
+  inline void setPartitioningQueryVertices(const std::vector<QueryVertexID>* pqvs) {
+    if (pqvs != nullptr) {
+      CHECK_EQ(pqvs->size(), 1) << "Now support only one pqv";
+      pqv_ = pqvs->front();
+    }
+  }
 
   const auto& getOpInputSubqueryCover() const { return op_input_subquery_cover_; }
 

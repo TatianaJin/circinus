@@ -45,7 +45,7 @@ class VertexRelationship {
 
   std::pair<QueryVertexID, std::vector<QueryVertexID>> findReusableSet(
       QueryVertexID target, std::vector<QueryVertexID>& set_vertices,
-      const unordered_set<QueryVertexID>& existing_vertices) const;
+      const unordered_set<QueryVertexID>& existing_vertices, uint64_t exclude_mask = 0) const;
 
   std::pair<bool, uint32_t> canBeReusedBy(QueryVertexID u1, QueryVertexID u2) const;
 };

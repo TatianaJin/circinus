@@ -165,6 +165,10 @@ class NaivePlanner {
 
   inline const std::vector<QueryVertexID>& getMatchingOrder() const { return matching_order_; }
 
+  void setPartitioningQueryVertices(const std::vector<QueryVertexID>* pqvs) {
+    plan_.setPartitioningQueryVertices(pqvs);
+  }
+
  private:
   /* Start of implementations of compression strategy */
 
