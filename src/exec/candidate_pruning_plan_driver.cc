@@ -77,6 +77,7 @@ void CandidatePruningPlanDriver::init(QueryId qid, QueryContext* query_ctx, Exec
   finish_event_ = std::make_unique<ServerEvent>(ServerEvent::CandidatePhase);
   DLOG(INFO) << (finish_event_ == nullptr);
   finish_event_->query_id = qid;
+  exec_config_ = &ctx.first;
   if (plan_->getPhase() == 1) {
     LOG(INFO) << "Candidate pruning phase 1";
     auto n_partitions = query_ctx->graph_metadata->numPartitions();
@@ -114,7 +115,7 @@ void CandidatePruningPlanDriver::init(QueryId qid, QueryContext* query_ctx, Exec
     QueryVertexID query_vertex = filter->getQueryVertex();
     uint64_t input_size = (*result_->getMergedCandidates())[query_vertex].size();
     filter->setInputSize(input_size);
-    filter->setParallelism((input_size + FLAGS_batch_size - 1) / FLAGS_batch_size);
+    filter->setParallelism(getFilterParallelism(input_size));
     task_counters_[n_finished_tasks_] = filter->getParallelism();
     for (uint32_t i = 0; i < filter->getParallelism(); ++i) {
       task_queue.putTask(new NeighborhoodFilterTask(qid, n_finished_tasks_, query_ctx->stop_time, i, filter,
@@ -156,7 +157,7 @@ void CandidatePruningPlanDriver::taskFinish(std::unique_ptr<TaskBase>& task, Thr
       uint64_t input_size = (*result_->getMergedCandidates())[query_vertex].size();
       CHECK_NE(input_size, 0) << "query vertex " << query_vertex << " has empty candidate set, not handled yet";
       filter->setInputSize(input_size);
-      filter->setParallelism((input_size + FLAGS_batch_size - 1) / FLAGS_batch_size);
+      filter->setParallelism(getFilterParallelism(input_size));
       task_counters_[n_finished_tasks_] = filter->getParallelism();
       for (uint32_t i = 0; i < filter->getParallelism(); ++i) {
         task_queue->putTask(new NeighborhoodFilterTask(task->getQueryId(), n_finished_tasks_, task->getStopTime(), i,

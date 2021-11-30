@@ -157,7 +157,7 @@ class Benchmark {
       (*out) << dataset << ',' << query_size << ',' << query_mode << ',' << index << ',';
     }
     return circinus::Path::join(
-        FLAGS_data_dir, dataset, "query_graph",
+        FLAGS_data_dir, dataset, "query_graph_new",
         "query_" + query_mode + "_" + std::to_string(query_size) + "_" + std::to_string(index) + ".graph");
   }
 
