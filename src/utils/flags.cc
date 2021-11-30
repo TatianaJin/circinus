@@ -29,6 +29,7 @@ DEFINE_int32(candidate_set_intersection, 0,
 DEFINE_int32(seperate_enumeration, 0,
              "1 to split set before enumeration, 2 to seperate enumeration of sets into key in an operator. Default 0, "
              "disabled");
+DEFINE_int32(task_split, 0, "0 lowest-level-first, 1 no splitting, 2 splitting on current level");
 
 DEFINE_bool(standalone, false,
             "In standalone mode, a Circinus server is launched together with a simple command line driver.");
@@ -44,5 +45,8 @@ DEFINE_string(cost_learner, "",
               "The address of the cost learner which uses machine learning to learn costs for compression plan.");
 
 DEFINE_bool(break_symmetry, false, "If true, break symmetry to avoid automorphism in matching");
+
+DEFINE_bool(path_card, true,
+            "Whether to use path weights to estimate cardinality of cover when candidates are available");
 
 DEFINE_int32(verbosity, circinus::FULL_LOG, "The verbosity level of logs");

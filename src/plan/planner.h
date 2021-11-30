@@ -135,7 +135,7 @@ class Planner {
                                               const std::vector<CandidateSetView>* candidate_views = nullptr,
                                               const std::vector<QueryVertexID>* partitioning_qvs = nullptr,
                                               const std::vector<QueryVertexID>* use_order = nullptr,
-                                              bool use_cover_path = true);
+                                              bool use_cover_path = FLAGS_path_card);
 
   void exhaustivePartitionPlan(std::vector<std::vector<CandidateScope>>& partitioned_plans, uint32_t level,
                                uint32_t partition_num, const std::vector<QueryVertexID>& partitioning_qv,

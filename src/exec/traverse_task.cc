@@ -100,6 +100,13 @@ void TraverseChainTask::logTask(uint64_t old_count, uint32_t executor_idx) {
 
 template <QueryType mode>
 bool TraverseChainTask::splitInput(bool split_on_suspended_level) {
+  if (FLAGS_task_split == 1) {  // do not split
+    return false;
+  }
+  if (FLAGS_task_split == 2) {  // split on current level
+    split_level_ = suspended_level_;
+    split_on_suspended_level = true;
+  }
   if (split_level_ <= start_level_) {  // if split from start level, directly get from input
     if (traverse_context_[0]->canSplitInput()) {
       auto[ptr, size] = traverse_context_[0]->splitInput();
