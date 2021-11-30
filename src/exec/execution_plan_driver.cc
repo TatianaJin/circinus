@@ -131,6 +131,7 @@ void ExecutionPlanDriverBase::taskTimeOut(std::unique_ptr<TaskBase>& task, Threa
 
 template <typename TaskType>
 void ExecutionPlanDriverBase::handleSuspendedTask(std::unique_ptr<TaskBase>& task, ThreadsafeTaskQueue* task_queue) {
+  suspend_interval_ptr_ = &suspend_interval_;
   auto traverse_task = dynamic_cast<TaskType*>(task.get());
   auto splits = traverse_task->getSplits();
   CHECK(!splits.empty());
