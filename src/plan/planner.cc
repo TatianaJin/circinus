@@ -382,7 +382,7 @@ void Planner::parallelizePartitionedPlans(
     auto sum_costs = std::accumulate(step_costs.begin(), step_costs.end(), 0.) + 1.;
     if (sum_costs <= parallelization_threshold) {
       parallelized_partitioned_plans.push_back(std::move(partition));
-      segment_mask.push_back(false);
+      segment_mask.push_back(query_context_->query_config.compression_strategy != CompressionStrategy::Dynamic);
       continue;
     }
 

@@ -253,6 +253,9 @@ void ExecutionPlanDriver::init(QueryId qid, QueryContext* query_ctx, ExecutionCo
     ++task_counters_[plan_->getPartitionedPlan(i).first];
   }
   n_pending_tasks_ += n_plans;
+  if (n_pending_tasks_ < max_parallelism_) {
+    suspend_interval_ = min_suspend_interval_;
+  }
 
   // >>>>> hard code now to share hashmaps of candidate sets
   candidate_hashmaps_.resize(n_plans);
