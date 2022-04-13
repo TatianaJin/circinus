@@ -1,17 +1,3 @@
-// Copyright 2021 HDL
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-// http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 #pragma once
 
 #include <algorithm>
@@ -62,7 +48,6 @@ class QueryGraph {
 
   /**
    * @param path The file to load query graph (undirected).
-   * TODO(tatiana): support directed query graph
    *
    * File format
    * t n_vertices n_edges
@@ -136,7 +121,6 @@ class DirectedQueryGraph : public QueryGraph {
 
  public:
   DirectedQueryGraph() {}
-  // TODO(tatiana): test
   explicit DirectedQueryGraph(const std::string& path);
 
   inline QueryVertexID getGraphMaxInDegree() const { return max_in_degree_; }
@@ -147,8 +131,6 @@ class DirectedQueryGraph : public QueryGraph {
     return std::make_pair(&in_elist_[in_vlist_[id]], getVertexInDegree(id));
   }
 
-  // TODO(tatiana): test
-  // overload function
   inline DirectedQueryGraph getInducedSubgraph(const std::vector<QueryVertexID>& vertices) const {
     DirectedQueryGraph ret;
     getInducedSubgraphInner(&ret, vertices);

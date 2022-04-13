@@ -1,17 +1,3 @@
-// Copyright 2021 HDL
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-// http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 #include "graph/compressed_subgraphs.h"
 
 #include <unordered_map>
@@ -132,8 +118,6 @@ uint64_t CompressedSubgraphs::getNumIsomorphicSubgraphsWithConstraintsImpl(
   return count;
 }
 
-// TODO(tatiana): compute an inclusion-exclusion schedule with intersection and coefficient and pass the schedule to
-// this function
 uint64_t CompressedSubgraphs::getNumIsomorphicSubgraphs(const PruningIndexGroups& pruning_indices, uint64_t limit,
                                                         const VertexRelationship* qv_equivalent_classes) const {
   if (pruning_indices.empty()) {
@@ -219,7 +203,7 @@ uint64_t CompressedSubgraphs::getEnumerationCount(const std::vector<uint32_t>& s
                                                   const unordered_set<VertexID>& except, VertexID max_except) const {
   uint32_t n_sets = set_indices.size();
   DCHECK_GT(n_sets, 1) << set_indices[0];
-  DCHECK_LT(n_sets, 4) << "counting more than 3 sets is not supported yet";  // TODO(tatiana)
+  DCHECK_LT(n_sets, 4) << "counting more than 3 sets is not supported yet";  
   uint64_t cnt = 0, product = 1;
   if (except.empty()) {
     for (auto index : set_indices) {
@@ -314,7 +298,6 @@ uint64_t CompressedSubgraphs::getNumIsomorphicSubgraphsWithConstraints(
     const PruningIndexGroups& pruning_indices, const std::vector<std::vector<std::vector<uint32_t>>>& constraints_adjs,
     const std::vector<std::vector<uint32_t>>& enumerate_orders, uint64_t limit,
     const VertexRelationship* qv_equivalent_classes) const {
-  // TODO(tatiana): reuse code in getNumIsomorphicSubgraphs >>>>>
   if (pruning_indices.empty()) {
     return std::min(limit, getNumSubgraphs());
   }  // no same-label keys or sets
@@ -352,7 +335,6 @@ uint64_t CompressedSubgraphs::getNumIsomorphicSubgraphsWithConstraints(
             [&pruning_set_group_size](uint32_t idx1, uint32_t idx2) {
               return pruning_set_group_size[idx1] < pruning_set_group_size[idx2];
             });
-  // TODO(tatiana): reuse code in getNumIsomorphicSubgraphs <<<<<
 
   unordered_set<VertexID> existing_vertices;
   VertexID max_existing_vertices = 0;
@@ -387,7 +369,6 @@ uint64_t CompressedSubgraphs::getNumIsomorphicSubgraphsWithConstraints(
         group_cnt /= d;
       }
     } else {
-      // FIXME(tatiana): use getNumIsomorphicSubgraphs if there is no constraint in this group
       group_cnt = getNumIsomorphicSubgraphsWithConstraintsImpl(existing_vertices, pruning_set_ptrs[idx],
                                                                constraints_adjs[idx], (limit + count - 1) / count);
     }

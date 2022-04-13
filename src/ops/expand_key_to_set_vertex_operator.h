@@ -1,17 +1,3 @@
-// Copyright 2021 HDL
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-// http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 #pragma once
 
 #include <algorithm>
@@ -92,7 +78,6 @@ class ExpandKeyToSetVertexOperator : public ExpandVertexOperator {
   inline uint32_t expandInner(uint32_t batch_size, TraverseContext* base_ctx) const {
     auto ctx = (ExpandVertexTraverseContext*)base_ctx;
     uint32_t output_num = 0;
-    // TODO(tatiana): tidy up
     if (have_existing_target_set_) {
       uint32_t target_vertex_index = query_vertex_indices_.at(target_vertex_);
       for (; output_num < batch_size && ctx->hasNextInput(); ctx->nextInput()) {

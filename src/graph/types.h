@@ -1,17 +1,3 @@
-// Copyright 2021 HDL
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-// http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 #pragma once
 
 #include <cinttypes>
@@ -39,7 +25,6 @@ enum class GraphType : uint32_t { Normal, Partitioned, GraphView, BipartiteGraph
 using PartialOrderConstraintMap =
     unordered_map<QueryVertexID, std::pair<std::vector<QueryVertexID>, std::vector<QueryVertexID>>>;
 
-// TODO(tatiana): remove inverse type?
 enum class CandidateScopeType : uint8_t { All = 0, Partition = 1, Range = 2, PartitionRange = 3, Inverse = 4 };
 inline std::string CANDIDATE_SCOPE_TYPE_NAMES[5] = {"All", "Partition", "Range", "PRange", "Inverse"};
 inline std::ostream& operator<<(std::ostream& os, CandidateScopeType type) {

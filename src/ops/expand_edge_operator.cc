@@ -1,17 +1,3 @@
-// Copyright 2021 HDL
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-// http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 #include "ops/expand_edge_operator.h"
 
 #include <algorithm>
@@ -582,7 +568,6 @@ class ExpandEdgeSetToKeyOperator : public ExpandEdgeOperator {
     if (std::min(ctx->getCandidateSet()->size(), set_neighbor_size) <=
         cap) {             // here we use set_neighbor_size to approximate the output size. as long as the
                            // output size does not exceed cap, ByParent is preferred than ByExtension.
-                           // TODO(tatiana): consider better estimation on the output size
       return ByExtension;  // return ByParent;
     }
     return ByExtension;
@@ -627,7 +612,6 @@ class ExpandEdgeSetToKeyOperator : public ExpandEdgeOperator {
 
   template <QueryType profile>
   void expandInner(const CompressedSubgraphs& input, uint32_t cap, ExpandEdgeSetToKeyTraverseContext* ctx) const {
-    // TODO(tatiana): consider reusable set in case of containment
     auto& parent_set = input.getSet(parent_index_);
     ExecutionMode mode = getExecutionMode(parent_set.get(), cap, ctx);
     switch (mode) {

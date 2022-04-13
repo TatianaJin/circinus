@@ -1,17 +1,3 @@
-// Copyright 2021 HDL
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-// http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 #pragma once
 
 #include <algorithm>
@@ -167,7 +153,6 @@ class EnumerateKeyExpandToSetOperator : public ExpandVertexOperator {
     return expandInner<QueryType::ProfileWithMiniIntersection>(batch_size, ctx);
   }
 
-  // TODO(tatiana): name convention
   bool extend_vertex() const override { return !target_set_exists_; }
 
   bool enumeratesSet() const override { return true; }
@@ -208,8 +193,6 @@ class EnumerateKeyExpandToSetOperator : public ExpandVertexOperator {
   void setPartialOrder(const PartialOrder& po, const unordered_map<QueryVertexID, uint32_t>& seen_vertices) override {
     // set constraints related to targets
     TraverseOperator::setPartialOrder(po, seen_vertices);
-    // TODO(tatiana): filter target according partial order as soon as applicable
-    // set constraints related to keys to enumerate
     auto n_keys = keys_to_enumerate_.size();
     if (n_keys > 1) {
       /* order keys from smaller to larger by partial order */

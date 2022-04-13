@@ -1,17 +1,3 @@
-// Copyright 2021 HDL
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-// http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 #pragma once
 
 #include <memory>
@@ -231,14 +217,12 @@ class ExpandSetToKeyVertexOperator : public ExpandVertexOperator {
       return false;
     }
 #ifndef USE_FILTER
-    // TODO(tatiana): `ExpandSetToKey` requires different groups of same-label indices for the parent sets
     // for active pruning, should use same-label set indices >>>
     unordered_set<uint32_t> set_indices;
     for (uint32_t i = 0; i < new_output->getNumSets(); ++i) {
       set_indices.insert(i);
     }  // <<< for active pruning, should use same-label set indices
 #endif
-    // TODO(by) hash key_out_neighbors?
     if
       constexpr(!sensitive_to_hint<G>) key_out_neighbors =
           ctx->getDataGraph<G>()->getInNeighborsWithHint(target, ALL_LABEL, source_parent_idx);

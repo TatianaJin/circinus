@@ -1,17 +1,3 @@
-// Copyright 2021 HDL
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-// http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 #pragma once
 
 #include <chrono>
@@ -30,7 +16,7 @@
 
 namespace circinus {
 
-enum class OutputType : uint32_t { Subgraph = 0, Count }; /* TODO(tatiana): support enumeration */
+enum class OutputType : uint32_t { Subgraph = 0, Count }; 
 
 class Outputs {
   std::vector<uint64_t> n_matches_per_thread_;
@@ -49,7 +35,6 @@ class Outputs {
 
   inline uint64_t getCount(uint32_t thread_id) const { return n_matches_per_thread_[thread_id]; }
 
-  // TODO(limit): sync limit among threads
   inline void limit(uint64_t total_limit) { limit_per_thread_ = total_limit; }
 
   inline uint64_t getLimitPerThread() const { return limit_per_thread_; }

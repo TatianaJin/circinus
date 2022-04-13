@@ -1,17 +1,3 @@
-// Copyright 2021 HDL
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-// http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 #pragma once
 
 #include <chrono>
@@ -183,14 +169,12 @@ class ExpandIntoOperator : public TraverseOperator {
             }
         }
 #ifndef USE_FILTER
-      // TODO(tatiana): `ExpandInto` requires different groups of same-label indices for the parent sets
       // for active pruning, should use same-label set indices >>>
       unordered_set<uint32_t> set_indices;
       for (uint32_t i = 0; i < input.getNumSets(); ++i) {
         set_indices.insert(i);
       }  // <<< for active pruning, should use same-label set indices
 #endif
-      // TODO(tatiana): consider sorting of parents in ascending order of set size, for better pruning?
       uint32_t parent_idx = 0;
       auto exceptions = input.getKeyMap();
       for (QueryVertexID vid : parents_) {
@@ -211,7 +195,6 @@ class ExpandIntoOperator : public TraverseOperator {
           break;
         }
 #ifdef USE_FILTER
-        // TODO(tatiana): include same-label keys for checking when sets are updated (ExpandInto and ExpandSettoKey)
         input.UpdateSets(id, newVertexSet(new_set));
         if (filter(input)) {
           add = false;

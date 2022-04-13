@@ -1,17 +1,3 @@
-// Copyright 2021 HDL
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-// http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 #include "graph/partitioned_graph.h"
 
 #include <algorithm>
@@ -38,8 +24,6 @@ ReorderedPartitionedGraph::ReorderedPartitionedGraph(const std::string& path, ui
   auto labels = loadUndirectedGraph(path);
   vertex_ids_.resize(getNumVertices());
   std::iota(vertex_ids_.begin(), vertex_ids_.end(), 0);
-  // TODO(tatiana): now only single-thread processing, support parallel processing later
-  // partition and reorder
   if (n_partitions > 1) {
     auto[parts, n_edge_cuts] = getMetisParts(n_partitions);
     n_edge_cuts_ = n_edge_cuts;
@@ -97,7 +81,6 @@ void ReorderedPartitionedGraph::sortVertices(const std::vector<idx_t>& parts, co
   });
 }
 
-// TODO(tatiana): now only single-thread processing, support parallel processing later
 void ReorderedPartitionedGraph::reorder(bool sort_by_degree, const std::vector<LabelID>& labels,
                                         const std::vector<idx_t>& parts, const GraphBase* src_graph) {
   if (sort_by_degree) {

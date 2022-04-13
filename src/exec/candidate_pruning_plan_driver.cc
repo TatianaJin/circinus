@@ -1,17 +1,3 @@
-// Copyright 2021 HDL
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-// http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 #include "exec/candidate_pruning_plan_driver.h"
 
 #include <memory>
@@ -40,7 +26,6 @@ void CandidatePruningPlanDriver::initPhase1TasksForPartitionedGraph(QueryId qid,
   ctx.second = Result::newPartitionedCandidateResult(n_qvs, n_partitions);
   result_ = (CandidateResult*)ctx.second.get();
   finish_event_->data = result_;
-  // TODO(tatiana) now for simplicity enforce one task per partition for one query vertex
   ctx.first.setMaxParallelism(1);
   std::vector<ScanTask*> tasks;
   tasks.reserve(n_partitions * n_qvs);
@@ -63,7 +48,6 @@ void CandidatePruningPlanDriver::initPhase1TasksForPartitionedGraph(QueryId qid,
   }
   for (auto counter : task_counters_) {
     if (counter == 0) {
-      // TODO(tatiana): handle trivial case when there is no candidate
       LOG(FATAL) << " No candidate matching query vertex?";
     }
   }
@@ -134,7 +118,6 @@ void CandidatePruningPlanDriver::taskFinish(std::unique_ptr<TaskBase>& task, Thr
     // dynamic_cast<ScanTask*>(task.get())->getScanContext().candidates.size();
     result_->collect(task);
   }
-  // TODO(BYLI) package merge operation and remove_invalid operation into tasks, determine the parallelism
   // LOG(INFO) << plan_->getPhase() << "  " << task->getTaskId() << "  " << task_counters_[task->getTaskId()];
   if (--task_counters_[task->getTaskId()] == 0) {
     if (plan_->getPhase() == 1) {

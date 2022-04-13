@@ -1,17 +1,3 @@
-// Copyright 2021 HDL
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-// http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 #include "ops/scans.h"
 
 #include <numeric>
@@ -176,7 +162,6 @@ class DegreeScanBase : public Scan {
 using DirectedDegreeScan = DegreeScanBase<true>;
 using DegreeScan = DegreeScanBase<false>;
 
-// TODO(tatiana): support versions that apply to graphs sorted by label/degree
 
 /* factory functions */
 
@@ -186,13 +171,11 @@ std::unique_ptr<Scan> Scan::newLDFScan(LabelID label, VertexID out_d, VertexID i
     if (label_pruning_method == 1) {
       return std::make_unique<LDFScan>(label, out_d, conf);
     }
-    // TODO(tatiana): handle when label_pruning_method == 2
     return std::make_unique<LDFFullScan>(label, out_d, conf);
   }
   if (label_pruning_method == 1) {
     return std::make_unique<DirectedLDFScan>(label, out_d, in_d, conf);
   }
-  // TODO(tatiana): handle when label_pruning_method == 2
   return std::make_unique<DirectedLDFFullScan>(label, out_d, in_d, conf);
 }
 

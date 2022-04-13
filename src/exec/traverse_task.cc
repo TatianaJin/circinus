@@ -1,14 +1,3 @@
-// Copyright 2021 HDL
-//
-// Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
-//
-// http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
-// an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
-// specific language governing permissions and limitations under the License.
-
 #include "exec/traverse_task.h"
 
 namespace circinus {
@@ -36,7 +25,6 @@ void TraverseChainTask::run(uint32_t executor_idx) {
   if (end_level_ == operators_->size() - 1) {
     old_count = dynamic_cast<OutputOperator*>(operators_->back())->getOutput()->getCount(executor_idx);
   }
-  // TODO(engineering): support match limit
   execute<QueryType::Execute>(inputs_, start_index_, input_size_, start_level_, executor_idx);
   checkSplits();
   logTask(old_count, executor_idx);
@@ -57,7 +45,6 @@ void TraverseChainTask::profile(uint32_t executor_idx) {
   if (end_level_ == operators_->size() - 1) {
     old_count = dynamic_cast<OutputOperator*>(operators_->back())->getOutput()->getCount(executor_idx);
   }
-  // TODO(engineering): support match limit
   execute<QueryType::Profile>(inputs_, start_index_, input_size_, start_level_, executor_idx);
   if (task_status_ == TaskStatus::Normal) {
     DCHECK_LT(start_level_, operators_->size());

@@ -1,17 +1,3 @@
-// Copyright 2021 HDL
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-// http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 #pragma once
 
 #include <chrono>
@@ -71,7 +57,6 @@ class CircinusServer {
   std::thread client_server_thread_;
 
   zmq::context_t zmq_ctx_;
-  // TODO(tatiana): clear disconnected sockets
   std::unordered_map<std::string, zmq::socket_t> sockets_to_clients_;
 
  public:
@@ -104,13 +89,11 @@ class CircinusServer {
   void handleNewQuery(const Event& event);
 
   /** Load data graph.
-   * TODO(tatiana): support asynchronous parallel graph loading
    * @param event The event contains three args: graph path, graph name, and loading config.
    */
   void handleLoadGraph(const Event& event);
 
   inline void handleShutDown(const Event& event) {
-    // TODO(tatiana): finish up before shutdown
   }
 
   void handleCandidatePhase(const Event& event);

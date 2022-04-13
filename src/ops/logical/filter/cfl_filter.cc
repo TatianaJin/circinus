@@ -1,17 +1,3 @@
-// Copyright 2021 HDL
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-// http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 #include <algorithm>
 #include <memory>
 #include <queue>
@@ -34,7 +20,6 @@ LogicalCFLFilter::LogicalCFLFilter(const GraphMetadata& metadata, const QueryGra
   generateBFSTree(query_graph);
 }
 
-// TODO(tatiana): no need for 2core solver given the start vertex
 LogicalCFLFilter::LogicalCFLFilter(const QueryGraph* query_graph, QueryVertexID seed_qv)
     : LogicalNeighborhoodFilter(query_graph), start_vertex_(seed_qv), two_core_solver_(query_graph) {
   if (start_vertex_ == DUMMY_QUERY_VERTEX) {

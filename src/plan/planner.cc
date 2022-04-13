@@ -1,17 +1,3 @@
-// Copyright 2021 HDL
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-// http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 #include "plan/planner.h"
 
 #include <algorithm>
@@ -36,7 +22,6 @@ namespace circinus {
 
 /**
  * For now, in the case of partitioned graph, all graph partitions share the same candidate pruning plan.
- * TODO(tatiana): cache order / bfs-tree for execution plan generation
  */
 CandidatePruningPlan* Planner::generateCandidatePruningPlan() {
   auto& q = query_context_->query_graph;
@@ -59,7 +44,6 @@ CandidatePruningPlan* Planner::generateCandidatePruningPlan() {
   }
   case CandidatePruningStrategy::Adaptive: {
     LOG(FATAL) << "Not implemented yet";
-    // TODO(tatiana): adapt to data graph distribution
     return &candidate_pruning_plan_;
   }
   case CandidatePruningStrategy::LDF: {
@@ -102,7 +86,6 @@ CandidatePruningPlan* Planner::generateCandidatePruningPlan() {
   return &candidate_pruning_plan_;
 }
 
-// TODO(engineering): classes in plan should not know classes in exec
 CandidatePruningPlan* Planner::updateCandidatePruningPlan(const CandidateResult* result) {
   CHECK(result != nullptr);
   auto part_cardinality = result->getCandidateCardinality();
@@ -134,7 +117,6 @@ CandidatePruningPlan* Planner::updateCandidatePruningPlan(const CandidateResult*
     //   candidate_pruning_plan_.setFinished();
     // }
     // return &candidate_pruning_plan_;
-    // TODO(tatiana): now we skip phase 2 as it is not easy to parallelize forward construction due to set union
     phase = candidate_pruning_plan_.completePhase();
   }
   if (phase == 3) {
@@ -520,7 +502,6 @@ BacktrackingPlan* Planner::generateExecutionPlan(std::pair<QueryVertexID, Vertex
 }
 
 void Planner::breakSymmetry() {
-  // FIXME(tatiana): seed qv should be excluded from symmetry analysis
   DCHECK(backtracking_plan_ != nullptr);
   LOG(INFO) << "Symmetry breaking enabled? " << FLAGS_break_symmetry;
   if (FLAGS_break_symmetry) {
@@ -536,7 +517,6 @@ void Planner::breakSymmetry() {
   }
 }
 
-// TODO(engineering): classes in plan should not know classes in exec
 BacktrackingPlan* Planner::generateExecutionPlan(const CandidateResult* result, bool multithread) {
   if (query_context_->query_config.candidate_pruning_strategy ==
       CandidatePruningStrategy::Online) {  // fast plan: only one plan, no partitioning applied
@@ -705,7 +685,6 @@ BacktrackingPlan* Planner::generateExecutionPlan(const CandidateResult* result, 
     LOG(INFO) << ">>>>>>>>>> Time to parallelizePartitionedPlans " << toSeconds(t1, t2) << "s";
   }
 
-  // TODO(tatiana): check for prunable partitioned plans
 
   if (shortPlannerLog()) {  // debug log for scopes and plans
     uint32_t plan_idx = 0;
@@ -731,7 +710,6 @@ BacktrackingPlan* Planner::generateExecutionPlan(const CandidateResult* result, 
 
 BacktrackingPlan* Planner::generateExecutionPlan(const std::vector<std::vector<VertexID>>* candidate_cardinality,
                                                  bool multithread) {
-  // TODO(engineering): for explain mode
   return backtracking_plan_.get();
 }
 

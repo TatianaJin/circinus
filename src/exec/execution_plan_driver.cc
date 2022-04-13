@@ -1,17 +1,3 @@
-// Copyright 2021 HDL
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-// http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 #include "exec/execution_plan_driver.h"
 
 #include <algorithm>
@@ -246,7 +232,6 @@ void ExecutionPlanDriver::init(QueryId qid, QueryContext* query_ctx, ExecutionCo
   n_labels_ = query_ctx->data_graph->getNumLabels();
 
   auto n_plans = plan_->getNumPartitionedPlans();
-  // TODO(tatiana): handle the case with no plan (no match after pruning)
   CHECK_NE(n_plans, 0) << "The case of no plan is not handled yet";
   task_counters_.resize(plan_->getPlans().size(), 0);
   candidates_.resize(n_plans);
@@ -260,7 +245,6 @@ void ExecutionPlanDriver::init(QueryId qid, QueryContext* query_ctx, ExecutionCo
 
   // >>>>> hard code now to share hashmaps of candidate sets
   candidate_hashmaps_.resize(n_plans);
-  // FIXME(tatiana): problematic if using LDF/NLF cps as candidates are not merged
   auto candidate_views = candidate_result_->getCandidates();
   CHECK_EQ(candidate_views.size(), query_ctx->query_graph.getNumVertices())
       << "Now assuming generating candidates for all qvs";
@@ -355,7 +339,7 @@ void MatchingParallelExecutionPlanDriver::init(QueryId qid, QueryContext* query_
     return;
   }
 
-  {  // TODO(tatiana): wrap with a task?
+  {  
     traverse_ctx_templates_.reserve(plan_->getOperators().size() - 1);
     for (auto op : plan_->getOperators()) {
       auto traverse = dynamic_cast<TraverseOperator*>(op);
@@ -371,7 +355,7 @@ void MatchingParallelExecutionPlanDriver::init(QueryId qid, QueryContext* query_
   task_depleted_.resize(plan_->getOperators().size() + 1, false);
   input_op_ = plan_->getInputOperator();
   task_counters_[0] = input_op_->getParallelism();
-  CHECK_EQ(task_counters_[0], 1) << " input task counter is not equal to 1 ";  // TODO(tatiana): parallel input tasks
+  CHECK_EQ(task_counters_[0], 1) << " input task counter is not equal to 1 ";  
 
   input_op_->setNext(plan_->getOperators().front());
   addTaskToQueue<MatchingParallelInputTask>(&task_queue, qid, 0, query_ctx->stop_time,
@@ -426,7 +410,6 @@ void MatchingParallelExecutionPlanDriver::taskFinish(std::unique_ptr<TaskBase>& 
   }
 
   if (--task_counters_[task->getTaskId()] == 0) {
-    // TODO(limit): abort task when match limit is reached
     if (task->getTaskId() == 0 || task_depleted_[task->getTaskId() - 1]) {
       for (uint32_t i = task->getTaskId(); i < task_counters_.size() && task_counters_[i] == 0; ++i) {
         task_depleted_[i] = true;

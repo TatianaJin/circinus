@@ -1,17 +1,3 @@
-// Copyright 2021 HDL
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-// http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 #include "plan/naive_planner.h"
 
 #include <algorithm>
@@ -320,7 +306,6 @@ double NaivePlanner::estimateCardinality(const GraphBase* data_graph,
   }
 
   /* dfs from a cover vertex to compute estimation */
-  // TODO(tatiana): find one cover vertex with least candidates?
   for (auto qid : matching_order_) {
     if ((cover_bits >> qid & 1) == 0 || visited[qid]) {
       continue;
@@ -433,7 +418,6 @@ double NaivePlanner::estimateExpandCost(const GraphBase* data_graph,
     }
   }
   auto reusable = vertex_relationship_->findReusableSet(target_vertex, set_vertices, existing_vertices);
-  // TODO(tatiana): handle when reusable.second is not empty
   if (reusable.first != DUMMY_QUERY_VERTEX && reusable.second.empty()) {
     return 0;
   }
@@ -882,8 +866,6 @@ void NaivePlanner::generateCoverNode(const std::vector<std::vector<double>>& car
   }
 
   // take log of the cardinality for computing weighted vertex cover
-  // TODO(tatiana): more efficient implementation by reusing the prefix values? or the cardinality varies among
-  // subqueries?
   std::vector<std::vector<double>> candidate_cardinality_by_match_order(matching_order_.size());
   std::vector<uint32_t> order_index(matching_order_.size(), 0);  // query vertex to matching order index
   for (uint32_t i = 0; i < matching_order_.size(); ++i) {

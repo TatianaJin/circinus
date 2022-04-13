@@ -1,17 +1,3 @@
-// Copyright 2021 HDL
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-// http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 #include "exec/circinus_server.h"
 
 #include <memory>
@@ -245,7 +231,7 @@ double CircinusServer::loadGraphFromBinary(const std::string& graph_path, const 
   auto graph = dynamic_cast<Graph*>(data_graph.get());
   GraphMetadata meta;
   if (graph != nullptr) {
-    graph->buildLabelIndex();  // TODO(tatiana): construct label index only when suitable
+    graph->buildLabelIndex();  
     meta = GraphMetadata(*graph, true);
   } else {
     meta = GraphMetadata(*dynamic_cast<ReorderedPartitionedGraph*>(data_graph.get()));
@@ -305,7 +291,6 @@ void CircinusServer::finishQuery(uint32_t query_index, void* result, const std::
       msg.addstr(reply.toString());
       replyToClient(query.client_addr, msg);
     } else {
-      // TODO(tatiana): support other output option
       LOG(WARNING) << "Output option not implemented yet: " << query.query_context.query_config.output;
     }
   } else {
@@ -350,13 +335,11 @@ void CircinusServer::prepareQuery(uint32_t query_index) {
   consolidateConfigs(query_state.query_context);
   if (query_state.query_context.query_config.mode == QueryMode::Explain) {  // dry run
     auto cardinality = query_state.planner->estimateCardinality();
-    // FIXME(by)
     // auto plan = query_state.planner->generateExecutionPlan(&cardinality);
     // auto str = plan->toString();
     // query_state.query_context.query_config.output = "plan";
     // finishQuery(query_index, &str, "");
   } else {  // enter actual execution phases
-    // TODO(tatiana): refactor to merge both branches
     if (query_state.query_context.query_config.seed.first != DUMMY_QUERY_VERTEX &&
         query_state.query_context.query_config.order_strategy == OrderStrategy::Online) {
       LOG(INFO) << "Skipped candidate generation. Start backtracking.";
@@ -378,7 +361,7 @@ void CircinusServer::prepareQuery(uint32_t query_index) {
 
       // phase 1: preprocessing
       CandidatePruningPlan* plan = query_state.planner->generateCandidatePruningPlan();
-      if (plan->isFinished()) {  // no candidate generation TODO(tatiana): in case of seed data vertex
+      if (plan->isFinished()) {  // no candidate generation 
         auto plan = query_state.planner->generateExecutionPlan((CandidateResult*)nullptr, FLAGS_num_cores > 1);
         executor_manager_.run(query_index, &query_state.query_context,
                               std::make_unique<ExecutionPlanDriver>(plan, &zmq_ctx_));
