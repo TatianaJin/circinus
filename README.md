@@ -1,8 +1,6 @@
 Circinus: an efficient parallel subgraph matching framework that reduces computation redundancy and optimizes memory usage
 =======
 
-[![status](https://github.com/TatianaJin/circinus/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/TatianaJin/circinus/actions/workflows/ci.yml)
-
 ### Dependency
 
 Circinus has the following required dependencies:
@@ -27,9 +25,8 @@ A bash script `scripts/install_bliss.sh` is provided to download and install bli
 git clone https://github.com/tatianajin/circinus.git && cd circinus
 mkdir -p release && cd release
 cmake .. -DCMAKE_BUILD_TYPE=Release # CMAKE_BUILD_TYPE: Release, Debug, RelWithDebInfo
-make -j4 # 4 if to use 4 threads to compile
+make Circinus Benckmark -j4 # 4 if to use 4 threads to compile
 ```
-
 
 2. Run unit tests
 ```bash
@@ -43,7 +40,7 @@ make test                            # Run unit tests
 
 Circinus Server manages the whole process of query processing. It owns an executor manager for query execution.
 
-Circinus Client takes query from user, sends the query to the server, and displays the results to user. Multiple concurrent clients are supported, while a standalone mode is available for running Circius Server and Client in the same process.
+Circinus Client takes query from user, sends the query to the server, and displays the results to user. Multiple concurrent clients are supported, while a standalone mode is available for running Circinus Server and Client in the same process.
 
 #### Executor Manager
 

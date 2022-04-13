@@ -73,6 +73,7 @@ class TraverseOperator : public Operator {
 
   /* setters */
   inline void setMatchingOrderIndices(std::vector<std::pair<bool, uint32_t>>&& matching_order_indices) {
+    LOG(INFO) << toString() << "  setMatchingOrderIndices " << circinus::toString(matching_order_indices);
     matching_order_indices_ = std::move(matching_order_indices);
   }
   inline void setTargetLabel(LabelID l) { target_label_ = l; }
@@ -126,6 +127,7 @@ class TraverseOperator : public Operator {
         subgraph_gt_conditions.push_back(p.second);
       }
     }
+    LOG(INFO) << "subgraph_lt_conditions " << circinus::toString(subgraph_lt_conditions);
     if (!subgraph_lt_conditions.empty() || !subgraph_gt_conditions.empty()) {
       if (subgraph_filter_ == nullptr) {
         subgraph_filter_ = SubgraphFilter::newPartialOrderSubgraphFilter(
@@ -186,12 +188,13 @@ class TraverseOperator : public Operator {
   virtual void setPartialOrder(const PartialOrder& po, const unordered_map<QueryVertexID, uint32_t>& seen_vertices) {
     auto& indices = getMatchingOrderIndices();
     auto constraints = po.getConstraintsForVertex(target_vertex_, seen_vertices);
-    DLOG(INFO) << toString() << ' ' << constraints.size() << " constraints " << circinus::toString(constraints);
+    LOG(INFO) << toString() << ' ' << constraints.size() << " constraints " << circinus::toString(constraints);
     std::vector<std::pair<bool, uint32_t>> lt_constraints;
     std::vector<std::pair<bool, uint32_t>> gt_constraints;
     for (auto& cond : constraints) {
       if (cond.first) {  // target less than this
         lt_constraints.push_back(indices[cond.second]);
+        LOG(INFO) << "lt_constraints " << indices[cond.second].first << " " << indices[cond.second].second;
       } else {  // target greater than this
         gt_constraints.push_back(indices[cond.second]);
       }

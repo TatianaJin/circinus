@@ -46,6 +46,8 @@ class ThreadsafeTaskQueue {
     }
   }
 
+  std::uint64_t getSize() { return queue_.size(); }
+
   void shutDown() {
     {
       std::lock_guard<std::mutex> lock(mu_);

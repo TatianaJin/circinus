@@ -18,7 +18,6 @@ namespace circinus {
 
 void GQLFilter::filter(const GraphBase* data_graph, std::vector<std::vector<VertexID>>* candidates,
                        FilterContext* ctx) const {
-  LOG(INFO) << "QueryVertex " << query_vertex_ << " " << ctx->end - ctx->offset;
   for (uint32_t i = ctx->offset; i < ctx->end; ++i) {
     VertexID& data_vertex = (*candidates)[query_vertex_][i];
     if (data_vertex == INVALID_VERTEX_ID) {

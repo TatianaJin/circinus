@@ -124,6 +124,7 @@ class NeighborhoodFilter : public Operator {
   inline FilterContext initFilterContext(uint32_t task_idx) const {
     DCHECK_LT(task_idx, parallelism_);
     auto chunk_size = filter_size_ / parallelism_;
+    // LOG(INFO) << filter_size_ << " " << parallelism_;
     CHECK_NE(chunk_size, 0) << "scan_size=" << filter_size_ << ", parallelism=" << parallelism_;
     if (task_idx < filter_size_ % parallelism_) {
       auto offset = (chunk_size + 1) * task_idx;

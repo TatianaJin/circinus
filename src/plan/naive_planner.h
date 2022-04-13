@@ -114,9 +114,9 @@ class NaivePlanner {
    * If candidate_views is nullptr, estimate the cardinality of compressed groups by product of candidate cardinality;
    * otherwise, do a dfs traversal based on the candidate view to compute a tighter estimation.
    */
-  ExecutionPlan* generatePlanWithDynamicCover(const GraphBase* data_graph,
-                                              const std::vector<CandidateSetView>* candidate_views,
-                                              const PartialOrder* = nullptr);
+  ExecutionPlan* generatePlanWithDynamicCover(
+      const GraphBase* data_graph, const std::vector<CandidateSetView>* candidate_views, const PartialOrder* = nullptr,
+      const CompressionStrategy compression_strategy = CompressionStrategy::Dynamic);
 
   ExecutionPlan* generatePlanWithSampleExecution(const std::vector<std::vector<double>>& cardinality,
                                                  const std::vector<double>& level_cost);
@@ -173,10 +173,12 @@ class NaivePlanner {
   /* Start of implementations of compression strategy */
 
   /** Generates the pruned search space of dynamic cover sequences */
-  void generateCoverNode(const std::vector<std::vector<double>>& cardinality);
+  void generateCoverNode(const std::vector<std::vector<double>>& cardinality,
+                         const CompressionStrategy compression_strategy);
 
   std::vector<std::vector<int>> generateAnchorCovers(const std::vector<QueryVertexID>& subquery_vertices,
-                                                     const std::vector<double>& cardinality);
+                                                     const std::vector<double>& cardinality,
+                                                     const CompressionStrategy compression_strategy);
   /** Alternative for generateAnchorCovers */
   std::vector<std::vector<int>> generateAnchorCoversSettingParentAsKey(
       const std::vector<QueryVertexID>& subquery_vertices, const std::vector<double>& cardinality,

@@ -111,7 +111,7 @@ std::vector<LabelID> GraphBase::loadUndirectedGraphFromEdgeList(const std::strin
   }
   vertices_file.close();
 
-  uint64_t labels_num = 100;
+  uint64_t labels_num = 30;
   // grapser's vtx label
   auto vtx_label_file = openOutputFile(index_path + "vtx_label", std::ios::out);
   for (uint32_t i = 1; i <= labels_num; ++i) {

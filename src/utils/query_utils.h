@@ -69,7 +69,7 @@ struct ServerEvent {
 
 enum class CandidatePruningStrategy : uint16_t { None = 0, Adaptive, LDF, NLF, CFL, DAF, GQL, TSO, Online };
 enum class OrderStrategy : uint16_t { None = 0, CFL, DAF, GQL, TSO, Online };
-enum class CompressionStrategy : uint16_t { None = 0, Static, Dynamic };
+enum class CompressionStrategy : uint16_t { None = 0, Static, Dynamic, Forward, Backward };
 enum class PQVStrategy : uint16_t { None = 0, ClosenessCentrality };
 enum class QueryMode : uint16_t { Execute = 0, Profile, Explain, ProfileSI, ProfileCandidateSI };
 
@@ -82,7 +82,9 @@ class QueryConfig {
   static inline const unordered_map<std::string, CompressionStrategy> compression_strategies = {
       {"none", CompressionStrategy::None},
       {"static", CompressionStrategy::Static},
-      {"dynamic", CompressionStrategy::Dynamic}};
+      {"dynamic", CompressionStrategy::Dynamic},
+      {"forward", CompressionStrategy::Forward},
+      {"backward", CompressionStrategy::Backward}};
   static inline const unordered_map<std::string, CandidatePruningStrategy> candidate_pruning_strategies = {
       {"none", CandidatePruningStrategy::None}, {"adaptive", CandidatePruningStrategy::Adaptive},
       {"ldf", CandidatePruningStrategy::LDF},   {"nlf", CandidatePruningStrategy::NLF},
@@ -110,7 +112,7 @@ class QueryConfig {
   bool intra_partition_plan = true;
   std::string output = "count";
   uint64_t limit = ~0ull;
-  std::chrono::seconds time_limit = std::chrono::seconds(600);
+  std::chrono::seconds time_limit = std::chrono::seconds(1800);
   QueryMode mode = QueryMode::Execute;
 
   // seed node

@@ -127,7 +127,7 @@ class Planner {
   inline GraphType getGraphType() const {
     return query_context_->query_config.use_auxiliary_index
                ? GraphType::BipartiteGraphView
-               : (query_context_->graph_metadata->numPartitions() > 1 ? GraphType::Partitioned : GraphType::Normal);
+               : (query_context_->graph_metadata->numPartitions() >= 1 ? GraphType::Partitioned : GraphType::Normal);
   }
 
   /** Generates order, then compression strategy, and then operators */

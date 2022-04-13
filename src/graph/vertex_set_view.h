@@ -203,7 +203,6 @@ class SingleRangeVertexSetView : public VertexSetView {
   }
 
   SingleRangeVertexSetView(const VertexID* start, const VertexID* end) {
-    DCHECK_LT(start, end);
     if (std::distance(start, end) == 0) return;
     addOffsetSize(start, std::distance(start, end));
   }

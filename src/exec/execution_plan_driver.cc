@@ -216,6 +216,7 @@ void OnlineQueryExecutionPlanDriver::init(QueryId qid, QueryContext* query_ctx, 
                                         std::move(input_operator), query_ctx->data_graph, &candidates_[i], query_type_,
                                         ops.size() - 1, nullptr);
     }
+    suspend_interval_ptr_ = &suspend_interval_;
   }
 }
 
@@ -270,6 +271,7 @@ void ExecutionPlanDriver::init(QueryId qid, QueryContext* query_ctx, ExecutionCo
   }
   // <<<<< hard code now to share hashmaps of candidate sets
 
+  LOG(INFO) << n_plans;
   for (uint32_t i = 0; i < n_plans; ++i) {
     auto plan_idx = plan_->getPartitionedPlan(i).first;
     // all plans share the same output
@@ -297,6 +299,8 @@ void ExecutionPlanDriver::init(QueryId qid, QueryContext* query_ctx, ExecutionCo
     // <<<<< hard code now to share hashmaps of candidate sets
 
     if (max_parallelism_ > 1 && plan_->toSegment(i)) {
+      // if (max_parallelism_ > 1 &&
+      //     (plan_->toSegment(i) || query_ctx->query_config.compression_strategy == CompressionStrategy::None)) {
       suspend_interval_ptr_ = &suspend_interval_;
     } else {
       suspend_interval_ptr_ = nullptr;
@@ -307,6 +311,7 @@ void ExecutionPlanDriver::init(QueryId qid, QueryContext* query_ctx, ExecutionCo
                                  std::move(input_operator), scopes, query_ctx->data_graph, &candidates_[i], query_type_,
                                  end_level, &candidate_hashmaps_[i]);
   }
+  suspend_interval_ptr_ = &suspend_interval_;
 }
 
 void ExecutionPlanDriver::taskFinish(std::unique_ptr<TaskBase>& task, ThreadsafeTaskQueue* task_queue,

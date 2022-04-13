@@ -69,8 +69,10 @@ int main(int argc, char** argv) {
   if (FLAGS_partition == 0) {
     if (FLAGS_input_format == "snap") {
       Graph g;
+      LOG(INFO) << "--------------- ";
       g.loadUndirectedGraphEdgeList(input);
-      g.saveAsBinary(output);
+      
+      // g.saveAsBinary(output);
     } else if (FLAGS_input_format == "tve") {
       Graph g;
       g.loadTVEUndirectedGraphToGrasperGraph(input);

@@ -158,8 +158,8 @@ class PartialOrderSubgraphFilter : public SetPrunningSubgraphFilter {
       : less_than_indices_(std::move(lt_conditions)),
         greater_than_indices_(std::move(gt_conditions)),
         target_index_(target) {
-    // LOG(INFO) << "target index = " << target_index_.second << ", is key = " << target_index_.first << " less than "
-    //           << toString(less_than_indices_) << " greater than " << toString(greater_than_indices_);
+    LOG(INFO) << "target index = " << target_index_.second << ", is key = " << target_index_.first << " less than "
+              << toString(less_than_indices_) << " greater than " << toString(greater_than_indices_);
   }
 
   PartialOrderSubgraphFilter(std::vector<std::vector<uint32_t>>&& pruning_set_indices,
@@ -169,8 +169,8 @@ class PartialOrderSubgraphFilter : public SetPrunningSubgraphFilter {
         less_than_indices_(std::move(lt_conditions)),
         greater_than_indices_(std::move(gt_conditions)),
         target_index_(target) {
-    // LOG(INFO) << "target index = " << target_index_.second << ", is key = " << target_index_.first << " less than "
-    //           << toString(less_than_indices_) << " greater than " << toString(greater_than_indices_);
+    LOG(INFO) << "target index = " << target_index_.second << ", is key = " << target_index_.first << " less than "
+              << toString(less_than_indices_) << " greater than " << toString(greater_than_indices_);
   }
 
   /** @returns True if pruned. */

@@ -65,6 +65,7 @@ DEFINE_string(pqv, "none", "The strategy to choose pqv");
 DEFINE_bool(utht, false, "Use two hop traversal");
 DEFINE_string(profile_file_extra, "", "profile file name extra info");
 DEFINE_string(seed, "", "seed info");
+DEFINE_string(time_limit, "", "time_limit");
 
 class QueryConfig {
  public:
@@ -171,11 +172,7 @@ class Benchmark {
   }
 
   void loadDataset(const std::string& dataset, double& load_time, const uint32_t partition = 1) {
-    if (partition == 1) {
-      server_->loadGraph(getGraphPath(dataset), std::string(dataset), "", ADDRESS);
-    } else {
-      server_->loadGraph(getPartitionGraphPath(dataset, partition), std::string(dataset), "", ADDRESS);
-    }
+    server_->loadGraph(getPartitionGraphPath(dataset, partition), std::string(dataset), "", ADDRESS);
     zmq::multipart_t reply;
     reply.recv(sock_);
     auto success = reply.poptyp<bool>();
@@ -201,6 +198,10 @@ class Benchmark {
       config << ",seed=" << FLAGS_seed;
     }
 
+    if (FLAGS_time_limit != "") {
+      config << ",time_limit=" << FLAGS_time_limit;
+    }
+
     if (FLAGS_profile == 1) {
       config << ",mode=profile";
     } else if (FLAGS_profile == 2) {
@@ -219,7 +220,7 @@ class Benchmark {
       if (FLAGS_profile) {
         auto profile_file_name = dataset + '_' + query_mode + '_' + std::to_string(query_size) + '_' +
                                  std::to_string(index) + '_' + FLAGS_filter + '_' + FLAGS_vertex_cover + '_' +
-                                 FLAGS_match_order + '_' + FLAGS_pqv + "_" + FLAGS_profile_file_extra;
+                                 FLAGS_match_order + '_' + FLAGS_pqv;
         auto profile_file = circinus::Path::join(FLAGS_profile_prefix, profile_file_name);
         LOG(INFO) << "------------- profile_file " << profile_file;
         auto ofs = circinus::openOutputFile(profile_file);
@@ -237,10 +238,10 @@ class Benchmark {
     (*out) << "dataset,query_size,query_mode,query_index,elapsed_execution_time,filter_time,plan_time,"
               "enumerate_time,n_embeddings,"
               "order,max_task_time\n";
-    for (uint32_t i = 1; i <= 200; ++i) {
+    for (uint32_t i = 1; i <= 100; ++i) {
       run(dataset, query_size, "dense", i, match_order, out);
     }
-    for (uint32_t i = 1; i <= 200; ++i) {
+    for (uint32_t i = 1; i <= 100; ++i) {
       run(dataset, query_size, "sparse", i, match_order, out);
     }
   }

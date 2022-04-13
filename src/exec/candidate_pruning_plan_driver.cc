@@ -116,6 +116,7 @@ void CandidatePruningPlanDriver::init(QueryId qid, QueryContext* query_ctx, Exec
     uint64_t input_size = (*result_->getMergedCandidates())[query_vertex].size();
     filter->setInputSize(input_size);
     filter->setParallelism(getFilterParallelism(input_size));
+    // filter->setParallelism((input_size + FLAGS_batch_size - 1) / FLAGS_batch_size);
     task_counters_[n_finished_tasks_] = filter->getParallelism();
     for (uint32_t i = 0; i < filter->getParallelism(); ++i) {
       task_queue.putTask(new NeighborhoodFilterTask(qid, n_finished_tasks_, query_ctx->stop_time, i, filter,
@@ -134,6 +135,7 @@ void CandidatePruningPlanDriver::taskFinish(std::unique_ptr<TaskBase>& task, Thr
     result_->collect(task);
   }
   // TODO(BYLI) package merge operation and remove_invalid operation into tasks, determine the parallelism
+  // LOG(INFO) << plan_->getPhase() << "  " << task->getTaskId() << "  " << task_counters_[task->getTaskId()];
   if (--task_counters_[task->getTaskId()] == 0) {
     if (plan_->getPhase() == 1) {
       // if (!plan_->toPartitionResult()) {
@@ -158,6 +160,7 @@ void CandidatePruningPlanDriver::taskFinish(std::unique_ptr<TaskBase>& task, Thr
       CHECK_NE(input_size, 0) << "query vertex " << query_vertex << " has empty candidate set, not handled yet";
       filter->setInputSize(input_size);
       filter->setParallelism(getFilterParallelism(input_size));
+      // filter->setParallelism((input_size + FLAGS_batch_size - 1) / FLAGS_batch_size);
       task_counters_[n_finished_tasks_] = filter->getParallelism();
       for (uint32_t i = 0; i < filter->getParallelism(); ++i) {
         task_queue->putTask(new NeighborhoodFilterTask(task->getQueryId(), n_finished_tasks_, task->getStopTime(), i,

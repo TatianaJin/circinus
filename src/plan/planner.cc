@@ -377,6 +377,7 @@ void Planner::parallelizePartitionedPlans(
   std::vector<bool> segment_mask;
   parallelized_partitioned_plans.reserve(partitioned_plans->size());
   segment_mask.reserve(partitioned_plans->size());
+  double parallel_factor = 50.0 / partitioned_plans->size() + 1.0;
   for (auto& partition : *partitioned_plans) {
     auto& step_costs = backtracking_plan_->getPlan(partition.first)->getStepCosts();
     auto sum_costs = std::accumulate(step_costs.begin(), step_costs.end(), 0.) + 1.;
@@ -394,18 +395,30 @@ void Planner::parallelizePartitionedPlans(
       CHECK(plan->isInCover(parallel_qv));
     }
 
-    auto weights = planners_[partition.first]->getParallelizingQueryVertexWeights(
-        parallel_qv, query_context_->data_graph, candidate_views, plan->getQueryCoverBits());
-    auto sum_weight = std::accumulate(weights.begin(), weights.end(), 0.);
+    std::vector<double> weights;
+    double sum_weight = 0;
+    if (FLAGS_path_card) {
+      weights = planners_[partition.first]->getParallelizingQueryVertexWeights(
+          parallel_qv, query_context_->data_graph, candidate_views, plan->getQueryCoverBits());
+      sum_weight = std::accumulate(weights.begin(), weights.end(), 0.);
+    } else {
+      bucket_weight_limit = 50000;
+      auto g = query_context_->data_graph;
+      for (uint32_t i = 0; i < candidate_views[parallel_qv].size(); ++i) {
+        weights.push_back(g->getVertexOutDegree(candidate_views[parallel_qv][i]));
+        sum_weight += weights.back();
+      }
+    }
 
     // bucket_weight_limit = sum_weight * parallelization_threshold / sum_costs;
-    auto partition_bucket_weight_limit = std::max(bucket_weight_limit, sum_weight / 100.);
+    double partition_bucket_weight_limit = std::max(bucket_weight_limit, sum_weight / parallel_factor);
     if (sum_weight < partition_bucket_weight_limit) {
       parallelized_partitioned_plans.push_back(std::move(partition));
       segment_mask.push_back(true);
       continue;
     }
     double bucket_weight = 0;
+    uint64_t log = 0;
     for (uint32_t l = 0, r = 0; r < weights.size(); ++r) {  // l and r both inclusive
       bucket_weight += weights[r];
       if (bucket_weight > partition_bucket_weight_limit) {
@@ -415,6 +428,7 @@ void Planner::parallelizePartitionedPlans(
         }
         parallelized_partitioned_plans.emplace_back(partition);
         parallelized_partitioned_plans.back().second[parallel_qv].addRange(l, r);
+        log++;
         if (verbosePlannerLog()) {
           LOG(INFO) << "Partition " << (parallelized_partitioned_plans.size() - 1) << " plan " << partition.first
                     << " weight " << bucket_weight;
@@ -424,6 +438,7 @@ void Planner::parallelizePartitionedPlans(
         segment_mask.push_back(true);
       } else if (r == weights.size() - 1) {
         parallelized_partitioned_plans.emplace_back(std::move(partition));
+        log++;
         if (verbosePlannerLog()) {
           LOG(INFO) << "Partition " << (parallelized_partitioned_plans.size() - 1) << " plan " << partition.first
                     << " weight " << bucket_weight;
@@ -542,8 +557,11 @@ BacktrackingPlan* Planner::generateExecutionPlan(const CandidateResult* result, 
       plan->setInputAreKeys(plan->isInCover(plan->getRootQueryVertexID()));
       break;
     }
+    case CompressionStrategy::Forward:
+    case CompressionStrategy::Backward:
     case CompressionStrategy::Dynamic: {
-      plan = planner->generatePlanWithDynamicCover(query_context_->data_graph, nullptr, qv_partial_order_.get());
+      plan = planner->generatePlanWithDynamicCover(query_context_->data_graph, nullptr, qv_partial_order_.get(),
+                                                   query_context_->query_config.compression_strategy);
       plan->setInputAreKeys(plan->isInCover(plan->getRootQueryVertexID()) &&
                             (plan->getToKeyLevel(plan->getRootQueryVertexID()) == 0));
       break;
@@ -564,7 +582,7 @@ BacktrackingPlan* Planner::generateExecutionPlan(const CandidateResult* result, 
         CHECK_EQ(candidates.size(), 1);
         start_size = candidates.front().size();
       }
-      const uint32_t n_chunks = 100;
+      const uint32_t n_chunks = 50;
       std::vector<std::pair<uint32_t, std::vector<CandidateScope>>> partitioned_plans;
       if (start_size < n_chunks) {
         partitioned_plans.resize(start_size);
@@ -777,9 +795,11 @@ ExecutionPlan* Planner::generateLogicalExecutionPlan(const std::vector<VertexID>
     plan->setInputAreKeys(plan->isInCover(plan->getRootQueryVertexID()));
     break;
   }
+  case CompressionStrategy::Forward:
+  case CompressionStrategy::Backward:
   case CompressionStrategy::Dynamic: {
-    plan =
-        planner->generatePlanWithDynamicCover(query_context_->data_graph, use_cover_path ? candidate_views : nullptr);
+    plan = planner->generatePlanWithDynamicCover(query_context_->data_graph, use_cover_path ? candidate_views : nullptr,
+                                                 nullptr, query_context_->query_config.compression_strategy);
     plan->setInputAreKeys(plan->isInCover(plan->getRootQueryVertexID()) &&
                           (plan->getToKeyLevel(plan->getRootQueryVertexID()) == 0));
     break;

@@ -452,6 +452,7 @@ double NaivePlanner::estimateExpandCost(const GraphBase* data_graph,
 
   auto[nbrs, cnt] = query_graph_->getOutNeighbors(target_vertex);
   QueryVertexID set_parent = DUMMY_QUERY_VERTEX;
+  uint64_t set_parent_mask = 0;
   for (uint32_t k = 0; k < cnt; ++k) {
     if (existing_vertices.count(nbrs[k]) != 0) {
       if ((parent_cover_bits >> nbrs[k] & 1) == 0) {
@@ -459,6 +460,7 @@ double NaivePlanner::estimateExpandCost(const GraphBase* data_graph,
             (*candidate_views)[nbrs[k]].size() < (*candidate_views)[set_parent].size()) {
           set_parent = nbrs[k];
         }
+        set_parent_mask |= 1 << nbrs[k];
         ++set_parent_cnt;
       } else {
         ++key_parent_cnt;
@@ -485,6 +487,7 @@ double NaivePlanner::estimateExpandCost(const GraphBase* data_graph,
     }
     if (set_parent_cnt > 0) {  // enumerate key expand to set
       // computation cost to expand from enumerated parents
+      // return cost + set_parent_cnt * getCardinality(car, level - 1, cover_bits | set_parent_mask, data_graph, candidate_views);
       return cost + set_parent_cnt * getCardinality(car, level - 1, cover_bits, data_graph, candidate_views);
     }
     return cost;  // key to set
@@ -501,7 +504,8 @@ double NaivePlanner::estimateExpandCost(const GraphBase* data_graph,
 
 ExecutionPlan* NaivePlanner::generatePlanWithDynamicCover(const GraphBase* data_graph,
                                                           const std::vector<CandidateSetView>* candidate_views,
-                                                          const PartialOrder* po) {
+                                                          const PartialOrder* po,
+                                                          const CompressionStrategy compression_strategy) {
   if (verbosePlannerLog()) {
     if (candidate_views != nullptr) {
       std::stringstream ss;
@@ -518,7 +522,7 @@ ExecutionPlan* NaivePlanner::generatePlanWithDynamicCover(const GraphBase* data_
     setVertexWeightByDegreeConstraints(candidate_cardinality_, po);
   }
   std::vector<std::vector<double>> cardinality_per_level(candidate_cardinality_.size(), candidate_cardinality_);
-  generateCoverNode(cardinality_per_level);
+  generateCoverNode(cardinality_per_level, compression_strategy);
 
   if (verbosePlannerLog()) {
     logCoverSpace();
@@ -561,6 +565,7 @@ ExecutionPlan* NaivePlanner::generatePlanWithDynamicCover(const GraphBase* data_
       best_idx = i;
     }
   }
+  // best_idx = 2;
   CHECK_NE(best_idx, -1) << "ERROR: can not get best plan index.";
   if (verbosePlannerLog()) {  // debug log
     LOG(INFO) << "===== Covers for query graph =====";
@@ -792,9 +797,13 @@ const std::vector<QueryVertexID>& NaivePlanner::generateOrder(QueryVertexID seed
 }
 
 std::vector<std::vector<int>> NaivePlanner::generateAnchorCovers(const std::vector<QueryVertexID>& subquery_vertices,
-                                                                 const std::vector<double>& cardinality) {
+                                                                 const std::vector<double>& cardinality,
+                                                                 const CompressionStrategy compression_strategy) {
   auto subquery = query_graph_->getInducedSubgraph(subquery_vertices);
   WeightedBnB vc_solver(&subquery, cardinality);
+  if (compression_strategy == CompressionStrategy::Backward || compression_strategy == CompressionStrategy::Forward) {
+    vc_solver.setBestBufferSize(1);
+  }
   vc_solver.computeVertexCover();
   if (vc_solver.getBestCovers().empty()) {
     LOG(INFO) << toString(subquery_vertices) << " cardinality " << toString(cardinality);
@@ -841,7 +850,8 @@ std::vector<std::vector<int>> NaivePlanner::generateAnchorCoversSettingParentAsK
   return {std::move(select_cover)};
 }
 
-void NaivePlanner::generateCoverNode(const std::vector<std::vector<double>>& cardinality) {
+void NaivePlanner::generateCoverNode(const std::vector<std::vector<double>>& cardinality,
+                                     const CompressionStrategy compression_strategy) {
   if (!hasValidCandidate()) {
     return;
   }
@@ -886,9 +896,13 @@ void NaivePlanner::generateCoverNode(const std::vector<std::vector<double>>& car
 
   /* populate each level in the search space covers_ */
   for (uint32_t i = matching_order_.size() - 1; i > 0; --i) {
+    if (compression_strategy == CompressionStrategy::Forward) {
+      i = 1;
+    }
     subquery_vertices.resize(i + 1);
     // compute anchor vertex covers of subquery i
-    auto covers = generateAnchorCovers(subquery_vertices, candidate_cardinality_by_match_order[i]);
+    auto covers =
+        generateAnchorCovers(subquery_vertices, candidate_cardinality_by_match_order[i], compression_strategy);
     // auto covers = generateAnchorCoversSettingParentAsKey(subquery_vertices, candidate_cardinality_by_match_order[i],
     // order_index, to_intersect_vertices, existing_vertices);
     CHECK_GT(covers.size(), 0) << "level " << i << " doesn't have any cover.";  // at least one cover should be obtained
@@ -976,6 +990,9 @@ void NaivePlanner::generateCoverNode(const std::vector<std::vector<double>>& car
         }
         addCover(last_cover_node, j - 1);
       }
+    }
+    if (compression_strategy == CompressionStrategy::Backward) {
+      break;
     }
   }
 

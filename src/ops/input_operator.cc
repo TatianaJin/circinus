@@ -32,10 +32,6 @@ std::vector<CompressedSubgraphs> InputOperator::getInputs(const void* g,
 
 std::vector<CompressedSubgraphs> PartitionedInputOperator::getInputs(
     const void* data_graph, const std::vector<CandidateSetView>& candidates) const {
-  if (verboseExecutionLog()) {
-    LOG(INFO) << "Prune input by pivot query vertex? " << qv_pivots_->empty();
-  }
-
   if (!qv_pivots_->empty()) {
 #ifndef NDEBUG
     std::stringstream ss;

@@ -129,7 +129,7 @@ void WeightedBnB::dfs(std::vector<int> assignment, std::deque<QueryEdge> uncover
       best_cover_weights_.push_back(current_weight);
     } else {  // a cover better than current best covers is found
       uint32_t idx = 0;
-      for (uint32_t i = 1; i < TOPK; ++i) {
+      for (uint32_t i = 1; i < best_buffer_size_; ++i) {
         if (best_cover_weights_[i] > best_cover_weights_[idx]) {
           idx = i;
         }

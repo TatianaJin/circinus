@@ -243,8 +243,9 @@ uint64_t CompressedSubgraphs::getEnumerationCount(const std::vector<uint32_t>& s
     for (auto index : set_indices) {
       set_sizes.push_back(countExcept(*getSet(index), except, max_except));
       if (set_sizes.back() == 0) {
-        LOG(WARNING) << "set index " << index << " size " << getSet(index)->size() << " n_exceptions " << except.size()
-                     << " front " << getSet(index)->front() << circinus::toString(keys_);
+        // LOG(WARNING) << "set index " << index << " size " << getSet(index)->size() << " n_exceptions " <<
+        // except.size()
+        //              << " front " << getSet(index)->front() << circinus::toString(keys_);
         return 0;
       }
       product *= set_sizes.back();
@@ -412,9 +413,9 @@ std::ostream& CompressedSubgraphs::logEnumerated(std::ostream& ss,
   }
 
   std::vector<VertexID> set_tuple(sets_.size(), -1);
-  std::vector<std::vector<VertexID>*> set_ptrs(sets_.size());
+  std::vector<const SingleRangeVertexSetView*> set_ptrs(sets_.size());
   for (uint32_t i = 0; i < sets_.size(); ++i) {
-    set_ptrs[i] = sets_[i].get();
+    set_ptrs[i] = &(*sets_[i]);
   }
   unordered_set<VertexID> existing_vertices;
   existing_vertices.reserve(getNumVertices() - 1);
@@ -423,8 +424,6 @@ std::ostream& CompressedSubgraphs::logEnumerated(std::ostream& ss,
   std::iota(set_indices.begin(), set_indices.end(), 0);
   std::sort(set_indices.begin(), set_indices.end(),
             [&set_ptrs](uint32_t set1, uint32_t set2) { return set_ptrs[set1]->size() < set_ptrs[set2]->size(); });
-  std::sort(set_ptrs.begin(), set_ptrs.end(),
-            [](const auto& set1, const auto& set2) { return set1->size() < set2->size(); });
   // dfs sets_ chain
   uint64_t count = 0;
   std::vector<uint32_t> set_index(set_ptrs.size(), 0);

@@ -44,7 +44,6 @@ class CandidatePruningPlanDriver : public PlanDriver {
  private:
   void initPhase1TasksForPartitionedGraph(QueryId qid, QueryContext* query_ctx, ExecutionContext& ctx,
                                           ThreadsafeTaskQueue& task_queue);
-
   inline uint32_t getFilterParallelism(uint64_t input_size) const {
     auto batch_size = exec_config_->getBatchSize();
     uint32_t batches = (input_size + batch_size - 1) / batch_size;
