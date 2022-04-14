@@ -45,8 +45,8 @@ if(GTEST_FOUND)
   add_executable(Benchmark benchmark.cc)
   target_link_libraries(Benchmark circinus ${GTEST_LIBRARY} ${EXTERNAL_LIBRARY})
 
-  add_executable(BenchmarkNoFilter benchmark.cc)
-  target_link_libraries(BenchmarkNoFilter circinus_no_filter ${GTEST_LIBRARY} ${EXTERNAL_LIBRARY})
+  #add_executable(BenchmarkNoFilter benchmark.cc)
+  #target_link_libraries(BenchmarkNoFilter circinus_no_filter ${GTEST_LIBRARY} ${EXTERNAL_LIBRARY})
 
   file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/resources DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
 
