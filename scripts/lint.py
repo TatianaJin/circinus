@@ -5,7 +5,6 @@ import os
 import subprocess
 import sys
 
-# TODO(tatiana)
 
 CPPLINT_PY = os.path.dirname(os.path.abspath(__file__)) + '/cpplint.py'
 CPPLINT_EXTENSIONS = ['cc', 'h']

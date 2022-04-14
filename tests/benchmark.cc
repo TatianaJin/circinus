@@ -176,7 +176,6 @@ class Benchmark {
     auto query_path = getQueryPath(dataset, query_size, query_mode, index, out);
     // run query
     std::stringstream config;
-    // FIXME(tatiana): parallelization strategy
     config << "cps=" << FLAGS_filter << ",cs=" << FLAGS_vertex_cover << ",limit=" << FLAGS_match_limit
            << ",mo=" << match_order << ",pqv=" << FLAGS_pqv << ",ipp=" << FLAGS_ipp << ",upg=" << FLAGS_upg
            << ",utht=" << FLAGS_utht;

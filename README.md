@@ -22,7 +22,7 @@ A bash script `scripts/install_bliss.sh` is provided to download and install bli
 
 1. Build and install
 ```bash
-git clone https://github.com/tatianajin/circinus.git && cd circinus
+git clone <git link> && cd circinus
 mkdir -p release && cd release
 cmake .. -DCMAKE_BUILD_TYPE=Release # CMAKE_BUILD_TYPE: Release, Debug, RelWithDebInfo
 make Circinus Benckmark -j4 # 4 if to use 4 threads to compile
