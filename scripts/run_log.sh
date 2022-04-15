@@ -1,7 +1,7 @@
 #! /bin/bash
 
 # SET YOUR OWN
-proj_dir=/data/share/users/tati/subgraph_matching/circinus
+proj_dir=$CIRCINUS_HOME
 
 time_limit=300
 
@@ -24,7 +24,7 @@ run_batch () {
   if [[ $# -gt 3 ]]; then vertex_cover=$4; fi
   if [[ $# -gt 4 ]]; then match_limit=$5;  fi
   if [[ $# -gt 5 ]]; then batch_size=$6;   fi
-  
+
   python3 run_benchmark.py -p $proj_dir -t $time_limit -c $config \
     -b $batch_size -f $filter -o $order -s $vertex_cover -l $match_limit \
     --partition $partition --upg $upg --ipp $ipp --pqv $pqv

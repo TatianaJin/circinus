@@ -23,30 +23,28 @@ A bash script `scripts/install_bliss.sh` is provided to download and install bli
 1. Build and install
 ```bash
 git clone <git link> && cd circinus
-mkdir -p release && cd release
+mkdir -p build && cd build
 cmake .. -DCMAKE_BUILD_TYPE=Release # CMAKE_BUILD_TYPE: Release, Debug, RelWithDebInfo
 make Circinus Benckmark -j4 # 4 if to use 4 threads to compile
 ```
 
-2. Run unit tests
-```bash
-make test                            # Run unit tests
+### Experimental Data and Query
+
+The experiment results in paper is in `exp_results_in_paper/exp/data`.
+
+If you want to reproduce the results in paper, please follow steps below.
+
+Export the home dir of circinus.
+```
+export CIRCINUS_HOME=  #project dir
 ```
 
+Create file to store artifact experiment results.
+```
+cd $CIRCINUS_HOME
+mkdir -p exp_results_artifact/exp/data/
+cd exp_results_artifact/exp/data/
+mkdir cardinality_sensitivity  compare_peregrine  compare_single_thread  compare_unlabeled  parallelization  redundancy_multithread  vc_influence
+```
 
-### Introduction to Circinus
-
-#### Circinus Server and Client
-
-Circinus Server manages the whole process of query processing. It owns an executor manager for query execution.
-
-Circinus Client takes query from user, sends the query to the server, and displays the results to user. Multiple concurrent clients are supported, while a standalone mode is available for running Circinus Server and Client in the same process.
-
-#### Executor Manager
-
-Accepts tasks from the circinus server and supports asynchronous execution of tasks. A thread pool is maintained to run tasks in parallel.
-
-#### Planner
-For each query, Circinus Server instantiates a Planner that generates logical `Plan`s for candidate pruning and subgraph matching. The generated `Plan`s are then translated into physical operators based on runtime information for execution.
-
-A `Plan` has a `PlanDriver` that generates task intances for parallel execution of the physical operators. While the physical operators provide the application logic, the `PlanDriver` is a bridge between the execution engine and the application logic, which specifies the input to the logic, and leave task coordination to the execution engine.
+All experiment scripts are in the `scripts/exp_scripts/`, check details in `scripts/exp_scripts/run_all_exps.sh`.

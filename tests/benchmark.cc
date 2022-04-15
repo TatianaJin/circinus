@@ -10,6 +10,7 @@
 
 #include "gflags/gflags.h"
 #include "glog/logging.h"
+#include "utils/flags.h"
 #ifdef WITH_GPERF
 #include "gperftools/profiler.h"
 #endif
@@ -52,6 +53,7 @@ DEFINE_bool(utht, false, "Use two hop traversal");
 DEFINE_string(profile_file_extra, "", "profile file name extra info");
 DEFINE_string(seed, "", "seed info");
 DEFINE_string(time_limit, "", "time_limit");
+DEFINE_bool(unlabeled, false, "is unlabeled");
 
 class QueryConfig {
  public:
@@ -143,9 +145,20 @@ class Benchmark {
     if (out != nullptr) {
       (*out) << dataset << ',' << query_size << ',' << query_mode << ',' << index << ',';
     }
+
     return circinus::Path::join(
-        FLAGS_data_dir, dataset, "query_graph_new",
+        FLAGS_data_dir, dataset, "query_graph",
         "query_" + query_mode + "_" + std::to_string(query_size) + "_" + std::to_string(index) + ".graph");
+  }
+
+  static inline std::string getQueryPath(const std::string& dataset, uint32_t index, std::ostream* out = nullptr) {
+    if (out != nullptr) {
+      (*out) << dataset << ',' << ',' << index << ',';
+    }
+
+    return circinus::Path::join(
+        FLAGS_data_dir, "unlabeled_query_graph",
+        "q" + std::to_string(index) + ".graph");
   }
 
   static inline std::string getGraphPath(const std::string& dataset) {
@@ -157,8 +170,25 @@ class Benchmark {
                                 dataset + ".circinus.bin.p" + std::to_string(partition));
   }
 
+  static inline std::string getUnlabeledGraphPath(const std::string& dataset) {
+    return circinus::Path::join(FLAGS_data_dir, dataset, "data_graph", dataset + ".graph.txt.sorted.bin");
+  }
+
   void loadDataset(const std::string& dataset, double& load_time, const uint32_t partition = 1) {
     server_->loadGraph(getPartitionGraphPath(dataset, partition), std::string(dataset), "", ADDRESS);
+    zmq::multipart_t reply;
+    reply.recv(sock_);
+    auto success = reply.poptyp<bool>();
+    if (success) {
+      load_time = reply.poptyp<double>();
+    } else {
+      auto msg = reply.pop();
+      LOG(FATAL) << std::string_view((char*)msg.data(), msg.size()) << std::endl;
+    }
+  }
+
+  void loadUnlabeledDataset(const std::string& dataset, double& load_time) {
+    server_->loadGraph(getUnlabeledGraphPath(dataset), std::string(dataset), "", ADDRESS);
     zmq::multipart_t reply;
     reply.recv(sock_);
     auto success = reply.poptyp<bool>();
@@ -204,6 +234,46 @@ class Benchmark {
     if (success) {
       if (FLAGS_profile) {
         auto profile_file_name = dataset + '_' + query_mode + '_' + std::to_string(query_size) + '_' +
+                                 std::to_string(index) + '_' + FLAGS_filter + '_' + FLAGS_vertex_cover + '_' +
+                                 FLAGS_match_order + '_' + FLAGS_pqv;
+        auto profile_file = circinus::Path::join(FLAGS_profile_prefix, profile_file_name);
+        LOG(INFO) << "------------- profile_file " << profile_file;
+        auto ofs = circinus::openOutputFile(profile_file);
+        ofs << std::string_view((char*)msg.data(), msg.size());
+        msg = reply.pop();
+      }
+      (*out) << std::string_view((char*)msg.data(), msg.size());
+    } else {
+      LOG(WARNING) << std::string_view((char*)msg.data(), msg.size());
+    }
+    (*out) << std::endl;
+  }
+
+  void runUnlabeled(const std::string& dataset, uint32_t index, std::ostream* out) {
+    // get query path and log config
+    auto query_path = getQueryPath(dataset, index, out);
+    // run query
+    std::stringstream config;
+    // FIXME(tatiana): parallelization strategy
+    config << "cs=" << FLAGS_vertex_cover << ",time_limit=43200";
+
+    if (FLAGS_profile == 1) {
+      config << ",mode=profile";
+    } else if (FLAGS_profile == 2) {
+      config << ",mode=profile_si";
+    } else if (FLAGS_profile == 3) {
+      config << ",mode=profile_candidate";
+    }
+
+    server_->query(std::string(dataset), std::move(query_path), config.str(), ADDRESS);
+    // log result
+    zmq::multipart_t reply;
+    reply.recv(sock_);
+    auto success = reply.poptyp<bool>();
+    auto msg = reply.pop();
+    if (success) {
+      if (FLAGS_profile) {
+        auto profile_file_name = dataset + '_' +
                                  std::to_string(index) + '_' + FLAGS_filter + '_' + FLAGS_vertex_cover + '_' +
                                  FLAGS_match_order + '_' + FLAGS_pqv;
         auto profile_file = circinus::Path::join(FLAGS_profile_prefix, profile_file_name);
@@ -294,11 +364,16 @@ int main(int argc, char** argv) {
   }
 
   double load_time = 0;
-  benchmark.loadDataset(FLAGS_dataset, load_time, FLAGS_partition);
-  if (FLAGS_batch_run) {
-    benchmark.batch_run(FLAGS_dataset, FLAGS_query_size, FLAGS_match_order, out);
+  if (FLAGS_unlabeled) {
+    benchmark.loadUnlabeledDataset(FLAGS_dataset, load_time);
+    benchmark.runUnlabeled(FLAGS_dataset, FLAGS_query_index, out);
   } else {
-    benchmark.run(FLAGS_dataset, FLAGS_query_size, FLAGS_query_mode, FLAGS_query_index, FLAGS_match_order, out);
+    benchmark.loadDataset(FLAGS_dataset, load_time, FLAGS_partition);
+    if (FLAGS_batch_run) {
+      benchmark.batch_run(FLAGS_dataset, FLAGS_query_size, FLAGS_match_order, out);
+    } else {
+      benchmark.run(FLAGS_dataset, FLAGS_query_size, FLAGS_query_mode, FLAGS_query_index, FLAGS_match_order, out);
+    }
   }
 
   fstream.close();

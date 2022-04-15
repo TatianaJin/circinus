@@ -1,0 +1,8 @@
+thread_num,worker,memory_percentage
+1,memory_consumption/dat/ib40-20211206-032845 Max Memory Used : ,22.376646925558973
+2,memory_consumption/dat/ib41-20211206-032845 Max Memory Used : ,22.354458294880697
+4,memory_consumption/dat/ib42-20211206-032845 Max Memory Used : ,22.38787204856457
+8,memory_consumption/dat/ib43-20211206-032845 Max Memory Used : ,22.535501530523437
+16,memory_consumption/dat/ib45-20211206-032845 Max Memory Used : ,23.097202477278177
+24,memory_consumption/dat/ib46-20211206-032845 Max Memory Used : ,23.078969901123692
+32,memory_consumption/dat/ib47-20211206-032845 Max Memory Used : ,23.149117910669375
