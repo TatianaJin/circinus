@@ -22,7 +22,7 @@ namespace circinus {
 #define toMilliseconds(start, end) \
   (((double)std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count()) / 1e6)
 
-const uint64_t INVALID_VERTEX_ID = 0xffffffffffffffff;
+const VertexID INVALID_VERTEX_ID = std::numeric_limits<VertexID>::max();
 
 static void dfs(QueryVertexID cur_vertex, const std::vector<TreeNode>& dfs_tree,
                 std::vector<QueryVertexID>& dfs_order) {

@@ -99,7 +99,7 @@ uint64_t CompressedSubgraphs::getNumIsomorphicSubgraphsWithConstraintsImpl(
         } else {
           existing_vertices.insert(v);
           ++current_depth;
-          uint64_t least_vid = 0;
+          VertexID least_vid = 0;
           for (uint32_t nbr : constraints_adj[current_depth]) {
             least_vid = std::max(least_vid, (*set_ptrs[nbr])[set_index[nbr] - 1]);
           }
@@ -203,7 +203,7 @@ uint64_t CompressedSubgraphs::getEnumerationCount(const std::vector<uint32_t>& s
                                                   const unordered_set<VertexID>& except, VertexID max_except) const {
   uint32_t n_sets = set_indices.size();
   DCHECK_GT(n_sets, 1) << set_indices[0];
-  DCHECK_LT(n_sets, 4) << "counting more than 3 sets is not supported yet";  
+  DCHECK_LT(n_sets, 4) << "counting more than 3 sets is not supported yet";
   uint64_t cnt = 0, product = 1;
   if (except.empty()) {
     for (auto index : set_indices) {

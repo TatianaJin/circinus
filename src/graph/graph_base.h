@@ -160,9 +160,7 @@ class GraphBase {
   static void vectorToBinaryStream(std::ostream& output, const std::vector<T>& vec) {
     size_t size = vec.size();
     output.write(reinterpret_cast<const char*>(&size), sizeof(size));
-    for (const auto& v : vec) {
-      output.write(reinterpret_cast<const char*>(&v), sizeof(T));
-    }
+    output.write(reinterpret_cast<const char*>(vec.data()), sizeof(T) * vec.size());
   }
 
   template <typename T>
@@ -170,9 +168,7 @@ class GraphBase {
     size_t size;
     input.read(reinterpret_cast<char*>(&size), sizeof(size));
     vec.resize(size);
-    for (size_t i = 0; i < size; ++i) {
-      input.read(reinterpret_cast<char*>(&vec[i]), sizeof(T));
-    }
+    input.read(reinterpret_cast<char*>(vec.data()), sizeof(T) * vec.size());
   }
 
   void copyMetadata(const GraphBase& src) {

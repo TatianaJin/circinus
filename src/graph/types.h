@@ -12,10 +12,10 @@
 
 namespace circinus {
 
-using EdgeID = uint64_t;
+using EdgeID = uint32_t;
 using LabelID = uint32_t;
 using QueryVertexID = uint32_t;
-using VertexID = uint64_t;
+using VertexID = uint32_t;
 
 constexpr LabelID ALL_LABEL = ~0u;
 constexpr QueryVertexID DUMMY_QUERY_VERTEX = UINT32_MAX;

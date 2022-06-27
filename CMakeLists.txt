@@ -78,6 +78,8 @@ target_link_libraries(GraphToSNAPFormat circinus ${EXTERNAL_LIBRARY})
 # target_link_libraries(QueryTopologyCheck circinus ${EXTERNAL_LIBRARY})
 # add_executable(BreakSymmetry src/tools/break_symmetry.cc)
 # target_link_libraries(BreakSymmetry circinus ${EXTERNAL_LIBRARY})
+add_executable(GraphChangeBits src/tools/graph_change_bits.cc)
+target_link_libraries(GraphChangeBits circinus ${EXTERNAL_LIBRARY})
 
 # Tests
 if (BUILD_TESTS)
