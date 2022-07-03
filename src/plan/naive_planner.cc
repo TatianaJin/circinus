@@ -471,7 +471,8 @@ double NaivePlanner::estimateExpandCost(const GraphBase* data_graph,
     }
     if (set_parent_cnt > 0) {  // enumerate key expand to set
       // computation cost to expand from enumerated parents
-      // return cost + set_parent_cnt * getCardinality(car, level - 1, cover_bits | set_parent_mask, data_graph, candidate_views);
+      // return cost + set_parent_cnt * getCardinality(car, level - 1, cover_bits | set_parent_mask, data_graph,
+      // candidate_views);
       return cost + set_parent_cnt * getCardinality(car, level - 1, cover_bits, data_graph, candidate_views);
     }
     return cost;  // key to set

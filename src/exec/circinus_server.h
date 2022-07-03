@@ -93,8 +93,7 @@ class CircinusServer {
    */
   void handleLoadGraph(const Event& event);
 
-  inline void handleShutDown(const Event& event) {
-  }
+  inline void handleShutDown(const Event& event) {}
 
   void handleCandidatePhase(const Event& event);
 

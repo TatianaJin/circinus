@@ -30,7 +30,7 @@ class ExecutionPlan {
   const QueryGraph* query_graph_;
 
   int seperate_enumerate_ = FLAGS_num_cores > 1 ? FLAGS_seperate_enumeration : 0;
-  std::vector<Operator*> operators_;  
+  std::vector<Operator*> operators_;
 
   /* matching order related */
   std::vector<QueryVertexID> matching_order_;
@@ -50,7 +50,7 @@ class ExecutionPlan {
   std::vector<double> step_costs_;
 
   /* partition query vertex's candidate search space */
-  uint32_t partition_id_ = 0;  
+  uint32_t partition_id_ = 0;
   uint64_t query_cover_bits_ = 0;
 
   // transient variable for populating plan

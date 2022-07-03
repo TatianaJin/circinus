@@ -87,7 +87,7 @@ class QueryConfig {
       {"none", OrderStrategy::None}, {"cfl", OrderStrategy::CFL}, {"daf", OrderStrategy::DAF},
       {"gql", OrderStrategy::GQL},   {"tso", OrderStrategy::TSO}, {"online", OrderStrategy::Online}};
 
-  std::string matching_order;  
+  std::string matching_order;
   CandidatePruningStrategy candidate_pruning_strategy = CandidatePruningStrategy::Adaptive;
   OrderStrategy order_strategy = OrderStrategy::CFL;
   CompressionStrategy compression_strategy = CompressionStrategy::Dynamic;

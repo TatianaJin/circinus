@@ -57,7 +57,7 @@ int main(int argc, char** argv) {
       Graph g;
       LOG(INFO) << "--------------- ";
       g.loadUndirectedGraphEdgeList(input);
-      
+
       // g.saveAsBinary(output);
     } else if (FLAGS_input_format == "tve") {
       Graph g;

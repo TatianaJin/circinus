@@ -173,7 +173,7 @@ void CircinusServer::handleCandidatePhase(const Event& event) {
         CandidatePruningStrategy::Online) {
       plan_driver = std::make_unique<OnlineQueryExecutionPlanDriver>(plan);
     } else if (false && (active_queries_[event.query_id].query_context.graph_metadata->numPartitions() == 1 ||
-               !active_queries_[event.query_id].query_context.query_config.use_partitioned_graph)) {
+                         !active_queries_[event.query_id].query_context.query_config.use_partitioned_graph)) {
       plan_driver = std::make_unique<MatchingParallelExecutionPlanDriver>(plan);
     } else {
       plan_driver = std::make_unique<ExecutionPlanDriver>(plan, &zmq_ctx_);
@@ -231,7 +231,7 @@ double CircinusServer::loadGraphFromBinary(const std::string& graph_path, const 
   auto graph = dynamic_cast<Graph*>(data_graph.get());
   GraphMetadata meta;
   if (graph != nullptr) {
-    graph->buildLabelIndex();  
+    graph->buildLabelIndex();
     meta = GraphMetadata(*graph, true);
   } else {
     meta = GraphMetadata(*dynamic_cast<ReorderedPartitionedGraph*>(data_graph.get()));
@@ -361,7 +361,7 @@ void CircinusServer::prepareQuery(uint32_t query_index) {
 
       // phase 1: preprocessing
       CandidatePruningPlan* plan = query_state.planner->generateCandidatePruningPlan();
-      if (plan->isFinished()) {  // no candidate generation 
+      if (plan->isFinished()) {  // no candidate generation
         auto plan = query_state.planner->generateExecutionPlan((CandidateResult*)nullptr, FLAGS_num_cores > 1);
         executor_manager_.run(query_index, &query_state.query_context,
                               std::make_unique<ExecutionPlanDriver>(plan, &zmq_ctx_));

@@ -685,7 +685,6 @@ BacktrackingPlan* Planner::generateExecutionPlan(const CandidateResult* result, 
     LOG(INFO) << ">>>>>>>>>> Time to parallelizePartitionedPlans " << toSeconds(t1, t2) << "s";
   }
 
-
   if (shortPlannerLog()) {  // debug log for scopes and plans
     uint32_t plan_idx = 0;
     for (auto plan : backtracking_plan_->getPlans()) {

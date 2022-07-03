@@ -270,7 +270,7 @@ class MatchingParallelTraverseTask : public MatchingParallelTask {
   std::unique_ptr<TraverseContext> traverse_ctx_;
   std::vector<CandidateSetView> candidates_;
   std::shared_ptr<std::vector<CompressedSubgraphs>> inputs_;
-  uint32_t batch_size_ = FLAGS_batch_size;  
+  uint32_t batch_size_ = FLAGS_batch_size;
 
  public:
   MatchingParallelTraverseTask(QueryId qid, TaskId tid, std::chrono::time_point<std::chrono::steady_clock> stop_time,

@@ -156,9 +156,7 @@ class Benchmark {
       (*out) << dataset << ',' << ',' << index << ',';
     }
 
-    return circinus::Path::join(
-        FLAGS_data_dir, "unlabeled_query_graph",
-        "q" + std::to_string(index) + ".graph");
+    return circinus::Path::join(FLAGS_data_dir, "unlabeled_query_graph", "q" + std::to_string(index) + ".graph");
   }
 
   static inline std::string getGraphPath(const std::string& dataset) {
@@ -273,9 +271,8 @@ class Benchmark {
     auto msg = reply.pop();
     if (success) {
       if (FLAGS_profile) {
-        auto profile_file_name = dataset + '_' +
-                                 std::to_string(index) + '_' + FLAGS_filter + '_' + FLAGS_vertex_cover + '_' +
-                                 FLAGS_match_order + '_' + FLAGS_pqv;
+        auto profile_file_name = dataset + '_' + std::to_string(index) + '_' + FLAGS_filter + '_' + FLAGS_vertex_cover +
+                                 '_' + FLAGS_match_order + '_' + FLAGS_pqv;
         auto profile_file = circinus::Path::join(FLAGS_profile_prefix, profile_file_name);
         LOG(INFO) << "------------- profile_file " << profile_file;
         auto ofs = circinus::openOutputFile(profile_file);

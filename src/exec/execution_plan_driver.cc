@@ -339,7 +339,7 @@ void MatchingParallelExecutionPlanDriver::init(QueryId qid, QueryContext* query_
     return;
   }
 
-  {  
+  {
     traverse_ctx_templates_.reserve(plan_->getOperators().size() - 1);
     for (auto op : plan_->getOperators()) {
       auto traverse = dynamic_cast<TraverseOperator*>(op);
@@ -355,7 +355,7 @@ void MatchingParallelExecutionPlanDriver::init(QueryId qid, QueryContext* query_
   task_depleted_.resize(plan_->getOperators().size() + 1, false);
   input_op_ = plan_->getInputOperator();
   task_counters_[0] = input_op_->getParallelism();
-  CHECK_EQ(task_counters_[0], 1) << " input task counter is not equal to 1 ";  
+  CHECK_EQ(task_counters_[0], 1) << " input task counter is not equal to 1 ";
 
   input_op_->setNext(plan_->getOperators().front());
   addTaskToQueue<MatchingParallelInputTask>(&task_queue, qid, 0, query_ctx->stop_time,

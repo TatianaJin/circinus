@@ -117,8 +117,7 @@ class GraphMetadata {
   inline uint32_t numPartitions() const { return partitioned_metadata_.empty() ? 1 : partitioned_metadata_.size(); }
   const GraphMetadata& getPartition(uint32_t idx) const { return partitioned_metadata_[idx]; }
 
-  void collectDegreeFrequency(const GraphBase& graph) {
-  }
+  void collectDegreeFrequency(const GraphBase& graph) {}
 
   void collectLabelFrequency(const GraphBase& g) {
     for (auto label : g.getLabels()) {

@@ -193,7 +193,8 @@ bool TraverseChainTask::execute(const std::vector<CompressedSubgraphs>& input, u
     // LOG(INFO) << (suspend_interval_ == nullptr) << " " << (suspend_interval_ == nullptr ? 0 : *suspend_interval_) <<
     // " "
     //           << toSeconds(start_time_, std::chrono::steady_clock::now());
-    if (suspend_interval_ != nullptr && *suspend_interval_ > 0 && toSeconds(start_time_, std::chrono::steady_clock::now()) > *suspend_interval_) {
+    if (suspend_interval_ != nullptr && *suspend_interval_ > 0 &&
+        toSeconds(start_time_, std::chrono::steady_clock::now()) > *suspend_interval_) {
       suspended_level_ = level;
       if (splitInput<mode>(traverse_op->enumeratesSet())) {  // do not suspend if no splits
         task_status_ = TaskStatus::Suspended;

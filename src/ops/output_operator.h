@@ -16,7 +16,7 @@
 
 namespace circinus {
 
-enum class OutputType : uint32_t { Subgraph = 0, Count }; 
+enum class OutputType : uint32_t { Subgraph = 0, Count };
 
 class Outputs {
   std::vector<uint64_t> n_matches_per_thread_;

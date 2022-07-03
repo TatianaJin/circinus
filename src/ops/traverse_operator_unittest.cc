@@ -9,5 +9,4 @@ using circinus::QueryGraph;
 
 class TestTraverseOperator : public testing::Test {};
 
-TEST_F(TestTraverseOperator, Intersection) {
-}
+TEST_F(TestTraverseOperator, Intersection) {}

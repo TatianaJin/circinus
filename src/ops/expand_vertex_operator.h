@@ -198,9 +198,7 @@ class ExpandVertexOperator : public TraverseOperator {
     }
 
     if
-      constexpr(isProfileMode(profile)) {
-        ctx->total_num_input_subgraphs += ctx->getCurrentInput().getNumSubgraphs();
-      }
+      constexpr(isProfileMode(profile)) { ctx->total_num_input_subgraphs += ctx->getCurrentInput().getNumSubgraphs(); }
   }
 
  protected:

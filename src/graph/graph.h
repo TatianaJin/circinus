@@ -96,9 +96,7 @@ class Graph : public GraphBase {
 
 class DirectedGraph : public Graph {
  public:
-  VertexID getVertexInDegree(VertexID) const {
-    return 0;
-  }
+  VertexID getVertexInDegree(VertexID) const { return 0; }
 };
 
 }  // namespace circinus

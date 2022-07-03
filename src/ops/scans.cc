@@ -162,7 +162,6 @@ class DegreeScanBase : public Scan {
 using DirectedDegreeScan = DegreeScanBase<true>;
 using DegreeScan = DegreeScanBase<false>;
 
-
 /* factory functions */
 
 std::unique_ptr<Scan> Scan::newLDFScan(LabelID label, VertexID out_d, VertexID in_d, ExecutionConfig& conf,
