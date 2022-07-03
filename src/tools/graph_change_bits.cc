@@ -15,21 +15,6 @@ using circinus::unordered_map;
 #define V_input_t uint64_t
 #define E_input_t uint64_t
 
-template <typename T>
-static void vectorToBinaryStream(std::ostream& output, const std::vector<T>& vec) {
-  size_t size = vec.size();
-  output.write(reinterpret_cast<const char*>(&size), sizeof(size));
-  output.write(reinterpret_cast<const char*>(vec.data()), sizeof(T) * vec.size());
-}
-
-template <typename T>
-static void binaryStreamToVector(std::istream& input, std::vector<T>& vec) {
-  size_t size;
-  input.read(reinterpret_cast<char*>(&size), sizeof(size));
-  vec.resize(size);
-  input.read(reinterpret_cast<char*>(vec.data()), sizeof(T) * vec.size());
-}
-
 template <typename InputT, typename OutputT>
 void inputToOutput(std::istream& in, std::ostream& out, std::vector<InputT>& in_buf, std::vector<OutputT>& out_buf) {
   size_t size;
