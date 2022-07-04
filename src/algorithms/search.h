@@ -1,8 +1,10 @@
 #pragma once
 
 #define BINARY_SEARCH_THRESHOLD 256
+#define SEARCH_BASE 8
 
 #include <algorithm>
+#include <cinttypes>
 #include <type_traits>
 
 namespace circinus {
@@ -41,6 +43,22 @@ template <typename ForwardIt, typename T>
 inline constexpr typename std::enable_if<!HasLowerBound<ForwardIt>::value, ForwardIt>::type lowerBound(ForwardIt first,
                                                                                                        ForwardIt last,
                                                                                                        const T& value) {
+  if (*first >= value) {
+    return first;
+  }
+  // to give an amortized cost of O(1+log(N/m)) for m searches
+  // requires that ForwardIt can be advanced by i in O(1) time
+  for (uint32_t i = 1; first + i < last; i *= SEARCH_BASE) {
+    auto& v = *(first + i);
+    if (v == value) {
+      return first + i;
+    }
+    if (v > value) {
+      last = first + i;
+      first += i / SEARCH_BASE;
+      break;
+    }
+  }
   if (std::distance(first, last) >= BINARY_SEARCH_THRESHOLD) {
     return std::lower_bound(first, last, value);
   }
