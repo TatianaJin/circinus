@@ -74,7 +74,7 @@ class VertexSetView {
     }
 
     /** search from this iterator to end */
-    inline ConstIterator getLowerBound(const ConstIterator& end, value_type v) const {
+    ConstIterator getLowerBound(const ConstIterator& end, value_type v) const {
       if (*this == end) {  // if this is end, return
         return *this;
       }
@@ -95,6 +95,22 @@ class VertexSetView {
           (target_range_idx == end.range_idx_ ? end.idx_in_range_ : (*ranges_)[target_range_idx].second);
       return ConstIterator((*ranges_), target_range_idx,
                            lowerBound(first, last, v) - (*ranges_)[target_range_idx].first);
+    }
+
+    void seek(value_type v) {
+      if (range_idx_ == ranges_->size()) {  // is end
+        return;
+      }
+      while (v > (*ranges_)[range_idx_].first[(*ranges_)[range_idx_].second - 1]) {
+        ++range_idx_;
+        idx_in_range_ = 0;
+        if (range_idx_ == ranges_->size()) {
+          return;
+        }
+      }
+      const VertexID* first = (*ranges_)[range_idx_].first + idx_in_range_;
+      const VertexID* last = (*ranges_)[range_idx_].first + (*ranges_)[range_idx_].second;
+      idx_in_range_ = lowerBound(first, last, v) - (*ranges_)[range_idx_].first;
     }
   };
 

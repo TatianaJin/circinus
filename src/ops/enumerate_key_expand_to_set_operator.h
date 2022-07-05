@@ -409,18 +409,34 @@ uint32_t EnumerateKeyExpandToSetOperator<G, intersect_candidates>::expandInner(u
         if (ctx->target_sets[enumerate_key_depth].empty()) {
           DCHECK_EQ(enumerate_key_depth, 0);
           if (intersect_candidates) {
+            SingleRangeVertexSetView candidates(ctx->getCandidateSet()->begin(), ctx->getCandidateSet()->end());
             if (target_set_exists_) {
+#ifdef USE_LFJ
+              std::vector<typename G::NeighborSet> sets{std::move(candidates),
+                                                        *ctx->getCurrentInput().getSet(target_input_index_), neighbors};
+              leapfrogJoin(sets, &ctx->target_sets[enumerate_key_depth + 1], ctx->existing_vertices);
+#else
               intersect(*ctx->getCandidateSet(), *ctx->getCurrentInput().getSet(target_input_index_),
                         &ctx->target_sets[enumerate_key_depth + 1], ctx->existing_vertices);
               intersectInplace(ctx->target_sets[enumerate_key_depth + 1], neighbors,
                                &ctx->target_sets[enumerate_key_depth + 1]);
+#endif
             } else {
+#ifdef USE_LFJ
+              leapfrogJoin(candidates, neighbors, &ctx->target_sets[enumerate_key_depth + 1], ctx->existing_vertices);
+#else
               intersect(*ctx->getCandidateSet(), neighbors, &ctx->target_sets[enumerate_key_depth + 1],
                         ctx->existing_vertices);
+#endif
             }
           } else if (target_set_exists_) {
+#ifdef USE_LFJ
+            leapfrogJoin(*ctx->getCurrentInput().getSet(target_input_index_), neighbors,
+                         &ctx->target_sets[enumerate_key_depth + 1], ctx->existing_vertices);
+#else
             intersect(neighbors, *ctx->getCurrentInput().getSet(target_input_index_),
                       &ctx->target_sets[enumerate_key_depth + 1], ctx->existing_vertices);
+#endif
           } else {
             degreeFilter(neighbors, target_degree_, g, &ctx->target_sets[enumerate_key_depth + 1],
                          ctx->existing_vertices);
@@ -429,8 +445,14 @@ uint32_t EnumerateKeyExpandToSetOperator<G, intersect_candidates>::expandInner(u
           //  filterTargets(&ctx->target_sets[enumerate_key_depth + 1], input);
           //}
         } else {
+#ifdef USE_LFJ
+          SingleRangeVertexSetView view(ctx->target_sets[enumerate_key_depth].data(),
+                                        ctx->target_sets[enumerate_key_depth].size());
+          leapfrogJoin(view, neighbors, &ctx->target_sets[enumerate_key_depth + 1], ctx->existing_vertices);
+#else
           intersect(ctx->target_sets[enumerate_key_depth], neighbors, &ctx->target_sets[enumerate_key_depth + 1],
                     ctx->existing_vertices);
+#endif
         }
         ctx->updateIntersection<profile>(
             (ctx->target_sets[enumerate_key_depth].empty() ? (intersect_candidates ? ctx->getCandidateSet()->size() : 0)
@@ -620,7 +642,7 @@ bool EnumerateKeyExpandToSetOperator<G, intersect_candidates>::expandInner(
 // if (!target_set.empty()) {
 //  filterTargets(&target_set, input);
 //}
-#else
+#else  // #ifdef INTERSECTION_CACHE
   if (existing_key_parent_indices_.size() == 1) {
     uint32_t key_vid = input.getKeyVal(existing_key_parent_indices_[0]);
     auto neighbors = ctx->getDataGraph<G>()->getOutNeighborsWithHint(key_vid, target_label_, 0);
@@ -631,7 +653,12 @@ bool EnumerateKeyExpandToSetOperator<G, intersect_candidates>::expandInner(
                                            input, target_filter_.get());
           return target_set.empty();
         }
+#ifdef USE_LFJ
+      SingleRangeVertexSetView candidates(ctx->getCandidateSet()->begin(), ctx->getCandidateSet()->end());
+      leapfrogJoin(candidates, neighbors, &target_set, ctx->existing_vertices);
+#else
       intersect(*ctx->getCandidateSet(), neighbors, &target_set, ctx->existing_vertices);
+#endif
       if
         constexpr(isProfileMode(profile)) {
           ctx->updateIntersection<profile>(ctx->getCandidateSet()->size() + neighbors.size(), target_set.size(), 0,

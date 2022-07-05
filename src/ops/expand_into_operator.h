@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "algorithms/intersect.h"
+#include "algorithms/leapfrog_join.h"
 #include "graph/query_graph.h"
 #include "ops/expand_vertex_traverse_context.h"
 #include "ops/traverse_operator.h"
@@ -185,7 +186,11 @@ class ExpandIntoOperator : public TraverseOperator {
             key_neighbors = graph->getInNeighborsWithHint(key_vertex_id, parent_labels_[parent_idx], parent_idx);
           }
         DCHECK(input.getSet(id).get() != nullptr) << vid << " " << id;
+#ifdef USE_LFJ
+        leapfrogJoin(*(input.getSet(id)), key_neighbors, &new_set, exceptions);
+#else
         intersect(*(input.getSet(id)), key_neighbors, &new_set, exceptions);
+#endif
         if
           constexpr(isProfileMode(profile)) {
             ctx->updateIntersectInfo(input.getSet(id)->size() + key_neighbors.size(), new_set.size());

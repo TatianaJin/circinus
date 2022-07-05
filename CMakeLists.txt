@@ -62,6 +62,12 @@ add_dependencies(circinus ${EXTERNAL_DEPENDENCY})
 add_executable(Circinus src/circinus_main.cc)
 target_link_libraries(Circinus circinus ${EXTERNAL_LIBRARY})
 
+add_executable(CircinusLFJ src/circinus_main.cc ${circinus_sources})
+target_compile_definitions(CircinusLFJ PUBLIC "USE_FILTER")
+target_compile_definitions(CircinusLFJ PUBLIC "USE_LFJ")
+target_link_libraries(CircinusLFJ ${EXTERNAL_LIBRARY})
+add_dependencies(CircinusLFJ ${EXTERNAL_DEPENDENCY})
+
 #add_executable(CircinusIntersectionCache src/circinus_main.cc ${circinus_sources})
 #target_compile_definitions(CircinusIntersectionCache PUBLIC "USE_FILTER")
 #target_compile_definitions(CircinusIntersectionCache PUBLIC "INTERSECTION_CACHE")

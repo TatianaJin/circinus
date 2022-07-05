@@ -322,7 +322,11 @@ class CurrentResultsByCandidate : public CurrentResults {
         continue;
       }
       auto neighbors = data_graph->getInNeighborsWithHint(candidate, parent_label_, 0);
-      intersect(*parent_set, neighbors, &parents);  // No need for exceptions
+#ifdef USE_LFJ
+      leapfrogJoin(*parent_set, neighbors, &parents, {});
+#else
+      intersect(*parent_set, neighbors, &parents);   // No need for exceptions
+#endif
       if
         constexpr(isProfileMode(profile)) {
           ctx_->updateIntersectInfo(parent_set->size() + neighbors.size(), parents.size());
@@ -434,7 +438,11 @@ class CurrentResultsByExtension : public CurrentResults {
         extensions_.pop();
         std::vector<VertexID> parents;  // valid parents for current candidate
         auto neighbors = g->getInNeighborsWithHint(candidate, parent_label_, 0);
+#ifdef USE_LFJ
+        leapfrogJoin(parent_set, neighbors, &parents, {});
+#else
         intersect(parent_set, neighbors, &parents);  // no need for exceptions
+#endif
         if
           constexpr(isProfileMode(profile)) {
             ctx_->updateIntersectInfo(parent_set.size() + neighbors.size(), parents.size());
@@ -476,7 +484,12 @@ class CurrentResultsByExtension : public CurrentResults {
                                        owner_->getTargetFilter());
     } else {
       if (intersect_candidates) {
+#ifdef USE_LFJ
+        SingleRangeVertexSetView candidate_view(candidates->begin(), candidates->end());
+        leapfrogJoin(candidate_view, neighbors, &current_extensions, current_exceptions_);
+#else
         intersect(*candidates, neighbors, &current_extensions, current_exceptions_);
+#endif
         if
           constexpr(isProfileMode(profile)) {
             ctx_->updateIntersectInfo(candidates->size() + neighbors.size(), current_extensions.size());

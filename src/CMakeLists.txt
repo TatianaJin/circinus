@@ -3,6 +3,7 @@ include_directories(${PROJECT_SOURCE_DIR}/src ${EXTERNAL_INCLUDES})
 set(circinus_algo_sources
   ${PROJECT_SOURCE_DIR}/src/algorithms/automorphism_check.cc
   ${PROJECT_SOURCE_DIR}/src/algorithms/k_core.cc
+  ${PROJECT_SOURCE_DIR}/src/algorithms/leapfrog_join.cc
   ${PROJECT_SOURCE_DIR}/src/algorithms/minimum_weight_vertex_cover.cc
   ${PROJECT_SOURCE_DIR}/src/algorithms/partial_order.cc
   ${PROJECT_SOURCE_DIR}/src/algorithms/vertex_cover.cc

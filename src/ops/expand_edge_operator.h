@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "algorithms/intersect.h"
+#include "algorithms/leapfrog_join.h"
 #include "graph/types.h"
 #include "ops/filters/subgraph_filter.h"
 #include "ops/traverse_operator.h"
@@ -21,8 +22,12 @@ class ExpandEdgeTraverseContext : public TraverseContext, public IntersectionCac
 #else
 class ExpandEdgeTraverseContext : public TraverseContext {
 #endif
+#ifdef USE_LFJ
+  const CandidateSetView* candidates_;
+#else
   unordered_set<VertexID> candidate_set_;
   const unordered_set<VertexID>* candidate_hashmap_;
+#endif
   unordered_set<VertexID> parent_set_;  // for profile
 
  public:
@@ -30,6 +35,9 @@ class ExpandEdgeTraverseContext : public TraverseContext {
                             std::vector<CompressedSubgraphs>* outputs, QueryType profile, bool hash_candidates,
                             const unordered_set<VertexID>* candidate_hashmap)
       : TraverseContext(graph, outputs, profile) {
+#ifdef USE_LFJ
+    candidates_ = candidates;
+#else
     if (hash_candidates) {
       if (candidate_hashmap != nullptr) {
         candidate_hashmap_ = candidate_hashmap;
@@ -38,6 +46,7 @@ class ExpandEdgeTraverseContext : public TraverseContext {
         candidate_hashmap_ = &candidate_set_;
       }
     }
+#endif
   }
 
   virtual ~ExpandEdgeTraverseContext() {}
@@ -59,7 +68,16 @@ class ExpandEdgeTraverseContext : public TraverseContext {
 
   inline bool hasIntersectionParent(VertexID parent_match) { return parent_set_.insert(parent_match).second; }
 
-  const unordered_set<VertexID>& getCandidateSet() const { return *candidate_hashmap_; }
+#ifdef USE_LFJ
+  inline SingleRangeVertexSetView getCandidateSet() const {
+    return SingleRangeVertexSetView(candidates_->begin(), candidates_->end());
+  }
+
+  inline auto getCandidateSize() const { return candidates_->size(); }
+#else
+  inline const unordered_set<VertexID>& getCandidateSet() const { return *candidate_hashmap_; }
+  inline auto getCandidateSize() const { return candidate_hashmap_->size(); }
+#endif
 };
 
 class ExpandEdgeOperator : public TraverseOperator {
@@ -179,13 +197,21 @@ class ExpandEdgeOperator : public TraverseOperator {
           if (targets->empty()) return;
         }
         auto target_size = targets->size();
+#ifdef USE_LFJ
+        intersectInplace(*targets, dctx->getCandidateSet(), targets);
+#else
         intersectInplace(targets, dctx->getCandidateSet());
+#endif
         ctx->candidate_si_diff += target_size - targets->size();
         ((ExpandEdgeTraverseContext*)ctx)
             ->updateIntersection<profile>(dctx->getCandidateSet().size() + target_size, targets->size(), parent_match);
         return;
       }
+#ifdef USE_LFJ
+    leapfrogJoin(dctx->getCandidateSet(), neighbors, targets, exceptions);
+#else
     intersect(dctx->getCandidateSet(), neighbors, targets, exceptions);
+#endif
     if
       constexpr(isProfileMode(profile)) {
         ((ExpandEdgeTraverseContext*)ctx)

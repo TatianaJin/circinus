@@ -6,6 +6,7 @@
 #include "glog/logging.h"
 
 #include "algorithms/intersect.h"
+#include "algorithms/leapfrog_join.h"
 #include "utils/utils.h"
 
 namespace circinus {
@@ -261,7 +262,8 @@ uint64_t CompressedSubgraphs::getEnumerationCount(const std::vector<uint32_t>& s
                qv_equivalent_classes->isEquivalentByIndices(set_indices[1], set_indices[2])) {
       cnt += 2 * cache.begin()->second.size();
     } else {
-      cnt += 2 * intersectionCount(cache.begin()->second, *getSet(set_indices[2]));  // no need to except again
+      SingleRangeVertexSetView view(cache.begin()->second.data(), cache.begin()->second.size());
+      cnt += 2 * intersectionCount(view, *getSet(set_indices[2]));  // no need to except again
     }
   }
   return cnt;
@@ -283,7 +285,11 @@ uint64_t CompressedSubgraphs::getIntersectionSize(uint32_t set_idx1, uint32_t se
     return intersectionCount(set1, set2, except);
   }
   std::vector<VertexID> intersection;
+#ifdef USE_LFJ
+  leapfrogJoin(set1, set2, &intersection, except);
+#else
   intersect(set1, set2, &intersection, except);
+#endif
   auto size = intersection.size();
   // cache the result
   if (set_idx1 > set_idx2) {

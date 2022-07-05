@@ -150,6 +150,28 @@ inline void intersectInplace(std::vector<VertexID>* set1, const unordered_set<Ve
 
 template <typename Set1, typename Set2>
 inline uint64_t intersectionCount(const Set1& set1, const Set2& set2) {
+#ifdef USE_LFJ
+  uint64_t count = 0;
+  std::array<std::pair<const VertexID*, const VertexID*>, 2> pointers;
+  pointers[0] = {set1.begin(), set1.end()};
+  pointers[1] = {set2.begin(), set2.end()};
+  uint32_t p = *pointers[0].first > *pointers[1].first;  // index to smaller pointer
+  VertexID x_prime, x;
+  while (true) {
+    x_prime = *pointers[1 - p].first;
+    x = *pointers[p].first;
+    if (x == x_prime) {  // match
+      ++count;
+      ++pointers[p].first;  // next
+    } else {                // x < x_prime, seek set p to find x_prime or a bit larger
+      pointers[p].first = lowerBound(pointers[p].first, pointers[p].second, x_prime);
+    }
+    if (pointers[p].first == pointers[p].second) {
+      break;  // at end
+    }
+    p = 1 - p;  // now the smaller pointer changes
+  }
+#else
   if (set1.size() > set2.size()) {
     return intersectionCount(set2, set1);
   }
@@ -163,11 +185,36 @@ inline uint64_t intersectionCount(const Set1& set1, const Set2& set2) {
       ++count;
     }
   }
+#endif
   return count;
 }
 
 template <typename Set1, typename Set2>
 inline uint64_t intersectionCount(const Set1& set1, const Set2& set2, const unordered_set<VertexID> exception) {
+#ifdef USE_LFJ
+  uint64_t count = 0;
+  std::array<std::pair<const VertexID*, const VertexID*>, 2> pointers;
+  pointers[0] = {set1.begin(), set1.end()};
+  pointers[1] = {set2.begin(), set2.end()};
+  uint32_t p = *pointers[0].first > *pointers[1].first;  // index to smaller pointer
+  VertexID x_prime, x;
+  while (true) {
+    x_prime = *pointers[1 - p].first;
+    x = *pointers[p].first;
+    if (x == x_prime) {  // match
+      if (exception.count(x) == 0) {
+        ++count;
+      }
+      ++pointers[p].first;  // next
+    } else {                // x < x_prime, seek set p to find x_prime or a bit larger
+      pointers[p].first = lowerBound(pointers[p].first, pointers[p].second, x_prime);
+    }
+    if (pointers[p].first == pointers[p].second) {
+      break;  // at end
+    }
+    p = 1 - p;  // now the smaller pointer changes
+  }
+#else
   if (exception.empty()) return intersectionCount(set1, set2);
   if (set1.size() > set2.size()) {
     return intersectionCount(set2, set1, exception);
@@ -183,6 +230,7 @@ inline uint64_t intersectionCount(const Set1& set1, const Set2& set2, const unor
       ++count;
     }
   }
+#endif
   return count;
 }
 

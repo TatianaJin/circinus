@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "algorithms/intersect.h"
+#include "algorithms/leapfrog_join.h"
 #include "graph/compressed_subgraphs.h"
 #include "graph/query_graph.h"
 #include "ops/expand_vertex_traverse_context.h"
@@ -74,6 +75,46 @@ class ExpandVertexOperator : public TraverseOperator {
     return ret;
   }
 
+#ifdef USE_LFJ
+  // now not implementing for isProfileCandidateSIEffect
+  template <typename G, QueryType profile, bool intersect_candidates, bool po = true>
+  void expandBySets(const CompressedSubgraphs& input, const G* data_graph, ExpandVertexTraverseContext* ctx,
+                    std::vector<typename G::NeighborSet>& neighbor_sets, const unordered_set<VertexID>& exceptions,
+                    std::vector<VertexID>* targets) const {
+    uint32_t smallest = 0;
+    uint32_t smallest_size = neighbor_sets.front().size();
+    for (uint32_t i = 0; i < neighbor_sets.size(); ++i) {
+      if (neighbor_sets[i].empty()) {
+        return;
+      }
+      if (neighbor_sets[i].size() < smallest_size) {
+        smallest_size = neighbor_sets[i].size();
+        smallest = i;
+      }
+    }
+    (void)smallest;
+    if
+      constexpr(po) {  // enforce partial order
+        filterTargets(neighbor_sets[smallest], input);
+        if (neighbor_sets[smallest].empty()) return;
+      }
+    if (intersect_candidates) {
+      neighbor_sets.emplace_back(ctx->getCandidateSet()->begin(), ctx->getCandidateSet()->end());
+    }
+    leapfrogJoin(neighbor_sets, targets, exceptions);
+    if
+      constexpr(isProfileMode(profile)) {
+        uint32_t si_input_size = 0;
+        for (auto& set : neighbor_sets) {
+          si_input_size += set.size();
+        }
+        ctx->updateIntersectInfo(si_input_size, targets->size());
+      }
+    if (!intersect_candidates) {
+      degreeFilter(targets, target_degree_, data_graph);
+    }
+  }
+#else
   template <typename G, QueryType profile, bool intersect_candidates, bool po = true>
   void expandBySets(const CompressedSubgraphs& input, const G* data_graph, ExpandVertexTraverseContext* ctx,
                     std::vector<typename G::NeighborSet>& neighbor_sets, const unordered_set<VertexID>& exceptions,
@@ -127,6 +168,7 @@ class ExpandVertexOperator : public TraverseOperator {
       degreeFilter(targets, target_degree_, data_graph);
     }
   }
+#endif
 
   template <typename G, QueryType profile, bool intersect_candidates, bool po = true>
   void expandFromParents(const CompressedSubgraphs& input, const G* data_graph, ExpandVertexTraverseContext* ctx,
