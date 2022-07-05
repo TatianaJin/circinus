@@ -45,6 +45,11 @@ if (BUILD_SHARED)
 
   #add_library(circinus_no_filter SHARED ${circinus_sources})
   #target_link_libraries(circinus_no_filter ${EXTERNAL_LIBRARY})
+
+  add_library(circinus_lfj SHARED ${circinus_sources})
+  target_compile_definitions(circinus_lfj PUBLIC "USE_FILTER")
+  target_compile_definitions(circinus_lfj PUBLIC "USE_LFJ")
+  target_link_libraries(circinus_lfj ${EXTERNAL_LIBRARY})
 else()
   # Static
   add_library(circinus STATIC ${circinus_objs})

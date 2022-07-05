@@ -45,6 +45,9 @@ if(GTEST_FOUND)
   add_executable(Benchmark benchmark.cc)
   target_link_libraries(Benchmark circinus ${GTEST_LIBRARY} ${EXTERNAL_LIBRARY})
 
+  add_executable(BenchmarkLFJ benchmark.cc)
+  target_link_libraries(BenchmarkLFJ circinus_lfj ${GTEST_LIBRARY} ${EXTERNAL_LIBRARY})
+
   #add_executable(BenchmarkNoFilter benchmark.cc)
   #target_link_libraries(BenchmarkNoFilter circinus_no_filter ${GTEST_LIBRARY} ${EXTERNAL_LIBRARY})
 
