@@ -1,6 +1,14 @@
 Circinus: an efficient parallel subgraph matching framework that reduces computation redundancy and optimizes memory usage
 =======
 
+### Disclaimer
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+**This repo is no longer maintained since the owners are now working full-time, and the code is released as it is. For reproducing the results reported in the paper, please check the artifact1 branch for experiment scripts. Use at your own discretion.**
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
 [![status](https://github.com/TatianaJin/circinus/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/TatianaJin/circinus/actions/workflows/ci.yml)
 
 ### Dependency
@@ -18,13 +26,14 @@ For testing, Circinus uses [googletest](https://github.com/google/googletest/rel
 ### Build
 
 1. Build and install
+   
         $ git clone https://github.com/tatianajin/circinus.git && cd circinus
         $ mkdir -p release && cd release
         $ cmake .. -DCMAKE_BUILD_TYPE=Release # CMAKE_BUILD_TYPE: Release, Debug, RelWithDebInfo
         $ make -j4 # 4 if to use 4 threads to compile
 
 
-2. Run unit tests
+3. Run unit tests
 
         $ make test                            # Run unit tests
 
